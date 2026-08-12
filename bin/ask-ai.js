@@ -99,11 +99,30 @@ if (cmd === 'init') {
   process.exit(0)
 }
 
+/**
+ * Read the environment the way the BUILD reads it, not the way a shell does.
+ *
+ * `doctor` reporting a key as missing because it lives in `.env.local` — where
+ * every VitePress project is told to put it, and where the build finds it — is
+ * a false alarm from the one command whose entire job is to not raise one.
+ * vitepress is a peer dependency, so it resolves from the project this is being
+ * run in; a project without it is not a project this CLI has anything to say to.
+ */
+async function loadEnvironment() {
+  try {
+    const { loadEnv } = await import('vitepress')
+    return { ...process.env, ...loadEnv('', process.cwd(), '') }
+  } catch {
+    return process.env
+  }
+}
+
 const { settings, configPath } = await loadSettings()
-const resolved = resolveAskAI(settings, process.env)
+const env = await loadEnvironment()
+const resolved = resolveAskAI(settings, env)
 
 if (cmd === 'doctor') {
-  const ready = readiness(resolved, process.env)
+  const ready = readiness(resolved, env)
   console.log(`[ask-ai] config    ${configPath}`)
   console.log(`[ask-ai] docs      ${resolved.docsDir}`)
   console.log(`[ask-ai] index     ${indexDirOf(resolved)}`)
