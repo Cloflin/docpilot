@@ -1,0 +1,65 @@
+{
+  "name": "vitepress-plugin-ask-ai",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A grounded AI answer panel for VitePress docs. Retrieval runs in the browser against a static index; a calibrated gate refuses before the model is called; every citation is checked against what the host actually retrieved.",
+  "keywords": [
+    "vitepress",
+    "vitepress-plugin",
+    "vite-plugin",
+    "documentation",
+    "rag",
+    "ai",
+    "search",
+    "ask-ai",
+    "llm"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./config": "./src/config.js",
+    "./theme": "./src/theme/index.js",
+    "./theme/components/*.vue": "./src/theme/components/*.vue",
+    "./style.css": "./dist/ask-ai.css",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "ask-ai": "./bin/ask-ai.js"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepare": "node bin/build-css.js",
+    "build": "node bin/build-css.js",
+    "test": "vitest run",
+    "docs:dev": "npm run build && vitepress dev docs",
+    "docs:build": "npm run build && vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0",
+    "minisearch": "^7.1.2"
+  },
+  "peerDependencies": {
+    "vitepress": "^1.6.0 || ^2.0.0",
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "sass": "^1.80.0",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.10",
+    "vue": "^3.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stripo/vitepress-plugin-ask-ai.git"
+  }
+}

@@ -1,0 +1,1116 @@
+/**
+ * Ask AI — UI-SPEC 3, 4, 5, 6, 7, 8.
+ *
+ * Seven rules govern this file and each is checkable by grep:
+ *   1. ONE resting hairline: .ask-ai__panel's border-inline-start, desktop only.
+ *      The open scope picker adds two more; both live inside its v-if.
+ *   2. THREE non-transparent backgrounds inside the thread: the question, code
+ *      surfaces, and a marker-linked source row. Plus transient hover washes.
+ *      The status label's gradient is clipped to text and paints no box.
+ *   3. Green appears at most once on screen and zero times at rest.
+ *   4. Agent progress is one node whose text is replaced in place.
+ *   5. Three UI type sizes: 15 / 14 / 13, plus 16px input below 960px.
+ *   6. Seven animations; exactly two loop, both on the busy status node.
+ *   7. --vp-c-text-3 never reaches text, by reference or by inheritance.
+ */
+
+.ask-ai {
+  // ── Surfaces — one opaque, one alpha ──────────────────────────────────────
+  --ask-surface: var(--vp-c-bg);
+  --ask-fill: var(--vp-c-default-soft);
+
+  // ── Line — one, and it is the panel boundary ──────────────────────────────
+  --ask-line: var(--vp-c-divider);
+
+  // ── Text — two readable levels, no third ──────────────────────────────────
+  --ask-text: var(--vp-c-text-1);
+  --ask-text-dim: var(--vp-c-text-2);
+  --ask-on-text: var(--vp-c-white-invrert); // upstream typo; this is the real name
+
+  // ── Focus — matches the site's black/white primary, 21:1 not 2.65:1 ───────
+  --ask-focus: var(--vp-c-brand-1);
+
+  // ── The single accent ─────────────────────────────────────────────────────
+  --ask-accent-soft: var(--brand-bg-active);
+
+  // ── Structure ─────────────────────────────────────────────────────────────
+  --ask-top: var(--vp-nav-height);
+  --ask-scrim: var(--vp-backdrop-bg-color);
+  --ask-font: var(--vp-font-family-base);
+  --ask-font-mono: var(--vp-font-family-mono);
+
+  --ask-width: clamp(360px, 30vw, 460px);
+  // Each radius is a rest / hover / focus tier, not a single value. The site's
+  // prev-next pager (theme.scss) already answers a pointer by growing its own
+  // corners 18 → 24 → 32 on this exact curve; the drawer speaks the same way
+  // rather than inventing a second shape language for the same two states.
+  --ask-radius: 4px;
+  --ask-radius-hover: 8px;
+  --ask-radius-focus: 12px;
+  --ask-radius-shell: 8px;
+  --ask-radius-shell-hover: 12px;
+  --ask-radius-shell-focus: 20px;
+  --ask-gutter: 20px;
+  --ask-dur: 240ms;
+  --ask-dur-exit: 180ms;
+  --ask-dur-fast: 120ms;
+  --ask-dur-shape: 250ms; // the pager's own duration, mirrored
+  --ask-ease: cubic-bezier(0.2, 0, 0, 1);
+  --ask-z: 29;
+
+  font-family: var(--ask-font);
+}
+
+// Below 960px VitePress raises its sidebar to 60 and its backdrop to 50, so a
+// "modal" sheet at 40 would render underneath the hamburger menu.
+@media (max-width: 959px) {
+  .ask-ai {
+    --ask-z: 70;
+  }
+}
+
+.ask-ai__scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--ask-scrim);
+  z-index: calc(var(--ask-z) - 1);
+}
+
+.ask-ai__panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  background: var(--ask-surface);
+  color: var(--ask-text);
+  z-index: var(--ask-z);
+  outline: none;
+
+  @media (min-width: 960px) {
+    inset-block-start: var(--ask-top);
+    inset-inline-end: 0;
+    inline-size: var(--ask-width);
+    // dvh, not vh: iPadOS Safari's dynamic toolbar otherwise pushes the
+    // composer out of reach.
+    block-size: calc(100dvh - var(--ask-top));
+    border-inline-start: 1px solid var(--ask-line);
+    animation: ask-in-x var(--ask-dur) var(--ask-ease);
+  }
+
+  @media (max-width: 959px) {
+    inset: 0;
+    inline-size: 100vw;
+    block-size: 100dvh;
+    padding-block-start: env(safe-area-inset-top);
+    animation: ask-in-y var(--ask-dur) var(--ask-ease);
+  }
+}
+
+@keyframes ask-in-x {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+@keyframes ask-in-y {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+// ── header — no bottom rule; the 56px band and the thread padding separate ──
+.ask-ai__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 12px var(--ask-gutter);
+  flex: none;
+}
+
+// The leading glyph is the nav trigger's, at its own size on its own 24 box:
+// aria-hidden, currentColor, so the heading's name and colour are unchanged.
+.ask-ai__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  margin: 0;
+
+  svg {
+    flex: none;
+  }
+}
+
+.ask-ai__header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.ask-ai__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--ask-text-dim);
+  cursor: pointer;
+  transition:
+    color var(--ask-dur-fast) linear,
+    background-color var(--ask-dur-fast) linear;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--ask-text);
+    background: var(--ask-fill);
+  }
+  &:active {
+    transform: scale(0.96);
+    transition: transform var(--ask-dur-fast) var(--ask-ease);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+// ── thread ──────────────────────────────────────────────────────────────────
+.ask-ai__thread {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: auto; // smooth fights the autoscroll write and never settles
+  padding: 20px var(--ask-gutter);
+  scroll-padding-block: 20px;
+  display: flex;
+  flex-direction: column;
+
+  &:focus-visible {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: -2px;
+  }
+}
+
+// Two anchors in one column: the greeting's auto margins eat the free space, so
+// it centres while the suggestions keep the position `margin-block-start: auto`
+// gave them — next to the only control the reader needs.
+.ask-ai__empty {
+  flex: 1;
+  padding-block-end: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ask-ai__greeting {
+  margin-block: auto;
+  padding-block: 24px;
+}
+
+// Title, the header's own role. The heading came back; the 20px tier did not.
+.ask-ai__greeting-h {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.ask-ai__greeting-p {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ask-text-dim);
+}
+
+.ask-ai__suggestions {
+  display: flex;
+  flex-direction: column;
+}
+
+.ask-ai__suggestion {
+  appearance: none;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding-block: 4px;
+  text-align: start;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ask-text);
+  cursor: pointer;
+  // Dim plain text is a paragraph until the pointer is over it, and hover is not
+  // an affordance on the sheet where these rows matter most.
+  text-decoration: underline;
+  text-decoration-color: var(--ask-text-dim);
+  text-decoration-thickness: from-font;
+  text-underline-offset: 3px;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration-color: currentColor;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: 2px;
+  }
+}
+
+.ask-ai__turn + .ask-ai__turn {
+  margin-block-start: 32px;
+}
+
+.ask-ai__question {
+  max-width: 78%;
+  margin: 0 0 20px auto;
+  padding: 12px 16px;
+  background: var(--ask-fill);
+  border-radius: var(--ask-radius);
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+// ── the one live status node ────────────────────────────────────────────────
+.ask-ai__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  color: var(--ask-text-dim);
+}
+
+.ask-ai__status-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-block-start: 0.5px;
+  border-radius: 999px;
+  background: currentColor;
+  // scale, not opacity: a .3 opacity trough composites to 1.34:1 and is
+  // invisible for half of every cycle in the component's only loading cue.
+  animation: ask-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes ask-breathe {
+  0%,
+  100% {
+    transform: scale(0.6);
+  }
+  50% {
+    transform: scale(1);
+  }
+}
+
+// The dot answers "alive"; the sweep answers "is this line still the current
+// one" — a phase can hold for seconds while the dot breathes identically in all
+// of them. The gradient runs between the two READABLE text levels, so the
+// trough is the label's own resting contrast, not the 1.34:1 an opacity loop
+// would composite to. background-clip: text paints inside the glyphs only, so
+// no surface appears and rule 2's count of three fills is unchanged.
+.ask-ai__status-label {
+  min-inline-size: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-image: linear-gradient(
+    90deg,
+    var(--ask-text-dim) 0%,
+    var(--ask-text-dim) 40%,
+    var(--ask-text) 50%,
+    var(--ask-text-dim) 60%,
+    var(--ask-text-dim) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: ask-shimmer 2.4s linear infinite;
+}
+
+@keyframes ask-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+
+// ── answer ──────────────────────────────────────────────────────────────────
+.ask-ai__answer {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ask-text);
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  outline: none;
+
+  p + p {
+    margin-block-start: 12px;
+  }
+
+  // base.css kills list markers globally and this subtree is not inside .vp-doc
+  ul,
+  ol {
+    padding-inline-start: 20px;
+    margin-block-start: 12px;
+  }
+  ul {
+    list-style: disc;
+  }
+  ol {
+    list-style: decimal;
+  }
+  li::marker {
+    color: var(--ask-text-dim);
+  }
+  li + li {
+    margin-block-start: 4px;
+  }
+
+  // base.css neutralises links (color: inherit; text-decoration: inherit), so
+  // both have to be re-declared — never with the theme accent.
+  a {
+    color: var(--ask-text);
+    text-decoration: underline;
+    text-decoration-thickness: from-font;
+    text-underline-offset: 2px;
+  }
+
+  // ── inline citation marker ────────────────────────────────────────────────
+  // `position: relative` is REQUIRED: without it the ::after resolves against
+  // .ask-ai__panel, which is fixed, and becomes a full-panel invisible overlay
+  // that swallows every click in the drawer.
+  a.ask-ai__cite {
+    position: relative;
+    font-size: 0.75em;
+    font-weight: 500;
+    vertical-align: super;
+    // Load-bearing: a superscript inflates the 1.65 line box without it and the
+    // answer's rhythm breaks on every cited line.
+    line-height: 0;
+    padding: 0 1px;
+    color: var(--ask-text-dim);
+    text-decoration: none;
+    transition: color var(--ask-dur-fast) linear;
+  }
+  // Invisible hit-area expansion, zero layout impact — the glyph itself is
+  // roughly 11px tall and is not a target.
+  a.ask-ai__cite::after {
+    content: '';
+    position: absolute;
+    inset-block: -8px;
+    inset-inline: -3px;
+  }
+  a.ask-ai__cite + a.ask-ai__cite {
+    margin-inline-start: 8px;
+  }
+  a.ask-ai__cite:hover,
+  a.ask-ai__cite:focus-visible {
+    color: var(--ask-text);
+  }
+  a.ask-ai__cite:focus-visible {
+    outline: none;
+  }
+  // The ring is drawn on the target, not on the glyph.
+  a.ask-ai__cite:focus-visible::after {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: 0;
+    border-radius: 4px;
+  }
+
+  // ── code blocks ───────────────────────────────────────────────────────────
+  // Same surface as the documentation pages, same shape, and the fill sits on
+  // the wrapper rather than on the `pre` — which is how VitePress builds an
+  // article's code block, and it is what keeps the copy button on the block's
+  // own background instead of on scrolling code.
+  //
+  // The wrapper is also the positioning context for that button: `pre` is a
+  // horizontal scroller and would carry an absolutely positioned child
+  // off-screen along with the code.
+  .ask-ai__code {
+    position: relative;
+    background: var(--vp-code-block-bg);
+    border-radius: 8px;
+  }
+
+  pre {
+    background: none;
+    border-radius: 0;
+    padding: 12px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    font-size: 13px;
+    line-height: 1.6;
+    font-family: var(--ask-font-mono);
+
+    // It is a scroller, so it is a tab stop; without a ring the focus is
+    // invisible for exactly the reader who needs it.
+    &:focus-visible {
+      outline: 2px solid var(--ask-focus);
+      outline-offset: 2px;
+    }
+  }
+
+  // Shiki writes BOTH themes onto every token as custom properties and applies
+  // neither (`defaultColor: false`). These two rules pick one — the same pair
+  // VitePress ships for the article body, so the panel and the page read from
+  // one palette. The `inherit` fallback is load-bearing: the `pre`'s own inline
+  // style is stripped, so the variables exist only on token spans.
+  .shiki,
+  .shiki span {
+    color: var(--shiki-light, inherit);
+  }
+
+  .ask-ai__code-copy {
+    position: absolute;
+    inset-block-start: 8px;
+    inset-inline-end: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    // The panel's own surface, not a fourth fill: it has to occlude the code it
+    // covers, and it is invisible until the block is hovered.
+    background: var(--ask-surface);
+    color: var(--ask-text-dim);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity var(--ask-dur-fast) linear,
+      color var(--ask-dur-fast) linear;
+
+    &:hover {
+      color: var(--ask-text);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--ask-focus);
+      outline-offset: 2px;
+    }
+  }
+
+  // pointer-events rather than visibility: an invisible chip must not eat
+  // clicks meant for the code, but it must stay reachable by Tab — and
+  // pointer-events never blocks focus.
+  .ask-ai__code:hover .ask-ai__code-copy,
+  .ask-ai__code-copy:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .ask-ai__glyph-done {
+    display: none;
+  }
+  .ask-ai__code-copy.is-copied {
+    .ask-ai__glyph-rest {
+      display: none;
+    }
+    .ask-ai__glyph-done {
+      display: inline;
+    }
+  }
+
+  :not(pre) > code {
+    background: var(--ask-fill);
+    border-radius: 4px;
+    padding: 0 4px;
+    font-size: 0.9em;
+    font-family: var(--ask-font-mono);
+  }
+
+  blockquote {
+    color: var(--ask-text-dim);
+    margin: 12px 0 0;
+    padding: 0;
+    border: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-block-start: 16px;
+  }
+}
+
+.ask-ai__lead {
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+
+.ask-ai__meta {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ask-text-dim);
+  margin: 12px 0 0;
+}
+
+.ask-ai__row {
+  display: flex;
+  gap: 16px;
+  margin: 12px 0 0;
+}
+
+.ask-ai__text-btn {
+  appearance: none;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding-block: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ask-text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--ask-text-dim);
+  text-decoration-thickness: from-font;
+  text-underline-offset: 2px;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration-color: currentColor;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: 2px;
+  }
+}
+
+// ── reasoning: one collapsed line ───────────────────────────────────────────
+.ask-ai__thoughts-toggle {
+  @extend .ask-ai__text-btn;
+  display: block;
+  margin-block-start: 12px;
+  color: var(--ask-text-dim);
+}
+
+.ask-ai__thoughts,
+.ask-ai__prompt {
+  font-family: var(--ask-font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ask-text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-block: 8px;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+.ask-ai__thoughts {
+  max-block-size: 240px;
+}
+.ask-ai__prompt {
+  max-block-size: min(240px, 32dvh);
+  margin-block-end: 8px;
+
+  &:focus-visible {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: 2px;
+  }
+}
+.ask-ai__prompt-h {
+  font-family: var(--ask-font);
+  font-size: 13px;
+  color: var(--ask-text-dim);
+  margin: 12px 0 4px;
+}
+.ask-ai__prompt-yours,
+.ask-ai__prompt-edit {
+  color: var(--ask-text);
+}
+.ask-ai__prompt-edit {
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  font: inherit;
+  inline-size: 100%;
+
+  &:focus-visible {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: 2px;
+  }
+}
+
+// ── sources ─────────────────────────────────────────────────────────────────
+.ask-ai__sources {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+}
+
+.ask-ai__source {
+  display: grid;
+  // minmax(0, …), not 1fr: a grid item's default min-width: auto floors the
+  // track at min-content, which for a nowrap tail was the whole untruncated
+  // breadcrumb — it pushed the row past the panel and gave the thread a
+  // horizontal scrollbar. The track has to be allowed to shrink so text wraps.
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 32px;
+  padding: 8px;
+  margin-inline: -8px;
+  border-radius: var(--ask-radius);
+  color: var(--ask-text-dim); // set ONCE, so .is-linked promotes everything
+  transition:
+    border-radius var(--ask-dur-shape) var(--ask-ease),
+    background-color var(--ask-dur-fast) linear;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  &:hover,
+  &:focus-within {
+    background: var(--ask-fill);
+    .ask-ai__source-title {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  // Declared after the shared fill rule and in this order, so a row that is
+  // both hovered and focused lands on the focus radius rather than the hover
+  // one. The row's focusable node is its <a>, hence :focus-within.
+  &:hover {
+    border-radius: var(--ask-radius-hover);
+  }
+  &:focus-within {
+    border-radius: var(--ask-radius-focus);
+  }
+
+  // The only green in the component, and zero at rest.
+  &.is-linked {
+    background: var(--ask-accent-soft);
+    color: var(--ask-text);
+  }
+
+  @media (pointer: coarse) {
+    min-height: 44px;
+  }
+}
+
+.ask-ai__source-n {
+  font-size: 13px;
+  color: inherit;
+}
+.ask-ai__source-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ask-text);
+  overflow-wrap: anywhere;
+}
+// It wraps, it is not truncated. The tail is an inline span, so the ellipsis
+// this rule used to carry never rendered — only the nowrap did, and that was
+// the overflow. The tail is also what tells two similar titles apart, so it is
+// the wrong thing to cut.
+.ask-ai__source-tail {
+  font-size: 13px;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+// ── actions: hover- and focus-revealed, resident where hover does not exist ──
+.ask-ai__actions {
+  display: flex;
+  gap: 4px;
+  margin-block-start: 12px;
+  opacity: 0;
+  transition: opacity var(--ask-dur-fast) linear;
+}
+.ask-ai__turn:hover .ask-ai__actions,
+.ask-ai__turn:focus-within .ask-ai__actions,
+.ask-ai__actions.is-resident {
+  opacity: 1;
+}
+@media (hover: none), (pointer: coarse) {
+  .ask-ai__actions {
+    opacity: 1;
+  }
+  // Same rule, same reason: where there is no hover there is no reveal, so the
+  // control is resident — and sized for a finger.
+  .ask-ai__code-copy {
+    opacity: 1;
+    pointer-events: auto;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+// The one dark-mode selector in this file. Everything else follows --vp-c-*
+// automatically; Shiki's colours are inline per token, so which of the two
+// themes applies has to be stated.
+html.dark .ask-ai__answer {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark, inherit);
+  }
+}
+
+.ask-ai__reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block-start: 8px;
+}
+
+// ── composer ────────────────────────────────────────────────────────────────
+.ask-ai__composer {
+  flex: none;
+  padding: 12px var(--ask-gutter);
+
+  @media (max-width: 959px) {
+    padding-block-end: max(12px, env(safe-area-inset-bottom));
+  }
+}
+
+.ask-ai__field {
+  display: grid;
+  grid-template-columns: 1fr 32px;
+  align-items: end;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  min-height: 48px;
+  background: var(--ask-fill);
+  border-radius: var(--ask-radius-shell); // 16px button radius + 8px padding
+  border: none;
+  transition: border-radius var(--ask-dur-shape) var(--ask-ease);
+  outline-offset: 2px;
+  outline: 2px solid var(--vp-c-divider);
+
+  &:hover {
+    border-radius: var(--ask-radius-shell-hover);
+    outline: 2px solid var(--vp-c-brand-1);
+  }
+  &:focus-within {
+    border-radius: var(--ask-radius-shell-focus);
+    outline: 2px solid var(--ask-focus);
+  }
+
+  textarea {
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    font: inherit;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ask-text);
+    padding-block: 6px;
+    margin: 0;
+    max-block-size: calc(5lh + 12px);
+    overflow-y: auto;
+
+    // base.css paints every placeholder --vp-c-text-3 (2.69:1 on the fill)
+    &::placeholder {
+      color: var(--ask-text-dim);
+      opacity: 1;
+    }
+
+    @media (max-width: 959px) {
+      font-size: 16px; // below 16px iOS Safari zooms the viewport on focus
+    }
+  }
+
+  @media (pointer: coarse) {
+    grid-template-columns: 1fr 44px;
+    min-height: 60px;
+  }
+}
+
+.ask-ai__send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ask-text-dim);
+  cursor: pointer;
+  transition:
+    background-color var(--ask-dur-fast) linear,
+    color var(--ask-dur-fast) linear;
+
+  &.is-ready {
+    background: var(--ask-text);
+    color: var(--ask-on-text);
+  }
+  &:active {
+    transform: scale(0.96);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.ask-ai__counter {
+  font-size: 13px;
+  color: var(--ask-text-dim);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  margin: 8px 0 0;
+}
+
+.ask-ai__footnote {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ask-text-dim);
+  margin: 8px 0 0;
+}
+
+.ask-ai__scope,
+.ask-ai__prompt-toggle {
+  font: inherit;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0 4px;
+  margin-inline: -4px 0;
+  color: var(--ask-text); // NOT inherit — this is the whole discoverability path
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--ask-text-dim);
+  text-decoration-thickness: from-font;
+  text-underline-offset: 2px;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration-color: currentColor;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--ask-focus);
+    outline-offset: 2px;
+  }
+}
+
+.ask-ai__scope {
+  max-inline-size: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+// ── scope picker ────────────────────────────────────────────────────────────
+// The only two borders that are not the panel boundary, and they exist only
+// while the reader holds the picker open. This is the one place whitespace
+// failed: three text buttons that overwrite the tick set sit directly above 139
+// rows that toggle it, sharing one alignment, one fill and two type roles, and
+// the picker is the one disclosure that pushes nothing when it opens. Both are
+// full-bleed — the gutter is cancelled and restored as padding — because a line
+// inset 20px reads as an underline on the row above it, not as a boundary.
+.ask-ai__picker {
+  margin-block: -12px 8px; // -12px pulls the rule flush under the thread
+  margin-inline: calc(var(--ask-gutter) * -1);
+  padding: 12px var(--ask-gutter) 0;
+  border-block-start: 1px solid var(--ask-line);
+  outline: none;
+}
+
+.ask-ai__picker-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin-inline: calc(var(--ask-gutter) * -1);
+  padding: 0 var(--ask-gutter) 8px;
+  border-block-end: 1px solid var(--ask-line);
+}
+
+// The presets are their own group: closing the picker is not setting a scope,
+// so the close button sits in the row but outside role="group".
+.ask-ai__picker-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+}
+
+// align-self, because the row aligns on the text baseline and a 32px box sitting
+// on it would hang below the rule this row carries.
+.ask-ai__picker-close {
+  flex: none;
+  align-self: center;
+  margin-inline-start: auto;
+}
+
+// aria-hidden in the template: the group is already named "Set the scope", so
+// this is a visual restatement, not a second announcement.
+.ask-ai__picker-label {
+  flex: none;
+  font-size: 13px;
+  color: var(--ask-text-dim);
+}
+
+// The -8px row margins need somewhere to go. Without the padding that pays for
+// them, each row's border box ends 8px past the list's content edge and this
+// scroller — overflow-y: auto, so overflow-x resolves to auto with it — grows a
+// horizontal scrollbar of exactly that width, whatever the text does.
+.ask-ai__picker-list {
+  max-block-size: min(240px, 32dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 8px;
+  margin-inline: -8px;
+  padding: 8px 8px 0;
+}
+
+.ask-ai__pick {
+  display: grid;
+  // 16px fixed, so nothing shifts when a tick appears; minmax(0, …) for the
+  // same reason as .ask-ai__source — these are full page titles, so the row
+  // that overflows is the common one here, not the edge case.
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start; // the tick pins to the first line of a wrapped row
+  min-height: 32px;
+  padding: 8px;
+  margin-inline: -8px;
+  border-radius: var(--ask-radius);
+  color: var(--ask-text-dim);
+  cursor: pointer;
+  transition:
+    border-radius var(--ask-dur-shape) var(--ask-ease),
+    background-color var(--ask-dur-fast) linear;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--ask-fill);
+  }
+  // Order matters, as on .ask-ai__source: focus wins over hover.
+  &:hover {
+    border-radius: var(--ask-radius-hover);
+  }
+  &:focus-visible {
+    border-radius: var(--ask-radius-focus);
+    outline: 2px solid var(--ask-focus);
+    outline-offset: -2px;
+  }
+
+  // The tick is the selected state — a glyph, not a fill, so rule 2 holds and
+  // it survives forced-colors. Promoting the row's colour with it keeps the
+  // mark from rendering dimmer than the thing it marks.
+  &[aria-selected='true'] {
+    color: var(--ask-text);
+  }
+
+  @media (pointer: coarse) {
+    min-height: 44px;
+  }
+}
+
+.ask-ai__pick-mark {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+.ask-ai__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// ── forced colors ───────────────────────────────────────────────────────────
+// This design carries all structure in backgrounds and has zero resting
+// borders, so forced-colors — which replaces every background-color with a
+// system colour — is the one mode it cannot degrade into gracefully.
+@media (forced-colors: active) {
+  .ask-ai__field,
+  .ask-ai__question,
+  .ask-ai__send,
+  .ask-ai__prompt-edit,
+  .ask-ai__code-copy,
+  .ask-ai pre {
+    border: 1px solid CanvasText;
+  }
+  .ask-ai__panel {
+    border-inline-start: 1px solid CanvasText;
+  }
+  .ask-ai__source.is-linked {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .ask-ai__status-dot {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  // The system palette repaints `color` but never touches -webkit-text-fill-
+  // color, so a label left at `transparent` renders as an empty line in the one
+  // mode with the least tolerance for a missing string. Restore the whole trio.
+  .ask-ai__status-label {
+    animation: none;
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-ai__panel {
+    animation-name: ask-fade;
+  }
+  .ask-ai__status-dot {
+    animation: none;
+    transform: scale(1);
+  }
+  // Cancelling the animation alone freezes a transparent fill mid-gradient. The
+  // label must land on the colour it would have had if the sweep never existed.
+  .ask-ai__status-label {
+    animation: none;
+    background-image: none;
+    color: var(--ask-text-dim);
+    -webkit-text-fill-color: currentColor;
+  }
+  .ask-ai__icon-btn:active,
+  .ask-ai__send:active {
+    transform: none;
+  }
+}
+
+@keyframes ask-fade {
+  from {
+    opacity: 0;
+  }
+}
