@@ -1,22 +1,22 @@
 /**
- * The package entry — one call, `defineAskAI()`, and everything else hangs off
+ * The package entry — one call, `defineDocPilot()`, and everything else hangs off
  * what it returns.
  *
  * The alternative shape, three exported functions the host calls in three
  * places, is what this was extracted from, and it had a defect that took a week
- * to find: `themeAskAI()` silently omitted `suggestions`, so a documented,
+ * to find: `themeDocPilot()` silently omitted `suggestions`, so a documented,
  * component-read setting could never reach the client and nothing said so.
  * Resolution happening once, in one object, is what makes that class of bug
  * impossible rather than merely unlikely.
  */
 
 import {
-  resolveAskAI,
+  resolveDocPilot,
   readiness,
-  themeAskAI,
+  themeDocPilot,
   nodeEmbedTarget,
   devProxy,
-  logAskAI,
+  logDocPilot,
 } from './config.js'
 
 export {
@@ -24,32 +24,32 @@ export {
   providerKey,
   nodeEmbedTarget,
   resolveEmbed,
-  resolveAskAI,
+  resolveDocPilot,
   resolveSuggestions,
   readiness,
-  themeAskAI,
+  themeDocPilot,
   devProxy,
-  logAskAI,
+  logDocPilot,
 } from './config.js'
 
 /** The package's own name, used for the SSR externalisation fix below. */
-const PKG = 'vitepress-plugin-ask-ai'
+const PKG = '@cloflin/docpilot'
 
 /**
  * Resolve settings once and hand back the three views a VitePress config needs.
  *
  * ```js
  * import { defineConfig } from 'vitepress'
- * import { defineAskAI } from 'vitepress-plugin-ask-ai'
+ * import { defineDocPilot } from '@cloflin/docpilot'
  *
- * const ai = defineAskAI({
+ * const ai = defineDocPilot({
  *   chat:  { provider: 'openai', model: 'gpt-4o' },
  *   embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
  * })
  *
  * export default defineConfig({
  *   vite: { plugins: [ai.plugin()] },
- *   themeConfig: { askAI: ai.themeConfig },
+ *   themeConfig: { docPilot: ai.themeConfig },
  * })
  * ```
  *
@@ -58,8 +58,8 @@ const PKG = 'vitepress-plugin-ask-ai'
  * package never calls `loadEnv` itself, because doing so would make the plugin
  * decide which env files a project has.
  */
-export function defineAskAI(settings = {}, env = process.env) {
-  const resolved = resolveAskAI(settings, env)
+export function defineDocPilot(settings = {}, env = process.env) {
+  const resolved = resolveDocPilot(settings, env)
   const ready = readiness(resolved, env)
 
   return {
@@ -75,13 +75,13 @@ export function defineAskAI(settings = {}, env = process.env) {
      * `{ enabled: false }` when readiness failed, and that is the whole of the
      * unconfigured behaviour — the theme mounts nothing and the site builds.
      */
-    themeConfig: ready.ok ? themeAskAI(resolved, env) : { enabled: false },
+    themeConfig: ready.ok ? themeDocPilot(resolved, env) : { enabled: false },
 
     /** The embed target as the indexer sees it: real host, key in hand. */
     nodeEmbedTarget: () => nodeEmbedTarget(resolved, env),
 
-    /** The Vite plugin. See askAIPlugin below for what it actually does. */
-    plugin: () => askAIPlugin(resolved, ready, env),
+    /** The Vite plugin. See docPilotPlugin below for what it actually does. */
+    plugin: () => docPilotPlugin(resolved, ready, env),
   }
 }
 
@@ -105,9 +105,9 @@ export function defineAskAI(settings = {}, env = process.env) {
  *    the embedder, the index and the key can disagree is otherwise silent until
  *    a reader hits it.
  */
-export function askAIPlugin(settings, ready, env = process.env) {
+export function docPilotPlugin(settings, ready, env = process.env) {
   return {
-    name: 'vitepress-plugin-ask-ai',
+    name: '@cloflin/docpilot',
     // `config`, not `configResolved`: the proxy and noExternal have to be
     // merged before Vite finalises, and a mutation afterwards is ignored.
     config() {
@@ -116,7 +116,7 @@ export function askAIPlugin(settings, ready, env = process.env) {
       return out
     },
     configResolved() {
-      logAskAI(settings, env, ready)
+      logDocPilot(settings, env, ready)
     },
   }
 }

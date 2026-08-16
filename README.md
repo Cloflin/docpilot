@@ -1,12 +1,15 @@
-# vitepress-plugin-ask-ai
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/public/logo-dark.svg">
+  <img alt="DocPilot" src="docs/public/logo-light.svg" width="320">
+</picture>
 
 A grounded AI answer panel for VitePress documentation.
 
 Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
 ```bash
-npm i vitepress-plugin-ask-ai
-npx ask-ai init
+npm i @cloflin/docpilot
+npx docpilot init
 ```
 
 ## Add it
@@ -14,53 +17,58 @@ npx ask-ai init
 ```js
 // docs/.vitepress/config.mjs
 import { defineConfig, loadEnv } from 'vitepress'
-import { defineAskAI } from 'vitepress-plugin-ask-ai'
+import { defineDocPilot } from '@cloflin/docpilot'
 
-export const askAI = {
-  chat:  { provider: 'openai', model: 'gpt-4o' },
+export const docPilot = {
+  product: 'Acme Editor',
+  chat:  { provider: 'openai', model: 'gpt-4o-mini' },
   embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
 }
 
-const ai = defineAskAI(askAI, loadEnv('', process.cwd(), ''))
+const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
 
 export default defineConfig({
   vite: { plugins: [ai.plugin()] },
-  themeConfig: { askAI: ai.themeConfig },
+  themeConfig: { docPilot: ai.themeConfig },
 })
 ```
 
 ```js
 // docs/.vitepress/theme/index.js
 import DefaultTheme from 'vitepress/theme'
-import { withAskAi } from 'vitepress-plugin-ask-ai/theme'
+import { withDocPilot } from '@cloflin/docpilot/theme'
 
-export default withAskAi(DefaultTheme)
+export default withDocPilot(DefaultTheme)
 ```
 
 ```bash
-npx ask-ai index        # build the retrieval index from your docs
-npx ask-ai calibrate    # measure the refusal thresholds against your corpus
+npx docpilot index        # build the retrieval index from your docs
+npx docpilot calibrate    # measure the refusal thresholds against your corpus
 ```
 
-The `askAI` **named export** is the contract between the build and the CLI: both read the same object, so there is no second place to state which model embeds or where the docs live.
+The `docPilot` **named export** is the contract between the build and the CLI: both read the same object, so there is no second place to state which model embeds or where the docs live.
+
+`product` is optional. It is what the assistant says it answers questions about — in the instruction, in the composer placeholder, and when a reader says hello. Left out, all three read "this documentation".
+
+**`vitepress dev` proxies `/ai/*` for you; a built site does not.** `npx docpilot doctor --proxy` prints the two rules a production reverse proxy needs.
 
 ## Nothing configured yet?
 
 The site still builds. The panel switches itself off and the build prints one block:
 
 ```
-[ask-ai] the panel is OFF — 2 things to set up:
+[docpilot] the panel is OFF — 2 things to set up:
 
   · chat: "openai" needs a key and none is set
       export OPENAI_API_KEY=…
   · no index at docs/public/rag
-      npx ask-ai index
+      npx docpilot index
 
   The site builds and every other feature is untouched.
-  Run `npx ask-ai doctor` to re-check without a full build.
+  Run `npx docpilot doctor` to re-check without a full build.
 ```
 
-A dependency that can fail someone else's docs build the moment it lands is a dependency they remove. `npx ask-ai doctor` is the opt-in place to turn the same facts into a non-zero exit for CI.
+A dependency that can fail someone else's docs build the moment it lands is a dependency they remove. `npx docpilot doctor` is the opt-in place to turn the same facts into a non-zero exit for CI.
 
 ## What it guarantees
 
@@ -81,11 +89,16 @@ Three claims this README will not make. *"It only answers from the documentation
 
 | | |
 |---|---|
-| `npx ask-ai index` | build the retrieval index from your markdown and OpenAPI files |
-| `npx ask-ai calibrate` | measure the refusal thresholds against your own corpus |
-| `npx ask-ai eval` | run your golden set and write a report |
-| `npx ask-ai doctor` | check the configuration without a full build; exits non-zero when not ready |
-| `npx ask-ai init` | scaffold `.env.example` and print the next step |
+| `npx docpilot index` | build the retrieval index from your markdown and OpenAPI files |
+| `npx docpilot import <url>` | turn an allowlisted external page into a page of the corpus |
+| `npx docpilot calibrate` | measure the refusal thresholds against your own corpus |
+| `npx docpilot lint` | check the golden set against the index it measures |
+| `npx docpilot eval` | run your golden set and write a report |
+| `npx docpilot bench` | A/B two retrieval configurations on answer quality, with no API key |
+| `npx docpilot doctor` | check the configuration without a full build; exits non-zero when not ready |
+| `npx docpilot init` | scaffold the environment, the eval sets and the authoring skills |
+
+The loop is `index → calibrate → lint → eval → bench`. The first two make the panel work; the last three tell you whether it works well, and they are the half that gets skipped.
 
 **Calibrate before you ship.** Thresholds are a statement about one corpus and do not transfer between projects. Until `calibrate` has run, the gate uses provisional values and every record says so.
 
@@ -105,9 +118,41 @@ The panel refuses a question containing a credential shape — API keys, JWTs, b
 
 This is a habit guard, not a security boundary. It cannot stop a reader who pastes a key into a model directly.
 
+## Greetings
+
+"Hello" carries no documented subject, so the gate scores it at zero and refuses it — a correct verdict that tells the reader, on their very first message, that the assistant is broken. Greetings, thank-yous, farewells and "who are you" are recognised before the gate and answered from a template in eighteen languages, with no model call. A greeting attached to a real question is not claimed.
+
+## Conversation history
+
+Conversations are kept in the reader's own `localStorage` and listed in the panel, so a reload — or a citation followed into a new tab — no longer throws a thread away. The archive is shared by every tab; which conversation a tab is showing is not, so two tabs are two conversations.
+
+Reasoning, retrieved excerpts and the reader's own instruction are never written. Nothing is sent anywhere. The reader can delete one conversation or all of them, and `history: { enabled: false }` stops recording *and* clears what is stored.
+
+## Imported pages
+
+`npx docpilot import <url>` turns an allowlisted external page into a page of the corpus. If the site already publishes `page.md` beside `page` — declared as an alternate, or derived from its canonical URL — **that** file is the import, because it is what the page was built from. Otherwise the markup is converted to markdown **in code**, never summarised by a model. Either way, one final model pass may add `<llm-only>` / `<llm-exclude>` and nothing else, verified by comparing its output to its input character for character.
+
+Point `importDir` at a directory outside your docs and the assistant will answer from pages that have no route on your site — a product page, a policy — and cite the original. Every `source:` is checked against `sources.allow`, https-only, at build time: that value becomes an `href` in the answer panel, so markdown is never trusted with a URL scheme.
+
+## Translating it
+
+Every reader-facing string — about a hundred of them — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
+
+```js
+i18n: {
+  locales: { ru: { translations: { empty: { heading: 'Чем помочь?' } } } },
+}
+```
+
+Panel chrome follows the page's locale; the credential and greeting replies follow the language the reader typed. A key that does not exist is dropped and named on stdout.
+
+## Skills
+
+`npx docpilot init` copies two skills into `.claude/skills/`: `docs-rag`, the measurement and tuning loop with a list of experiments already run and what they cost, and `docs-import`, the contract for imported pages. A skill inside `node_modules` reaches nobody, so copying is the only delivery there is.
+
 ## Documentation
 
-Full documentation, including configuration reference and the retrieval contract: run `npm run docs:dev` in this repository.
+Full documentation — configuration reference, the retrieval contract, translation, imported pages, deploying it (nginx, containers, cache rules for the index) and mounting it on a site that is not VitePress: run `npm run docs:dev` in this repository.
 
 ## License
 

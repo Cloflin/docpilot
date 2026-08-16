@@ -12,6 +12,8 @@ Four things are true of every answer, for every model, under every prompt — in
 
 Three further things are true of the product rather than of an answer: the instruction, the tool descriptions and the active scope are visible to the reader; a reader's own added instruction is delivered as a separate user message and can reach none of the four mechanisms above; and a hallucinated-citation rate of zero is a hard gate on every evaluation run.
 
+**What is written down, and where.** Conversations are kept in the reader's own `localStorage` and are never sent anywhere; the reader can delete one or all of them from the panel, and a site can switch the store off, which also clears it. The redaction that catches a pasted key runs before a turn exists, so a key never reaches what is stored. See [Conversation history](/guide/history).
+
 ## What this is not
 
 It is a control against a weak, badly-behaved or injected **model** — a small model inventing an id, emitting malformed arguments, or drifting after four steps.
@@ -32,7 +34,7 @@ It is a control against a weak, badly-behaved or injected **model** — a small 
 
 **"Prompt injection is prevented."** Text arriving inside your documentation reaches the model as data, and neither the gate nor the validator inspects it. The durable control is review of the pull request that would introduce it.
 
-**"The thresholds are tuned."** Until `npx ask-ai calibrate` has run against your own index, they are provisional and every record says so.
+**"The thresholds are tuned."** Until `npx docpilot calibrate` has run against your own index, they are provisional and every record says so.
 
 Nothing here may be phrased as protection **against the reader**, because it cannot be kept — and stating it invites the one attack that has no defence and no victim.
 

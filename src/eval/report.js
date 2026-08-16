@@ -93,7 +93,7 @@ export function diffSummaries(prev, next) {
 
 function markdown({ meta, summary, diff, incomparable, rows }) {
   const L = []
-  L.push(`# Ask AI eval — ${meta.model}`)
+  L.push(`# DocPilot eval — ${meta.model}`)
   L.push('')
   L.push(`- index \`${meta.indexHash}\` · ${meta.chunkCount} chunks · embed \`${meta.embedModel}\``)
   L.push(`- prompt \`${meta.promptHash}\` · records ${meta.records} · maxIterations ${meta.maxIterations}`)
@@ -253,5 +253,6 @@ export function writeReport({ dir, name, meta, summary, rows }) {
       )
     }
   }
-  console.log(`  report written to eval/reports/${name}\n`)
+  // The directory the caller passed, not a literal: `evalDir` moves it.
+  console.log(`  report written to ${path.relative(process.cwd(), path.join(dir, name))}\n`)
 }

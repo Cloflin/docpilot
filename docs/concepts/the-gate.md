@@ -22,15 +22,23 @@ So the score is the **maximum** of the raw question and the question composed wi
 
 There is no length-based continuation classifier. Measured against three ordinary starter questions, a "shorter than six words" test fired on all three.
 
-## Three refusals, three causes
+**A quoted passage is the same mechanism with a better antecedent.** When the reader selects text in an answer and asks about it, that passage — not the previous question — is what the follow-up composes with: they have pointed at exactly what `this` refers to. It never joins the raw question, and that is deliberate. A passage lifted out of an answer matches the corpus by construction, so folding it into the query would drive lexical coverage to near 1 on a channel with no admissibility test behind it, and any question at all would clear the gate while wearing a quote. Through the composed channel the same three bounds still hold: the lexical weight is below the threshold, the score is a maximum, and admissibility is measured against the reader's **own** words — so *«I selected the scope picker, now what's the weather in Paris»* is inadmissible and refuses on the raw channel.
+
+## Five settled turns, five causes
+
+One state — `no-answer` — with five causes, and only three of them are the gate's verdict. The other two settle **before** the gate runs and are listed here because a reader of this table would otherwise look for them and not find them.
 
 | cause | when | offered |
 |---|---|---|
+| `credential` | the question carried something shaped like a live key — *pre-gate* | the same question with the value masked |
+| `social` | the input was a greeting and nothing else — *pre-gate* | what the assistant covers, and the suggestions |
 | `no-evidence` | below threshold, and widening the scope provably would not help | the closest pages |
 | `out-of-scope` | below threshold, but it would pass across the whole corpus | a button that widens and resubmits |
 | `not-answerable` | the model was called and returned nothing citable | the closest pages |
 
 `out-of-scope` is only claimed when it has been **computed**, never guessed.
+
+The two pre-gate causes print no provenance line. "Searched the docs" would describe work that did not happen.
 
 **A refusal never explains itself with a number.** No score, no threshold, no "low confidence", no "off-topic".
 

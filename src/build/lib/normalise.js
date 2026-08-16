@@ -153,25 +153,34 @@ export function collapseWhitespace(src) {
 }
 
 /**
- * Frontmatter → { title, description, layout, body }.
+ * Frontmatter → { title, description, layout, source, body }.
  *
  * `description` is kept as well as the title because it is the one sentence an
  * author has already written that says what the whole page is FOR — the same
  * string vitepress-plugin-llms puts beside the page's link in llms.txt. Section
  * headings say what a passage contains; nothing else on the page says what the
  * reader would have come there to do, which is what a question is phrased as.
+ *
+ * `source` is the external page this one was imported from. It is read here
+ * rather than parsed at the call site so that ONE regex decides what a
+ * provenance line looks like, and it is deliberately anchored at column 0: a
+ * nested `source:` under some other key belongs to that key, not to the page.
+ * The value is not validated here — `sources.js` owns the allowlist, and this
+ * module stays dependency-free and I/O-free by contract.
  */
 export function splitFrontmatter(src) {
   const m = /^---\n([\s\S]*?)\n---\n?/.exec(src)
-  if (!m) return { title: null, description: null, layout: null, body: src }
+  if (!m) return { title: null, description: null, layout: null, source: null, body: src }
   const title = /^title:\s*(.+)$/m.exec(m[1])
   const description = /^description:\s*(.+)$/m.exec(m[1])
   const layout = /^layout:\s*(.+)$/m.exec(m[1])
+  const source = /^source:\s*(.+)$/m.exec(m[1])
   const clean = (v) => (v ? v[1].trim().replace(/^['"]|['"]$/g, '') : null)
   return {
     title: clean(title),
     description: clean(description),
     layout: clean(layout),
+    source: clean(source),
     body: src.slice(m[0].length),
   }
 }
@@ -226,10 +235,10 @@ export function stripHtml(src) {
 
 /**
  * The full pipeline, in the order RAG-SPEC 2.2 specifies.
- * Returns { title, description, layout, faq, text, warnings }.
+ * Returns { title, description, layout, source, faq, text, warnings }.
  */
 export function normaliseMarkdown(src) {
-  const { title, description, layout, body } = splitFrontmatter(src)
+  const { title, description, layout, source, body } = splitFrontmatter(src)
   const warnings = []
   const faq = extractFaq(body)
   let t = body
@@ -243,5 +252,5 @@ export function normaliseMarkdown(src) {
   t = stripHtml(t)
   t = collapseWhitespace(t)
   t = t.replace(/\n{3,}/g, '\n\n')
-  return { title, description, layout, faq, text: t.trim(), warnings }
+  return { title, description, layout, source, faq, text: t.trim(), warnings }
 }

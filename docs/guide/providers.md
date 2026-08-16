@@ -5,8 +5,8 @@ Chat and embeddings are **two decisions**, and the second is the one that is eas
 ## One provider, if it can do both
 
 ```js
-export const askAI = {
-  chat: { provider: 'openai', model: 'gpt-4o' },
+export const docPilot = {
+  chat: { provider: 'openai', model: 'gpt-4o-mini' },
   // embed: 'auto' is the default — it follows chat.provider
 }
 ```
@@ -24,7 +24,7 @@ These answer but do not retrieve — they have no embeddings endpoint at all:
 Choosing one of them with `embed: 'auto'` **stops the build** and names both ways out. Do not treat that as an inconvenience: it is the failure that is otherwise silent until a reader asks a question and gets a refusal.
 
 ```js
-export const askAI = {
+export const docPilot = {
   chat:  { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
 }
@@ -35,7 +35,7 @@ A project-scoped key limited to chat models hits the same wall with a provider t
 ## Fully local, no key
 
 ```js
-export const askAI = {
+export const docPilot = {
   chat: { provider: 'ollama', model: 'qwen3:8b' },
 }
 ```

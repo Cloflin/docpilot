@@ -2,7 +2,7 @@
 /**
  * Golden-set lint — run before every eval.
  *
- *   node eval/lint-golden.js [--file=eval/golden.jsonl]
+ *   npx docpilot lint [--file=<path to golden.jsonl>]
  *
  * A golden set that has drifted from the index measures nothing, and the way it
  * drifts is silent: `retrievalF1Loose` prefix-matches, so a `gold_chunks` entry

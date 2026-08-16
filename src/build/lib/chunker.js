@@ -8,7 +8,7 @@
  */
 
 import { normaliseMarkdown, MAX_CHUNK_CHARS } from './normalise.js'
-import { estTokens } from '../../theme/ask-ai/text.js'
+import { estTokens } from '../../theme/docpilot/text.js'
 
 export const TARGET_MIN_TOKENS = 350
 export const TARGET_MAX_TOKENS = 500
@@ -115,10 +115,11 @@ function codeLangs(text) {
  * @returns {{ chunks: Array, warnings: string[] }}
  */
 export function chunkMarkdown({ src, path, kind, sidebarTitle }) {
-  const { title: fmTitle, description, layout, faq, text, warnings: normWarnings } =
+  const { title: fmTitle, description, layout, source, faq, text, warnings: normWarnings } =
     normaliseMarkdown(src)
   const warnings = normWarnings.map((w) => `${w} in ${path}`)
-  if (layout === 'home') return { chunks: [], warnings, title: fmTitle || sidebarTitle, faq: [] }
+  if (layout === 'home')
+    return { chunks: [], warnings, title: fmTitle || sidebarTitle, faq: [], source }
 
   const { h1, sections } = toSections(text, fmTitle || sidebarTitle)
   const pageTitle = fmTitle || sidebarTitle || h1 || path
@@ -211,5 +212,9 @@ export function chunkMarkdown({ src, path, kind, sidebarTitle }) {
     }
   }
 
-  return { chunks, warnings, title: pageTitle, faq }
+  // `source` rides out unvalidated and unattached to any chunk: provenance is a
+  // property of the PAGE, and the manifest is where a page's properties live.
+  // The caller checks it against the allowlist — this module has no I/O and no
+  // configuration, which is what lets the linter re-chunk from source on a PR.
+  return { chunks, warnings, title: pageTitle, faq, source }
 }

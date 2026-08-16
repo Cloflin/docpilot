@@ -41,7 +41,7 @@ export async function chunkOpenapi(yamlText, name) {
     ;({ dereference } = await import('@scalar/openapi-parser'))
   } catch {
     throw new Error(
-      `[ask-ai] found an OpenAPI file (${name}) but @scalar/openapi-parser is not installed.\n` +
+      `[docpilot] found an OpenAPI file (${name}) but @scalar/openapi-parser is not installed.\n` +
         '  npm i -D @scalar/openapi-parser   — or remove the YAML from your public/ directory.',
     )
   }

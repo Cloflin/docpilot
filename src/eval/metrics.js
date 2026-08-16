@@ -5,7 +5,7 @@
  * compute cannot be a gate, because it moves when the judge does.
  */
 
-import { detectLanguage } from '../theme/ask-ai/prompt.js'
+import { detectLanguage } from '../theme/docpilot/prompt.js'
 
 // ── 5.1 retrieval ────────────────────────────────────────────────────────────
 

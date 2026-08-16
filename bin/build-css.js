@@ -14,15 +14,25 @@
  * So `sass` stays a devDependency here and the published tarball carries CSS.
  * `prepare` runs this on `npm install` in a clone and again before publish, so
  * neither a contributor nor a consumer ever has to know it happened.
+ *
+ * THREE OUTPUTS, not one. The bundle is what almost everyone wants and what
+ * `"./style.css"` still points at. The other two exist for the two cases the
+ * bundle cannot serve: a host that is not VitePress (core alone), and a host
+ * that wants the panel's own styling replaced wholesale but the VitePress
+ * mapping kept (adapter alone, over their own core).
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const src = path.join(root, 'src/theme/styles/ask-ai.scss')
 const outDir = path.join(root, 'dist')
-const out = path.join(outDir, 'ask-ai.css')
+
+const ENTRIES = [
+  ['src/theme/styles/docpilot.scss', 'docpilot.css'],
+  ['src/theme/styles/core.scss', 'docpilot-core.css'],
+  ['src/theme/styles/vitepress.scss', 'docpilot-vitepress.css'],
+]
 
 let sass
 try {
@@ -31,11 +41,24 @@ try {
   // A consumer installing from the registry gets `dist/` in the tarball and
   // never reaches this file; `prepare` still runs for them, so it has to be a
   // no-op rather than a failed install.
-  console.log('[ask-ai] sass not installed — skipping the stylesheet build (this is normal for a consumer install)')
+  console.log('[docpilot] sass not installed — skipping the stylesheet build (this is normal for a consumer install)')
   process.exit(0)
 }
 
-const { css } = sass.compile(src, { style: 'compressed', silenceDeprecations: ['legacy-js-api'] })
 mkdirSync(outDir, { recursive: true })
-writeFileSync(out, css)
-console.log(`[ask-ai] dist/ask-ai.css  ${(css.length / 1024).toFixed(1)} KB`)
+
+for (const [from, to] of ENTRIES) {
+  const { css } = sass.compile(path.join(root, from), {
+    style: 'compressed',
+    silenceDeprecations: ['legacy-js-api'],
+  })
+  // An empty output is the failure mode a split invites: a renamed partial, a
+  // `@use` that resolves to nothing, and the build still "succeeds" — with a
+  // stylesheet that silently ships no rules. Fail here instead of in a release.
+  if (!css.trim()) {
+    console.error(`[docpilot] ${from} compiled to an empty stylesheet — refusing to write ${to}`)
+    process.exit(1)
+  }
+  writeFileSync(path.join(outDir, to), css)
+  console.log(`[docpilot] dist/${to}  ${(css.length / 1024).toFixed(1)} KB`)
+}

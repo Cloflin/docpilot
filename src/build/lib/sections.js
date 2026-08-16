@@ -60,7 +60,20 @@ function walk(nodes, base, depth, out) {
 }
 
 /**
- * @param {object} sidebar themeConfig.sidebar — an object of scope → node[]
+ * VitePress accepts a sidebar in two shapes and this reads both.
+ *
+ * `SidebarItem[]` — one sidebar for the whole site — and
+ * `{ '/guide/': SidebarItem[], … }` — one per route prefix. Only the second was
+ * handled, and the first failed as `(nodes || []) is not iterable` from inside
+ * `walk`: `Object.entries` on an array yields `['0', node]`, so every "node
+ * list" was a single node object. The flat form is the one every small site
+ * uses, and it took the whole index build down.
+ */
+const byScope = (sidebar) =>
+  Array.isArray(sidebar) ? { '/': sidebar } : sidebar && typeof sidebar === 'object' ? sidebar : {}
+
+/**
+ * @param {object|Array} sidebar themeConfig.sidebar, in either shape
  * @param {(path: string) => boolean} isIndexed a path with zero chunks is dropped
  * @returns {{ sections, orphanPages, allPaths, warnings }}
  */
@@ -68,7 +81,7 @@ export function resolveSections(sidebar, isIndexed = () => true) {
   const warnings = []
   const out = { pages: new Set(), sections: [] }
 
-  for (const [scope, nodes] of Object.entries(sidebar)) {
+  for (const [scope, nodes] of Object.entries(byScope(sidebar))) {
     const scoped = { pages: new Set(), sections: [] }
     walk(nodes, scope === '/' ? '/' : scope, 1, scoped)
     for (const p of scoped.pages) out.pages.add(p)

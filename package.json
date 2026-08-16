@@ -1,5 +1,5 @@
 {
-  "name": "vitepress-plugin-ask-ai",
+  "name": "@cloflin/docpilot",
   "version": "0.1.0",
   "type": "module",
   "description": "A grounded AI answer panel for VitePress docs. Retrieval runs in the browser against a static index; a calibrated gate refuses before the model is called; every citation is checked against what the host actually retrieved.",
@@ -11,7 +11,7 @@
     "rag",
     "ai",
     "search",
-    "ask-ai",
+    "docpilot",
     "llm"
   ],
   "license": "MIT",
@@ -21,18 +21,27 @@
   "exports": {
     ".": "./src/index.js",
     "./config": "./src/config.js",
+    "./sidebar": "./src/sidebar.js",
     "./theme": "./src/theme/index.js",
+    "./theme-without-styles": "./src/theme/no-styles.js",
     "./theme/components/*.vue": "./src/theme/components/*.vue",
-    "./style.css": "./dist/ask-ai.css",
+    "./style.css": "./dist/docpilot.css",
+    "./style/core.css": "./dist/docpilot-core.css",
+    "./style/vitepress.css": "./dist/docpilot-vitepress.css",
     "./package.json": "./package.json"
   },
+  "sideEffects": [
+    "*.css",
+    "*.scss"
+  ],
   "bin": {
-    "ask-ai": "./bin/ask-ai.js"
+    "docpilot": "./bin/docpilot.js"
   },
   "files": [
     "src/",
     "bin/",
     "dist/",
+    "skills/",
     "README.md",
     "LICENSE"
   ],
@@ -40,26 +49,41 @@
     "prepare": "node bin/build-css.js",
     "build": "node bin/build-css.js",
     "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "bash scripts/check-docpilot.sh",
+    "verify": "npm run check && npm run typecheck && npm test",
+    "docs:index": "node bin/docpilot.js index",
     "docs:dev": "npm run build && vitepress dev docs",
     "docs:build": "npm run build && vitepress build docs",
     "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
-    "markdown-it": "^14.1.0",
-    "minisearch": "^7.1.2"
+    "markdown-it": "^15.0.0",
+    "minisearch": "^7.2.0"
   },
   "peerDependencies": {
-    "vitepress": "^1.6.0 || ^2.0.0",
-    "vue": "^3.4.0"
+    "linkedom": "^0.18.0",
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.41"
+  },
+  "peerDependenciesMeta": {
+    "linkedom": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "sass": "^1.80.0",
-    "vitepress": "^1.6.4",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@types/node": "^26.2.0",
+    "@voidzero-dev/vitepress-theme": "^5.0.5",
+    "linkedom": "^0.18.13",
+    "sass": "^1.102.0",
+    "typescript": "^7.0.2",
+    "vitepress": "^2.0.0-alpha.19",
     "vitest": "^4.1.10",
-    "vue": "^3.5.0"
+    "vue": "^3.5.41"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stripo/vitepress-plugin-ask-ai.git"
+    "url": "git+https://github.com/cloflin/docpilot.git"
   }
 }

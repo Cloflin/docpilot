@@ -1,0 +1,15 @@
+/**
+ * The two widths this package changes shape at, named once so that the core
+ * stylesheet and the VitePress adapter cannot drift apart.
+ *
+ * `$sheet` is not free to move: `DocPilot.vue` watches `(min-width: 960px)` in a
+ * matchMedia string of its own and switches the panel between `complementary`
+ * and a modal `dialog` on it. A stylesheet that changed shape at a width the
+ * component does not agree with would hand a reader a full-screen sheet that
+ * still announces itself as a sidebar. The suite pins the pair together.
+ *
+ * `$nav` is VitePress's own navbar breakpoint — the width at which its search
+ * box stops filling the bar. It exists only in the adapter.
+ */
+$sheet: 960px;
+$nav: 768px;

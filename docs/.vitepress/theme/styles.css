@@ -1,0 +1,73 @@
+@import '@voidzero-dev/vitepress-theme/src/styles/index.css';
+@import '@fontsource-variable/jetbrains-mono/index.css';
+
+/* The theme only scans its own components; this adds the ones in this folder. */
+@source "./**/*.vue";
+
+/*
+ * Prose keeps the theme's own faces — the sans for body, the display face for
+ * headings — and only the mono slot is ours. That slot is what code, the
+ * `font-mono` spans in the components here, and the buttons below all resolve
+ * to, so JetBrains Mono still carries the technical voice without setting the
+ * whole page in a fixed advance width.
+ *
+ * The brand colours are exposed as Tailwind tokens so the components in this
+ * folder can name them (`text-dp-violet`) instead of repeating hex.
+ */
+@theme {
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-dp-blue: #476be3;
+  --color-dp-violet: #9277c7;
+  --color-dp-clay: #c56161;
+}
+
+/*
+ * Brand colour per appearance. The theme keys everything — links, the active
+ * sidebar item, code, the badge — off `--color-brand`, so this is the whole of
+ * the palette override.
+ *
+ * Light mode uses the blue as given: it clears 4.5:1 against white. Dark mode
+ * uses a lightened blue rather than one of the other two brand colours, so a
+ * link does not change hue when the reader flips appearance.
+ */
+:root[data-variant='rolldown'] {
+  --color-brand: #476be3;
+  --dp-brand-gradient: linear-gradient(120deg, #476be3 0%, #9277c7 52%, #c56161 100%);
+}
+
+:root.dark:not([data-theme])[data-variant='rolldown'],
+:root[data-theme='dark'][data-variant='rolldown'] {
+  --color-brand: #8ba0ea;
+}
+
+:root[data-theme='light'][data-variant='rolldown'] {
+  --color-brand: #476be3;
+}
+
+/*
+ * The primary button's fill is a raster image shipped per variant by the theme.
+ * Swapping it for the gradient keeps the theme's own hover and drift animation,
+ * which both act on background-position.
+ */
+:root[data-variant='rolldown'] .button--primary::before {
+  background-image: var(--dp-brand-gradient);
+  background-size: 200% 200%;
+}
+
+/*
+ * The theme's own 16px header logo is right for a wordmark, and the logo is a
+ * wordmark again — so there is no height override here any more. The rule this
+ * replaces existed only because the mark was standing in for the lettering.
+ */
+
+/*
+ * The call-to-action buttons stay on the mono face. They read as commands
+ * rather than prose, which is the same reason the shell snippets beside them
+ * are set in it, and the theme's own type scale for `.button` needs no
+ * adjustment for the swap: mono only widens a two-word label slightly, and the
+ * button sizes itself to its content.
+ */
+.button {
+  font-family: var(--font-mono);
+}

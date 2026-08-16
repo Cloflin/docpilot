@@ -2,10 +2,10 @@
 /**
  * Gate calibration — RAG-SPEC 5.6.
  *
- *   npm run rag:calibrate
- *   npm run rag:calibrate -- --refresh        ignore the raw cache, re-embed
- *   npm run rag:calibrate -- --sweep-only     sweep the cache, embed nothing
- *   npm run rag:calibrate -- --limit=40       short loop while authoring probes
+ *   npx docpilot calibrate
+ *   npx docpilot calibrate --refresh        ignore the raw cache, re-embed
+ *   npx docpilot calibrate --sweep-only     sweep the cache, embed nothing
+ *   npx docpilot calibrate --limit=40       short loop while authoring probes
  *
  * NEEDS THE EMBED ENDPOINT ONLY. No chat model is contacted, ever: a threshold
  * that moves when a generator moves is not a threshold, and the whole point of
@@ -14,10 +14,10 @@
  * (`eval/metrics.js` states the same constraint for the same reason).
  *
  * `tau`, `tauLexical`, `wDense` and `wLexical` are set ONLY here (RAG-SPEC 7).
- * Everything downstream reads `eval/calibration.json`; nothing else may write it.
+ * Everything downstream reads `${evalDir}/calibration.json`; nothing else may write it.
  *
  * The three expensive things — embedding, retrieval and the zExp ladder — are
- * computed once and cached to `eval/calibration.raw.jsonl` (gitignored). The
+ * computed once and cached to `${evalDir}/calibration.raw.jsonl` (gitignored). The
  * sweep is then a pure function of that cache, so re-running step 3 after a
  * change to the selection rule costs milliseconds instead of a full re-embed.
  */
@@ -25,14 +25,22 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import { loadEnv } from 'vitepress'
+import { pathToFileURL } from 'node:url'
 
-import { assembleIndex } from '../theme/ask-ai/store.js'
-import { embedQuery } from '../theme/ask-ai/embed.js'
-import { createRetrieval } from '../theme/ask-ai/retriever.js'
+import { assembleIndex } from '../theme/docpilot/store.js'
+import { embedQuery } from '../theme/docpilot/embed.js'
+import { createRetrieval } from '../theme/docpilot/retriever.js'
 import { wilsonUpper95 } from './metrics.js'
+import { nodeEmbedTarget } from '../config.js'
 
-import { ROOT, RAG, CALIBRATION_SET, CALIBRATION_OUT, settings as askAI } from '../cli-context.js'
+import {
+  ROOT,
+  RAG,
+  CALIBRATION_SET,
+  CALIBRATION_OUT,
+  settings as docPilot,
+  fileEnv,
+} from '../cli-context.js'
 const EVAL = path.dirname(CALIBRATION_SET)
 const PROBES = path.join(EVAL, 'calibration.jsonl')
 const RAW = path.join(EVAL, 'calibration.raw.jsonl')
@@ -40,7 +48,7 @@ const OUT_JSON = path.join(EVAL, 'calibration.json')
 const OUT_MD = path.join(EVAL, 'calibration.report.md')
 
 /** `.env.local` through the loader config.mjs uses. Existing environment wins. */
-for (const [k, v] of Object.entries(loadEnv('', ROOT, ''))) {
+for (const [k, v] of Object.entries(await fileEnv())) {
   if (process.env[k] === undefined) process.env[k] = v
 }
 
@@ -53,26 +61,44 @@ const has = (name) => process.argv.includes(`--${name}`)
 const REFRESH = has('refresh')
 const SWEEP_ONLY = has('sweep-only')
 const LIMIT = Number(arg('limit', '0'))
-const EMBED_PROVIDER = process.env.ASK_AI_EMBED_PROVIDER || 'ollama'
-const EMBED_BASE = process.env.ASK_AI_EMBED_URL || 'http://localhost:11434'
+/**
+ * The embedder, from the project's own settings.
+ *
+ * These three used to default to a local Ollama regardless of what the index was
+ * built with, so `docpilot calibrate` on a project embedding with a hosted service
+ * either failed on an unreachable `localhost:11434` or — worse, if an Ollama
+ * happened to be running — measured thresholds in a foreign vector space and
+ * wrote them out as if they described this corpus.
+ *
+ * `nodeEmbedTarget` is the same resolver `docpilot index` uses, so the calibration
+ * and the index cannot disagree about which model produced the vectors. The
+ * environment still wins, for a sweep against a second endpoint.
+ */
+const EMBED_TARGET = nodeEmbedTarget(docPilot, process.env)
+const EMBED_PROVIDER = process.env.DOCPILOT_EMBED_PROVIDER || EMBED_TARGET.provider
+const EMBED_BASE = process.env.DOCPILOT_EMBED_URL || EMBED_TARGET.baseURL
 // Read but never printed. The report and every log line below carry thresholds
 // and probe ids, never a credential.
-const EMBED_KEY = process.env.ASK_AI_EMBED_KEY || process.env.OPENAI_API_KEY || null
+const EMBED_KEY = process.env.DOCPILOT_EMBED_KEY || EMBED_TARGET.apiKey || null
 
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 
 // ── strata ───────────────────────────────────────────────────────────────────
 
 /**
- * The eight strata of RAG-SPEC 5.6 step 1, and what each one is for.
+ * The eleven strata of RAG-SPEC 5.6 step 1, and what each one is for.
  *
  * `positive` strata are scored on PASSING; everything else is scored on
  * REFUSING. `bound` is the UB95 ceiling from the RAG-SPEC 5.4 table — only the
  * three positive strata carry one, and `gatePrecision` deliberately does not:
  * step 6 says negative-catch is the objective maximised subject to over-refusal,
  * never a reason to raise tau.
+ *
+ * EXPORTED so `src/feedback/stratum.js` can suggest a stratum for a question a
+ * reader actually asked, and be structurally unable to suggest one this
+ * validator would then reject.
  */
-const STRATA = {
+export const STRATA = {
   U: { positive: true, bound: 0.05, metric: 'gateOverRefusal', label: 'unscoped positives' },
   S: { positive: true, bound: 0.05, metric: 'scopedGateOverRefusal', label: 'scoped positives' },
   F: { positive: true, bound: 0.08, metric: 'followupRefusalRate', label: 'follow-up pairs' },
@@ -113,7 +139,11 @@ function rng(seed) {
 function loadIndex() {
   const manifest = JSON.parse(fs.readFileSync(path.join(RAG, 'manifest.json'), 'utf8'))
   const shards = manifest.shards.map((s) => JSON.parse(fs.readFileSync(path.join(RAG, s), 'utf8')))
-  const vectorBuffer = fs.readFileSync(path.join(RAG, manifest.vectors)).buffer
+  // `.buffer` on a Buffer is NOT the file: Node pools small allocations, so for
+  // any vector blob under ~8 KB it is the whole pool and `assembleIndex`'s
+  // length check refuses the index. Slice to the view's own bytes.
+  const vecBuf = fs.readFileSync(path.join(RAG, manifest.vectors))
+  const vectorBuffer = vecBuf.buffer.slice(vecBuf.byteOffset, vecBuf.byteOffset + vecBuf.byteLength)
   const dfDoc = JSON.parse(fs.readFileSync(path.join(RAG, manifest.df), 'utf8'))
   return assembleIndex({ manifest, shards, vectorBuffer, dfDoc })
 }
@@ -159,17 +189,23 @@ function levers() {
   ]
   const out = {}
   for (const n of names) {
-    const v = process.env[`ASK_AI_${n}`]
+    const v = process.env[`DOCPILOT_${n}`]
     if (v !== undefined && v !== '' && Number.isFinite(Number(v))) out[n] = Number(v)
   }
   return out
 }
+
+// Bump when a row gains a field the sweep READS. A cache line written before
+// the bump is missing that field, and `regate` would hand it back unswept —
+// a silent half-swept run is worse than a re-embed that costs a cent.
+const RAW_SCHEMA = 2 // 2: per-channel z/L for the window sweep
 
 const sigOf = (rec, indexHash, lev) =>
   crypto
     .createHash('sha1')
     .update(
       JSON.stringify([
+        RAW_SCHEMA,
         indexHash,
         rec.question,
         rec.prev_question || null,
@@ -212,8 +248,8 @@ async function embed(text, index) {
     die(
       `embed model mismatch: ${EMBED_PROVIDER} returned ${vec.length} dims, the index is ` +
         `${index.manifest.dims} (${index.manifest.embedModel}). Point the embedder at it:\n` +
-        `          ASK_AI_EMBED_PROVIDER=ollama\n` +
-        `          ASK_AI_EMBED_URL=http://localhost:11434`,
+        `          DOCPILOT_EMBED_PROVIDER=ollama\n` +
+        `          DOCPILOT_EMBED_URL=http://localhost:11434`,
     )
   }
   return vec
@@ -301,6 +337,16 @@ async function probeOne({ rec, index, guard, ladderPages }) {
     D: hybrid.D,
     L: hybrid.L,
     z: hybrid.z,
+    // The window sweep re-derives D from the raw cosine, and in cosine mode `z`
+    // IS that cosine (`denseFromCosine` returns it unchanged). It needs the
+    // components of EVERY channel, not only the one that won here: which channel
+    // wins is `c.G > best.G`, and G moves with the window being swept. Caching
+    // the winner alone would pin the follow-up strata to the window the probe
+    // happened to run under — the records that decide tau.
+    z_raw: rawOnly.z,
+    L_raw: rawOnly.L,
+    z_composed: composedOnly ? composedOnly.z : null,
+    L_composed: composedOnly ? composedOnly.L : null,
     n: hybrid.n,
     mode: hybrid.mode,
     channel: hybrid.channel,
@@ -326,6 +372,133 @@ const hashSeed = (s) => {
 // ── step 3 and 4: the sweep ──────────────────────────────────────────────────
 
 const TAU_STEPS = Array.from({ length: 101 }, (_, i) => Number((i / 100).toFixed(2)))
+
+/**
+ * The cosine window — swept here, not hard-coded upstream.
+ *
+ * WHY THIS EXISTS. `cosFloor` / `cosCeil` map a raw cosine onto D, and where a
+ * raw cosine SITS is a property of the embedder, not of the corpus. The pair
+ * [0.44, 0.64] was measured on bge-m3 and reached `guardFor()` in
+ * build-rag-index.js as a literal, while this file swept only tau inside it. So
+ * an embed-model swap kept a window nobody re-measured, and on
+ * text-embedding-3-small — whose positives sit 0.44–0.72 against bge-m3's much
+ * higher band — the floor landed inside the positive distribution. Measured
+ * consequence: Russian positives scored cosine ≈ 0.49, D ≈ 0.27, G ≈ 0.20
+ * against tau 0.30 and were refused with their gold page ranked first, while the
+ * English half cleared the same gate on lexical overlap the Russian half cannot
+ * have. Twelve probes pinned tau at 0.00 and the run failed `no-feasible-tau`.
+ *
+ * HOW IT IS CHOSEN, and where this is an interpretation rather than the spec.
+ * RAG-SPEC 5.6 step 6 forbids `gatePrecision` from justifying a higher **tau**,
+ * and that rule is untouched: inside every candidate window tau is still step
+ * 4's largest-feasible, chosen by a selector that never sees the precision. The
+ * window is a different axis and the spec does not size it, so the rule written
+ * down here is: keep only windows that clear the step-5 hard floor
+ * (`blatantRefusalRate >= 0.80`) with a feasible tau above `wLexical`, and among
+ * those take the highest `gatePrecision`. Ties go to the larger tau, then to the
+ * wider span — a wide window degrades gracefully, a narrow one is a step
+ * function pretending to be a score.
+ *
+ * `unscopedG` is NOT re-derived. It drives the X-stratum cause check and the
+ * widen affordance, never the sweep — which scores X on refusal alone — so it
+ * keeps the window its probe ran under. Said out loud because a reader comparing
+ * `unscopedG` against a swept `G` would otherwise find them inconsistent.
+ */
+const WINDOW_FLOORS = Array.from({ length: 16 }, (_, i) => Number((0.16 + i * 0.02).toFixed(2)))
+const WINDOW_SPANS = Array.from({ length: 17 }, (_, i) => Number((0.08 + i * 0.02).toFixed(2)))
+
+const WINDOWS = WINDOW_FLOORS.flatMap((cosFloor) =>
+  WINDOW_SPANS.map((span) => ({ cosFloor, cosCeil: Number((cosFloor + span).toFixed(2)) })),
+).filter((w) => w.cosCeil <= 0.95)
+
+/** gate.js `denseFromCosine`, restated over the cache so the sweep stays pure. */
+const dOf = (z, { cosFloor, cosCeil }) =>
+  Math.min(1, Math.max(0, (z - cosFloor) / Math.max(cosCeil - cosFloor, 1e-6)))
+
+/**
+ * Re-score every probe at one candidate window.
+ *
+ * Mirrors `retriever.evaluate()`'s channel rule exactly — the composed channel
+ * replaces the raw one only when it is `admissible` AND scores higher — because
+ * a sweep that picked the max unconditionally would measure a retriever nobody
+ * ships.
+ */
+function regate(rows, w, guard) {
+  return rows.map((r) => {
+    if (r.z_raw == null) return r // pre-window cache line: leave it as measured
+    const gOf = (z, L) => guard.wDense * dOf(z, w) + guard.wLexical * L
+    const raw = { G: gOf(r.z_raw, r.L_raw), D: dOf(r.z_raw, w), channel: 'raw' }
+    let best = raw
+    if (r.z_composed != null && r.admissible) {
+      const composed = {
+        G: gOf(r.z_composed, r.L_composed),
+        D: dOf(r.z_composed, w),
+        channel: 'composed',
+      }
+      if (composed.G > best.G) best = composed
+    }
+    return { ...r, ...best, G_raw: raw.G }
+  })
+}
+
+/**
+ * The window search. Returns the winning window with the sweep it earned, or
+ * null when no window in the grid produces a shippable gate at all — which is a
+ * real answer, not a failure to search: it means the embedder does not separate
+ * this corpus and no threshold can rescue that.
+ */
+function chooseWindow(scored, guard) {
+  const positives = scored.filter((r) => STRATA[r.stratum].positive && r.z_raw != null)
+
+  const viable = []
+  for (const w of WINDOWS) {
+    const rw = regate(scored, w, guard)
+    const sweep = TAU_STEPS.map((t) => sweepRow(rw, t, 'G'))
+    const best = chooseTau(sweep)
+    if (!best || best.tau < 0.05 || best.tau <= guard.wLexical) continue
+    if (best.blatantRefusalRate === null || best.blatantRefusalRate < 0.8) continue
+
+    // How much of the ramp is actually being used. A window narrower than the
+    // spread it is mapping saturates D to 0 or 1 for everything and turns the
+    // gate into a step on the raw cosine — which scores well here and ships a
+    // knife edge: one embedder revision and every probe crosses at once.
+    const inside = positives.filter((r) => {
+      const d = dOf(r.z_raw, w)
+      return d > 0 && d < 1
+    }).length
+    viable.push({
+      window: w,
+      sweep,
+      best,
+      rows: rw,
+      span: Number((w.cosCeil - w.cosFloor).toFixed(2)),
+      rampShare: positives.length ? inside / positives.length : 0,
+    })
+  }
+  if (!viable.length) return null
+
+  const rank = (a, b) =>
+    b.best.gatePrecision - a.best.gatePrecision || b.best.tau - a.best.tau || b.span - a.span
+
+  // Non-degenerate first: a window that leaves at least a third of the positives
+  // strictly inside the ramp is scoring them, not bucketing them. Only if the
+  // grid offers none does the search fall back to raw precision, and it says so.
+  const graded = viable.filter((v) => v.rampShare >= 0.33).sort(rank)
+  const pool = graded.length ? graded : viable.slice().sort(rank)
+
+  return {
+    ...pool[0],
+    viableCount: viable.length,
+    gradedCount: graded.length,
+    shortlist: pool.slice(0, 6).map((v) => ({
+      window: v.window,
+      tau: v.best.tau,
+      gatePrecision: v.best.gatePrecision,
+      blatant: v.best.blatantRefusalRate,
+      rampShare: v.rampShare,
+    })),
+  }
+}
 
 /**
  * One row of the sweep at a candidate threshold.
@@ -418,7 +591,7 @@ async function main() {
   const lev = levers()
   const probes = loadProbes()
 
-  console.log(`\nAsk AI gate calibration — RAG-SPEC 5.6`)
+  console.log(`\nDocPilot gate calibration — RAG-SPEC 5.6`)
   console.log(
     `  index ${hash}  chunks ${index.manifest.chunkCount}  embed ${index.manifest.embedModel}`,
   )
@@ -467,7 +640,7 @@ async function main() {
             (EMBED_PROVIDER === 'ollama'
               ? `\n        start it with:  ollama serve` +
                 `\n        pull the model: ollama pull ${index.manifest.embedModel}`
-              : `\n        check ASK_AI_EMBED_URL and the key in .env.local`),
+              : `\n        check DOCPILOT_EMBED_URL and the key in .env.local`),
         )
       }
       throw e
@@ -498,8 +671,39 @@ async function main() {
   const missIds = new Set(misses.map((r) => r.id))
   const scored = rows.filter((r) => !missIds.has(r.id))
 
-  const sweep = TAU_STEPS.map((t) => sweepRow(scored, t, 'G'))
-  const best = chooseTau(sweep)
+  // The window is swept beside tau, in cosine mode only — in zscore mode D comes
+  // off the z ladder and there is no window to move. `rows` is re-scored IN
+  // PLACE at the winner so every downstream reader (the report, the bounding
+  // list, `scored`, which shares these objects) sees one consistent G. The RAW
+  // cache is already on disk by this point and keeps the values as MEASURED,
+  // which is what makes `--sweep-only` able to try a different window for free.
+  const searched = guard.denseMode === 'cosine' ? chooseWindow(scored, guard) : null
+  const win = searched ? searched.window : { cosFloor: guard.cosFloor, cosCeil: guard.cosCeil }
+  if (searched) {
+    regate(rows, win, guard).forEach((r, i) => Object.assign(rows[i], r))
+    console.log(
+      `  window: [${win.cosFloor}, ${win.cosCeil}] from ${WINDOWS.length} candidates — ` +
+        `${searched.viableCount} viable, ${searched.gradedCount} non-degenerate  ` +
+        `(was [${guard.cosFloor}, ${guard.cosCeil}], ${guard.source})`,
+    )
+    console.log('           window        tau   gatePrec  blatant  ramp')
+    for (const s of searched.shortlist) {
+      console.log(
+        `           [${s.window.cosFloor}, ${s.window.cosCeil}]  ${s.tau.toFixed(2)}   ` +
+          `${(100 * s.gatePrecision).toFixed(1)}%     ${(100 * s.blatant).toFixed(0)}%     ` +
+          `${(100 * s.rampShare).toFixed(0)}%`,
+      )
+    }
+  } else if (guard.denseMode === 'cosine') {
+    console.log(
+      `  window: no candidate of ${WINDOWS.length} yields a feasible tau above wLexical ` +
+        `with blatantRefusalRate >= 80% — keeping [${win.cosFloor}, ${win.cosCeil}]`,
+    )
+  }
+  const guardOut = { ...guard, cosFloor: win.cosFloor, cosCeil: win.cosCeil }
+
+  const sweep = searched ? searched.sweep : TAU_STEPS.map((t) => sweepRow(scored, t, 'G'))
+  const best = searched ? searched.best : chooseTau(sweep)
   const tau = best ? best.tau : null
 
   const sweepLex = TAU_STEPS.map((t) => sweepRow(scored, t, 'G_lex'))
@@ -594,7 +798,9 @@ async function main() {
     tau,
     tauLexical,
     fails,
-    guard,
+    // Carries the SWEPT window, so `calibration.json` ships the pair that was
+    // measured rather than the pair the index happened to be built with.
+    guard: guardOut,
     index,
     zexp,
     retrievalMissRate,
@@ -622,7 +828,7 @@ async function main() {
 
   fs.writeFileSync(OUT_JSON, JSON.stringify(doc, null, 2) + '\n')
   console.log(`\n  wrote ${path.relative(ROOT, OUT_JSON)} and ${path.relative(ROOT, OUT_MD)}`)
-  console.log(`  run \`npm run rag:index\` to inline the new guard into the manifest\n`)
+  console.log(`  run \`npx docpilot index\` to inline the new guard into the manifest\n`)
 }
 
 // ── output ───────────────────────────────────────────────────────────────────
@@ -813,14 +1019,14 @@ function markdown(doc, ctx) {
 
   L.push(`# Gate calibration — \`${doc.calibratedAt}\``)
   L.push('')
-  L.push(`Produced by \`npm run rag:calibrate\` (RAG-SPEC 5.6). Embed endpoint only — no chat`)
+  L.push(`Produced by \`npx docpilot calibrate\` (RAG-SPEC 5.6). Embed endpoint only — no chat`)
   L.push(`model, no LLM judge, no unseeded randomness. Same corpus + same probes ⇒ same output.`)
   L.push('')
 
   if (!doc.ok) {
     L.push(`> ## CALIBRATION FAILED`)
     L.push(`>`)
-    L.push(`> \`eval/calibration.json\` was **not** written; \`build-rag-index.js\` will keep`)
+    L.push(`> \`${path.relative(ROOT, OUT_JSON)}\` was **not** written; \`build-rag-index.js\` will keep`)
     L.push(`> inlining the provisional guard and warning about it. RAG-SPEC 5.6 step 5.`)
     L.push(`>`)
     for (const f of doc.fails) {
@@ -1069,8 +1275,15 @@ for (const line of fs.existsSync(PROBES) ? fs.readFileSync(PROBES, 'utf8').split
   }
 }
 
-export { sweepRow, chooseTau, STRATA, contiguousScope, TAU_STEPS }
+export { sweepRow, chooseTau, contiguousScope, TAU_STEPS }
+// The window search, exported for the same reason the tau sweep is: it decides
+// a shipped threshold and is a pure function of the cache, so it is testable
+// without an embedder.
+export { dOf, regate, chooseWindow, WINDOWS }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// `pathToFileURL`, not a template literal: a path with a space or a non-ASCII
+// segment does not survive plain concatenation, and the failure mode is this
+// whole command silently doing nothing and exiting 0.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((e) => die(e.stack || e.message))
 }

@@ -2,6 +2,10 @@ node_modules/
 dist/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+# The retrieval index is a build artifact — megabytes of quantised vectors,
+# rebuilt by `npm run docs:index` whenever the docs change. Its presence is also
+# what mounts the panel on this site; see docs/.vitepress/config.mjs.
+docs/public/rag/
 .env
 .env.local
 *.log

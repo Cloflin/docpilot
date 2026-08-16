@@ -14,6 +14,8 @@ The question settles locally, with zero network calls of any kind. The reader se
 
 The button resubmits the same question with the value already replaced by a placeholder, so the reader still gets the answer they asked for — and a code sample they can safely paste.
 
+"Not kept in the thread" now covers a thread that outlives the tab, and it still holds: the turn is built from the redacted text, so the mask is what [conversation history](/guide/history) writes to `localStorage`, and the mask is what titles the row in the switcher.
+
 ## What is detected
 
 By shape, over the raw question: prefixed API keys (`sk-…`, `ghp_…`, `xox…`, `sk_live_…`, `SG.…`), JWTs, `Bearer …` headers, AWS key ids, and any run of 32 or more hex characters.

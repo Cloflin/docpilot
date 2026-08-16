@@ -1,0 +1,2088 @@
+/**
+ * DocPilot, the whole panel — ui-specs/000, the design system.
+ *
+ * THE VALUES BELOW ARE NOT DECIDED HERE. `ui-specs/000-design-system.md` holds
+ * the system — the token table, the four type sizes, the radius scale, the three
+ * surface levels, the motion tiers and the component recipes — and the reasoning
+ * behind each. This file is where it is written down in CSS, and
+ * `scripts/check-docpilot.sh` is where the parts of it that can be grepped are
+ * enforced. All three move together or none of them does.
+ *
+ * THIS FILE KNOWS NOTHING ABOUT VITEPRESS, and that is checkable: no `--vp-`,
+ * no `.VP…`, no `html.dark` appears below. Every colour is a real value, every
+ * selector is one this package owns. A project with no VitePress at all can
+ * load this alone and get a panel that reads correctly in both colour schemes.
+ *
+ * The split is by SELECTOR OWNERSHIP, not by theme. The navbar trigger, the
+ * end-of-article call to action and the panel are all ours, so all three are
+ * styled here from `--dp-*`. `vitepress.scss` re-declares those tokens in
+ * VitePress's own terms and styles the two navbar elements that are not ours.
+ *
+ * ORDER MATTERS. The adapter overrides by CASCADE — same specificity, loaded
+ * second — so it must be loaded after this file and must re-declare the WHOLE
+ * colour set. `docpilot.scss` is the entry point that does both; a consumer
+ * importing `style/vitepress.css` alone gets an unstyled panel.
+ *
+ * The rules, each checkable by grep and each stated in full in 000:
+ *   1. THE HAIRLINE IS ONE PIXEL AND ONE COLOUR SOURCE. Every border in this
+ *      file and the adapter is `1px solid` from `--dp-line`, `transparent` or
+ *      `CanvasText`, or a reset — and `outline` is only ever the focus ring.
+ *   2. Radii are static and on the scale. Nothing animates a corner.
+ *   3. The accent is declared once per file and used once, and no brand token is
+ *      named outside a `--dp-*` declaration.
+ *   4. Agent progress is one node whose text is replaced in place.
+ *   5. Four UI type sizes — 24 / 16 / 14 / 13 — plus 0.9em and 0.75em.
+ *   6. Six keyframes; exactly two of them repeat, both on the busy status node.
+ *   7. --vp-c-text-3 never reaches text, by reference or by inheritance.
+ *   8. This file names no VitePress token or selector.
+ *   9. The adapter is a mapping, never a second design.
+ *  10. The published token table and this file's declarations agree.
+ *
+ * Surfaces come in THREE LEVELS and the level is the rule — see the token block
+ * below, and rule 1 in 000 for why a control inside a hovered row needs no
+ * special case to separate from it.
+ */
+
+@use './breakpoints' as bp;
+
+/**
+ * The tokens, on :root rather than on `.docpilot`.
+ *
+ * `.docpilot` exists only while the panel is open, and three of this package's
+ * elements live outside it and outlive it — the navbar trigger, the floating
+ * button and the article call to action. Tokens declared on the panel would be
+ * unreachable to all three.
+ *
+ * Colours are stated twice: a light set here, a dark set under
+ * `prefers-color-scheme`. Everything that is not a colour — geometry, radii,
+ * durations, z — is stated once, because it does not vary with appearance.
+ */
+:root {
+  /**
+   * ── Surfaces — THREE LEVELS, and the level is the whole rule ────────────────
+   *
+   *   0  --dp-surface    the panel, and anything that IS a surface: the
+   *                      composer, the copy button's occluder, the FAB
+   *   1  --dp-surface-2  an OBJECT's own paint — the question bubble, a
+   *                      suggestion row, a toggle's track, inline code — and a
+   *                      ROW's hover
+   *   2  --dp-wash       a pointer on a CONTROL, composited on top of whatever
+   *                      it sits on
+   *
+   * The corollary is the point: a delete button inside a hovered history row
+   * paints level 2 over level 1 and reads as a darker chip inside a lighter row.
+   * It separates by compositing, so there is no special case to write — which is
+   * what let ui-specs/006's `:has()` rule be withdrawn rather than kept.
+   *
+   * One token used to do all three jobs, so a control nested in a hoverable row
+   * painted the same colour over the same colour and vanished into it.
+   */
+  --dp-surface: #ffffff;
+  --dp-surface-2: rgba(101, 117, 133, 0.12);
+  /**
+   * DERIVED, and it must stay that way — ui-specs/000.
+   *
+   * Substitution resolves at computed-value time against `:root`'s winning
+   * `--dp-text`, so the adapter's mapping (or a consumer's override of it)
+   * reaches this token and declaration order does not matter. 12% is the one
+   * value that lands near the reference's light target and slightly under its
+   * dark one.
+   *
+   * IT MUST NEVER GET A DARK VARIANT. The suite requires every token in the
+   * `prefers-color-scheme` block below to be re-declared UNCONDITIONALLY by an
+   * adapter, and no host token expresses "7% in light, 15% in dark" as one
+   * unconditional value.
+   */
+  --dp-wash: color-mix(in srgb, var(--dp-text, #0d0d0d) 12%, transparent);
+
+  // ── Line — one, and it is the panel boundary ────────────────────────────────
+  --dp-line: rgba(101, 117, 133, 0.24);
+
+  // ── Text — two readable levels, no third ────────────────────────────────────
+  --dp-text: #1f2328;
+  --dp-text-dim: #5c6672;
+  // The colour of text ON `--dp-text` — the send button once it is armed.
+  --dp-on-text: #ffffff;
+
+  // ── Focus — a ring, not a hue: it has to survive any host palette ───────────
+  --dp-focus: #1f2328;
+
+  // ── The single accent ───────────────────────────────────────────────────────
+  // Declared ONCE and alpha, so one value reads on both surfaces and the rule
+  // "the accent is named in exactly one place" survives having two schemes.
+  --dp-accent-soft: rgba(100, 108, 255, 0.18);
+
+  // ── Surfaces that sit outside the panel ─────────────────────────────────────
+  // `--dp-chip` is the navbar trigger's fill: it has to match whatever the host
+  // puts next to it, which is a different job from any level above and is why it
+  // is not `--dp-surface-2`. `--dp-code-bg` is the
+  // code block's, and on a docs site it should be the site's own code surface.
+  --dp-chip: rgba(101, 117, 133, 0.08);
+  --dp-code-bg: rgba(101, 117, 133, 0.08);
+  --dp-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.12);
+  --dp-scrim: rgba(0, 0, 0, 0.6);
+
+  --dp-font:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --dp-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  // ── Structure ───────────────────────────────────────────────────────────────
+  // Zero is the correct default: with no fixed header above it the panel starts
+  // at the top of the viewport. A host with a header declares its own height.
+  --dp-top: 0px;
+
+  --dp-width: clamp(360px, 30vw, 460px);
+  // The floating button and the popup that opens above it. `--dp-popup-inset`
+  // is both the button's distance from the corner and the popup's, so the two
+  // share one edge; the coarse size is the 44px minimum target with room around
+  // the glyph.
+  --dp-fab-size: 48px;
+  --dp-fab-size-coarse: 56px;
+  --dp-popup-inset: 20px;
+  --dp-popup-block: 640px;
+
+  /**
+   * ── Radius — SIX STEPS, AND NONE OF THEM MOVES ──────────────────────────────
+   *
+   * These used to be rest / hover / focus TIERS: 4 → 8 → 12 on rows and
+   * 8 → 12 → 20 on shells, mirrored from the host site's prev-next pager, which
+   * answers a pointer by growing its own corners. The reference this design now
+   * follows does not do that — its corners are static — and a shape that moves
+   * under the cursor competes with the colour change already saying the same
+   * thing. So the tiers are gone and each step names a KIND of thing instead.
+   */
+  --dp-r-sm: 8px; // icon buttons, the copy chip, the nav trigger, inline
+  //                 text buttons, inline code, the citation focus ring
+  --dp-r-md: 12px; // rows and blocks: suggestion, source, pick, the code card
+  --dp-r-lg: 16px; // panels and cards: the popup, the feedback textarea
+  --dp-r-bubble: 22px; // the question
+  --dp-r-field: 28px; // the composer
+  --dp-r-pill: 999px; // send, ghost pills, the FAB, the status dot
+
+  --dp-gutter: 20px;
+
+  // ── Motion — two tiers and one curve ────────────────────────────────────────
+  // `--dp-dur-fast` carries every colour, background and opacity change;
+  // `--dp-dur` carries the three panel entrances. Colour transitions run
+  // `linear` — between two colours the curve is imperceptible — so the ease is
+  // reserved for movement, which is the only place it does any work.
+  --dp-dur: 220ms;
+  --dp-dur-fast: 150ms;
+  --dp-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dp-z: 29;
+}
+
+/**
+ * The dark set, and the only tokens that differ.
+ *
+ * Every name below must ALSO be declared unconditionally by an adapter, or a
+ * dark-OS reader on a host that is forced light keeps these values and reads
+ * dark text on a dark panel. The suite asserts that pairing rather than trusting
+ * it, because nothing else would catch a token added here and forgotten there.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dp-surface: #1b1b1f;
+    --dp-surface-2: rgba(101, 117, 133, 0.16);
+    --dp-line: rgba(130, 130, 140, 0.32);
+    --dp-text: #dfdfd6;
+    --dp-text-dim: #98989f;
+    --dp-on-text: #1b1b1f;
+    --dp-focus: #dfdfd6;
+    --dp-chip: rgba(101, 117, 133, 0.16);
+    --dp-code-bg: rgba(101, 117, 133, 0.16);
+  }
+}
+
+.docpilot {
+  font-family: var(--dp-font);
+}
+
+/**
+ * The one reset this file owns, and it is load-bearing.
+ *
+ * VitePress declares `box-sizing: border-box` globally — but from inside a
+ * cascade layer, and only on a VitePress host. Every 1px ring below would
+ * otherwise be a 2px layout change for a consumer who loads `style/core.css`
+ * alone, which is the exact install this file exists to serve. Scoped to the
+ * three subtrees this package owns rather than declared on `*`, because a panel
+ * mounted into someone else's page has no business resetting their document.
+ */
+.docpilot,
+.docpilot *,
+.docpilot *::before,
+.docpilot *::after,
+.docpilot-nav-trigger,
+.docpilot-nav-trigger *,
+.docpilot-cta,
+.docpilot-cta * {
+  box-sizing: border-box;
+}
+
+/**
+ * The icon sprite — ui-specs/001.
+ *
+ * `DocPilotIcons` teleports one 0×0 `<svg>` of `<symbol>` definitions into
+ * `<body>`, and every icon in the panel is a `<use>` into it. It is taken out
+ * of flow and clipped rather than hidden: `display: none` is the one way to
+ * make a sprite that some engines decline to resolve references into.
+ */
+.docpilot__sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+// Below 960px VitePress raises its sidebar to 60 and its backdrop to 50, so a
+// "modal" sheet at 40 would render underneath the hamburger menu.
+@media (max-width: #{bp.$sheet - 1px}) {
+  :root {
+    --dp-z: 70;
+  }
+}
+
+.docpilot__scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--dp-scrim);
+  z-index: calc(var(--dp-z) - 1);
+}
+
+/**
+ * TWO SHAPES, one panel. The modifier is always present — `--drawer` or
+ * `--popup`, never neither — so every geometric rule can name the shape it
+ * belongs to instead of one shape being "the default" and the other undoing it.
+ *
+ * Below the sheet breakpoint the two are identical and this base block is all
+ * there is: a full-screen sheet, whichever shape was configured.
+ */
+.docpilot__panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  background: var(--dp-surface);
+  color: var(--dp-text);
+  z-index: var(--dp-z);
+  outline: none;
+
+  @media (max-width: #{bp.$sheet - 1px}) {
+    inset: 0;
+    inline-size: 100vw;
+    block-size: 100dvh;
+    padding-block-start: env(safe-area-inset-top);
+    animation: dp-in-y var(--dp-dur) var(--dp-ease);
+  }
+}
+
+/**
+ * The full-height drawer, docked to the trailing edge.
+ *
+ * The hairline lives HERE and not on the base selector, and that is not
+ * bookkeeping: with the border on the base, the popup would have to switch it
+ * off, and `border-inline-start: none` is still a border declaration to the
+ * check script — a fifth one, failing a rule whose message would say nothing
+ * about popups. Declaring it on the shape that has it keeps the count at four.
+ */
+.docpilot__panel--drawer {
+  @media (min-width: bp.$sheet) {
+    inset-block-start: var(--dp-top);
+    inset-inline-end: 0;
+    inline-size: var(--dp-width);
+    // dvh, not vh: iPadOS Safari's dynamic toolbar otherwise pushes the
+    // composer out of reach.
+    block-size: calc(100dvh - var(--dp-top));
+    border-inline-start: 1px solid var(--dp-line);
+    animation: dp-in-x var(--dp-dur) var(--dp-ease);
+  }
+}
+
+/**
+ * The floating popup, above the button that opened it.
+ *
+ * Above, not over: the FAB stays visible and keeps working as the close
+ * affordance — the convention every chat widget has already taught — and that
+ * is also what makes returning focus to it correct rather than lucky.
+ *
+ * It carries no border at all. Its edge is the shadow, which is why
+ * `forced-colors` has to give it one: that mode erases shadows, and a surface
+ * with neither would float with no boundary at all.
+ */
+.docpilot__panel--popup {
+  @media (min-width: bp.$sheet) {
+    inset-block-start: auto;
+    inset-block-end: calc(var(--dp-popup-inset) + var(--dp-fab-size) + 12px);
+    inset-inline-end: var(--dp-popup-inset);
+    inline-size: var(--dp-width); // the same width as the drawer, deliberately
+    block-size: min(
+      var(--dp-popup-block),
+      calc(100dvh - var(--dp-top) - var(--dp-popup-inset) * 2 - var(--dp-fab-size) - 12px)
+    );
+    // Ring AND shadow. The shadow alone was its whole edge, which is invisible
+    // on a dark host and erased outright by forced-colors — the one mode where a
+    // floating surface most needs a boundary.
+    border: 1px solid var(--dp-line);
+    border-radius: var(--dp-r-lg);
+    overflow: hidden; // the thread must not paint over the rounded corners
+    box-shadow: var(--dp-shadow);
+    transform-origin: bottom;
+    animation: dp-in-pop var(--dp-dur) var(--dp-ease);
+  }
+}
+
+/**
+ * The selection popover — ui-specs/007.
+ *
+ * THE THIRD THING THAT FLOATS, and it takes the treatment the other two do: a
+ * ring AND a shadow. The shadow alone is invisible on a dark host and erased
+ * outright by forced-colors, which is the one mode where a surface with nothing
+ * behind it most needs a boundary.
+ *
+ * It has to clear the popup shape's `overflow: hidden`, so it is a top-layer
+ * popover where the platform has one. Where it is not, the attribute is simply
+ * absent and the same node is a plain fixed box — which is not clipped either,
+ * because a fixed box escapes an ancestor's overflow. One node, one recipe, two
+ * placements. `z-index` is for the second of them: an element in the top layer
+ * has no use for one.
+ *
+ * There is deliberately NO `display: none` here. In a browser with the API the
+ * UA sheet hides it until `showPopover()`; in one without, the attribute is
+ * ignored and the node must stay visible — that absence IS the fallback.
+ *
+ * `inset: auto` and `margin: 0` undo the UA popover sheet, which centres the box
+ * with `inset: 0; margin: auto`; the position comes from the selection's own
+ * rect, measured in JS.
+ */
+.docpilot__ask {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  display: flex;
+  padding: 2px; // so the button's wash never touches the ring
+  overflow: visible; // the UA sheet makes a popover a scroll box; it would clip the focus ring
+  z-index: calc(var(--dp-z) + 1);
+  background: var(--dp-surface);
+  color: var(--dp-text);
+  border: 1px solid var(--dp-line);
+  border-radius: var(--dp-r-pill);
+  box-shadow: var(--dp-shadow);
+  transform-origin: bottom;
+  animation: dp-in-pop var(--dp-dur) var(--dp-ease);
+
+  // Below the selection where the platform draws its own callout above one.
+  // The rise reads the same either way; only its origin flips.
+  &.is-below {
+    transform-origin: top;
+  }
+}
+
+.docpilot__ask-btn {
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@keyframes dp-in-x {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+@keyframes dp-in-y {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+// `bottom`, not `right bottom`: a corner origin would need a mirrored rule for
+// right-to-left, and the rise reads the same from either edge.
+@keyframes dp-in-pop {
+  from {
+    transform: translateY(8px) scale(0.98);
+    opacity: 0;
+  }
+}
+
+/**
+ * ── header ──────────────────────────────────────────────────────────────────
+ *
+ * The divider is TRANSPARENT AT REST and coloured once the thread has moved —
+ * ui-specs/002. At the top of the panel the chrome is one uninterrupted surface
+ * and a rule under the title would be a second boundary competing with the
+ * panel's own edge; scrolled, the same absence lets an answer slide under the
+ * title with nothing to say the header is a layer above it.
+ *
+ * Declared unconditionally and switched by COLOUR, never added and removed: a
+ * border that appears would move the thread by a pixel every time the reader
+ * crosses the top of the scroller. Only the colour transitions.
+ *
+ * `is-scrolled` comes from a passive scroll listener rather than from
+ * `@container scroll-state(...)`, which is Chromium-only — the fallback that
+ * feature's own guidance prescribes.
+ */
+.docpilot__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 12px var(--dp-gutter);
+  flex: none;
+  border-block-end: 1px solid transparent;
+  transition: border-color var(--dp-dur-fast) linear;
+
+  &.is-scrolled {
+    border-color: var(--dp-line);
+  }
+}
+
+// The leading glyph is the nav trigger's, at its own size on its own 24 box:
+// aria-hidden, currentColor, so the heading's name and colour are unchanged.
+.docpilot__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0;
+
+  svg {
+    flex: none;
+  }
+}
+
+.docpilot__header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+// Chrome controls in a 32px box, at `--dp-r-sm`, not the full round: the
+// composer's send button and the floating button are the two circles in this
+// design and they are circles because they are the primary action of their
+// surface. ui-specs/004.
+.docpilot__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--dp-r-sm);
+  background: none;
+  color: var(--dp-text-dim);
+  cursor: pointer;
+  transition:
+    color var(--dp-dur-fast) linear,
+    background-color var(--dp-dur-fast) linear;
+
+  // Level 2 — a pointer on a control. It composites on top of whatever is
+  // underneath, which is what separates this button from a row that is itself
+  // hovered at level 1.
+  &:hover,
+  &:focus-visible {
+    color: var(--dp-text);
+    background: var(--dp-wash);
+  }
+  &:active {
+    transform: scale(0.96);
+    transition: transform var(--dp-dur-fast) var(--dp-ease);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+// ── thread ──────────────────────────────────────────────────────────────────
+.docpilot__thread {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: auto; // smooth fights the autoscroll write and never settles
+  padding: 20px var(--dp-gutter);
+  scroll-padding-block: 20px;
+  display: flex;
+  flex-direction: column;
+
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: -2px;
+  }
+}
+
+// Two anchors in one column: the greeting's auto margins eat the free space, so
+// it centres while the suggestions keep the position `margin-block-start: auto`
+// gave them — next to the only control the reader needs.
+.docpilot__empty {
+  flex: 1;
+  padding-block-end: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.docpilot__greeting {
+  margin-block: auto;
+  padding-block: 24px;
+}
+
+// THE ONE DISPLAY STRING IN THE PACKAGE. The empty state is the only moment the
+// panel has a canvas rather than a conversation, and this is the reference
+// product's own measurement for it: large and thin, not small and bold. It wraps
+// to two lines at the narrow end of `--dp-width`, and that is accepted.
+// `letter-spacing` is a display treatment and appears at this size and nowhere
+// else — it used to tighten a 15px label, which is a size that wants no help.
+.docpilot__greeting-h {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.docpilot__greeting-p {
+  margin: 8px 0 0;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--dp-text-dim);
+}
+
+.docpilot__suggestions {
+  display: flex;
+  flex-direction: column;
+  align-items: start; // each row is as wide as its question, not as the panel
+  gap: 8px;
+}
+
+// The same rows inside a settled turn rather than in the empty state, where
+// `.docpilot__empty` supplies the spacing instead.
+.docpilot__suggestions--inline {
+  margin-block-start: 12px;
+}
+
+/**
+ * A row, not a pill — ui-specs/004.
+ *
+ * These are whole sentences, and a pill drawn around a sentence is a paragraph
+ * with a rounded rectangle on it. So they take the shape the reference products
+ * give their own suggestions: a surface, and the rest / hover / focus radius
+ * tiers the source rows already answer a pointer with.
+ *
+ * The surface is RESTING, and it is the point. These three rows are the only
+ * thing to do in an empty panel, and the underline they used to carry was their
+ * one affordance — a plain sentence that becomes clickable on hover is a
+ * sentence nobody touches on a touchscreen. They exist only while the thread is
+ * empty (or beside a social reply that has nothing else to offer), so they never
+ * add a fill to a settled conversation.
+ *
+ * Level 1 at rest, level 2 on contact, and the text promoted with it.
+ */
+.docpilot__suggestion {
+  appearance: none;
+  background: var(--dp-surface-2);
+  border: none;
+  border-radius: var(--dp-r-md);
+  min-height: 32px;
+  padding: 6px 12px;
+  text-align: start;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dp-text-dim);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    color var(--dp-dur-fast) linear,
+    background-color var(--dp-dur-fast) linear;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--dp-text);
+    background: var(--dp-wash);
+  }
+  &:active {
+    transform: scale(0.96);
+    transition: transform var(--dp-dur-fast) var(--dp-ease);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    min-height: 44px;
+  }
+}
+
+.docpilot__turn + .docpilot__turn {
+  margin-block-start: 32px;
+}
+
+// The 20px that used to sit under the bubble is now the action row's: 2 + 32 + 6
+// comes to 40, and the row is transparent at rest, so the resting rhythm is
+// unchanged for a reader who never brings a pointer near it.
+.docpilot__question {
+  max-width: 70%;
+  margin: 0 0 2px auto;
+  padding: 10px 16px;
+  background: var(--dp-surface-2);
+  border-radius: var(--dp-r-bubble);
+  font-size: 16px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/**
+ * The quote chip — ui-specs/007.
+ *
+ * Level 1 and 13px: an object with its own paint, one tier quieter than the
+ * question bubble it sits above, because it is the reference and the question is
+ * the ask. It shares the bubble's 70% and its auto margin, so the two line up on
+ * the same edge.
+ *
+ * ONE LINE, ALWAYS. The chip NAMES a passage; it does not reproduce it — the
+ * passage is still on screen a few lines up. A chip that grows to five lines
+ * pushes the composer off a phone.
+ *
+ * No ring: in this system a quotation is signalled by dimmed text, which is what
+ * the answer's own `blockquote` does, and a rule down its side would be the only
+ * one in the package.
+ */
+.docpilot__quote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 70%;
+  margin: 0 0 8px auto;
+  padding: 6px 12px;
+  background: var(--dp-surface-2);
+  border-radius: var(--dp-r-md);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dp-text-dim);
+
+  svg {
+    flex: none;
+  }
+}
+
+.docpilot__quote-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The same chip in the composer, where it is a draft rather than a record: full
+// width, and it carries its own dismissal.
+.docpilot__quote--draft {
+  max-width: none;
+  margin: 0 0 8px;
+}
+
+// ── the one live status node ────────────────────────────────────────────────
+.docpilot__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  color: var(--dp-text-dim);
+}
+
+.docpilot__status-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-block-start: 0.5px;
+  border-radius: var(--dp-r-pill);
+  background: currentColor;
+  // scale, not opacity: a .3 opacity trough composites to 1.34:1 and is
+  // invisible for half of every cycle in the component's only loading cue.
+  animation: dp-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes dp-breathe {
+  0%,
+  100% {
+    transform: scale(0.6);
+  }
+  50% {
+    transform: scale(1);
+  }
+}
+
+// The dot answers "alive"; the sweep answers "is this line still the current
+// one" — a phase can hold for seconds while the dot breathes identically in all
+// of them. The gradient runs between the two READABLE text levels, so the
+// trough is the label's own resting contrast, not the 1.34:1 an opacity loop
+// would composite to. background-clip: text paints inside the glyphs only, so
+// no surface appears and rule 2's count of three fills is unchanged.
+.docpilot__status-label {
+  min-inline-size: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background-image: linear-gradient(
+    90deg,
+    var(--dp-text-dim) 0%,
+    var(--dp-text-dim) 40%,
+    var(--dp-text) 50%,
+    var(--dp-text-dim) 60%,
+    var(--dp-text-dim) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: dp-shimmer 2.4s linear infinite;
+}
+
+@keyframes dp-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+
+// ── answer ──────────────────────────────────────────────────────────────────
+.docpilot__answer {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--dp-text);
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  outline: none;
+
+  p + p {
+    margin-block-start: 12px;
+  }
+
+  // base.css kills list markers globally and this subtree is not inside .vp-doc
+  ul,
+  ol {
+    padding-inline-start: 20px;
+    margin-block-start: 12px;
+  }
+  ul {
+    list-style: disc;
+  }
+  ol {
+    list-style: decimal;
+  }
+  li::marker {
+    color: var(--dp-text-dim);
+  }
+  li + li {
+    margin-block-start: 4px;
+  }
+
+  // base.css neutralises links (color: inherit; text-decoration: inherit), so
+  // both have to be re-declared — never with the theme accent.
+  a {
+    color: var(--dp-text);
+    text-decoration: underline;
+    text-decoration-thickness: from-font;
+    text-underline-offset: 2px;
+  }
+
+  // ── inline citation marker ────────────────────────────────────────────────
+  // `position: relative` is REQUIRED: without it the ::after resolves against
+  // .docpilot__panel, which is fixed, and becomes a full-panel invisible overlay
+  // that swallows every click in the drawer.
+  a.docpilot__cite {
+    position: relative;
+    font-size: 0.75em;
+    font-weight: 500;
+    vertical-align: super;
+    // Load-bearing: a superscript inflates the 1.65 line box without it and the
+    // answer's rhythm breaks on every cited line.
+    line-height: 0;
+    padding: 0 1px;
+    color: var(--dp-text-dim);
+    text-decoration: none;
+    transition: color var(--dp-dur-fast) linear;
+  }
+  // Invisible hit-area expansion, zero layout impact — the glyph itself is
+  // roughly 11px tall and is not a target.
+  a.docpilot__cite::after {
+    content: '';
+    position: absolute;
+    inset-block: -8px;
+    inset-inline: -3px;
+  }
+  a.docpilot__cite + a.docpilot__cite {
+    margin-inline-start: 8px;
+  }
+  a.docpilot__cite:hover,
+  a.docpilot__cite:focus-visible {
+    color: var(--dp-text);
+  }
+  a.docpilot__cite:focus-visible {
+    outline: none;
+  }
+  // The ring is drawn on the target, not on the glyph.
+  a.docpilot__cite:focus-visible::after {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 0;
+    border-radius: var(--dp-r-sm);
+  }
+
+  // ── code blocks ───────────────────────────────────────────────────────────
+  // Same surface as the documentation pages, same shape, and the fill sits on
+  // the wrapper rather than on the `pre` — which is how VitePress builds an
+  // article's code block, and it is what keeps the copy button on the block's
+  // own background instead of on scrolling code.
+  //
+  // The wrapper is also the positioning context for that button: `pre` is a
+  // horizontal scroller and would carry an absolutely positioned child
+  // off-screen along with the code.
+  // A ring as well as a fill: on a host where `--dp-code-bg` lands close to the
+  // panel's own surface the block would otherwise have no edge at all. NO
+  // `overflow: hidden` — it would clip the `pre`'s focus ring, which is drawn at
+  // `outline-offset: 2px`, and the `pre` has no background to show through the
+  // corners anyway.
+  .docpilot__code {
+    position: relative;
+    background: var(--dp-code-bg);
+    border: 1px solid var(--dp-line);
+    border-radius: var(--dp-r-md);
+  }
+
+  pre {
+    background: none;
+    border-radius: 0;
+    padding: 12px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    font-size: 13px;
+    line-height: 1.6;
+    font-family: var(--dp-font-mono);
+
+    // It is a scroller, so it is a tab stop; without a ring the focus is
+    // invisible for exactly the reader who needs it.
+    &:focus-visible {
+      outline: 2px solid var(--dp-focus);
+      outline-offset: 2px;
+    }
+  }
+
+  // Shiki writes BOTH themes onto every token as custom properties and applies
+  // neither (`defaultColor: false`), so one of the two has to be picked here.
+  // This CANNOT become a token: `var()` has to sit on a rule that targets the
+  // spans, because the variables exist only on token spans — resolved on :root
+  // it would compute to the literal `inherit` and the colours would be lost.
+  // The `inherit` fallback is load-bearing for the same reason: the `pre`'s own
+  // inline style is stripped.
+  .shiki,
+  .shiki span {
+    color: var(--shiki-light, inherit);
+  }
+
+  .docpilot__code-copy {
+    position: absolute;
+    inset-block-start: 8px;
+    inset-inline-end: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: var(--dp-r-sm);
+    // The panel's own surface, not a fourth fill: it has to occlude the code it
+    // covers, and it is invisible until the block is hovered.
+    background: var(--dp-surface);
+    color: var(--dp-text-dim);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity var(--dp-dur-fast) linear,
+      color var(--dp-dur-fast) linear;
+
+    &:hover {
+      color: var(--dp-text);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--dp-focus);
+      outline-offset: 2px;
+    }
+  }
+
+  // pointer-events rather than visibility: an invisible chip must not eat
+  // clicks meant for the code, but it must stay reachable by Tab — and
+  // pointer-events never blocks focus.
+  .docpilot__code:hover .docpilot__code-copy,
+  .docpilot__code-copy:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .docpilot__glyph-done {
+    display: none;
+  }
+  .docpilot__code-copy.is-copied {
+    .docpilot__glyph-rest {
+      display: none;
+    }
+    .docpilot__glyph-done {
+      display: inline;
+    }
+  }
+
+  :not(pre) > code {
+    background: var(--dp-surface-2);
+    border-radius: var(--dp-r-sm);
+    padding: 0 4px;
+    font-size: 0.9em;
+    font-family: var(--dp-font-mono);
+  }
+
+  blockquote {
+    color: var(--dp-text-dim);
+    margin: 12px 0 0;
+    padding: 0;
+    border: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-block-start: 20px;
+  }
+}
+
+// The other half of the Shiki pair. A host that switches appearance by class
+// overrides both branches from its adapter; with no adapter at all, the OS
+// preference is the only signal there is.
+@media (prefers-color-scheme: dark) {
+  .docpilot__answer .shiki,
+  .docpilot__answer .shiki span {
+    color: var(--shiki-dark, inherit);
+  }
+}
+
+.docpilot__lead {
+  font-size: 16px;
+  line-height: 1.65;
+  margin: 12px 0 0;
+}
+
+.docpilot__meta {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dp-text-dim);
+  margin: 12px 0 0;
+}
+
+// 8px, where the underlined era needed 16: a pill carries 12px of its own
+// padding on each side, and the old gap was paying for text that had none. The
+// negative inline margin puts the first pill's TEXT back on the paragraph's
+// alignment — the fill is allowed to extend past it.
+.docpilot__row {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 0;
+  margin-inline-start: -12px;
+}
+
+/**
+ * The ghost pill — ui-specs/004.
+ *
+ * A button that looks like a link reads as navigation, and every control wearing
+ * this class acts in place: retry, widen the scope, ask without the key, clear
+ * all, save, submit. So it takes the shape the reference products use for a
+ * secondary action — full round, no border at rest, a surface wash on hover, a
+ * solid inverted fill when it is a toggle that is ON.
+ *
+ * FULL ROUND rather than a radius tier: at 32px tall, `999px` and "the shell's
+ * radius minus its padding" are indistinguishable, and full round never needs
+ * recomputing when the shell around it changes tier.
+ *
+ * `aria-pressed` is styled here rather than on the feedback form, because the
+ * pressed state belongs to the control and not to the one place it is currently
+ * used. It is a resting fill and it is deliberate: a multi-select toggle whose
+ * only selected cue is the same wash hover uses is a toggle with no state.
+ */
+.docpilot__text-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--dp-r-pill);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--dp-text);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color var(--dp-dur-fast) linear,
+    color var(--dp-dur-fast) linear;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--dp-wash);
+  }
+  &:active {
+    transform: scale(0.96);
+    transition: transform var(--dp-dur-fast) var(--dp-ease);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  /**
+   * A TOGGLE carries a track at rest; an ACTION appears on contact.
+   *
+   * `[aria-pressed]` unqualified, so any control that declares itself a toggle
+   * gets the surface and every plain action stays a ghost. Without it the four
+   * feedback reasons are indistinguishable from the sentence above them until a
+   * pointer arrives — and where there is no pointer, never. It is a resting fill
+   * inside the thread, and it is bounded the same way the scope picker's borders
+   * are: nothing paints it unless the reader is holding that form open.
+   *
+   * LEVEL 1, not level 2: the track is an object's own paint. Level 2 on a
+   * resting control would read as permanently hovered.
+   *
+   * Dim at rest, promoted on contact — so hover is legible on a surface that is
+   * already filled, without a second fill colour to name.
+   */
+  &[aria-pressed] {
+    background: var(--dp-surface-2);
+    color: var(--dp-text-dim);
+  }
+  &[aria-pressed]:hover,
+  &[aria-pressed]:focus-visible {
+    color: var(--dp-text);
+  }
+
+  // The same inverted pair the armed send button already uses, so "on" is one
+  // colour relationship in this component rather than two. Declared last, so a
+  // pressed toggle keeps it under hover as well.
+  &[aria-pressed='true'] {
+    background: var(--dp-text);
+    color: var(--dp-on-text);
+  }
+
+  @media (pointer: coarse) {
+    min-height: 44px;
+  }
+}
+
+// ── reasoning: one collapsed line ───────────────────────────────────────────
+// `fit-content`, or a block-level pill would stretch a 12-character label across
+// the whole thread. The negative margin is the same optical correction the rows
+// above make: the pill's padding must not indent this line relative to the
+// answer underneath it.
+.docpilot__thoughts-toggle {
+  @extend .docpilot__text-btn;
+  display: flex;
+  width: fit-content;
+  margin-block-start: 12px;
+  margin-inline-start: -12px;
+  color: var(--dp-text-dim);
+}
+
+.docpilot__thoughts,
+.docpilot__prompt {
+  font-family: var(--dp-font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dp-text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-block: 8px;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+.docpilot__thoughts {
+  max-block-size: 240px;
+}
+.docpilot__prompt {
+  max-block-size: min(240px, 32dvh);
+  margin-block-end: 8px;
+
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+}
+.docpilot__prompt-h {
+  font-family: var(--dp-font);
+  font-size: 13px;
+  color: var(--dp-text-dim);
+  margin: 12px 0 4px;
+}
+.docpilot__prompt-yours,
+.docpilot__prompt-edit {
+  color: var(--dp-text);
+}
+.docpilot__prompt-edit {
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  font: inherit;
+  inline-size: 100%;
+
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  // THE ONLY iOS ZOOM GUARD LEFT, and the only field that ever needed one that
+  // did not have it. Both composers are 16px at every width now, so the two
+  // overrides that used to force it there are gone. This one inherits 13px mono
+  // from `.docpilot__prompt` — so it zoomed the viewport on focus, silently,
+  // for as long as the prompt disclosure has existed.
+  @media (max-width: #{bp.$sheet - 1px}) {
+    font-size: 16px;
+  }
+}
+
+// ── sources ─────────────────────────────────────────────────────────────────
+.docpilot__sources {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+}
+
+.docpilot__source {
+  display: grid;
+  // minmax(0, …), not 1fr: a grid item's default min-width: auto floors the
+  // track at min-content, which for a nowrap tail was the whole untruncated
+  // breadcrumb — it pushed the row past the panel and gave the thread a
+  // horizontal scrollbar. The track has to be allowed to shrink so text wraps.
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 32px;
+  padding: 8px;
+  margin-inline: -8px;
+  border-radius: var(--dp-r-md);
+  color: var(--dp-text-dim); // set ONCE, so .is-linked promotes everything
+  transition: background-color var(--dp-dur-fast) linear;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  // Level 1 — a row's hover is a SELECTION, not a control's answer. A control
+  // inside it paints level 2 on top of this and separates by compositing, which
+  // is what withdrew the `:has()` rule ui-specs/006 used to need here. The
+  // hover underline went with it: the surface is the affordance, and an
+  // underline promising "this opens" must not be lit while the cursor is on the
+  // bin that deletes it.
+  &:hover,
+  &:focus-within {
+    background: var(--dp-surface-2);
+  }
+
+  // The only green in the component, and zero at rest.
+  &.is-linked {
+    background: var(--dp-accent-soft);
+    color: var(--dp-text);
+  }
+
+  @media (pointer: coarse) {
+    min-height: 44px;
+  }
+}
+
+.docpilot__source-n {
+  font-size: 13px;
+  color: inherit;
+}
+.docpilot__source-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dp-text);
+  overflow-wrap: anywhere;
+}
+// It wraps, it is not truncated. The tail is an inline span, so the ellipsis
+// this rule used to carry never rendered — only the nowrap did, and that was
+// the overflow. The tail is also what tells two similar titles apart, so it is
+// the wrong thing to cut.
+.docpilot__source-tail {
+  font-size: 13px;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+// ── actions: hover- and focus-revealed, resident where hover does not exist ──
+.docpilot__actions {
+  display: flex;
+  gap: 4px;
+  margin-block-start: 12px;
+  opacity: 0;
+  transition: opacity var(--dp-dur-fast) linear;
+}
+// The same row under the question bubble, aligned to the edge the bubble sits
+// on. Deliberately NOT its own reveal mechanism: a hover scoped to the bubble
+// would need a bridge across the gap to the row, and a bridge is where hover
+// reveals start flickering. One turn, one hover.
+.docpilot__actions--ask {
+  justify-content: flex-end;
+  margin-block: 0 6px;
+}
+.docpilot__turn:hover .docpilot__actions,
+.docpilot__turn:focus-within .docpilot__actions,
+.docpilot__actions.is-resident {
+  opacity: 1;
+}
+@media (hover: none), (pointer: coarse) {
+  .docpilot__actions {
+    opacity: 1;
+  }
+  // Same rule, same reason: where there is no hover there is no reveal, so the
+  // control is resident — and sized for a finger.
+  .docpilot__code-copy {
+    opacity: 1;
+    pointer-events: auto;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+// Same arithmetic as `.docpilot__row`: the pills bring their own padding, so the
+// gap shrinks and the row is pulled back into the paragraph's alignment.
+.docpilot__reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 8px;
+  margin-inline-start: -12px;
+}
+
+.docpilot__feedback {
+  margin-block-start: 8px;
+}
+
+/**
+ * ── the question, open for editing ──────────────────────────────────────────
+ *
+ * The bubble becomes the field it always stood for. Level 0 and a ring, like
+ * the composer and the feedback textarea: a tinted field AND a ring would be
+ * two devices doing one job, and this is a field now rather than an object.
+ *
+ * It takes the whole column, where the bubble takes 70%. That jump is not a
+ * side effect — it is the signal that the text stopped being a record and
+ * became something to type in, and five lines of editing want the column
+ * anyway.
+ *
+ * A real border, so `forced-colors` needs no entry for it: that mode colours
+ * `border-color` from the system palette whatever token named it.
+ */
+.docpilot__edit {
+  margin: 0 0 8px;
+  padding: 10px 16px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-line);
+  border-radius: var(--dp-r-lg);
+
+  &:focus-within {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+}
+
+.docpilot__edit-field {
+  display: block;
+  inline-size: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  max-block-size: calc(5lh + 12px);
+  font: inherit;
+  // 16px is the body size AND the iOS zoom floor: Safari zooms the viewport for
+  // a focused control below it, and this one opens mid-thread.
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--dp-text);
+  padding: 0;
+  margin: 0;
+}
+
+// Under the field and at the same edge, because that is the edge the bubble
+// was on. The pills bring their own 12px, so the row is pulled back onto the
+// field's alignment rather than sitting inside it.
+.docpilot__edit-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-block-end: 12px;
+  margin-inline-end: -12px;
+}
+
+// The composer's field, one size down. It used to draw its resting edge with a
+// 2px OUTLINE — not a design decision, a way to stay out of the old rule 1's
+// border count, which its own comment admitted. The edge is a real ring now and
+// `outline` went back to being the focus indicator, which is what rule 1d
+// enforces so the workaround cannot come back.
+.docpilot__comment {
+  display: block;
+  inline-size: 100%;
+  margin-block-start: 8px;
+  padding: 8px 12px;
+  // Level 0: a field is a surface, not an object sitting on one. Its edge is
+  // the ring, which is a device rather than a second fill.
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-line);
+  border-radius: var(--dp-r-lg);
+  resize: none;
+  overflow-y: auto;
+  max-block-size: calc(5lh + 16px);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--dp-text);
+
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  // base.css paints every placeholder --vp-c-text-3 (2.69:1 on the fill)
+  &::placeholder {
+    color: var(--dp-text-dim);
+    opacity: 1;
+  }
+}
+
+/**
+ * ── back to the newest answer ───────────────────────────────────────────────
+ *
+ * A RAIL OF ZERO HEIGHT between the thread and the composer. `align-items:
+ * flex-end` on a box with no height puts the button's bottom edge exactly on
+ * the boundary between the two, and it grows upward over the thread — so the
+ * placement needs neither a wrapper around the panel's only scroller (autoscroll,
+ * `scroll-padding`, `100dvh` on iPadOS and `overscroll-behavior` all hang off
+ * that element) nor the composer's height as a number, which moves with the
+ * quote chip, the counter, the footnote and both docks.
+ */
+.docpilot__jump-rail {
+  flex: none;
+  block-size: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+/**
+ * Flat, and that is a decision. Three things float in this package — the popup,
+ * the floating button and the selection popover — and only those three carry a
+ * shadow. This one lives INSIDE the panel it belongs to, so it occludes the
+ * thread beneath it with the panel's own surface and one hairline, exactly as
+ * the code card's copy chip does.
+ *
+ * Hidden by `opacity` and `pointer-events`, never `visibility` or `display`: the
+ * fade is the whole point, and without `pointer-events: none` an invisible pill
+ * would eat the clicks aimed at the last turn's action row.
+ */
+.docpilot__jump {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 32px;
+  margin-block-end: 8px;
+  // Oblong, not round: 48 × 32 around a 16px chevron. A circle here would be a
+  // third one in a design that has exactly two, and both are primary actions.
+  padding: 6px 16px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-line);
+  border-radius: var(--dp-r-pill);
+  color: var(--dp-text-dim);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dp-dur-fast) linear,
+    color var(--dp-dur-fast) linear;
+
+  &.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  // Colour only. `--dp-wash` is translucent and the thread would show through
+  // the pill it is meant to be occluding — the copy chip's argument exactly.
+  &:hover,
+  &:focus-visible {
+    color: var(--dp-text);
+  }
+  &:active {
+    transform: scale(0.96);
+    transition: transform var(--dp-dur-fast) var(--dp-ease);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    min-block-size: 44px;
+    padding-inline: 20px;
+  }
+}
+
+// ── composer ────────────────────────────────────────────────────────────────
+.docpilot__composer {
+  flex: none;
+  padding: 12px var(--dp-gutter);
+
+  @media (max-width: #{bp.$sheet - 1px}) {
+    padding-block-end: max(12px, env(safe-area-inset-bottom));
+  }
+}
+
+.docpilot__field {
+  display: grid;
+  // 36px, not 32: the send button is the composer's primary action and the
+  // reference sizes a composer control larger than a chrome one. 36 + 8 + 8 is
+  // where the 52px floor comes from.
+  grid-template-columns: 1fr 36px;
+  align-items: end;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  min-height: 52px;
+  // Level 0, for the same reason the feedback textarea is: the reference's light
+  // composer is the page colour plus a hairline, and a tinted field with a ring
+  // is two devices doing one job.
+  background: var(--dp-surface);
+  border-radius: var(--dp-r-field);
+  // A real ring, where this used to be a 2px outline for the same reason the
+  // feedback textarea's was. NO HOVER STATE: the reference composer does not
+  // answer a pointer, and an edge that brightens under the cursor invites a
+  // click on a box that is already focusable by clicking anywhere in it.
+  border: 1px solid var(--dp-line);
+
+  &:focus-within {
+    // `--dp-focus`, not the brand token it is defined from: rule 3 allows the
+    // theme's accent to be named ONCE, where the local token is declared.
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  textarea {
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    font: inherit;
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--dp-text);
+    padding-block: 6px;
+    margin: 0;
+    max-block-size: calc(5lh + 12px);
+    overflow-y: auto;
+
+    // base.css paints every placeholder --vp-c-text-3 (2.69:1 on the fill)
+    &::placeholder {
+      color: var(--dp-text-dim);
+      opacity: 1;
+    }
+  }
+
+  @media (pointer: coarse) {
+    grid-template-columns: 1fr 44px;
+    min-height: 60px;
+  }
+}
+
+.docpilot__send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--dp-r-pill);
+  background: transparent;
+  color: var(--dp-text-dim);
+  cursor: pointer;
+  transition:
+    background-color var(--dp-dur-fast) linear,
+    color var(--dp-dur-fast) linear;
+
+  &.is-ready {
+    background: var(--dp-text);
+    color: var(--dp-on-text);
+  }
+  // The transition was missing here and present on the other three press
+  // targets, so this one snapped where they eased.
+  &:active {
+    transform: scale(0.96);
+    transition: transform var(--dp-dur-fast) var(--dp-ease);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.docpilot__counter {
+  font-size: 13px;
+  color: var(--dp-text-dim);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  margin: 8px 0 0;
+}
+
+.docpilot__footnote {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dp-text-dim);
+  margin: 8px 0 0;
+}
+
+// The two controls that are INLINE INSIDE A SENTENCE — the footnote reads
+// "All docs · AI-generated. Check the linked pages." A pill in running text
+// breaks the line box, so these keep their underline and take the hover wash at
+// a small radius instead: they answer a pointer the way everything else in the
+// panel does, without leaving the paragraph they belong to. ui-specs/004.
+.docpilot__scope,
+.docpilot__prompt-toggle {
+  font: inherit;
+  background: none;
+  border: none;
+  border-radius: var(--dp-r-sm);
+  padding: 2px 6px;
+  margin-inline: -6px 0;
+  color: var(--dp-text); // NOT inherit — this is the whole discoverability path
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--dp-text-dim);
+  text-decoration-thickness: from-font;
+  text-underline-offset: 2px;
+  transition: background-color var(--dp-dur-fast) linear;
+
+  // Level 2 — these are controls, not rows.
+  &:hover,
+  &:focus-visible {
+    background: var(--dp-wash);
+    text-decoration-color: currentColor;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+}
+
+.docpilot__scope {
+  max-inline-size: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+// ── scope picker ────────────────────────────────────────────────────────────
+// The only two borders that are not the panel boundary, and they exist only
+// while the reader holds the picker open. This is the one place whitespace
+// failed: three text buttons that overwrite the tick set sit directly above 139
+// rows that toggle it, sharing one alignment, one fill and two type roles, and
+// the picker is the one disclosure that pushes nothing when it opens. Both are
+// full-bleed — the gutter is cancelled and restored as padding — because a line
+// inset 20px reads as an underline on the row above it, not as a boundary.
+.docpilot__picker {
+  margin-block: -12px 8px; // -12px pulls the rule flush under the thread
+  margin-inline: calc(var(--dp-gutter) * -1);
+  padding: 12px var(--dp-gutter) 0;
+  border-block-start: 1px solid var(--dp-line);
+  outline: none;
+}
+
+.docpilot__picker-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin-inline: calc(var(--dp-gutter) * -1);
+  padding: 0 var(--dp-gutter) 8px;
+  border-block-end: 1px solid var(--dp-line);
+}
+
+// The presets are their own group: closing the picker is not setting a scope,
+// so the close button sits in the row but outside role="group".
+.docpilot__picker-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+}
+
+// align-self, because the row aligns on the text baseline and a 32px box sitting
+// on it would hang below the rule this row carries.
+.docpilot__picker-close {
+  flex: none;
+  align-self: center;
+  margin-inline-start: auto;
+}
+
+// aria-hidden in the template: the group is already named "Set the scope", so
+// this is a visual restatement, not a second announcement.
+.docpilot__picker-label {
+  flex: none;
+  font-size: 13px;
+  color: var(--dp-text-dim);
+}
+
+// The -8px row margins need somewhere to go. Without the padding that pays for
+// them, each row's border box ends 8px past the list's content edge and this
+// scroller — overflow-y: auto, so overflow-x resolves to auto with it — grows a
+// horizontal scrollbar of exactly that width, whatever the text does.
+.docpilot__picker-list {
+  max-block-size: min(240px, 32dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 8px;
+  margin-inline: -8px;
+  padding: 8px 8px 0;
+}
+
+.docpilot__pick {
+  display: grid;
+  // 16px fixed, so nothing shifts when a tick appears; minmax(0, …) for the
+  // same reason as .docpilot__source — these are full page titles, so the row
+  // that overflows is the common one here, not the edge case.
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start; // the tick pins to the first line of a wrapped row
+  min-height: 32px;
+  padding: 8px;
+  margin-inline: -8px;
+  border-radius: var(--dp-r-md);
+  color: var(--dp-text-dim);
+  cursor: pointer;
+  transition: background-color var(--dp-dur-fast) linear;
+
+  // Level 1 — a row, like .docpilot__source.
+  &:hover,
+  &:focus-visible {
+    background: var(--dp-surface-2);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: -2px;
+  }
+
+  // The tick is the selected state — a glyph, not a fill, so rule 2 holds and
+  // it survives forced-colors. Promoting the row's colour with it keeps the
+  // mark from rendering dimmer than the thing it marks.
+  &[aria-selected='true'] {
+    color: var(--dp-text);
+  }
+
+  @media (pointer: coarse) {
+    min-height: 44px;
+  }
+}
+
+.docpilot__pick-mark {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+/**
+ * ── conversation history, docked under the header ───────────────────────────
+ *
+ * ui-specs/003. It used to wear the scope picker's class and sit at the bottom
+ * of the panel, which put it three hundred pixels from the header button that
+ * opens it and gave it a rule on its TOP edge — correct under a thread, and
+ * inverted here.
+ *
+ * So it has its own shell, with ONE hairline: its bottom edge, against the
+ * thread. The actions row inside carries no second rule — at the foot of the
+ * panel that row needed a line to separate it from the list below, and under a
+ * header the block's own boundary is the only one it needs.
+ *
+ * Full-bleed, like the picker: the gutter is cancelled and restored as padding,
+ * because a line inset 20px reads as an underline on the row above rather than
+ * as a boundary.
+ */
+.docpilot__dock {
+  flex: none;
+  padding: 12px var(--dp-gutter);
+  border-block-end: 1px solid var(--dp-line);
+  outline: none;
+}
+
+.docpilot__dock-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.docpilot__history-list {
+  // The .docpilot__sources top margin belongs under an answer, not under the
+  // dock's own label row. The padding pays for the rows' -8px margins — without
+  // it the scroller grows a horizontal bar of exactly that width.
+  margin: 4px -8px 0;
+  padding: 0 8px;
+  // A third of the panel at most: this list scrolls inside itself so the thread
+  // it is docked above never disappears behind it.
+  max-block-size: min(240px, 32dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 8px;
+}
+
+// A third track for the delete control; the source row's own is `auto 1fr`.
+.docpilot__history-row {
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+}
+
+// The row opener is a button rather than a link — it switches the panel, it
+// does not navigate — so it has to be un-buttoned to read as the row it fills.
+// `border: none` is a reset and is excluded from rule 1's count by name.
+.docpilot__history-open {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  min-inline-size: 0;
+  outline: none; // the ROW draws the focus ring, via :focus-within
+
+  // The current conversation is named by aria-current for a screen reader and
+  // by weight here — not by a fill, which would be a second accent.
+  &[aria-current='true'] .docpilot__source-title {
+    color: var(--dp-text);
+    font-weight: 600;
+  }
+}
+
+.docpilot__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/**
+ * ── the two buttons that live outside the panel ─────────────────────────────
+ *
+ * Both used to be `<style lang="scss">` blocks inside their components, written
+ * against the host's tokens directly. They are ours, so they belong here on
+ * `--dp-*` — and moving them means a consumer no longer needs `sass` to build
+ * a `.vue` file out of this package.
+ *
+ * What is NOT here is where the navbar trigger sits inside someone else's
+ * navbar. That is a statement about VitePress's own layout and lives in the
+ * adapter with the rest of the foreign selectors.
+ */
+.docpilot-nav-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin-inline-start: 8px;
+  border: none;
+  border-radius: var(--dp-r-sm);
+  // The chip fill, not the panel fill: this button sits beside the host's own
+  // search box and has to match THAT, not the surface inside the panel.
+  background: var(--dp-chip);
+  font-family: var(--dp-font);
+  color: var(--dp-text-dim);
+  cursor: pointer;
+  // The old shape duration and the bare `ease` keyword used to sit on this one
+  // colour transition — the only place in the file either appeared for a
+  // colour, and the one reference a grep for animated corners would miss.
+  transition:
+    color var(--dp-dur-fast) linear,
+    background-color var(--dp-dur-fast) linear;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--dp-focus);
+  }
+  // `--dp-focus`, like every other control. This used to be `--dp-text`, with a
+  // note arguing that on a themed host the two are different colours — which is
+  // true and is exactly why there should be one of them: a reader learns one
+  // ring, and a host that wants the text colour repoints one token.
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  // Below the navbar breakpoint the host's search box drops its fill and becomes
+  // a bare icon; the trigger follows it rather than sitting there as the one
+  // filled chip in a row of glyphs.
+  @media (max-width: #{bp.$nav - 1px}) {
+    width: 44px;
+    height: 44px;
+    margin-inline-start: 0;
+    background: none;
+  }
+
+  // The mobile nav screen is a list of text rows, not a toolbar: no fill, no
+  // square, full width, and the label carries the meaning.
+  &.is-screen {
+    width: 100%;
+    height: 44px;
+    margin-inline-start: 0;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 0;
+    background: none;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--dp-text);
+
+    &:hover,
+    &:focus-visible {
+      background: none;
+      color: var(--dp-text);
+    }
+  }
+
+  &__hint {
+    font-size: 13px;
+    color: var(--dp-text-dim);
+  }
+
+  /**
+   * The floating button: same component, same base class, a third placement.
+   *
+   * Keeping `.docpilot-nav-trigger` as the base is what lets `DocPilot.vue` find the
+   * button to return focus to with one `document.querySelector`. In `fab` mode
+   * the navbar instance does not render, so the FAB is the only match — the
+   * component and that query are two halves of one arrangement, and both say so.
+   *
+   * It sits UNDER the scrim (z − 2) and stays visible while the popup is open:
+   * a chat widget's own button is how everyone expects to close it again, and a
+   * visible button is a focus target that still exists when the panel closes.
+   */
+  &.is-fab {
+    position: fixed;
+    inset-block-end: max(var(--dp-popup-inset), env(safe-area-inset-bottom));
+    inset-inline-end: var(--dp-popup-inset);
+    z-index: calc(var(--dp-z) - 2);
+    width: var(--dp-fab-size);
+    height: var(--dp-fab-size);
+    margin-inline-start: 0;
+    // A floating card: a surface, a ring and a raise. `--dp-chip` is the navbar
+    // trigger's job — matching the host's search box — and this button has no
+    // search box beside it to match.
+    border: 1px solid var(--dp-line);
+    border-radius: var(--dp-r-pill);
+    background: var(--dp-surface);
+    box-shadow: var(--dp-shadow);
+    color: var(--dp-text);
+    gap: 8px;
+  }
+
+  /**
+   * With words on it — ui-specs/005.
+   *
+   * It grows on the INLINE axis only. `--dp-fab-size` is an input to the popup's
+   * own geometry, which sits a fixed distance above this button, so a taller
+   * control would move the panel and a wider one cannot.
+   *
+   * The padding is symmetric and the OPTICAL correction is on the glyph: a
+   * glyph's bounding box already carries whitespace its neighbouring letterforms
+   * do not, so it is pulled 4px back into the padding. Stated that way rather
+   * than as an asymmetric padding pair, because it then corrects itself when
+   * there is no icon — `fabIcon: false` is a legal configuration and would
+   * otherwise sit visibly off-centre in its own pill.
+   */
+  &.is-fab.has-label {
+    width: auto;
+    padding-inline: 16px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+
+    .docpilot-nav-trigger__glyph {
+      margin-inline-start: -4px;
+    }
+  }
+}
+
+// A pointer-less device gets the larger target, and the panel below 960px is a
+// full-screen sheet — so the button it came from would be under it either way.
+@media (pointer: coarse) {
+  .docpilot-nav-trigger.is-fab {
+    width: var(--dp-fab-size-coarse);
+    height: var(--dp-fab-size-coarse);
+  }
+  .docpilot-nav-trigger.is-fab.has-label {
+    width: auto;
+  }
+}
+
+/**
+ * Hidden when it would be underneath the panel.
+ *
+ * The panel is teleported to `body`, so it is the FAB's SIBLING and not its
+ * ancestor — `:has()` on the body is the only way to ask "is a panel open" from
+ * CSS. A browser without `:has()` simply does not apply these, and the FAB
+ * stays visible behind a drawer that covers it: cosmetic, and a miss in the
+ * safe direction.
+ */
+body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
+  display: none;
+}
+
+@media (max-width: #{bp.$sheet - 1px}) {
+  body:has(.docpilot__panel) .docpilot-nav-trigger.is-fab {
+    display: none;
+  }
+}
+
+// The same shape as `.docpilot__scope` and `.docpilot__prompt-toggle`: an
+// inline text control, underlined, taking the wash at a small radius. It lives
+// in the host's ARTICLE, and a pill there would be the only one on the page —
+// which is what ui-specs/004 decided and this keeps. Folding the three into one
+// recipe is what makes that a rule rather than three near-identical blocks.
+.docpilot-cta {
+  margin-block-start: 32px;
+
+  button {
+    appearance: none;
+    background: none;
+    border: none;
+    border-radius: var(--dp-r-sm);
+    padding: 6px 8px;
+    margin-inline-start: -8px;
+    font-family: var(--dp-font);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--dp-text);
+    cursor: pointer;
+    transition: background-color var(--dp-dur-fast) linear;
+    text-decoration: underline;
+    text-decoration-color: var(--dp-text-dim);
+    text-decoration-thickness: from-font;
+    text-underline-offset: 3px;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--dp-wash);
+      text-decoration-color: currentColor;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--dp-focus);
+      outline-offset: 2px;
+    }
+  }
+}
+
+// ── forced colors ───────────────────────────────────────────────────────────
+// This mode replaces every background-color with a system colour, so a design
+// carrying its structure in fills degrades badly in it. This one carries its
+// structure in RINGS, and a border's colour is forced to a system value too —
+// so only the surfaces that have no ring need restating here, and the status
+// label, whose gradient is clipped to text.
+@media (forced-colors: active) {
+  // ONLY the fill-only surfaces. This block used to name the composer, the code
+  // block and both panel shapes as well; all four wear a real ring now, and
+  // this mode forces a border's colour to a system value regardless of which
+  // custom property produced it — so restating them would be four rules doing
+  // nothing. That the list got SHORTER is the ring adoption paying for itself.
+  .docpilot__question,
+  .docpilot__quote,
+  .docpilot__send,
+  .docpilot__prompt-edit,
+  .docpilot__code-copy,
+  .docpilot__suggestion {
+    border: 1px solid CanvasText;
+  }
+  .docpilot__source.is-linked {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .docpilot__status-dot {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  // The system palette repaints `color` but never touches -webkit-text-fill-
+  // color, so a label left at `transparent` renders as an empty line in the one
+  // mode with the least tolerance for a missing string. Restore the whole trio.
+  .docpilot__status-label {
+    animation: none;
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docpilot__panel,
+  .docpilot__ask {
+    animation-name: dp-fade;
+  }
+  .docpilot__status-dot {
+    animation: none;
+    transform: scale(1);
+  }
+  // Cancelling the animation alone freezes a transparent fill mid-gradient. The
+  // label must land on the colour it would have had if the sweep never existed.
+  .docpilot__status-label {
+    animation: none;
+    background-image: none;
+    color: var(--dp-text-dim);
+    -webkit-text-fill-color: currentColor;
+  }
+  // Every control that answers a press with `scale(0.96)`. The list grew with
+  // the pill system — a press response that survives this query is the one
+  // motion a reader asked not to see.
+  .docpilot__icon-btn:active,
+  .docpilot__send:active,
+  .docpilot__text-btn:active,
+  .docpilot__suggestion:active,
+  .docpilot__jump:active {
+    transform: none;
+  }
+}
+
+@keyframes dp-fade {
+  from {
+    opacity: 0;
+  }
+}

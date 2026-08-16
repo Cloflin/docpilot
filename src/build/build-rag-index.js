@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Ask AI index builder — RAG-SPEC 2.
+ * DocPilot index builder — RAG-SPEC 2.
  *
- *   npm run rag:index          build docs/public/rag/
- *   npm run rag:index -- --dry  chunk and report, no embeddings, no Ollama
+ *   npx docpilot index          build the index into `${indexDir}` (docs/public/rag by default)
+ *   npx docpilot index --dry  chunk and report, no embeddings, no Ollama
  *
  * Idempotent: identical input produces byte-identical output, which is why no
  * timestamp appears in any artefact and the version is a content hash.
@@ -14,16 +14,24 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
-import { loadEnv } from 'vitepress'
 
 import { chunkMarkdown } from './lib/chunker.js'
 import { chunkOpenapi } from './lib/openapi-chunker.js'
 import { resolveSections, orphanPages, tailFor } from './lib/sections.js'
-import { providerFor } from '../theme/ask-ai/providers.js'
+import { parseAllowlist, checkSource } from './lib/sources.js'
+import { providerFor } from '../theme/docpilot/providers.js'
 import { nodeEmbedTarget } from '../config.js'
-import { settings as askAI, ROOT, DOCS, RAG as OUT } from '../cli-context.js'
+import {
+  settings as docPilot,
+  ROOT,
+  DOCS,
+  RAG as OUT,
+  CALIBRATION_OUT,
+  CONFIG,
+  fileEnv,
+} from '../cli-context.js'
 import { l2normalise, toInt8, quantisationError } from './lib/quantize.js'
-import { terms, estTokens } from '../theme/ask-ai/text.js'
+import { terms, estTokens } from '../theme/docpilot/text.js'
 
 
 const SHARD_SIZE = 250
@@ -34,17 +42,22 @@ const FAIL_BYTES = 5 * 1024 * 1024
 
 const DRY = process.argv.includes('--dry')
 /**
- * The embedder is declared ONCE, as `askAI.embed` in docs/.vitepress/config.mjs,
+ * The embedder is declared ONCE, as `docPilot.embed` in docs/.vitepress/config.mjs,
  * and read here rather than restated: the index and the runtime must agree, and
  * the runtime only compares vector WIDTH, so a second copy of this decision is a
  * copy that drifts and takes retrieval down to lexical-only with nothing logged.
- * Changing embedder is one edit there, then `npm run rag:index`. Keys still come
+ * Changing embedder is one edit there, then `npx docpilot index`. Keys still come
  * from .env.local; nothing is stored.
  */
-const EMBED = nodeEmbedTarget(askAI, { ...loadEnv('', ROOT, ''), ...process.env })
+const EMBED = nodeEmbedTarget(docPilot, { ...(await fileEnv()), ...process.env })
 const EMBED_URL = EMBED.baseURL
 const EMBED_MODEL = EMBED.model
 const EMBED_KEY = EMBED.apiKey
+// The ADAPTER, not the brand: `nodeEmbedTarget` returns 'openai' for every
+// service that copied the OpenAI API, and the two things this name decides —
+// the response shape and the `ollama serve` hint — are adapter-level, not
+// brand-level. Same value `providerFor` is keyed on, one line below.
+const EMBED_PROVIDER = EMBED.provider
 const embedder = providerFor(EMBED.provider)
 
 const EXCLUDE = new Set(['/index', '/new-file'])
@@ -59,7 +72,7 @@ const die = (m) => {
 // them — Gemini today. Said here rather than discovered as a 404 on chunk 1.
 if (!DRY && !EMBED_URL) {
   die(
-    `askAI.embed.provider is "${EMBED.id}", which this script cannot call directly.\n` +
+    `docPilot.embed.provider is "${EMBED.id}", which this script cannot call directly.\n` +
       `        Build the index with ollama or openai and switch back afterwards.`,
   )
 }
@@ -77,6 +90,33 @@ function walkMarkdown(dir, acc = []) {
 function routeFor(file) {
   const rel = path.relative(DOCS, file).replace(/\\/g, '/').replace(/\.md$/, '')
   return `/${rel}`.replace(/\/index$/, '') || '/'
+}
+
+/**
+ * Imported pages — RAG corpus only, no page on the site.
+ *
+ * They live OUTSIDE `docsDir` on purpose: VitePress never sees them, so no route
+ * is built, nothing enters the sidebar, the sitemap or llms.txt, and the mirror
+ * cannot compete with the original in search. What they get instead is a
+ * mandatory `source:`, which is the only place their citation can point.
+ */
+const KB = docPilot.importDir ? path.resolve(ROOT, docPilot.importDir) : null
+
+/**
+ * The id of an EXTERNAL page — one that lives under `importDir` and has no route
+ * on this site at all.
+ *
+ * It looks like a route and is not one. Everything downstream keys a page by
+ * `path` — `sourceRow`, `closest`, the citation validator, the golden set — so
+ * an external page needs a value in that slot, and it needs to be one no real
+ * route can collide with. Derived from the directory name rather than fixed, and
+ * checked against the indexed routes below rather than assumed to be free.
+ */
+const EXTERNAL_PREFIX = KB ? `/${path.basename(KB)}` : null
+
+function externalIdFor(file) {
+  const rel = path.relative(KB, file).replace(/\\/g, '/').replace(/\.md$/, '')
+  return `${EXTERNAL_PREFIX}/${rel}`
 }
 
 function kindFor(route) {
@@ -119,7 +159,7 @@ async function embedAll(texts) {
 /**
  * The guard the manifest ships — RAG-SPEC 5.6.
  *
- * `tau`, `tauLexical`, `wDense` and `wLexical` are set ONLY by `rag:calibrate`
+ * `tau`, `tauLexical`, `wDense` and `wLexical` are set ONLY by `docpilot calibrate`
  * (RAG-SPEC 7). This function does not choose them; it decides whether the
  * measured ones still apply to the index being built, and says so out loud.
  *
@@ -132,7 +172,18 @@ async function embedAll(texts) {
  */
 export function guardFor(hash, opts = {}) {
   const embedModel = opts.embedModel ?? EMBED_MODEL
-  const file = opts.file ?? path.join(ROOT, 'eval', 'calibration.json')
+  /**
+   * The file `docpilot calibrate` actually writes — resolved from the same
+   * `evalDir` setting rather than restated here as a literal.
+   *
+   * This used to read `ROOT/eval/calibration.json`, a path nothing has written
+   * since the CLI grew `evalDir` (default `docpilot/`). The failure was silent in
+   * the worst way available: `calibrate` succeeded, wrote its thresholds, and
+   * every subsequent `index` reported "no calibration" and inlined the
+   * provisional guard anyway. One name, one place.
+   */
+  const file = opts.file ?? CALIBRATION_OUT
+  const shown = path.relative(ROOT, file)
   const log = opts.warn ?? warn
   const note = opts.note ?? ((m) => console.log(`  ${m}`))
 
@@ -162,31 +213,42 @@ export function guardFor(hash, opts = {}) {
 
   const stale = (why) => {
     log(`${why} — inlining the provisional guard (tau ${provisional.tau}, source "provisional").`)
-    log(`      run \`npm run rag:calibrate\` to measure thresholds for this index.`)
+    log(`      run \`npx docpilot calibrate\` to measure thresholds for this index.`)
     return provisional
   }
 
-  if (!fs.existsSync(file)) return stale('no eval/calibration.json')
+  if (!fs.existsSync(file)) return stale(`no ${shown}`)
 
   let doc
   try {
     doc = JSON.parse(fs.readFileSync(file, 'utf8'))
   } catch (e) {
-    return stale(`eval/calibration.json is unreadable (${e.message})`)
+    return stale(`${shown} is unreadable (${e.message})`)
   }
   const g = doc?.guard
   if (!g || typeof g.tau !== 'number' || typeof g.tauLexical !== 'number') {
-    return stale('eval/calibration.json carries no usable guard')
+    return stale(`${shown} carries no usable guard`)
   }
   if (g.calibratedAt !== hash) {
-    return stale(`eval/calibration.json is for index ${g.calibratedAt}, this build is ${hash}`)
+    return stale(`${shown} is for index ${g.calibratedAt}, this build is ${hash}`)
+  }
+  // The thresholds are bound to the pair (corpus, embedder), and the hash above
+  // covers only the corpus — it is sha256 over chunk text and moves for no other
+  // reason. Swap the embed model and every cosine moves while the hash does not,
+  // so without this line a calibration measured on bge-m3 inlines itself onto an
+  // OpenAI index in silence. That is not hypothetical: it is what shipped.
+  if (doc.embedModel && doc.embedModel !== embedModel) {
+    return stale(
+      `${shown} was measured with "${doc.embedModel}", this build embeds ` +
+        `with "${embedModel}" — a cosine threshold does not survive an embedder swap`,
+    )
   }
   // A cosine threshold measured against a z-score channel is not the same
   // number. The embed model decides the mode, so a swap invalidates the run even
   // when the chunk hash happens to survive it.
   if (g.denseMode !== provisional.denseMode) {
     return stale(
-      `eval/calibration.json was measured in denseMode "${g.denseMode}", this build is ` +
+      `${shown} was measured in denseMode "${g.denseMode}", this build is ` +
         `"${provisional.denseMode}" (${embedModel})`,
     )
   }
@@ -194,7 +256,7 @@ export function guardFor(hash, opts = {}) {
   // throws at runtime, and a build that inlines it ships a panel that cannot open.
   if (!(g.wLexical < g.tau)) {
     return stale(
-      `eval/calibration.json has wLexical ${g.wLexical} >= tau ${g.tau}, which gate.js rejects at init`,
+      `${shown} has wLexical ${g.wLexical} >= tau ${g.tau}, which gate.js rejects at init`,
     )
   }
 
@@ -224,18 +286,48 @@ export function guardFor(hash, opts = {}) {
 }
 
 async function main() {
-  console.log(`\nAsk AI index${DRY ? ' (dry run — no embeddings)' : ''}\n`)
+  console.log(`\nDocPilot index${DRY ? ' (dry run — no embeddings)' : ''}\n`)
 
   // ── sidebar ────────────────────────────────────────────────────────────────
-  const configUrl = pathToFileURL(path.join(DOCS, '.vitepress', 'config.mjs')).href
-  const config = (await import(configUrl)).default
+  // `?? {}` because the DEFAULT export is optional: the settings come from the
+  // named `docPilot` export, and a project whose site is not VitePress — a config
+  // file that exports the settings and nothing else — has no VitePress config to
+  // default-export. Without it that project died here on a TypeError naming
+  // `themeConfig`, which says nothing about what is actually missing.
+  //
+  // No sidebar means no section grouping: every chunk keeps its page and its
+  // headings, and only the "which part of the docs is this" label goes.
+  const configUrl = pathToFileURL(CONFIG).href
+  const config = (await import(configUrl)).default ?? {}
   const sidebar = config.themeConfig?.sidebar || {}
 
   // ── markdown ───────────────────────────────────────────────────────────────
+  // The allowlist is declared beside every other DocPilot decision and read here,
+  // not restated: a second copy is a copy that drifts, and this one decides what
+  // may become an `href` in the answer panel.
+  const { entries: allowedOrigins, errors: allowErrors } = parseAllowlist(docPilot.sources)
+  if (allowErrors.length) die(allowErrors.join('\n        '))
+
   const files = walkMarkdown(DOCS)
   const chunks = []
   const pages = new Map()
   let rawBytes = 0
+  let imported = 0
+
+  // A declared `source` fails the BUILD rather than being dropped with a
+  // warning. Dropping it silently indexes imported text with no provenance, and
+  // for an external page it would leave a citation with nowhere to point.
+  const originFor = (source, id) => {
+    const checked = checkSource(source, allowedOrigins)
+    if (checked.error) {
+      die(
+        `${id}: ${checked.error}\n` +
+          `        Add the origin to docPilot.sources.allow, or drop the frontmatter source.`,
+      )
+    }
+    imported++
+    return checked.href
+  }
 
   for (const file of files) {
     const route = routeFor(file)
@@ -244,16 +336,98 @@ async function main() {
 
     const src = fs.readFileSync(file, 'utf8')
     rawBytes += src.length
-    const { chunks: c, warnings, title } = chunkMarkdown({ src, path: route, kind: kindFor(route) })
+    const { chunks: c, warnings, title, source } = chunkMarkdown({
+      src,
+      path: route,
+      kind: kindFor(route),
+    })
     warnings.forEach(warn)
     if (!c.length) continue
+
+    const origin = source ? originFor(source, route) : null
+
     chunks.push(...c)
-    pages.set(route, { path: route, title, kind: kindFor(route), chunks: c.length })
+    pages.set(route, {
+      path: route,
+      title,
+      kind: kindFor(route),
+      chunks: c.length,
+      ...(origin ? { origin } : {}),
+    })
+  }
+
+  // ── imported pages ─────────────────────────────────────────────────────────
+  // Same chunker, same rules, one extra obligation: an external page has no
+  // route, so a missing or unusable `source` leaves its citation pointing at a
+  // page that does not exist. That is a build failure, not a warning.
+  let external = 0
+  const externalLinks = []
+  if (KB && fs.existsSync(KB)) {
+    // `EXTERNAL_PREFIX` is an id space, and an id space that collides with a
+    // real route makes a citation ambiguous. Checked against the routes just
+    // collected rather than assumed to be free.
+    for (const route of pages.keys()) {
+      if (route === EXTERNAL_PREFIX || route.startsWith(`${EXTERNAL_PREFIX}/`)) {
+        die(
+          `importDir "${docPilot.importDir}" claims the id prefix "${EXTERNAL_PREFIX}", ` +
+            `which is already a route of this site: ${route}.\n` +
+            `        Rename the import directory, or move that page.`,
+        )
+      }
+    }
+
+    for (const file of walkMarkdown(KB)) {
+      const id = externalIdFor(file)
+      if (pages.has(id)) die(`imported page id collides with a real route: ${id}`)
+
+      const src = fs.readFileSync(file, 'utf8')
+      rawBytes += src.length
+
+      // `vitepress build` checks dead links for every page it renders, and it
+      // never sees this one. Collected here and checked below, once the real
+      // routes — including the generated `/reference/` ones — are all known.
+      for (const m of src.matchAll(/\]\((\/[^)\s#]*)(?:#[^)\s]*)?\)/g)) {
+        externalLinks.push({ file: path.relative(ROOT, file), href: m[1] })
+      }
+      const { chunks: c, warnings, title, source } = chunkMarkdown({ src, path: id, kind: 'guide' })
+      warnings.forEach(warn)
+      if (!c.length) {
+        warn(`imported page produced no chunks: ${path.relative(ROOT, file)}`)
+        continue
+      }
+      if (!source) {
+        die(
+          `${path.relative(ROOT, file)} has no frontmatter source.\n` +
+            `        A page under ${docPilot.importDir}/ has no route on this site, so its citation has\n` +
+            `        nowhere else to point. Add "source: https://…" or move the page into ${docPilot.docsDir}/.`,
+        )
+      }
+
+      chunks.push(...c)
+      pages.set(id, {
+        path: id,
+        title,
+        kind: 'guide',
+        chunks: c.length,
+        origin: originFor(source, path.relative(ROOT, file)),
+        // Read by the client as "this path is not navigable": its source row and
+        // its `[n]` marker open the origin, and the citation validator must not
+        // treat the id as a link the model may emit.
+        external: true,
+      })
+      external++
+    }
   }
 
   // ── openapi ────────────────────────────────────────────────────────────────
+  // Optional, and absent in most projects. `readdirSync` on a directory that is
+  // not there throws ENOENT out of the middle of the build, which took the whole
+  // command down for every consumer who does not publish an OpenAPI spec.
   const specDir = path.join(DOCS, 'public', 'openapi')
-  for (const f of fs.readdirSync(specDir).filter((f) => /\.ya?ml$/.test(f))) {
+  const specs = fs.existsSync(specDir)
+    ? fs.readdirSync(specDir).filter((f) => /\.ya?ml$/.test(f))
+    : []
+  for (const f of specs) {
     const name = f.replace(/\.ya?ml$/, '')
     const yamlText = fs.readFileSync(path.join(specDir, f), 'utf8')
     rawBytes += yamlText.length
@@ -272,6 +446,17 @@ async function main() {
   }
 
   if (!chunks.length) die('empty index — 0 chunks')
+
+  // A link out of an imported page into the docs. An asset (`/img/…`) is skipped
+  // by its extension; `/` is the home page, which is `layout: home` and produces
+  // no chunk by design.
+  for (const { file, href } of externalLinks) {
+    const p = href.replace(/\/$/, '') || '/'
+    if (p === '/' || /\.\w+$/.test(p)) continue
+    if (!pages.has(p)) {
+      die(`${file}: link to "${href}", which is not a page of this site`)
+    }
+  }
 
   // Ids address chunks everywhere downstream — in emittedIds, in citations, in
   // the golden set. A duplicate makes a citation ambiguous, so it fails here.
@@ -323,7 +508,10 @@ async function main() {
   const pct = (q) => lens[Math.floor(lens.length * q)] || 0
   const normBytes = chunks.reduce((a, c) => a + c.text.length, 0)
 
-  console.log(`  pages            ${pageList.length}`)
+  console.log(
+    `  pages            ${pageList.length}` +
+      (imported ? ` (${imported} imported, ${external} of them external)` : ''),
+  )
   console.log(`  chunks           ${chunks.length}`)
   console.log(`  sections         ${sectionOut.length}`)
   console.log(`  orphan pages     ${orphans.length}${orphans.length ? ` (${orphans.join(', ')})` : ''}`)
@@ -395,7 +583,9 @@ async function main() {
     .readdirSync(OUT)
     .reduce((a, f) => a + fs.statSync(path.join(OUT, f)).size, 0)
 
-  console.log(`\n  written to docs/public/rag/  ${(total / 1024).toFixed(0)} KB total`)
+  console.log(
+    `\n  written to ${path.relative(ROOT, OUT)}/  ${(total / 1024).toFixed(0)} KB total`,
+  )
   console.log(`    manifest.json    ${(manifestJson.length / 1024).toFixed(1)} KB`)
   console.log(`    ${vecName}  ${(flat.length / 1024).toFixed(0)} KB`)
   console.log(`    ${shards.length} chunk shard(s)`)

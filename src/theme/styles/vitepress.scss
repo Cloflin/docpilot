@@ -1,0 +1,139 @@
+/**
+ * The VitePress adapter — a mapping, and nothing else.
+ *
+ * Two kinds of rule are allowed in this file and no third:
+ *   1. `--dp-*` re-declared in terms of VitePress's own tokens.
+ *   2. rules whose SELECTOR belongs to VitePress or to Shiki.
+ *
+ * Anything else is a design decision, and design decisions belong in
+ * `core.scss` where they apply to every host. The check script asserts this,
+ * because "the adapter grew a colour of its own" is exactly the kind of drift
+ * that is invisible until someone loads the core stylesheet on its own.
+ *
+ * HOW IT WINS. Not by specificity — `:root` here and `:root` there are equal —
+ * but by ORDER: this file is loaded after the core, so its declarations replace
+ * the core's for the whole document. Which is also why it re-declares the ENTIRE
+ * colour set rather than the tokens that happen to differ: a token left out
+ * keeps the core's OS-driven value, and a dark-OS reader on a site pinned to
+ * light gets one dark colour in an otherwise light panel.
+ */
+
+@use './breakpoints' as bp;
+
+:root {
+  // ── Surfaces ────────────────────────────────────────────────────────────────
+  --dp-surface: var(--vp-c-bg);
+  // Translucent on every host checked, so it composites in the right direction
+  // whatever it lands on. NOT `--vp-c-bg-soft`: on at least one real host
+  // (@voidzero-dev/vitepress-theme) that is DARKER than the page in dark mode,
+  // and a raised surface mapped to it inverts.
+  --dp-surface-2: var(--vp-c-default-soft);
+
+  // ── Line ────────────────────────────────────────────────────────────────────
+  --dp-line: var(--vp-c-divider);
+
+  // ── Text ────────────────────────────────────────────────────────────────────
+  --dp-text: var(--vp-c-text-1);
+  --dp-text-dim: var(--vp-c-text-2);
+  // `--vp-c-neutral-inverse` is VitePress's own name for this and exists in the
+  // default theme and in every theme that extends it. It used to name
+  // `--vp-c-white-invrert`, which exists NOWHERE — not upstream, not in the
+  // theme this panel was extracted from — so the first branch never resolved and
+  // the fallback was the only thing that ever ran. The fallback stays, because a
+  // theme that replaces the whole variable set should still get a legible
+  // inverse rather than nothing.
+  --dp-on-text: var(--vp-c-neutral-inverse, var(--vp-c-bg));
+
+  // ── Focus — matches the site's black/white primary, 21:1 not 2.65:1 ─────────
+  --dp-focus: var(--vp-c-brand-1);
+
+  // ── The single accent ───────────────────────────────────────────────────────
+  --dp-accent-soft: var(--brand-bg-active, var(--vp-c-brand-soft));
+
+  // ── Surfaces outside the panel ──────────────────────────────────────────────
+  // The chip is the search box's own fill, because the trigger sits next to it.
+  --dp-chip: var(--vp-c-bg-alt);
+  --dp-code-bg: var(--vp-code-block-bg);
+  --dp-shadow: var(--vp-shadow-3);
+  --dp-scrim: var(--vp-backdrop-bg-color);
+
+  --dp-font: var(--vp-font-family-base);
+  --dp-font-mono: var(--vp-font-family-mono);
+
+  // ── Structure ───────────────────────────────────────────────────────────────
+  // The one non-colour mapping: the panel hangs below the fixed navbar.
+  --dp-top: var(--vp-nav-height);
+}
+
+/**
+ * Position, not decoration.
+ *
+ * VitePress 1.6.4 renders the navbar as
+ *   [slot before] search · menu · translations · appearance · social · extra ·
+ *   [slot after] · hamburger
+ * and there is no slot between search and menu, which is where VitePress 2 puts
+ * its own DocPilot button. The trigger therefore goes in `nav-bar-content-before`
+ * — first in source order — and search is pulled ahead of it with one `order`
+ * declaration. Ordering our element instead would mean ordering every element
+ * after it, which is six selectors into someone else's component rather than
+ * one. The `.menu + …` divider rules upstream draws are untouched: they look at
+ * siblings after `.menu`, and this sits before it.
+ */
+.VPNavBar .search {
+  order: -1;
+}
+
+/**
+ * `.VPNavBarSearch` grows to fill the navbar, which is how upstream keeps the
+ * search box at the left of the content area and everything else at the right.
+ * Placed after a grown wrapper the trigger lands at the wrapper's far edge —
+ * measured, 398px away from the box it is supposed to belong to. So the growing
+ * moves onto the trigger: the wrapper shrinks to its box, the trigger sits 8px
+ * after it, and one auto margin does the pushing the growth used to do.
+ *
+ * Only above the breakpoint. Below it nothing grows upstream either — search
+ * and hamburger sit together at the right, and an auto margin there would drag
+ * them apart.
+ */
+@media (min-width: bp.$nav) {
+  // Gated on the trigger actually being in the bar. In `fab` mode nothing is
+  // mounted here, and shrinking the search box for a neighbour that does not
+  // exist would leave the host's own layout wrong for no reason. A browser
+  // without `:has()` skips the whole block: the search box keeps upstream's
+  // growth and the trigger, if there is one, sits at the far edge — visibly
+  // off, but nothing is broken and nothing is hidden.
+  .VPNavBar:has(.docpilot-nav-trigger:not(.is-screen):not(.is-fab)) {
+    .search {
+      flex-grow: 0;
+    }
+    .docpilot-nav-trigger:not(.is-screen) {
+      margin-inline-end: auto;
+    }
+  }
+}
+
+/**
+ * Shiki, both halves.
+ *
+ * The core picks a theme off `prefers-color-scheme`, which is the only signal
+ * available with no host. VitePress switches appearance by CLASS and lets a
+ * reader pin a site to light while their OS is dark — so BOTH branches have to
+ * be stated here. `html:not(.dark)` is not decoration: without it, the core's
+ * dark-scheme rule would still be in force on a site the reader pinned to
+ * light, and the code in the panel would be the one thing painted for a dark
+ * background. Shiki's colours are per-token inline properties, so this is the
+ * one thing in the package that a token cannot cover.
+ */
+html.dark .docpilot__answer {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark, inherit);
+  }
+}
+
+html:not(.dark) .docpilot__answer {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-light, inherit);
+  }
+}

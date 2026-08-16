@@ -2,12 +2,12 @@
 /**
  * Evaluation run — RAG-SPEC 6.
  *
- *   npm run rag:eval
- *   npm run rag:eval -- --models=qwen3.5:9b,phi4:14b,qwen3:8b
- *   npm run rag:eval -- --gate-only            retrieval + gate only, seconds
- *   npm run rag:eval -- --lexical              no embedder at all: BM25 only
- *   npm run rag:eval -- --limit=3              short loop while tuning
- *   npm run rag:eval -- --resume               reuse rows already on disk
+ *   npx docpilot eval
+ *   npx docpilot eval --models=qwen3.5:9b,phi4:14b,qwen3:8b
+ *   npx docpilot eval --gate-only            retrieval + gate only, seconds
+ *   npx docpilot eval --lexical              no embedder at all: BM25 only
+ *   npx docpilot eval --limit=3              short loop while tuning
+ *   npx docpilot eval --resume               reuse rows already on disk
  *
  * Needs a running Ollama unless `--gate-only` is given, in which case only the
  * embed endpoint is used — and not even that under `--lexical`.
@@ -27,15 +27,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadEnv } from 'vitepress'
 
-import { assembleIndex } from '../theme/ask-ai/store.js'
-import { embedQuery } from '../theme/ask-ai/embed.js'
-import { createRetrieval } from '../theme/ask-ai/retriever.js'
-import { composeQuery } from '../theme/ask-ai/gate.js'
-import { detectTools, detectCapabilities } from '../theme/ask-ai/llm.js'
-import { runTurn } from '../theme/ask-ai/harness.js'
-import { PROMPT_HASH } from '../theme/ask-ai/prompt.js'
+import { assembleIndex } from '../theme/docpilot/store.js'
+import { embedQuery } from '../theme/docpilot/embed.js'
+import { createRetrieval } from '../theme/docpilot/retriever.js'
+import { composeQuery } from '../theme/docpilot/gate.js'
+import { detectTools, detectCapabilities } from '../theme/docpilot/llm.js'
+import { runTurn } from '../theme/docpilot/harness.js'
+import { promptHash } from '../theme/docpilot/prompt.js'
 import {
   retrievalF1Loose,
   recallAtK,
@@ -51,8 +50,20 @@ import {
   percentile,
 } from './metrics.js'
 import { writeReport } from './report.js'
+import { nodeEmbedTarget } from '../config.js'
 
-import { ROOT, RAG, REPORTS, GOLDEN, settings as askAI } from '../cli-context.js'
+import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot, fileEnv } from '../cli-context.js'
+
+/**
+ * The hash of the instruction THIS project sends, not of the shipped default.
+ *
+ * It names every report file and is what `diffSummaries` compares two runs on,
+ * so it has to move when the instruction moves — and `docPilot.product` and
+ * `docPilot.prompt.override`/`extend` all move it. Reading the module constant
+ * instead would file a report about a customised prompt under the stock one's
+ * name and report "no change" across a rewrite.
+ */
+const PROMPT_HASH = promptHash(docPilot.prompt, docPilot.product)
 
 /**
  * `.env.local`, through the same loader `config.mjs` uses.
@@ -63,7 +74,7 @@ import { ROOT, RAG, REPORTS, GOLDEN, settings as askAI } from '../cli-context.js
  * key has to exist. Existing environment wins, so CI and a one-off export both
  * still override it.
  */
-for (const [k, v] of Object.entries(loadEnv('', ROOT, ''))) {
+for (const [k, v] of Object.entries(await fileEnv())) {
   if (process.env[k] === undefined) process.env[k] = v
 }
 
@@ -79,7 +90,7 @@ const MODELS = String(arg('models', arg('model', 'qwen3:8b')))
   .map((s) => s.trim())
   .filter(Boolean)
 const LIMIT = Number(arg('limit', '0'))
-const BASE = process.env.ASK_AI_BASE_URL || 'http://localhost:11434'
+const BASE = process.env.DOCPILOT_BASE_URL || 'http://localhost:11434'
 const GATE_ONLY = has('gate-only')
 const LEXICAL = has('lexical')
 const RESUME = has('resume')
@@ -105,18 +116,28 @@ const NUM_CTX = Number(arg('num-ctx', '8192'))
 
 // Same three adapters the panel uses, so an eval run measures the transport the
 // readers will actually get. Keys come from the environment; nothing is stored.
-const PROVIDER = arg('provider', process.env.ASK_AI_PROVIDER || 'ollama')
+const PROVIDER = arg('provider', process.env.DOCPILOT_PROVIDER || 'ollama')
 const API_KEY =
-  process.env.ASK_AI_API_KEY ||
+  process.env.DOCPILOT_API_KEY ||
   process.env.OPENAI_API_KEY ||
   process.env.ANTHROPIC_API_KEY ||
   process.env.OPENROUTER_API_KEY ||
   null
-const EMBED_PROVIDER =
-  process.env.ASK_AI_EMBED_PROVIDER || (PROVIDER === 'anthropic' ? 'ollama' : PROVIDER)
-const EMBED_BASE =
-  process.env.ASK_AI_EMBED_URL || (EMBED_PROVIDER === PROVIDER ? BASE : 'http://localhost:11434')
-const EMBED_KEY = EMBED_PROVIDER === PROVIDER ? API_KEY : process.env.ASK_AI_EMBED_KEY || null
+/**
+ * The embedder comes from `docPilot.embed`, not from the CHAT provider.
+ *
+ * The two are configured separately for a reason — Anthropic answers and cannot
+ * embed — and deriving one from the other meant that a project whose index was
+ * built with a hosted embedder had its eval queries embedded against a local
+ * Ollama. Either it failed on an unreachable endpoint, or, if one happened to be
+ * running, it scored queries in a foreign vector space and reported the result
+ * as this corpus's retrieval quality. `nodeEmbedTarget` is the same resolver
+ * `docpilot index` uses. The environment still wins.
+ */
+const EMBED_TARGET = nodeEmbedTarget(docPilot, process.env)
+const EMBED_PROVIDER = process.env.DOCPILOT_EMBED_PROVIDER || EMBED_TARGET.provider
+const EMBED_BASE = process.env.DOCPILOT_EMBED_URL || EMBED_TARGET.baseURL
+const EMBED_KEY = process.env.DOCPILOT_EMBED_KEY || EMBED_TARGET.apiKey || null
 
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 
@@ -128,7 +149,11 @@ const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 function loadIndex() {
   const manifest = JSON.parse(fs.readFileSync(path.join(RAG, 'manifest.json'), 'utf8'))
   const shards = manifest.shards.map((s) => JSON.parse(fs.readFileSync(path.join(RAG, s), 'utf8')))
-  const vectorBuffer = fs.readFileSync(path.join(RAG, manifest.vectors)).buffer
+  // `.buffer` on a Buffer is NOT the file: Node pools small allocations, so for
+  // any vector blob under ~8 KB it is the whole pool and `assembleIndex`'s
+  // length check refuses the index. Slice to the view's own bytes.
+  const vecBuf = fs.readFileSync(path.join(RAG, manifest.vectors))
+  const vectorBuffer = vecBuf.buffer.slice(vecBuf.byteOffset, vecBuf.byteOffset + vecBuf.byteLength)
   const dfDoc = JSON.parse(fs.readFileSync(path.join(RAG, manifest.df), 'utf8'))
   return assembleIndex({ manifest, shards, vectorBuffer, dfDoc })
 }
@@ -139,7 +164,7 @@ function endpointHelp(what, url, provider, e) {
     provider === 'ollama'
       ? `\n        start it with:  ollama serve` +
         `\n        check models:   ollama list`
-      : `\n        check ASK_AI_BASE_URL and the API key in .env.local`
+      : `\n        check DOCPILOT_BASE_URL and the API key in .env.local`
   return `${what} endpoint unreachable at ${url} — ${e.message || e}${hint}`
 }
 
@@ -155,8 +180,8 @@ async function embed(text, model) {
   // The retriever's own response to a foreign vector is to drop queryVec and
   // fall back to lexical-only — correct for a browser, wrong for a measurement,
   // because the run then reports retrieval numbers for a channel that was never
-  // used and never says so. This bites the moment ASK_AI_PROVIDER is switched to
-  // a hosted service without also setting ASK_AI_EMBED_PROVIDER: the embed call
+  // used and never says so. This bites the moment DOCPILOT_PROVIDER is switched to
+  // a hosted service without also setting DOCPILOT_EMBED_PROVIDER: the embed call
   // follows the chat provider, and text-embedding-3-small is 1536 dims against
   // this index's 1024.
   if (EXPECTED_DIMS && vec.length !== EXPECTED_DIMS) {
@@ -164,8 +189,8 @@ async function embed(text, model) {
       `embed model mismatch: ${EMBED_PROVIDER}/${model} returned ${vec.length} dims, ` +
         `the index was built with ${EXPECTED_DIMS} (${model === undefined ? '?' : model}).\n` +
         `        The index is bge-m3/1024. Point the embedder at it:\n` +
-        `          ASK_AI_EMBED_PROVIDER=ollama\n` +
-        `          ASK_AI_EMBED_URL=http://localhost:11434\n` +
+        `          DOCPILOT_EMBED_PROVIDER=ollama\n` +
+        `          DOCPILOT_EMBED_URL=http://localhost:11434\n` +
         `        Retrieval and generation are configured separately on purpose — a hosted\n` +
         `        chat provider does not have to be the one that embeds.`,
     )
@@ -400,6 +425,11 @@ function turn({ probe, model, fallback, thinkSupported, guard, question, history
       maxIterations: MAX_ITERATIONS ?? 4,
       guard,
       scope: { promptListLimit: 12 },
+      // The eval must send the instruction this project actually ships. Leaving
+      // these out measured the stock prompt and filed the result under the
+      // project's own name.
+      prompt: docPilot.prompt,
+      product: docPilot.product,
     },
     fallback,
     queryVec: probe.vec,
@@ -564,14 +594,14 @@ const reportName = ({ indexHash, model }) =>
  */
 function leverFingerprint() {
   const src = fs.readFileSync(
-    fileURLToPath(new URL('../theme/ask-ai/retriever.js', import.meta.url)),
+    fileURLToPath(new URL('../theme/docpilot/retriever.js', import.meta.url)),
     'utf8',
   )
   // The constants are declared as `tune('NAME', <default>)`, and an environment
   // override beats the default — so read the override first, exactly as the
   // module does, or the fingerprint records a sweep it did not run.
   const read = (name) => {
-    const env = process.env[`ASK_AI_${name}`]
+    const env = process.env[`DOCPILOT_${name}`]
     if (env !== undefined && env !== '' && Number.isFinite(Number(env))) return Number(env)
     const m = new RegExp(`tune\\('${name}',\\s*([\\d.]+)\\)`).exec(src)
     return m ? Number(m[1]) : null
@@ -602,7 +632,7 @@ async function main() {
     .slice(0, LIMIT || undefined)
 
   console.log(
-    `\nAsk AI eval — ${records.length} records, ` +
+    `\nDocPilot eval — ${records.length} records, ` +
       `${GATE_ONLY ? 'gate only' : `models ${MODELS.join(', ')}`}` +
       `${LEXICAL ? ', LEXICAL ONLY (no embedder)' : ''}`,
   )

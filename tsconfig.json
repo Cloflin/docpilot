@@ -1,0 +1,33 @@
+{
+  "// why": [
+    "Type CHECKING, never compilation. `exports` in package.json points straight",
+    "at ./src/*.js — this package ships its source, unbundled, and a build step",
+    "for it would change the artifact every consumer receives. So there is no",
+    "emit here: tsc reads the JSDoc that was already being written and says when",
+    "it disagrees with the code.",
+    "",
+    "The include list is deliberately narrow. Turning `checkJs` loose on the",
+    "whole tree at once produces hundreds of findings in code that has shipped",
+    "and works, which is a backlog rather than a gate. New modules join the list",
+    "as they are written, and the list only grows."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "types": ["node"]
+  },
+  "include": [
+    "src/build/import.js",
+    "src/build/lib/html-extract.js",
+    "src/build/lib/html-to-md.js",
+    "src/build/lib/annotate.js"
+  ]
+}

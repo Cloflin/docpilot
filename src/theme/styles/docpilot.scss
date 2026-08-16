@@ -1,0 +1,14 @@
+/**
+ * The bundle: the panel, then VitePress.
+ *
+ * This file has one job and must keep having exactly one — the order of these
+ * two lines IS the adapter mechanism. `core.scss` declares every `--dp-*` with
+ * a real value; `vitepress.scss` re-declares the colour set in terms of
+ * `--vp-*` at the same specificity and wins by coming second.
+ *
+ * The name is load-bearing: it compiles to `dist/docpilot.css`, which is what
+ * `"./style.css"` and `src/theme/index.js` both point at.
+ */
+
+@use './core';
+@use './vitepress';

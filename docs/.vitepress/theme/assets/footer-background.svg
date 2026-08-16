@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 640" preserveAspectRatio="xMidYMid slice" role="presentation">
+  <defs>
+    <linearGradient id="footer-base" x1="0" y1="640" x2="1600" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#476BE3" />
+      <stop offset=".52" stop-color="#9277C7" />
+      <stop offset="1" stop-color="#C56161" />
+    </linearGradient>
+    <radialGradient id="footer-glow-a" cx="0" cy="0" r="1"
+      gradientTransform="translate(320 120) rotate(38) scale(760 520)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7E9BF2" stop-opacity=".75" />
+      <stop offset="1" stop-color="#7E9BF2" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="footer-glow-b" cx="0" cy="0" r="1"
+      gradientTransform="translate(1340 560) rotate(-140) scale(880 600)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8C3B57" stop-opacity=".6" />
+      <stop offset="1" stop-color="#8C3B57" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="640" fill="url(#footer-base)" />
+  <rect width="1600" height="640" fill="url(#footer-glow-a)" />
+  <rect width="1600" height="640" fill="url(#footer-glow-b)" />
+</svg>
