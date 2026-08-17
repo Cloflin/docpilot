@@ -1,6 +1,27 @@
 # Getting started
 
-## Install
+## Overview
+
+DocPilot is a grounded AI answer panel for VitePress documentation. It consists
+of three parts:
+
+- **A build step** that turns your markdown into a static retrieval index, and a
+  Vite plugin that mounts the panel, proxies the model call in development, and
+  reports at build time whether the panel will render at all.
+
+- **A browser-side retriever** that scores a question against that index without
+  a vector database, a search service, or any server beyond the one already
+  serving your site.
+
+- **A calibrated gate** that refuses before the model is called, so an off-topic
+  question costs zero tokens — and a validator that checks every citation the
+  reader sees against what the host actually retrieved that turn.
+
+The rationale is in [Why DocPilot](./why), and the rules the project holds itself
+to are in [Philosophy](./philosophy). What follows is the ten minutes it takes to
+have it running.
+
+## Installing
 
 ```bash
 npm i @cloflin/docpilot
@@ -9,7 +30,7 @@ npx docpilot init
 
 `init` scaffolds the whole loop and never overwrites: `.env.example`, a starter golden set and calibration set under `docpilot/`, and the two authoring skills into `.claude/skills/`. Every file is reported as written or kept.
 
-## Wire the config
+## Wiring the config
 
 ```js
 // docs/.vitepress/config.mjs
@@ -38,7 +59,7 @@ Two details are load-bearing.
 
 `product` is optional and worth setting: it is what the assistant says it answers questions about, in the instruction and in the panel. Left out, everything reads "this documentation", which is correct and dull.
 
-## Wire the theme
+## Wiring the theme
 
 ```js
 // docs/.vitepress/theme/index.js
@@ -58,7 +79,7 @@ If you have no theme of your own, the package's default export is one:
 export { default } from '@cloflin/docpilot/theme'
 ```
 
-## Build the index
+## Building the index
 
 ```bash
 npx docpilot index
@@ -66,7 +87,7 @@ npx docpilot index
 
 This reads your markdown (and any OpenAPI YAML under `public/`), chunks it, embeds every chunk, and writes `docs/public/rag/`. Commit the output or build it in CI — it is a deploy artefact, and identical input produces byte-identical output, so it diffs cleanly.
 
-## Calibrate
+## Calibrating the gate
 
 ```bash
 npx docpilot calibrate
@@ -106,3 +127,10 @@ The build does not fail. The panel switches itself off and one block appears:
 ```
 
 That is deliberate. A dependency that can break someone's docs build on the day it lands is a dependency they remove. When you want the same facts to fail a pipeline, `npx docpilot doctor` exits non-zero.
+
+## Next steps
+
+- Two providers instead of one, or none at all: [Choosing providers](./providers).
+- What ends up in the index, and what to put in frontmatter to help it: [Building the index](./indexing).
+- What happens between a question and an answer: [How a turn works](/concepts/a-turn).
+- Something not working: [Troubleshooting](./troubleshooting).

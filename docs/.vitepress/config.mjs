@@ -48,7 +48,7 @@ const ragIndex = new URL('../public/rag/manifest.json', import.meta.url)
  * which model embeds or where the docs live.
  *
  * The providers are the shipped defaults, written out rather than inherited:
- * this is the setup getting-started tells a reader to run, so the site that
+ * this is the setup Getting started tells a reader to run, so the site that
  * documents it should be the one running it.
  */
 export const docPilot = {
@@ -77,34 +77,50 @@ const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
  * read — the guide says what to type, the concepts pages say what happens when
  * you do — and splitting them hides the second half from anyone who arrives at
  * the first.
+ *
+ * Three groups, in the order Vite's own docs use: why it exists, how to run it,
+ * what it does underneath. Introduction is short and answerable in one sitting;
+ * Guide follows the life of a project rather than the order the pages were
+ * written; Understanding it stays last because nobody needs the gate's two
+ * channels before their first index has been built.
+ *
+ * Links are absolute rather than `base`-relative. `/guide/` is a group landing
+ * page as well as a link, and a `base` that ends where its link begins reads as
+ * a typo every time someone edits this file.
  */
 const sidebarForGuide = [
   {
-    text: 'Guide',
-    base: '/guide/',
+    text: 'Introduction',
     items: [
-      { text: 'Getting started', link: 'getting-started' },
-      { text: 'Choosing providers', link: 'providers' },
-      { text: 'Building the index', link: 'indexing' },
-      { text: 'Imported pages', link: 'imported-pages' },
-      { text: 'Calibration and evaluation', link: 'evaluation' },
-      { text: 'Credentials in questions', link: 'credentials' },
-      { text: 'Social openers', link: 'social-openers' },
-      { text: 'Conversation history', link: 'history' },
-      { text: 'Translating the panel', link: 'i18n' },
-      { text: 'Appearance', link: 'appearance' },
-      { text: 'llms.txt and crawlers', link: 'llms-txt' },
-      { text: 'Production', link: 'production' },
-      { text: 'Sites that are not VitePress', link: 'other-sites' },
+      { text: 'Getting started', link: '/guide/' },
+      { text: 'Philosophy', link: '/guide/philosophy' },
+      { text: 'Why DocPilot', link: '/guide/why' },
+    ],
+  },
+  {
+    text: 'Guide',
+    items: [
+      { text: 'Choosing providers', link: '/guide/providers' },
+      { text: 'Building the index', link: '/guide/indexing' },
+      { text: 'Imported pages', link: '/guide/imported-pages' },
+      { text: 'Calibration and evaluation', link: '/guide/evaluation' },
+      { text: 'Production', link: '/guide/production' },
+      { text: 'Sites that are not VitePress', link: '/guide/other-sites' },
+      { text: 'Appearance', link: '/guide/appearance' },
+      { text: 'Translating the panel', link: '/guide/i18n' },
+      { text: 'Conversation history', link: '/guide/history' },
+      { text: 'Social openers', link: '/guide/social-openers' },
+      { text: 'Credentials in questions', link: '/guide/credentials' },
+      { text: 'llms.txt and crawlers', link: '/guide/llms-txt' },
+      { text: 'Troubleshooting', link: '/guide/troubleshooting' },
     ],
   },
   {
     text: 'Understanding it',
-    base: '/concepts/',
     items: [
-      { text: 'How a turn works', link: 'a-turn' },
-      { text: 'The refusal gate', link: 'the-gate' },
-      { text: 'What it guarantees', link: 'guarantees' },
+      { text: 'How a turn works', link: '/concepts/a-turn' },
+      { text: 'The refusal gate', link: '/concepts/the-gate' },
+      { text: 'What it guarantees', link: '/concepts/guarantees' },
     ],
   },
 ]
@@ -167,7 +183,7 @@ const config = defineConfig({
       {
         text: 'Guide',
         activeMatch: '/(guide|concepts)',
-        link: '/guide/getting-started',
+        link: '/guide/',
       },
       {
         text: 'Reference',
@@ -208,7 +224,8 @@ const config = defineConfig({
         {
           title: 'DocPilot',
           items: [
-            { text: 'Getting started', link: '/guide/getting-started' },
+            { text: 'Getting started', link: '/guide/' },
+            { text: 'Why DocPilot', link: '/guide/why' },
             { text: 'Building the index', link: '/guide/indexing' },
             { text: 'Configuration', link: '/reference/config' },
             { text: 'CLI', link: '/reference/cli' },

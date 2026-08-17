@@ -18,6 +18,6 @@ import Footer from '@voidzero-dev/vitepress-theme/src/components/oss/Footer.vue'
     heading="Put a grounded answer panel in your docs"
     subheading="Install the plugin, build an index, calibrate the gate against your own corpus."
     button-text="Get Started"
-    button-link="/guide/getting-started"
+    button-link="/guide/"
   />
 </template>

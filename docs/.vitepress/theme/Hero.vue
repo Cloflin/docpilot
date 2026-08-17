@@ -17,7 +17,7 @@ import markIcon from './assets/docpilot-mono.svg'
           gate refuses before the model is ever called
         </p>
         <div class="flex items-center gap-5 mt-6">
-          <a href="/guide/getting-started" class="button button--primary inline-block w-fit">
+          <a href="/guide/" class="button button--primary inline-block w-fit">
             <span>Get Started</span>
           </a>
           <a
