@@ -45,6 +45,7 @@ import {
   languageMatch,
   citationPrecision,
   hallucinatedCitationRate,
+  underPath,
   wilsonUpper95,
   mean,
   percentile,
@@ -276,7 +277,7 @@ async function probeRecords(index, guard, records) {
     const goldInScope =
       scope.kind === 'all' || !scope.paths.length
         ? rec.gold_chunks
-        : rec.gold_chunks.filter((gc) => scope.paths.some((p) => `/${gc}`.startsWith(p)))
+        : rec.gold_chunks.filter((gc) => scope.paths.some((p) => underPath(`/${gc}`, p)))
     const scoredAsNegative = rec.gold_chunks.length > 0 && goldInScope.length === 0
 
     probes.push({
@@ -346,15 +347,30 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
     // which is the only way §4.5's three-pair window is exercised at all.
     const history = []
     if (rec.prev_question) {
-      const first = await turn({
-        probe,
-        model,
-        fallback,
-        thinkSupported,
-        guard,
-        question: rec.prev_question,
-        history: [],
-      })
+      // Guarded like the scored turn below. Unguarded, one transport hiccup on a
+      // priming turn threw out of the loop and into `main().catch → die`, taking
+      // every row already run with it — the report is only written after the
+      // whole model finishes, so a matrix that had been running for an hour left
+      // nothing behind.
+      let first
+      try {
+        first = await turn({
+          probe,
+          model,
+          fallback,
+          thinkSupported,
+          guard,
+          question: rec.prev_question,
+          history: [],
+        })
+      } catch (e) {
+        row.observed = 'error'
+        row.error = `priming turn: ${String(e.message || e)}`
+        row.latencyMs = 0
+        rows.push(row)
+        report(row)
+        continue
+      }
       if (first?.text?.trim()) history.push({ question: rec.prev_question, answer: first.text })
     }
 
@@ -438,10 +454,22 @@ function turn({ probe, model, fallback, thinkSupported, guard, question, history
 
 // ── output ───────────────────────────────────────────────────────────────────
 
+/**
+ * What this record is actually expecting, once scope is taken into account.
+ *
+ * A record whose gold set falls entirely outside its own scope has one correct
+ * outcome — a refusal — and `probeRecords` says so in as many words. Its `expect`
+ * field still reads `answer`, though, so every consumer that compared against it
+ * was measuring the gate against a bar the gate is not supposed to clear:
+ * `causeExact` could never credit it, dragging `noAnswerPrecision` down however
+ * well the gate behaved, and the correct refusal printed as MISS.
+ */
+const expectEff = (r) => (r.scoredAsNegative ? 'refuse:out-of-scope' : r.expect)
+
 function report(row) {
+  const expect = expectEff(row)
   const ok =
-    row.observed === row.expect ||
-    (row.expect.startsWith('refuse') && row.observed.startsWith('refuse'))
+    row.observed === expect || (expect.startsWith('refuse') && row.observed.startsWith('refuse'))
   console.log(
     `${ok ? ' ok ' : 'MISS'} ${pad(row.id, 6)} G=${num(row.G)} ` +
       `ret=${row.retrieval ? num(row.retrieval.f1) : ' — '} ` +
@@ -463,7 +491,7 @@ export function summarise(rows) {
   const caught = negatives.filter((r) => r.observed.startsWith('refuse')).length
   // Credited only when the observed cause equals the expected one: a gate that
   // refuses for the wrong reason used to score a perfect 1.0.
-  const causeExact = negatives.filter((r) => r.observed === r.expect).length
+  const causeExact = negatives.filter((r) => r.observed === expectEff(r)).length
 
   const supported = answered.filter((r) => typeof r.support === 'number')
   const unsupported = supported.filter((r) => r.support < 0.5).length
@@ -512,13 +540,13 @@ export function summarise(rows) {
     latencyP50: percentile(rows.map((r) => r.latencyMs), 0.5),
     latencyP95: percentile(rows.map((r) => r.latencyMs), 0.95),
     misses: rows
-      .filter(
-        (r) =>
-          !(
-            r.observed === r.expect ||
-            (r.expect.startsWith('refuse') && r.observed.startsWith('refuse'))
-          ),
-      )
+      .filter((r) => {
+        const expect = expectEff(r)
+        return !(
+          r.observed === expect ||
+          (expect.startsWith('refuse') && r.observed.startsWith('refuse'))
+        )
+      })
       .map((r) => `${r.id}(${r.observed})`),
     languageFailures: positives.filter((r) => r.language === 0).map((r) => r.id),
   }
@@ -691,6 +719,11 @@ async function main() {
       thinkSupported,
       capabilities: caps,
       gateOnly: GATE_ONLY,
+      // Written down, not just encoded in the filename. A lexical-only run and a
+      // hybrid run measure different systems, which is why they get separate
+      // paths — but nothing downstream could TELL them apart, because the flag
+      // existed only as a substring of the name.
+      lexical: LEXICAL,
       provider: PROVIDER,
       indexHash: index.manifest.hash,
       promptHash: PROMPT_HASH,

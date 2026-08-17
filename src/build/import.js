@@ -55,13 +55,38 @@ export function slugFor(url) {
 /** `2026-08-15` and `15 August 2026` from one clock reading. */
 export function dates(now) {
   const iso = new Date(now).toISOString().slice(0, 10)
+  // Both readings are UTC. `toISOString` always is; without `timeZone` the
+  // second one formats in the machine's local zone, so the same instant printed
+  // two different days depending on who ran the import — and the attribution
+  // line could disagree with the `importedAt` key three lines above it.
   const human = new Date(now).toLocaleDateString('en-GB', {
+    timeZone: 'UTC',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   })
   return { iso, human }
 }
+
+/**
+ * One frontmatter value, safe to put after a `key:`.
+ *
+ * `title` and `description` come off the imported page — `og:title`, `<h1>`, a
+ * meta tag — and were being written raw. A newline in either one opens a new
+ * frontmatter line, which is enough to inject any key at all: a forged `source:`
+ * wins, because the provenance parser takes the first `^source:` it finds, and
+ * the page then claims to have come from somewhere it did not. A bare `---`
+ * closes the block early, and an ordinary colon in a title is enough to make the
+ * YAML unparseable without anyone attacking anything.
+ *
+ * Quoted rather than stripped, so titles keep their punctuation.
+ */
+const yamlValue = (v) =>
+  JSON.stringify(
+    String(v ?? '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  )
 
 /**
  * The page contract from `skills/docs-import/SKILL.md`, assembled.
@@ -74,11 +99,16 @@ export function dates(now) {
 export function composePage({ title, description, source, markdown, now = Date.now() }) {
   const { iso, human } = dates(now)
   const host = new URL(source).hostname.replace(/^www\./, '')
+  // The same collapsed title goes into the `#` heading below: a newline there
+  // would end the heading and turn the rest of the title into body text.
+  const oneLineTitle = String(title ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
   const front = [
     '---',
-    `title: ${title}`,
-    `description: ${description}`,
-    `source: ${source}`,
+    `title: ${yamlValue(oneLineTitle)}`,
+    `description: ${yamlValue(description)}`,
+    `source: ${yamlValue(source)}`,
     `importedAt: ${iso}`,
     '---',
   ].join('\n')
@@ -90,7 +120,7 @@ export function composePage({ title, description, source, markdown, now = Date.n
     ':::',
   ].join('\n')
 
-  return `${front}\n\n# ${title}\n\n${attribution}\n\n${markdown}\n`
+  return `${front}\n\n# ${oneLineTitle}\n\n${attribution}\n\n${markdown}\n`
 }
 
 /**
@@ -128,6 +158,7 @@ export async function readHtml({
   url,
   htmlFile,
   lang = 'en',
+  allow = null,
   fetchImpl = fetch,
   stdin = process.stdin,
 }) {
@@ -146,6 +177,21 @@ export async function readHtml({
     },
     redirect: 'follow',
   })
+  // The allowlist checked the URL the user typed. Redirects are followed, so
+  // without this it checked only the FIRST hop: an allowed origin that redirects
+  // — to plain http, to another host, or to something on the internal network of
+  // whatever machine is running the import — delivers that response's body into
+  // the corpus, filed under the allowed URL. Re-checking the URL the response
+  // actually came from is what makes the list the boundary it claims to be.
+  if (allow && res.url && res.url !== url) {
+    const verdict = allow(res.url)
+    if ('error' in verdict) {
+      throw new Error(
+        `${url} redirected to ${res.url}, which is outside docPilot.sources.allow.\n` +
+          '      Add that origin deliberately, or import the final URL directly.',
+      )
+    }
+  }
   if (!res.ok) {
     throw new Error(
       `${url} answered ${res.status}. A page behind a bot wall or built by ` +
@@ -350,7 +396,12 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
 
   let html
   try {
-    html = await readHtml({ url: flags.url, htmlFile: flags.htmlFile, lang: flags.lang })
+    html = await readHtml({
+      url: flags.url,
+      htmlFile: flags.htmlFile,
+      lang: flags.lang,
+      allow: (u) => checkSource(u, entries),
+    })
   } catch (e) {
     log.error(`[docpilot] ${e.message}`)
     return 1

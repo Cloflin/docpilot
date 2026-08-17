@@ -169,13 +169,35 @@ export function collapseWhitespace(src) {
  * module stays dependency-free and I/O-free by contract.
  */
 export function splitFrontmatter(src) {
-  const m = /^---\n([\s\S]*?)\n---\n?/.exec(src)
+  // CRLF is matched as well as LF. A Windows checkout — or `core.autocrlf` on a
+  // Unix one — otherwise misses here entirely, and the failure is loud in the
+  // wrong place: the frontmatter is never removed, so its raw YAML is indexed as
+  // prose, title and description come back null, and an imported page whose
+  // `source:` line is sitting right there fails the provenance check with "has
+  // no frontmatter source". The sibling parser in markdown-alternate.js already
+  // accepts both endings; these two must not disagree about what a document is.
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(src)
   if (!m) return { title: null, description: null, layout: null, source: null, body: src }
   const title = /^title:\s*(.+)$/m.exec(m[1])
   const description = /^description:\s*(.+)$/m.exec(m[1])
   const layout = /^layout:\s*(.+)$/m.exec(m[1])
   const source = /^source:\s*(.+)$/m.exec(m[1])
-  const clean = (v) => (v ? v[1].trim().replace(/^['"]|['"]$/g, '') : null)
+  // A double-quoted scalar is unquoted through JSON.parse rather than by
+  // trimming the quote characters, so a value containing an escape — which is
+  // how `import.js` writes every value it takes off a remote page — reads back
+  // as what it was, not as its source text with the outer quotes shaved off.
+  const clean = (v) => {
+    if (!v) return null
+    const raw = v[1].trim()
+    if (raw.startsWith('"')) {
+      try {
+        return JSON.parse(raw)
+      } catch {
+        // Not JSON after all; fall through to the plain form.
+      }
+    }
+    return raw.replace(/^['"]|['"]$/g, '')
+  }
   return {
     title: clean(title),
     description: clean(description),
@@ -190,21 +212,66 @@ export function splitFrontmatter(src) {
  * block is often the only place a constraint is stated.
  */
 export function unwrapContainers(src) {
-  return src
-    .replace(/^:::\s*success\s*$/gim, 'Note:')
-    .replace(/^:::\s*info-clear\s*$/gim, 'Note:')
-    .replace(/^:::\s*custom-warning\s*$/gim, 'Warning:')
-    .replace(/^:::\s*image-wrap.*$/gim, '')
-    .replace(/^:::\s*openapi\s+(\S+)\s*$/gim, (_m, name) => `See API reference: /reference/${name}`)
-    .replace(/^:::\s*$/gm, '')
+  return eachUnfencedLine(src, (line) =>
+    line
+      .replace(/^:::\s*success\s*$/i, 'Note:')
+      .replace(/^:::\s*info-clear\s*$/i, 'Note:')
+      .replace(/^:::\s*custom-warning\s*$/i, 'Warning:')
+      .replace(/^:::\s*image-wrap.*$/i, '')
+      .replace(/^:::\s*openapi\s+(\S+)\s*$/i, (_m, name) => `See API reference: /reference/${name}`)
+      .replace(/^:::\s*$/, ''),
+  )
 }
 
-/** Vue islands. FaqAccordion is extracted separately, before this runs. */
+/**
+ * Vue islands. FaqAccordion is extracted separately, before this runs.
+ *
+ * A line state machine on the same pattern as `applyLlmTags`, and for the same
+ * reason: a page that DOCUMENTS a `<script>` embed puts one in a fenced sample,
+ * and the multiline regex this replaces reached straight into that fence and
+ * deleted the sample's body. That is content loss at index time with nothing to
+ * show for it — the page still renders the example, the index no longer has it.
+ */
 export function stripVue(src) {
-  return src
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<FaqAccordion[\s\S]*?\/>/gi, '')
+  const out = []
+  let fenced = false
+  /** The closing tag being waited on, or null when not inside an island. */
+  let closing = null
+
+  for (const line of String(src).split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      fenced = !fenced
+      out.push(line)
+      continue
+    }
+    if (fenced) {
+      out.push(line)
+      continue
+    }
+
+    let l = line
+    if (closing) {
+      const end = closing.exec(l)
+      if (!end) continue
+      l = l.slice(end.index + end[0].length)
+      closing = null
+    }
+
+    // Inline forms first, so a one-line island never opens the state machine.
+    l = l
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<FaqAccordion[\s\S]*?\/>/gi, '')
+
+    // What is left of an opener runs to a later line.
+    const open = /<(script|style)\b[^>]*>|<FaqAccordion\b/i.exec(l)
+    if (open) {
+      closing = open[1] ? new RegExp(`</${open[1]}>`, 'i') : /\/>/
+      l = l.slice(0, open.index)
+    }
+    out.push(l)
+  }
+  return out.join('\n')
 }
 
 /**
@@ -221,15 +288,26 @@ export function extractFaq(src) {
 
 /** Links keep their route: the model must see `/getting-started` to be able to cite it. */
 export function flattenLinks(src) {
-  return src.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, href) =>
-    href.startsWith('#') ? text : `${text} (${href})`,
+  // Unfenced only, like every other transform here: a fenced sample showing
+  // markdown link syntax is documentation about links, not a link.
+  return eachUnfencedLine(src, (line) =>
+    line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, href) =>
+      href.startsWith('#') ? text : `${text} (${href})`,
+    ),
   )
 }
 
 /** Remaining HTML tags go; their text content stays. */
 export function stripHtml(src) {
   return eachUnfencedLine(src, (line) =>
-    line.replace(/<\/?[a-z][^>]*>/gi, '').replace(/&nbsp;/g, ' '),
+    line
+      // Autolinks are unwrapped before the tag sweep, not swept by it. `<https://
+      // example.com>` starts with a letter, so the tag pattern below matches the
+      // whole thing and takes the URL with it — losing the address entirely,
+      // while an ordinary [text](url) link keeps its href through flattenLinks.
+      .replace(/<((?:https?|mailto):[^>\s]+)>/gi, '$1')
+      .replace(/<\/?[a-z][^>]*>/gi, '')
+      .replace(/&nbsp;/g, ' '),
   )
 }
 

@@ -12,7 +12,18 @@ import {
 import { toMarkdown } from '../src/build/lib/html-to-md.js'
 import { annotate, stripAnnotations, verifyAnnotation } from '../src/build/lib/annotate.js'
 import { applyLlmTags } from '../src/build/lib/normalise.js'
-import { buildPage, composePage, parseImportFlags, runImport, slugFor } from '../src/build/import.js'
+import {
+  buildPage,
+  composePage,
+  dates,
+  parseImportFlags,
+  readHtml,
+  runImport,
+  slugFor,
+} from '../src/build/import.js'
+// Aliased: markdown-alternate.js exports a parser of the same name, imported
+// below, and two bindings with one name in a module is a SyntaxError.
+import { splitFrontmatter as splitPageFrontmatter } from '../src/build/lib/normalise.js'
 import {
   canonicalOf,
   declaredAlternates,
@@ -410,9 +421,10 @@ describe('import — the command', () => {
       source: 'https://acme.test/help/rate-limits',
       now: Date.UTC(2026, 7, 15),
     })
-    expect(built.file).toContain('title: Rate limits')
-    expect(built.file).toContain('description: How many requests each plan allows.')
-    expect(built.file).toContain('source: https://acme.test/help/rate-limits')
+    // Values off a remote page are quoted — see composePage.
+    expect(built.file).toContain('title: "Rate limits"')
+    expect(built.file).toContain('description: "How many requests each plan allows."')
+    expect(built.file).toContain('source: "https://acme.test/help/rate-limits"')
     expect(built.file).toContain('importedAt: 2026-08-15')
     // The provenance travels with the evidence: it is inside the chunk text,
     // which is why the date is in it.
@@ -425,6 +437,45 @@ describe('import — the command', () => {
     // which the report says in its own line rather than implying by silence.
     expect(built.scope).toBe('main')
     expect(built.dropped.map((d) => d.text)).toContain('Start free')
+  })
+
+  it('a newline in a remote title cannot forge a frontmatter key', () => {
+    const file = composePage({
+      title: 'Rate limits\nsource: https://evil.test/other\nlayout: home',
+      description: 'One line.',
+      source: 'https://acme.test/help/rate-limits',
+      markdown: 'Body.',
+      now: Date.UTC(2026, 7, 15),
+    })
+    // The forged keys are inside the quoted title, not lines of their own, so
+    // the provenance parser still reads the real source.
+    const fm = splitPageFrontmatter(file)
+    expect(fm.source).toBe('https://acme.test/help/rate-limits')
+    expect(fm.title).toBe('Rate limits source: https://evil.test/other layout: home')
+    expect(file).not.toMatch(/^layout:/m)
+    // And the H1 is still one heading.
+    expect(file).toContain('# Rate limits source: https://evil.test/other layout: home')
+  })
+
+  it('the human date is UTC, not the timezone of whoever ran the import', () => {
+    expect(dates(Date.UTC(2026, 7, 15)).human).toBe('15 August 2026')
+    expect(dates(Date.UTC(2026, 7, 15)).iso).toBe('2026-08-15')
+  })
+
+  it('a redirect out of the allowlist is refused after the fetch', async () => {
+    const fetchImpl = async () => ({
+      ok: true,
+      url: 'http://169.254.169.254/latest/meta-data/',
+      text: async () => '<html><body>secrets</body></html>',
+    })
+    await expect(
+      readHtml({
+        url: 'https://acme.test/help/rate-limits',
+        fetchImpl,
+        allow: (u) =>
+          u.startsWith('https://acme.test/') ? { href: u } : { error: 'outside the allowlist' },
+      }),
+    ).rejects.toThrow(/redirected to http:\/\/169\.254\.169\.254/)
   })
 
   it('does not run the model unless asked, and reports what it added when it does', async () => {

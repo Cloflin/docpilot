@@ -234,6 +234,13 @@ export async function findMarkdown({ urls, allow, fetchImpl, headers = {} }) {
       tried.push({ url, why: String(e?.message || e) })
       continue
     }
+    // Same reason as `readHtml`: the per-candidate check above covers the URL
+    // requested, and redirects are followed, so the response can have come from
+    // somewhere the list never approved.
+    if (res.url && res.url !== url && 'error' in allow(res.url)) {
+      tried.push({ url, why: `redirected outside the allowlist (${res.url})` })
+      continue
+    }
     if (!res.ok) {
       tried.push({ url, why: `${res.status}` })
       continue

@@ -904,7 +904,10 @@ watch(
         // Below 960px focus the container, never the textarea: a tabindex="-1"
         // container does not raise the software keyboard over the whole sheet.
         if (mobile.value) panel.value?.focus()
-        else panel.value?.querySelector('textarea')?.focus()
+        // The composer, by its own class — a bare `textarea` is whichever one
+        // comes first in the DOM, and an open feedback comment or question
+        // editor sits above the composer in the thread.
+        else panel.value?.querySelector('.docpilot__field textarea')?.focus()
       }, 60)
     } else {
       // The popover's node unmounts with the panel, which implicitly closes it —
@@ -1215,7 +1218,10 @@ function send() {
   input.value = ''
   quote.value = ''
   nextTick(() => {
-    const ta = panel.value?.querySelector('textarea')
+    // The composer specifically. `textarea` alone is the first one in the panel,
+    // which is an open question editor or feedback comment whenever one exists —
+    // so the wrong field collapsed and the emptied composer stayed tall.
+    const ta = panel.value?.querySelector('.docpilot__field textarea')
     if (ta) ta.style.height = 'auto'
   })
 }

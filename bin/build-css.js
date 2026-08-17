@@ -37,7 +37,15 @@ const ENTRIES = [
 let sass
 try {
   sass = await import('sass')
-} catch {
+} catch (err) {
+  // ONLY a missing module is a skip. This is the `prepare` script, so a broken
+  // or incompatible sass install — anything that throws on import rather than
+  // failing to resolve — would otherwise print "not installed", exit 0, and let
+  // `npm publish` build a tarball whose `dist/*.css` is stale or absent while
+  // `exports` still points at it. The publish succeeds and the package is broken.
+  const missing =
+    err?.code === 'ERR_MODULE_NOT_FOUND' && /['"]sass['"]/.test(String(err?.message || ''))
+  if (!missing) throw err
   // A consumer installing from the registry gets `dist/` in the tarball and
   // never reaches this file; `prepare` still runs for them, so it has to be a
   // no-op rather than a failed install.

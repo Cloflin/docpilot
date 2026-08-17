@@ -22,6 +22,24 @@ import { computeSupport } from './support.js'
 const DEFAULT_STEP_TIMEOUT_MS = 120000
 
 /**
+ * How many steps the loop will refund before it stops refunding.
+ *
+ * Three things below cost nothing: a repeat rejection from `fetch_section`, a
+ * search that hits the cache, and a call to a tool that does not exist. Each of
+ * them is the right call in isolation — none of them advanced the turn, so none
+ * should spend from a four-step budget. Together they were an unbounded loop:
+ * a model stuck on one invented id, one repeated query, or one invented tool
+ * name refunds every step it takes, and `while (iterations < maxIterations)`
+ * never comes due. Every lap is a full `chat()` call, and the per-step timeout
+ * bounds the call rather than the loop, so nothing but the reader pressing stop
+ * ends it.
+ *
+ * Past this many refunds the steps start being charged, the budget drains, and
+ * the turn is forced to the final answer call the way any other turn is.
+ */
+const MAX_FREE_STEPS = 5
+
+/**
  * How much of a chunk a search result spells out, and how much `fetch_section`
  * returns. Sweepable so the quality-per-token curve can be measured rather than
  * argued: the 1200 default cuts 26.4% of chunks on this corpus, and an
@@ -250,10 +268,19 @@ export async function runTurn({
       return { observation: observation('list_pages', scopeLabel, retrieval.pages(args.prefix)) }
     }
 
-    return { error: `unknown tool ${name}` }
+    // Charged. A name that is not in the tool list is a guess, and an uncharged
+    // guess is one the model can repeat forever.
+    return { error: `unknown tool ${name}`, charge: true }
   }
 
   const maxIterations = config.maxIterations ?? 4
+  let freeSteps = 0
+  /** Give the step back, up to MAX_FREE_STEPS times per turn. */
+  const refund = () => {
+    if (freeSteps >= MAX_FREE_STEPS) return
+    freeSteps++
+    iterations--
+  }
 
   while (iterations < maxIterations) {
     iterations++
@@ -309,10 +336,10 @@ export async function runTurn({
         observations.push({ tool: reply.toolCall.name, tool_error: res.error })
         // Guessing is never free, but a known weak-model behaviour must not eat
         // the whole budget: only the first rejection in a turn costs a step.
-        if (!res.charge) iterations--
+        if (!res.charge) refund()
       } else {
         observations.push(res.observation)
-        if (res.free) iterations--
+        if (res.free) refund()
       }
       continue
     }

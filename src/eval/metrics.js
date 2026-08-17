@@ -20,9 +20,31 @@ export function retrievalF1(retrievedIds, goldIds) {
   return { p, r, f1: p + r ? (2 * p * r) / (p + r) : 0 }
 }
 
-/** Gold chunks may be given as page paths; a chunk id starts with its path. */
+/**
+ * Gold chunks may be given as page paths; a chunk id starts with its path.
+ *
+ * The prefix has to end on a separator. A bare `startsWith` made the gold page
+ * `guide/scope` match `guide/scoped-page#anchor`, which is a different page —
+ * so retrieval F1, recall@k, MRR and citation precision were all being credited
+ * for chunks the answer could not have used. The runtime is strict about this
+ * (`retriever.js` scopes by exact path), and a metric that is more generous than
+ * the thing it measures reports a system that does not exist.
+ */
 export function matchesGold(id, gold) {
-  return gold.some((g) => id === g || id.startsWith(g))
+  return gold.some((g) => underPath(id, g))
+}
+
+/**
+ * Is `id` the path `prefix`, or something beneath it?
+ *
+ * The one place the boundary rule lives, so the four call sites that need it
+ * cannot drift apart: a chunk id is `<page>#<anchor>`, a nested page is
+ * `<page>/<child>`, and anything else that merely shares leading characters —
+ * `guide/scoped-page` under `guide/scope` — is a different page.
+ */
+export function underPath(id, prefix) {
+  const p = String(prefix).replace(/\/+$/, '')
+  return id === p || id.startsWith(`${p}#`) || id.startsWith(`${p}/`)
 }
 
 export function retrievalF1Loose(retrievedIds, gold) {

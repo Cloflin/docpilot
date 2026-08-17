@@ -76,7 +76,12 @@ function langOf(info) {
     .trim()
     .split(/\s+/)[0]
     .toLowerCase()
-  return LANGS[first] || null
+  // `hasOwn`, not a plain lookup. The info string is model output, and a plain
+  // lookup reaches Object.prototype: ```constructor and ```__proto__ both return
+  // something truthy that is not a language name, and it is that value — not a
+  // value from this table — that gets written into the markup downstream. The
+  // table is a sanitiser, so it has to be the only thing that can answer.
+  return Object.hasOwn(LANGS, first) ? LANGS[first] : null
 }
 
 md.renderer.rules.fence = (tokens, idx) => {

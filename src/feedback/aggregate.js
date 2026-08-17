@@ -93,8 +93,12 @@ export function aggregate(rows) {
         taus: [],
         ns: [],
         wouldPassUnscoped: 0,
-        firstSeen: r.ts,
-        lastSeen: r.ts,
+        // Numbers or nothing. `pull` reads "anything", and a source that hands
+        // back an ISO string here used to seed the group with one — after which
+        // `Math.min(string, number)` on the next row is NaN, and `iso` below
+        // threw RangeError out of the whole report.
+        firstSeen: typeof r.ts === 'number' ? r.ts : null,
+        lastSeen: typeof r.ts === 'number' ? r.ts : null,
       }
       groups.set(key, g)
     }
@@ -208,7 +212,9 @@ function finish(g, i) {
 }
 
 const round = (n) => Math.round(n * 1000) / 1000
-const iso = (ts) => (typeof ts === 'number' ? new Date(ts).toISOString() : null)
+// `Number.isFinite`, not `typeof === 'number'`: NaN passes the second test and
+// then `new Date(NaN).toISOString()` throws rather than returning anything.
+const iso = (ts) => (Number.isFinite(ts) ? new Date(ts).toISOString() : null)
 
 /**
  * A re-pull must not undo a review.
@@ -254,5 +260,48 @@ export function merge(existing = [], fresh = []) {
   for (const orphan of byKey.values()) {
     if (orphan.promoted || orphan.needsReview === false) out.push(orphan)
   }
-  return out.sort((a, b) => (a.question < b.question ? -1 : a.question > b.question ? 1 : 0))
+  return renumber(out).sort((a, b) =>
+    a.question < b.question ? -1 : a.question > b.question ? 1 : 0,
+  )
+}
+
+/**
+ * Make the ids unique again after a merge.
+ *
+ * Fresh candidates are numbered by their position in THIS pull, while a row that
+ * matched a prior one keeps the prior id — so the two schemes collide as soon as
+ * the sample changes. Concretely: {apple: fb-0001, banana: fb-0002} reviewed,
+ * then a pull returning {banana, cherry} numbers them fb-0001 and fb-0002,
+ * banana takes back fb-0002 from its prior, and cherry is still fb-0002. The
+ * duplicate is then written to candidates.jsonl and inherited by every later
+ * run, so a reviewer promoting "fb-0002" has two rows to choose from.
+ *
+ * Reviewed rows keep their ids — that is what a reviewer refers to. Only the
+ * unclaimed ones move, and they move above the highest id in use.
+ */
+function renumber(rows) {
+  const taken = new Set()
+  const free = []
+  // Reviewed rows claim first, so a collision is always resolved against the row
+  // nobody has referred to yet.
+  const reviewed = (r) => !!r.promoted || r.needsReview === false
+  for (const row of [...rows].sort((a, b) => Number(reviewed(b)) - Number(reviewed(a)))) {
+    if (row.id && !taken.has(row.id)) taken.add(row.id)
+    else free.push(row)
+  }
+  let next = 0
+  for (const id of taken) {
+    const n = /^fb-(\d+)$/.exec(String(id))
+    if (n) next = Math.max(next, Number(n[1]))
+  }
+  for (const row of free) {
+    let id
+    do {
+      next++
+      id = `fb-${String(next).padStart(4, '0')}`
+    } while (taken.has(id))
+    taken.add(id)
+    row.id = id
+  }
+  return rows
 }

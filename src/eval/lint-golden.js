@@ -22,6 +22,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ROOT, RAG, GOLDEN } from '../cli-context.js'
+import { underPath } from './metrics.js'
 
 const arg = (name, dflt) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -88,7 +89,7 @@ function main() {
     for (const g of r.gold_chunks || []) {
       const isId = ids.has(g)
       const isPage = pages.has(`/${g}`) || pages.has(g)
-      const prefixes = [...ids].some((i) => i.startsWith(g))
+      const prefixes = [...ids].some((i) => underPath(i, g))
       if (!isId && !isPage && !prefixes) {
         err(id, `gold_chunks entry "${g}" matches nothing in index ${manifest.hash}`)
       } else if (!isId && !isPage) {
@@ -120,7 +121,7 @@ function main() {
 
     if (r.scope && r.expect === 'refuse:out-of-scope') {
       const inScope = (r.gold_chunks || []).some((g) =>
-        (r.scope.paths || []).some((p) => `/${g}`.startsWith(p)),
+        (r.scope.paths || []).some((p) => underPath(`/${g}`, p)),
       )
       if (inScope) err(id, 'refuse:out-of-scope record has gold chunks INSIDE its scope')
     }

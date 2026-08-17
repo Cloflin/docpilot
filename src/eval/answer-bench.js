@@ -43,6 +43,7 @@ import {
   languageMatch,
   citationPrecision,
   hallucinatedCitationRate,
+  underPath,
   mean,
 } from './metrics.js'
 
@@ -151,7 +152,13 @@ async function emit() {
     const isFollowUp = Boolean(rec.prev_question)
     const priorAnswer = isFollowUp ? prior.get(`${rec.id}#prev`) : null
     if (isFollowUp && !historyFile) {
-      tasks.push(await task({ index, retrieval, scope, id: `${rec.id}#prev`, question: rec.prev_question, rec, history: [], stage: 1 }))
+      // Null-checked exactly like the stage-2 push below. `task` returns null
+      // when the gate refuses — a legitimate outcome — and pushing that wrote
+      // the literal string "null" into tasks.jsonl, which `shard()` then read
+      // back and dereferenced.
+      const t1 = await task({ index, retrieval, scope, id: `${rec.id}#prev`, question: rec.prev_question, rec, history: [], stage: 1 })
+      if (t1) tasks.push(t1)
+      else skippedGate++
       continue
     }
     const history = isFollowUp && priorAnswer
@@ -293,11 +300,11 @@ function cell(tasksFile, answersFile) {
     if (t.stage !== 2) continue // stage-1 turns exist only to seed a follow-up
 
     // `harness.js:371` drops any citation outside the emitted set before the
-    // answer leaves the turn, and surfaces the dropped ones separately as
-    // `phantom`. Scoring the model's RAW list would therefore measure something
-    // production cannot emit: `hallucinatedCitationRate` is structurally 0 in
-    // `run.js` because the filter already ran. Mirror the filter, and count what
-    // it removed — that is the signal the harness actually exposes.
+    // answer leaves the turn. So the QUALITY metrics below score the filtered
+    // list — measuring the raw one would credit or blame the bench for something
+    // production cannot emit — while the two INTEGRITY numbers, `phantom` and
+    // `hallucinated`, are computed from the raw list, because the whole question
+    // they ask is what the filter had to remove.
     const raw = Array.isArray(a.citations) ? a.citations.map(String) : []
     const citable = new Set(t.citable)
     const citations = raw.filter((id) => citable.has(id))
@@ -320,12 +327,17 @@ function cell(tasksFile, answersFile) {
       // directions purely on that count. Recall asks the question the config
       // can actually move — was the gold chunk cited at all.
       citationRecall: t.gold_chunks.length
-        ? t.gold_chunks.filter((g) => citations.some((c) => c === g || c.startsWith(g))).length /
+        ? t.gold_chunks.filter((g) => citations.some((c) => underPath(c, g))).length /
           t.gold_chunks.length
         : null,
       cites: citations.length,
       phantom,
-      hallucinated: hallucinatedCitationRate(citations, t.citable),
+      // The RAW list, not the filtered one. `citations` was produced two lines
+      // above by keeping only ids in `t.citable`, so measuring it against that
+      // same set could only ever return 0 — and the hard gate below, "a citation
+      // outside the primed set", was therefore unreachable code reporting a
+      // clean bill of health it had not checked.
+      hallucinated: hallucinatedCitationRate(raw, t.citable),
       support: typeof support === 'number' ? support : support?.score,
       chars: text.length,
     })

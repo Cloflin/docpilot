@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 
 import {
   stripImages,
@@ -97,13 +97,15 @@ import { __setHistoryForTests } from '../src/theme/docpilot/session.js'
 import { parseAllowlist, checkSource } from '../src/build/lib/sources.js'
 import { absoluteSidebar } from '../src/sidebar.js'
 import { detectSocial, socialCopy, SOCIAL_LANGUAGES } from '../src/theme/docpilot/social.js'
+import { createRetrieval, ScopeEscape } from '../src/theme/docpilot/retriever.js'
+import { runTurn } from '../src/theme/docpilot/harness.js'
+import { assembleIndex } from '../src/theme/docpilot/store.js'
 import {
   KEY_PATHS,
   resolveI18n,
   validateI18n,
   t,
   normaliseLocale,
-  KEY_PATHS,
   summariseI18n,
 } from '../src/theme/docpilot/i18n.js'
 
@@ -420,6 +422,13 @@ describe('streaming answer text', () => {
 })
 
 describe('streaming transport', () => {
+  // `vi.stubGlobal` rather than a bare assignment, with an afterEach to undo it.
+  // Assigning `globalThis.fetch` directly leaves the last mock installed for the
+  // rest of the FILE: every suite declared below silently inherits it, and the
+  // one place that saves and restores fetch by hand ends up "restoring" a leaked
+  // mock rather than the real function.
+  afterEach(() => vi.unstubAllGlobals())
+
   const ndjson = (lines) =>
     new ReadableStream({
       start(c) {
@@ -435,7 +444,7 @@ describe('streaming transport', () => {
 
   it('reassembles deltas into one message and reports them in order', async () => {
     const deltas = []
-    globalThis.fetch = async () => ({
+    vi.stubGlobal('fetch', async () => ({
       ok: true,
       body: ndjson([
         { message: { thinking: 'let me ' } },
@@ -444,7 +453,7 @@ describe('streaming transport', () => {
         { message: { content: ' it", "citations": ["a#b"], "confidence": 0.9}' } },
         { done: true },
       ]),
-    })
+    }))
     const reply = await chat({
       baseURL: 'http://x',
       model: 'm',
@@ -465,16 +474,18 @@ describe('streaming transport', () => {
 
   it('does not stream when no consumer asked for it', async () => {
     let sent = null
-    globalThis.fetch = async (_url, init) => {
+    vi.stubGlobal('fetch', async (_url, init) => {
       sent = JSON.parse(init.body)
       return { ok: true, json: async () => ({ message: { content: 'hi' } }) }
-    }
+    })
     await chat({ baseURL: 'http://x', model: 'm', messages: [], tools: true })
     expect(sent.stream).toBe(false)
   })
 })
 
 describe('provider adapters', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   const sse = (frames) =>
     new ReadableStream({
       start(c) {
@@ -488,12 +499,12 @@ describe('provider adapters', () => {
 
   const capture = (response) => {
     const seen = {}
-    globalThis.fetch = async (url, init) => {
+    vi.stubGlobal('fetch', async (url, init) => {
       seen.url = url
       seen.headers = init.headers
       seen.body = JSON.parse(init.body)
       return response
-    }
+    })
     return seen
   }
 
@@ -670,7 +681,7 @@ describe('provider adapters', () => {
     expect(reply.think).toBe('let me look')
   })
 
-  it('anthropic: extended thinking replaces temperature, which that mode pins', async () => {
+  it('anthropic: thinking is adaptive and temperature is never sent', async () => {
     const seen = capture({ ok: true, json: async () => ({ content: [] }) })
     await chat({
       provider: 'anthropic',
@@ -681,11 +692,37 @@ describe('provider adapters', () => {
       tools: true,
       enableThink: true,
     })
-    expect(seen.body.thinking).toEqual({ type: 'enabled', budget_tokens: 1024 })
+    // The budgeted form is rejected by every current model, and so is any
+    // sampling parameter — both were 400s on the live API, not preferences.
+    expect(seen.body.thinking).toEqual({ type: 'adaptive' })
     expect(seen.body.temperature).toBeUndefined()
     // tools are declared with input_schema here, not function.parameters
     expect(seen.body.tools[0].input_schema).toBeTruthy()
     expect(seen.body.tools[0].function).toBeUndefined()
+  })
+
+  it('anthropic: a forced answer schema suppresses thinking, which cannot ride with it', async () => {
+    const seen = capture({ ok: true, json: async () => ({ content: [] }) })
+    await chat({
+      provider: 'anthropic',
+      baseURL: '/ai',
+      model: 'm',
+      messages: [],
+      schema: { type: 'object', properties: { text: { type: 'string' } } },
+      enableThink: true,
+    })
+    // This is the final answer call: tool_choice pins the shape, so asking for
+    // thinking alongside it made every answer fail with a 400.
+    expect(seen.body.tool_choice).toEqual({ type: 'tool', name: 'answer' })
+    expect(seen.body.thinking).toBeUndefined()
+  })
+
+  it('anthropic: the tool-calling probe sends no sampling parameter either', async () => {
+    const seen = capture({ ok: true, json: async () => ({ content: [{ type: 'tool_use' }] }) })
+    await detectTools({ provider: 'anthropic', baseURL: '/ai', model: 'm', apiKey: 'k' })
+    // A 400 here reads as "cannot call tools", which demotes a capable model to
+    // the fallback path permanently.
+    expect(seen.body.temperature).toBeUndefined()
   })
 
   it('the capability probe follows the provider', async () => {
@@ -2163,7 +2200,7 @@ describe('absoluteSidebar', () => {
     expect(out['/ref/'][0].items[0].link).toBe('/ref/b')
   })
 
-  it('leaves an already-absolute link alone and inherits a base down the tree', () => {
+  it('bases a leading-slash link, because VitePress does, and inherits down the tree', () => {
     const out = absoluteSidebar([
       {
         base: '/guide/',
@@ -2173,8 +2210,33 @@ describe('absoluteSidebar', () => {
         ],
       },
     ])
-    expect(out[0].items[0].link).toBe('/elsewhere')
+    // theme-default/support/sidebar.js: `base + link.replace(/^\//, base
+    // .endsWith('/') ? '' : '/')` — a leading slash is stripped, not respected.
+    // Leaving it alone here printed /elsewhere in llms.txt for a page VitePress
+    // serves at /guide/elsewhere.
+    expect(out[0].items[0].link).toBe('/guide/elsewhere')
     expect(out[0].items[1].items[0].link).toBe('/guide/deep')
+  })
+
+  it('leaves an external link alone — VitePress skips those too', () => {
+    const out = absoluteSidebar([
+      {
+        base: '/guide/',
+        items: [
+          { text: 'GitHub', link: 'https://github.com/cloflin/docpilot' },
+          { text: 'Protocol-relative', link: '//example.com/x' },
+        ],
+      },
+    ])
+    // Without the isExternal check these became `/guide/https://…`.
+    expect(out[0].items[0].link).toBe('https://github.com/cloflin/docpilot')
+    expect(out[0].items[1].link).toBe('//example.com/x')
+  })
+
+  it('a group with no base leaves its links untouched', () => {
+    const out = absoluteSidebar([{ items: [{ text: 'A', link: '/a' }, { text: 'B', link: 'b' }] }])
+    expect(out[0].items[0].link).toBe('/a')
+    expect(out[0].items[1].link).toBe('b')
   })
 
   it('does not mutate the object VitePress renders from', () => {
@@ -4406,5 +4468,315 @@ describe('feedback — a key in the comment never reaches the archive either', (
       expect(turn.comment).not.toContain(KEY)
       expect(local.getItem('docpilot:history')).not.toContain(KEY)
     })
+  })
+})
+
+/**
+ * The browser-side retrieval core.
+ *
+ * Until now nothing imported this module at all: the gate and the quantiser were
+ * unit-tested, but the thing that actually answers "which chunks" — dense search
+ * over the int8 index, the lexical channel, the scope filter and its GATE 2
+ * post-condition — was covered by nothing. It is the choke point the whole scope
+ * guarantee rests on, so it is tested here against a synthetic index small
+ * enough to reason about by hand.
+ */
+describe('createRetrieval', () => {
+  const DIMS = 4
+  const GUARD = {
+    tau: 0.3,
+    tauLexical: 0.3,
+    wDense: 0.75,
+    wLexical: 0.25,
+    denseMode: 'cosine',
+    cosFloor: 0.44,
+    cosCeil: 0.64,
+    zexp: null,
+  }
+
+  // A vector the quantiser would have produced: one axis at full scale, so a
+  // query on the same axis scores exactly 1.0 and every other pair scores 0.
+  const axis = (i) => {
+    const v = new Array(DIMS).fill(0)
+    v[i] = 127
+    return v
+  }
+
+  /**
+   * `hash` must differ per fixture: `miniSearchFor` memoises its MiniSearch
+   * instance on `manifest.hash`, so two fixtures sharing one would have the
+   * second search the first's chunks.
+   */
+  let fixtureCount = 0
+  const makeIndex = (rows, guard = GUARD) => {
+    const hash = `test-${++fixtureCount}`
+    const vectors = new Int8Array(rows.length * DIMS)
+    rows.forEach((r, i) => vectors.set(r.vec, i * DIMS))
+    const chunks = rows.map(({ vec, ...c }) => ({ ...c }))
+    const paths = [...new Set(chunks.map((c) => c.path))]
+    return assembleIndex({
+      manifest: {
+        version: 3,
+        hash,
+        embedModel: 'test',
+        dims: DIMS,
+        chunkCount: chunks.length,
+        pages: paths.map((p) => ({ path: p, title: `Page ${p}`, tail: 'Docs' })),
+        guard,
+      },
+      shards: [chunks],
+      vectorBuffer: vectors.buffer,
+      dfDoc: { df: {} },
+    })
+  }
+
+  const CORPUS = () => [
+    {
+      id: 'a#one',
+      path: '/a',
+      anchor: 'one',
+      title: 'Alpha',
+      breadcrumb: 'Docs',
+      kind: 'guide',
+      text: 'The alpha widget is configured with a manifest and a token.',
+      prev: null,
+      next: null,
+      vec: axis(0),
+    },
+    {
+      id: 'b#one',
+      path: '/b',
+      anchor: 'one',
+      title: 'Beta',
+      breadcrumb: 'Docs',
+      kind: 'reference',
+      text: 'The beta gizmo installs from the registry and needs no token.',
+      prev: null,
+      next: null,
+      vec: axis(1),
+    },
+    {
+      id: 'c#one',
+      path: '/c',
+      anchor: 'one',
+      title: 'Gamma',
+      breadcrumb: 'Docs',
+      kind: 'guide',
+      text: 'Gamma covers billing plans, invoices and refunds.',
+      prev: null,
+      next: null,
+      vec: axis(2),
+    },
+  ]
+
+  const ALL = { kind: 'all', paths: [], label: 'All docs' }
+
+  it('ranks by the dense channel: the chunk on the query vector comes first', () => {
+    const r = createRetrieval({ index: makeIndex(CORPUS()), scope: ALL, guard: GUARD })
+    expect(r.search({ query: 'alpha widget', queryVec: axis(0) })[0].id).toBe('a#one')
+    expect(r.search({ query: 'beta gizmo', queryVec: axis(1) })[0].id).toBe('b#one')
+  })
+
+  it('answers without a query vector at all — the lexical-only fallback', () => {
+    const r = createRetrieval({ index: makeIndex(CORPUS()), scope: ALL, guard: GUARD })
+    const hits = r.search({ query: 'invoices refunds', queryVec: null })
+    expect(hits.length).toBeGreaterThan(0)
+    expect(hits[0].id).toBe('c#one')
+  })
+
+  it('a scope is a hard filter, not a ranking preference', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS()),
+      scope: { kind: 'page', paths: ['/b'], label: 'Beta' },
+      guard: GUARD,
+    })
+    // The query points straight at /a, which is outside the scope.
+    const hits = r.search({ query: 'alpha widget token', queryVec: axis(0) })
+    expect(hits.every((c) => c.path === '/b')).toBe(true)
+  })
+
+  it('fetch cannot tell an unknown id from one outside the scope', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS()),
+      scope: { kind: 'page', paths: ['/b'], label: 'Beta' },
+      guard: GUARD,
+    })
+    expect(r.fetch('b#one').ok).toBe(true)
+    // Both are refusals, and neither leaks which kind it was to the caller
+    // beyond the reason the harness deliberately collapses.
+    expect(r.fetch('a#one')).toEqual({ ok: false, reason: 'out-of-scope' })
+    expect(r.fetch('nope#nope')).toEqual({ ok: false, reason: 'unknown-id' })
+  })
+
+  it('pages() is scope-filtered and prefix-normalised — otherwise it is an id oracle', () => {
+    const index = makeIndex(CORPUS())
+    const scoped = createRetrieval({
+      index,
+      scope: { kind: 'page', paths: ['/b'], label: 'Beta' },
+      guard: GUARD,
+    })
+    expect(scoped.pages('/').map((p) => p.path)).toEqual(['/b'])
+    const all = createRetrieval({ index, scope: ALL, guard: GUARD })
+    expect(all.pages('/').map((p) => p.path)).toEqual(['/a', '/b', '/c'])
+    expect(all.pages('a').map((p) => p.path)).toEqual(['/a'])
+  })
+
+  it('GATE 2 catches a section expansion that would leave the scope', () => {
+    // A short chunk pulls in its `next`. Pointing that at another page is the
+    // one way expansion can escape, and it is exactly what GATE 2 exists for.
+    const rows = CORPUS()
+    rows[1].text = 'Short.'
+    rows[1].next = 'a#one'
+    const index = makeIndex(rows)
+    const scope = { kind: 'page', paths: ['/b'], label: 'Beta' }
+
+    const escaped = []
+    const quiet = createRetrieval({
+      index,
+      scope,
+      guard: GUARD,
+      onDebug: (kind, data) => kind === 'scope-escape' && escaped.push(...data),
+    })
+    const hits = quiet.search({ query: 'short', queryVec: axis(1) })
+    expect(hits.every((c) => c.path === '/b')).toBe(true)
+    expect(escaped).toContain('a#one')
+
+    const strict = createRetrieval({ index, scope, guard: GUARD, dev: true })
+    expect(() => strict.search({ query: 'short', queryVec: axis(1) })).toThrow(ScopeEscape)
+  })
+
+  it('a vector of the wrong width degrades to lexical rather than scoring garbage', () => {
+    const seen = []
+    const r = createRetrieval({
+      index: makeIndex(CORPUS()),
+      scope: ALL,
+      guard: GUARD,
+      onDebug: (kind, data) => seen.push([kind, data]),
+    })
+    const hits = r.search({ query: 'invoices refunds', queryVec: [1, 2] })
+    expect(seen.find(([k]) => k === 'dim-mismatch')).toBeTruthy()
+    expect(hits[0].id).toBe('c#one')
+  })
+
+  it('the gate passes on evidence and refuses without it, before any model call', () => {
+    const r = createRetrieval({ index: makeIndex(CORPUS()), scope: ALL, guard: GUARD })
+    const hit = r.evaluate({ question: 'how is the alpha widget configured?', queryVec: axis(0) })
+    expect(hit.pass).toBe(true)
+    expect(hit.G).toBeGreaterThanOrEqual(GUARD.tau)
+
+    // Nothing in the corpus lies on this axis and no term overlaps.
+    const miss = r.evaluate({ question: 'quarterly hiring headcount', queryVec: axis(3) })
+    expect(miss.pass).toBe(false)
+    expect(miss.G).toBeLessThan(GUARD.tau)
+  })
+
+  it('an empty corpus refuses instead of throwing', () => {
+    const r = createRetrieval({ index: makeIndex([]), scope: ALL, guard: GUARD })
+    expect(r.search({ query: 'anything', queryVec: axis(0) })).toEqual([])
+    expect(r.evaluate({ question: 'anything', queryVec: axis(0) }).pass).toBe(false)
+  })
+})
+
+/**
+ * The step budget.
+ *
+ * Three outcomes in `execute` cost nothing — a repeated `fetch_section`
+ * rejection, a search that hits the cache, and a call to a tool that does not
+ * exist. Each refund is right on its own; together they were an unbounded loop,
+ * because a model stuck on one of them paid for nothing and `while (iterations <
+ * maxIterations)` never came due. The only thing that ended such a turn was the
+ * reader pressing stop, and every lap was a full chat() call.
+ */
+describe('runTurn — the free-step ceiling', () => {
+  const DIMS = 4
+  const GUARD = {
+    tau: 0.3,
+    tauLexical: 0.3,
+    wDense: 0.75,
+    wLexical: 0.25,
+    denseMode: 'cosine',
+    cosFloor: 0.44,
+    cosCeil: 0.64,
+    zexp: null,
+  }
+
+  let n = 0
+  const oneChunkIndex = () => {
+    const chunk = {
+      id: 'a#one',
+      path: '/a',
+      anchor: 'one',
+      title: 'Alpha',
+      breadcrumb: 'Docs',
+      kind: 'guide',
+      text: 'The alpha widget is configured with a manifest and a token.',
+      prev: null,
+      next: null,
+    }
+    const vectors = new Int8Array(DIMS)
+    vectors[0] = 127
+    return assembleIndex({
+      manifest: {
+        version: 3,
+        hash: `harness-${++n}`,
+        embedModel: 'test',
+        dims: DIMS,
+        chunkCount: 1,
+        pages: [{ path: '/a', title: 'Alpha', tail: 'Docs' }],
+        guard: GUARD,
+      },
+      shards: [[chunk]],
+      vectorBuffer: vectors.buffer,
+      dfDoc: { df: {} },
+    })
+  }
+
+  const run = (toolCall) => {
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      // Every step answers with the same doomed tool call. Nothing here ever
+      // advances the turn, which is exactly the situation being bounded.
+      if (calls > 200) throw new Error('runaway: the loop is not bounded')
+      return {
+        ok: true,
+        json: async () => ({ message: { tool_calls: [toolCall] } }),
+      }
+    })
+    const index = oneChunkIndex()
+    const retrieval = createRetrieval({
+      index,
+      scope: { kind: 'all', paths: [], label: 'All docs' },
+      guard: GUARD,
+    })
+    return runTurn({
+      retrieval,
+      gateResult: { G: 1, pass: true, chunks: index.chunks },
+      question: 'how is the alpha widget configured?',
+      history: [],
+      addendum: '',
+      config: { llm: { provider: 'ollama', baseURL: 'http://x', model: 'm' }, maxIterations: 4 },
+      fallback: false,
+      queryVec: null,
+    }).then((r) => ({ ...r, calls }))
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('an invented tool name cannot buy free steps forever', async () => {
+    const r = await run({ function: { name: 'no_such_tool', arguments: '{}' } })
+    // 4 charged steps plus at most MAX_FREE_STEPS refunds — a small constant,
+    // not "until the reader gives up".
+    expect(r.calls).toBeLessThanOrEqual(10)
+  })
+
+  it('the same rejected id cannot buy free steps forever', async () => {
+    const r = await run({ function: { name: 'fetch_section', arguments: '{"id":"nope#nope"}' } })
+    expect(r.calls).toBeLessThanOrEqual(10)
+  })
+
+  it('the same cached search cannot buy free steps forever', async () => {
+    const r = await run({ function: { name: 'search_docs', arguments: '{"query":"alpha"}' } })
+    expect(r.calls).toBeLessThanOrEqual(10)
   })
 })

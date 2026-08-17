@@ -78,8 +78,13 @@ function hardSplit(text, limit, onCodeSplit) {
   }
   if (buf) out.push(buf)
   // A single line longer than the limit cannot be split at a line boundary.
+  // The `u` flag makes `[\s\S]` match a whole code point, so the cut lands on a
+  // character boundary. Without it the count is in UTF-16 units and a cut can
+  // fall between the halves of a surrogate pair — an emoji or a rarer CJK
+  // character — leaving a lone surrogate in the shard JSON and in the text
+  // handed to the embedder.
   return out.flatMap((p) =>
-    p.length <= limit ? [p] : p.match(new RegExp(`[\\s\\S]{1,${limit}}`, 'g')) || [],
+    p.length <= limit ? [p] : p.match(new RegExp(`[\\s\\S]{1,${limit}}`, 'gu')) || [],
   )
 }
 
@@ -154,7 +159,15 @@ export function chunkMarkdown({ src, path, kind, sidebarTitle }) {
 
     // The context line is prepended to every part, so the ceiling applies to
     // body + context, not to body alone.
-    const budget = MAX_CHUNK_CHARS - context.length - 1
+    //
+    // The frontmatter description is prepended too, on the page's first chunk
+    // (see `lead` below), and it was not being counted here. A page whose first
+    // section filled the budget therefore produced a first chunk over
+    // MAX_CHUNK_CHARS, and the assertion at the end of this function turned that
+    // into a thrown error — the whole index build failing on a perfectly valid
+    // page. Only the first section can carry the lead, so only it pays for it.
+    const leadCost = description && chunks.length === 0 ? description.length + 1 : 0
+    const budget = Math.max(1, MAX_CHUNK_CHARS - context.length - 1 - leadCost)
     let parts = estTokens(s.body) > TARGET_MAX_TOKENS ? paragraphSplit(s.body) : [s.body]
     parts = parts.flatMap((p) =>
       hardSplit(p, budget, () => warnings.push(`code block split by MAX_CHUNK_CHARS in ${path}`)),

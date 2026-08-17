@@ -69,7 +69,14 @@ export function previousReport(dir, meta) {
   for (const c of candidates) {
     try {
       const doc = JSON.parse(fs.readFileSync(path.join(dir, c.f), 'utf8'))
-      if (doc?.summary) return doc
+      if (!doc?.summary) continue
+      // The prefix stops at the model, so it also matches the `-lexical-` files
+      // written by `docpilot eval --lexical` — a diagnostic run with the dense
+      // channel switched off. Diffing a hybrid run against one of those reports
+      // "changes since the previous run" that are really the two channels, which
+      // is the exact confusion the separate filename was introduced to prevent.
+      if (Boolean(doc.meta?.lexical) !== Boolean(meta.lexical)) continue
+      return doc
     } catch {
       // A half-written report is not a comparison; skip it.
     }
@@ -198,6 +205,9 @@ function siblingMismatches(dir, meta) {
     }
     const m = doc?.meta
     if (!m || m.gateOnly || m.model === meta.model) continue
+    // Same reason as in `previousReport`: a lexical-only run is not a sibling of
+    // a hybrid one, it is a different experiment.
+    if (Boolean(m.lexical) !== Boolean(meta.lexical)) continue
     if (m.promptHash !== meta.promptHash || m.records !== meta.records) continue
 
     const diffs = []

@@ -20,6 +20,10 @@
  *
  * Pure and non-mutating: the object VitePress renders from is untouched.
  */
+/** VitePress's own `EXTERNAL_URL_RE`, copied rather than imported: this module
+ *  is dependency-free by design and the pattern has been stable for years. */
+const EXTERNAL_LINK = /^(?:[a-z]+:|\/\/)/i
+
 export function absoluteSidebar(node, base = '') {
   if (Array.isArray(node)) return node.map((n) => absoluteSidebar(n, base))
   if (!node || typeof node !== 'object') return node
@@ -38,8 +42,21 @@ export function absoluteSidebar(node, base = '') {
 
   const here = node.base || base
   const out = { ...node }
-  if (typeof out.link === 'string' && !out.link.startsWith('/')) {
-    out.link = `${here.replace(/\/$/, '')}/${out.link}`
+  // The rule VitePress applies, not an approximation of it — this file exists to
+  // produce the links VitePress produces, so the two must agree exactly.
+  //
+  // `addBase` (theme-default/support/sidebar.js) is:
+  //   if (base && link && !isExternal(link))
+  //     link = base + link.replace(/^\//, base.endsWith('/') ? '' : '/')
+  //
+  // The old condition here — skip anything starting with `/` — was wrong at both
+  // ends. An external link does not start with `/`, so `https://github.com/x`
+  // became `/https://github.com/x`. And a link that DOES start with `/` still
+  // gets the base under a group that declares one, so `/intro` stayed `/intro`
+  // where VitePress renders `/guide/intro` — the 404 in llms.txt this module was
+  // written to prevent, arriving from the other direction.
+  if (here && typeof out.link === 'string' && !EXTERNAL_LINK.test(out.link)) {
+    out.link = here + out.link.replace(/^\//, here.endsWith('/') ? '' : '/')
   }
   delete out.base
   if (out.items) out.items = absoluteSidebar(out.items, here)

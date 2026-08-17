@@ -65,8 +65,18 @@ const PATTERNS = [
  * `null` for everything that is not purely social — the common case, and the one
  * that must stay cheap: five anchored regexes on a trimmed string, no allocation
  * beyond the trim, run in submit() before the embedder is contacted.
+ *
+ * `hasQuote` is the other half of "social AND NOTHING ELSE". A reader who
+ * selects a passage and asks "что это?" has said something else — the passage —
+ * and the identity pattern above matches that phrase exactly. Without this the
+ * quoting feature answers "I'm the assistant for this documentation" to a
+ * question about the text under the cursor.
+ *
+ * @param {string} text
+ * @param {{ hasQuote?: boolean }} [opts]
  */
-export function detectSocial(text) {
+export function detectSocial(text, { hasQuote = false } = {}) {
+  if (hasQuote) return null
   const s = String(text || '').trim()
   if (!s || s.length > 64) return null // a long input is a question, whatever it opens with
   for (const [kind, re] of PATTERNS) if (re.test(s)) return { kind }

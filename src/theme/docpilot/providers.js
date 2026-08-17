@@ -205,6 +205,10 @@ const openai = {
       stream: streaming,
       temperature,
     }
+    // Usage rides on a final frame that is only sent when it is asked for, and
+    // nothing was asking — so token accounting was blank in exactly the mode the
+    // panel runs in, since streaming is on whenever there is an onDelta.
+    if (streaming) body.stream_options = { include_usage: true }
     if (schemaBody) {
       body.response_format = {
         type: 'json_schema',
@@ -250,9 +254,13 @@ const openai = {
       // Present only when the caller asked for it; absent is not an error.
       if (json.usage) usage = usageOf(json.usage.prompt_tokens, json.usage.completion_tokens)
       const d = json.choices?.[0]?.delta || {}
-      if (d.reasoning_content) {
-        thinking += d.reasoning_content
-        onDelta({ thinking: d.reasoning_content })
+      // Same two spellings `parse` already accounts for: OpenRouter normalises
+      // the field to `reasoning`, and reading only `reasoning_content` here lost
+      // every delta from the models routed through it.
+      const reasoning = d.reasoning_content || d.reasoning
+      if (reasoning) {
+        thinking += reasoning
+        onDelta({ thinking: reasoning })
       }
       if (d.content) {
         content += d.content
@@ -326,7 +334,7 @@ const anthropic = {
     return h
   },
 
-  body({ model, messages, temperature, streaming, tools, schemaBody, enableThink, maxTokens }) {
+  body({ model, messages, streaming, tools, schemaBody, enableThink, maxTokens }) {
     // `system` is a top-level parameter here, not a message role.
     const system = messages
       .filter((m) => m.role === 'system')
@@ -354,12 +362,19 @@ const anthropic = {
       body.tools = anthropicTools(tools)
     }
 
-    if (enableThink) {
-      body.thinking = { type: 'enabled', budget_tokens: 1024 }
-      // Extended thinking pins temperature to 1; sending anything else is an error.
-    } else if (typeof temperature === 'number') {
-      body.temperature = temperature
+    // Two things this API will not take, both of which used to be sent here.
+    // Thinking cannot ride along with a forced tool call, so the final answer
+    // step — the one that pins its shape with `tool_choice` above — asks for
+    // reasoning it can never get, and the request is rejected outright. And the
+    // budgeted form of the parameter is gone: current models take
+    // `{ type: 'adaptive' }` and decide the depth themselves.
+    if (enableThink && !schemaBody) {
+      body.thinking = { type: 'adaptive' }
     }
+    // `temperature` is not sent at all. Sampling parameters were removed from
+    // this API — passing one is a 400, not a no-op — so the prompt is the only
+    // steering left. The parameter stays in the shared call signature because
+    // Ollama and the OpenAI-shaped services still honour it.
     return body
   },
 
@@ -425,12 +440,14 @@ const anthropic = {
     }
   },
 
+  // No `temperature` here either. The probe decides whether the model can call
+  // tools at all, so a 400 on a rejected sampling parameter reads as "cannot",
+  // and a fully capable model gets demoted to the fallback path for good.
   probeBody: (model, tools) => ({
     model,
     max_tokens: 256,
     messages: [{ role: 'user', content: 'Call list_pages with prefix "/".' }],
     tools: anthropicTools(tools),
-    temperature: 0,
   }),
   probeHasToolCall: (json) => (json.content || []).some((b) => b.type === 'tool_use'),
 

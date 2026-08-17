@@ -205,6 +205,20 @@ function definitions(el, ctx) {
 }
 
 /**
+ * Does this element hold a block anywhere beneath it?
+ *
+ * Descendants, not just children: a `<div><span><p>…</p></span></div>` is still
+ * a container, and flattening it would merge paragraphs the source separated.
+ */
+function containsBlock(el) {
+  for (const child of [...(el.children || [])]) {
+    if (BLOCK.has(String(child.tagName || '').toLowerCase())) return true
+    if (containsBlock(child)) return true
+  }
+  return false
+}
+
+/**
  * Blocks, in document order.
  *
  * A generator rather than a string builder so the caller can see the sequence:
@@ -282,7 +296,14 @@ function* blocks(el, ctx) {
     // A container: recurse. A leaf that is not one of the above but carries
     // text — a `<span>` used as a paragraph, which marketing pages are full of
     // — becomes a paragraph, because dropping it would drop a sentence.
-    if ([...(node.children || [])].length) {
+    //
+    // "Container" means it holds a BLOCK element, not merely that it holds
+    // elements. That is what the BLOCK set above is for, and until now nothing
+    // consulted it: any node with a child recursed, so `<div>Click <b>Save</b>
+    // to continue</div>` came apart into three paragraphs — "Click", "**Save**",
+    // "to continue" — one sentence turned into three, and the chunker then
+    // indexed the fragments.
+    if (containsBlock(node)) {
       yield* blocks(node, ctx)
       continue
     }

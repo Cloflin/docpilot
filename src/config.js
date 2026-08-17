@@ -126,7 +126,14 @@ export function resolveEmbed(docPilot) {
     return {
         provider: id,
         model: id === 'ollama' ? LOCAL_EMBED_MODEL : PROVIDERS[id]?.embedModel,
-        baseURL: LOCAL_BASE_URL,
+        // The chat provider's host, not just its name. `auto` means "the same
+        // provider as chat", and a provider is where it is served from as much as
+        // what it is called — a hosted one supplies its own `directBase` and this
+        // value is ignored, but a self-hosted Ollama at `http://gpu:11434` was
+        // having its embeddings sent to localhost while its chat went to the GPU
+        // box. Retrieval either fails outright or, worse, the index gets built by
+        // a different server than the one that answers against it.
+        baseURL: docPilot.chat.baseURL || LOCAL_BASE_URL,
         auto: true,
     }
 }
@@ -324,8 +331,24 @@ export function devProxy(docPilot, env = {}) {
     // Most specific first. Vite matches proxy keys by prefix in insertion order,
     // so the embeddings route has to be declared before the catch-all `/ai` or a
     // split setup would send both halves to the chat provider.
-    route(routes, '/ai/v1/embeddings', resolveEmbed(docPilot).provider, env)
-    route(routes, '/ai', docPilot.chat.provider, env)
+    //
+    // The chat path is asked of the adapter, not written as the bare `/ai`
+    // prefix it used to be. Vite matches by prefix, and this route attaches the
+    // owner's API key on the way out — so `/ai` proxied EVERYTHING under it with
+    // that key attached, and `vitepress dev --host` puts that on the LAN.
+    // `proxyContract` already warns production about exactly this ("a prefix
+    // match on /ai would proxy anything under it"); dev deserves the same shape.
+    const embedId = resolveEmbed(docPilot).provider
+    const embedHosted = hostedOf(embedId)
+    route(
+        routes,
+        embedHosted ? providerFor(embedHosted.adapter).embedUrl('/ai') : '/ai/v1/embeddings',
+        embedId,
+        env,
+    )
+    const chatId = docPilot.chat.provider
+    const chatHosted = hostedOf(chatId)
+    if (chatHosted) route(routes, providerFor(chatHosted.adapter).chatUrl('/ai'), chatId, env)
     return Object.keys(routes).length ? routes : undefined
 }
 
@@ -472,6 +495,21 @@ function assertProviders(docPilot) {
                 `  provider that does both (${EMBEDDERS()}), or split the two:\n` +
                 "    embed: {provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434'}\n" +
                 '  then rebuild the index with `npx docpilot index`.',
+        )
+    }
+
+    // The provider CAN embed; what is missing is the model. Said separately
+    // because the message below sends the reader off to change providers, and
+    // one of the providers it then lists is the one they already chose — a
+    // diagnosis that reads as a contradiction and costs an hour.
+    if (canEmbed(embed.provider)) {
+        const suggestion =
+            embed.provider === 'ollama' ? LOCAL_EMBED_MODEL : PROVIDERS[embed.provider]?.embedModel
+        throw new Error(
+            `[docpilot] embed.model is not set for "${embed.provider}", which does have an\n` +
+                `  embeddings endpoint. Name the model — e.g. embed: {provider: '${embed.provider}',\n` +
+                `  model: '${suggestion || LOCAL_EMBED_MODEL}'} — then rebuild the index with\n` +
+                '  `npx docpilot index`.',
         )
     }
 

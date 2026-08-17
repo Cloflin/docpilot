@@ -200,13 +200,26 @@ function levers() {
 // a silent half-swept run is worse than a re-embed that costs a cent.
 const RAW_SCHEMA = 2 // 2: per-channel z/L for the window sweep
 
-const sigOf = (rec, indexHash, lev) =>
+/**
+ * The cache key for one probe's raw measurement.
+ *
+ * `indexHash` alone is not the identity of the vector space. It is computed from
+ * chunk ids and text (build-rag-index.js), so swapping the embed model and
+ * rebuilding leaves it unchanged — the file that computes it says so itself:
+ * "swap the embed model and every cosine moves while the hash does not". Keyed
+ * on the hash alone, a `docpilot calibrate` after an embedder change got a 100%
+ * cache hit and published thresholds derived from the OLD model's cosines as the
+ * calibration of the new space, silently. `denseMode` joins them because the
+ * cached G and z values are computed under it.
+ */
+const sigOf = (rec, indexHash, lev, embedIdentity) =>
   crypto
     .createHash('sha1')
     .update(
       JSON.stringify([
         RAW_SCHEMA,
         indexHash,
+        embedIdentity,
         rec.question,
         rec.prev_question || null,
         rec.scope || null,
@@ -588,6 +601,12 @@ async function main() {
   const index = loadIndex()
   const guard = index.manifest.guard
   const hash = index.manifest.hash
+  // What produced the numbers, as opposed to what produced the text. See sigOf.
+  const embedIdentity = [
+    index.manifest.embedModel ?? null,
+    index.manifest.dims ?? null,
+    index.manifest.guard?.denseMode ?? null,
+  ]
   const lev = levers()
   const probes = loadProbes()
 
@@ -618,7 +637,7 @@ async function main() {
   let embedded = 0
   const ladderPages = index.manifest.pages
   for (const rec of probes) {
-    const sig = sigOf(rec, hash, lev)
+    const sig = sigOf(rec, hash, lev, embedIdentity)
     const hit = cache.get(sig)
     if (hit) {
       rows.push(hit)

@@ -727,7 +727,7 @@ export async function submit(question, { quote = '' } = {}) {
   // The gate would refuse "привет" on `no-evidence`, which is the right verdict
   // and reads to the reader as a broken feature — see social.js. Settled from a
   // template with no model call, so nothing is sampled and nothing is invented.
-  const social = detectSocial(clean)
+  const social = detectSocial(clean, { hasQuote: !!selected })
   if (social) {
     const turn = makeTurn(clean, frozen, selected)
     turn.state = 'no-answer'
@@ -791,6 +791,12 @@ export async function submit(question, { quote = '' } = {}) {
       if (!embedderMatchesIndex()) throw new Error('embedder does not match the index')
       queryVec = await embedQuery(q, { ...embedTarget(cfg), signal })
     } catch (e) {
+      // A reader who pressed stop is not an outage. `embedQuery` is handed the
+      // turn's signal, so cancelling it lands here, and treating that as an
+      // unreachable embedder both prints the alarming console line above and
+      // lets the turn run on to a gate it will fail — so the reader is told
+      // their question isn't in the docs, about a question they withdrew.
+      if (signal.aborted) throw e
       mode = 'lexical-only'
       state.retrieval = 'lexical-only'
       state.retrievalError = String(e?.message || e)
@@ -835,7 +841,10 @@ export async function submit(question, { quote = '' } = {}) {
     if (antecedent && queryVec) {
       try {
         composedVec = await embedQuery(`${antecedent}\n${q}`, { ...embedTarget(cfg), signal })
-      } catch {
+      } catch (e) {
+        // Same reason as the query embedding above: cancellation has to keep
+        // travelling outward, where the turn ends as aborted.
+        if (signal.aborted) throw e
         composedVec = undefined
       }
     }
@@ -900,7 +909,11 @@ export async function submit(question, { quote = '' } = {}) {
     turn.state = 'thinking'
     const result = await runTurn({
       retrieval,
-      gateResult: { ...g, GUnscoped: g.wouldPassUnscoped ? g.G : g.G },
+      // The unscoped SCORE, which is what `harness.finish` clamps confidence
+      // against when a reader instruction is live. Both arms of the ternary
+      // this replaces read `g.G`, so the clamp was `Math.min(G, G)` and the
+      // separate measurement retrieval already computes was thrown away.
+      gateResult: { ...g, GUnscoped: g.unscopedG ?? g.G },
       question: q,
       quote: selected,
       // A prior turn's quote travels with its question, or the transcript reads
@@ -1082,12 +1095,19 @@ function finishTurn(turn, started) {
   state.busy = false
   state.status = null
   controller = null
-  saveCurrent()
   // The reader may have switched conversations while this one was running. It
   // still settles — the object is live and whoever comes back to it gets a
   // finished turn — but nothing about a thread that is no longer on screen is
-  // announced, and `saveCurrent` above wrote the thread that IS.
+  // announced, and nothing about it is written either.
+  //
+  // The save has to come after this check, not before. `saveCurrent` writes
+  // whichever thread is on screen NOW, stamped with the current index hash, and
+  // clears `conversationStale` as it goes — so an abandoned turn settling in the
+  // background used to silently retire the "this thread predates the current
+  // index" warning on a conversation the reader had only just opened and not
+  // touched.
   if (!state.turns.includes(turn)) return
+  saveCurrent()
   if (turn.state === 'complete') say(T('announce.answerReady', { n: turn.sources.length }))
   // A credential turn searched nothing, so "I couldn't find this in the docs"
   // would be a claim about the corpus for a turn that never looked at it — the
@@ -1154,6 +1174,11 @@ export function toggleReason(turn, reason) {
   const at = turn.reasons.indexOf(reason)
   if (at >= 0) turn.reasons.splice(at, 1)
   else turn.reasons.push(reason)
+  // Every path that writes the draft to the archive redacts it first. A reader
+  // who types a key into the comment and then clicks a reason pill reaches
+  // `slimTurn` through here, and if the tab closes before Submit or Skip the
+  // unredacted draft is what stays on disk.
+  redactComment(turn)
   saveCurrent()
 }
 
