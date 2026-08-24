@@ -9,7 +9,13 @@
     "The include list is deliberately narrow. Turning `checkJs` loose on the",
     "whole tree at once produces hundreds of findings in code that has shipped",
     "and works, which is a backlog rather than a gate. New modules join the list",
-    "as they are written, and the list only grows."
+    "as they are written, and the list only grows.",
+    "",
+    "`types/` is the exception to the first paragraph and not a contradiction of",
+    "it: those declarations are HAND-WRITTEN, they are the package's documented",
+    "public surface, and nothing emits them. They are included so that a syntax",
+    "error or a broken import in one fails `npm run typecheck` here rather than",
+    "in a consumer's editor."
   ],
   "compilerOptions": {
     "target": "ES2022",
@@ -28,6 +34,7 @@
     "src/build/import.js",
     "src/build/lib/html-extract.js",
     "src/build/lib/html-to-md.js",
-    "src/build/lib/annotate.js"
+    "src/build/lib/annotate.js",
+    "types/**/*.d.ts"
   ]
 }

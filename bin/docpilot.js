@@ -9,9 +9,11 @@
  * has since doubled, and nothing says so until a reader is told the docs do not
  * cover something they do.
  *
- * Every command resolves its settings the same way the VitePress build does —
- * by importing the project's own config — so there is no second place to state
- * which model embeds, where the docs live, or which key to use.
+ * Every command resolves its settings the same way the build does — by importing
+ * the project's own config — so there is no second place to state which model
+ * embeds, where the docs live, or which key to use. On VitePress that config is
+ * `.vitepress/config.mjs`; on any other site it is `docpilot.config.mjs`, and
+ * both carry the same named `docPilot` export.
  */
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from 'node:fs'
@@ -23,6 +25,7 @@ const COMMANDS = [
   'calibrate',
   'eval',
   'bench',
+  'tune',
   'lint',
   'feedback',
   'doctor',
@@ -39,14 +42,30 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
     import      turn an allowlisted external page into a page of the corpus
     calibrate   measure the refusal thresholds against your corpus
     eval        run the golden set and write a report
+                --level=low|medium|high|xhigh|max|ultra scores one tier of it
     bench       compare two retrieval configurations on answer quality
+                --level= takes the same six tiers
+    tune        sweep the retrieval levers (lambda, k) against the golden set
+                into docpilot/tuning.json, with a report of the grid beside it
     lint        check the golden set against the index it measures
     feedback    turn readers' votes into candidates for the eval sets
     doctor      check the configuration without a full build
+                --proxy prints the reverse-proxy contract; --models checks a
+                free pool against the provider's live catalogue
     init        scaffold the environment, the eval sets and the authoring skills
 
-  The loop is  index → calibrate → lint → eval → bench,  and every command
-  reads .vitepress/config.mjs for its settings.
+  The loop is  index → calibrate → lint → eval → bench,  with tune where it is
+  retrieval that has to move — and then index again, because that is the step
+  that inlines tuning.json into the manifest a reader downloads. Until it runs,
+  a swept lever is a file on disk and nothing more.
+
+  The six tiers are cumulative — --level=medium runs low + medium, no --level
+  runs everything — and eval, bench and tune all take one. A smoke-sized
+  regression is therefore a regression in the full set too, and two reports are
+  comparable only within one tier.
+
+  Every command reads .vitepress/config.mjs — or docpilot.config.mjs — for its
+  settings.
 
   "feedback" sits outside the loop: it reads what your own endpoint collected
   and PROPOSES probes for it. It never writes to the eval sets — a stratum is a
@@ -56,42 +75,64 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
 }
 
 if (!COMMANDS.includes(cmd)) {
-  console.error(`[docpilot] unknown command "${cmd}". One of: ${COMMANDS.join(', ')}`)
+  console.error(
+    `[docpilot] unknown command "${cmd}"\n\n` +
+      `  One of: ${COMMANDS.join(', ')}\n` +
+      '  npx docpilot --help  says what each one does.\n',
+  )
   process.exit(1)
 }
 
 /**
- * Load the consumer's VitePress config and find the DocPilot settings in it.
+ * Load the project's config and find the DocPilot settings in it.
  *
- * A named `docPilot` export is the documented contract, because the default
- * export is the whole VitePress config and digging the settings back out of it
- * means depending on where the user happened to put them.
+ * A named `docPilot` export is the documented contract, because on VitePress the
+ * default export is the whole site config and digging the settings back out of
+ * it means depending on where the user happened to put them. The same named
+ * export is what a `docpilot.config.mjs` carries on a project that has no
+ * VitePress at all — one contract, two places.
  */
 async function loadSettings() {
   const found = findConfig()
   if (!found) {
+    // The cwd is printed because the candidates below are RELATIVE to it, and
+    // "looked for docs/.vitepress/config.mjs" is unanswerable until you know
+    // where it looked from — which is the actual fault most of the time.
     console.error(
-      '[docpilot] no VitePress config found. Looked for:\n  ' +
-        CONFIG_CANDIDATES.join('\n  ') +
-        '\n\n  Run this from your project root.',
+      `[docpilot] no config under ${process.cwd()}. Looked for:\n    ` +
+        CONFIG_CANDIDATES.join('\n    ') +
+        '\n\n  Run it from your project root. On a site that is not VitePress that\n' +
+        '  root is wherever you put docpilot.config.mjs:\n\n' +
+        "    export const docPilot = { product: 'Acme', chat: { … }, embed: { … } }\n",
     )
     process.exit(1)
   }
   const mod = await import(pathToFileURL(path.resolve(found)).href)
   if (!mod.docPilot) {
+    // Not a naming convention: the CLI and the site build have to read the SAME
+    // object, or the index is built with one embedder and queried with another
+    // and nothing says so until a reader is refused an answer the docs contain.
     console.error(
-      `[docpilot] ${found} has no \`docPilot\` export.\n\n` +
-        '  Export the settings you pass to defineDocPilot so the CLI and the build\n' +
-        '  read the same object:\n\n' +
+      `[docpilot] ${found} has no \`docPilot\` export\n\n` +
+        '  Name the settings you pass to defineDocPilot, so this command and the\n' +
+        '  build read one object instead of two:\n\n' +
         "    export const docPilot = { chat: { … }, embed: { … } }\n" +
-        '    const ai = defineDocPilot(docPilot, loadEnv(\'\', process.cwd(), \'\'))\n',
+        "    const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))\n",
     )
     process.exit(1)
   }
   return { settings: mod.docPilot, configPath: found }
 }
 
-const { resolveDocPilot, readiness, indexDirOf, proxyContract } = await import('../src/config.js')
+const {
+  resolveDocPilot,
+  readiness,
+  indexDirOf,
+  proxyContract,
+  chatModels,
+  embedModels,
+  poolProviderOf,
+} = await import('../src/config.js')
 const { CONFIG_CANDIDATES, findConfig, parseUiFlags, validateUi, uiSnippet, UI_QUESTIONS } =
   await import('../src/cli-init.js')
 
@@ -118,7 +159,7 @@ if (cmd === 'init') {
    * with no output. So it asks only when both streams are a TTY and no flag has
    * already answered — which is the same rule `vitepress init` follows.
    *
-   * A project with no VitePress config gets one honest line instead: the two
+   * A project with no config file gets one honest line instead: the two
    * settings live in a file that does not exist yet, and inventing one is the
    * kind of "help" that overwrites somebody's work later.
    */
@@ -137,7 +178,7 @@ if (cmd === 'init') {
   let ui = validateUi(flags.ui)
 
   if (!configPath) {
-    console.log('[docpilot] no VitePress config here yet — skipping the placement questions.\n')
+    console.log('[docpilot] no config file here yet — skipping the placement questions.\n')
   } else if (interactive) {
     const { createInterface } = await import('node:readline/promises')
     const rl = createInterface({ input: process.stdin, output: process.stdout })
@@ -185,6 +226,11 @@ if (cmd === 'init') {
 
   // Three starter records, one of which must be REFUSED. A golden set with no
   // negative measures how often the model answers, not how often it is right to.
+  //
+  // `level` is the pool a record ENTERS at, and the pools nest: `--level=low`
+  // scores q-01 and n-01, `--level=medium` scores all three, and no flag scores
+  // everything. The negative is in the smallest pool on purpose — a smoke pool
+  // that can only pass measures how often the model answers, again.
   put(
     'docpilot/golden.jsonl',
     [
@@ -192,6 +238,7 @@ if (cmd === 'init') {
         id: 'q-01',
         question: 'How do I get started?',
         expect: 'answer',
+        level: 'low',
         gold_chunks: ['guide/getting-started#'],
         // A chunk id carries NO leading slash and ends at its anchor; `path#`
         // prefix-matches every anchor of that page and nothing else.
@@ -203,6 +250,7 @@ if (cmd === 'init') {
         id: 'q-02',
         question: 'How do I authenticate a request?',
         expect: 'answer',
+        level: 'medium',
         gold_chunks: ['guide/authentication#'],
         gold_answer: 'Replace this too. Anchored chunk ids, verified by running the retriever.',
         identifiers: [],
@@ -212,6 +260,7 @@ if (cmd === 'init') {
         id: 'n-01',
         question: 'What is the capital of France?',
         expect: 'refuse:no-evidence',
+        level: 'low',
         gold_chunks: [],
         promptStock: true,
       },
@@ -346,9 +395,24 @@ if (cmd === 'feedback') {
 
 if (cmd === 'doctor') {
   const ready = readiness(resolved, env)
-  console.log(`[docpilot] config    ${configPath}`)
-  console.log(`[docpilot] docs      ${resolved.docsDir}`)
-  console.log(`[docpilot] index     ${indexDirOf(resolved)}`)
+
+  /**
+   * One column for every value, so the block reads as a table rather than as a
+   * list of sentences that happen to start alike.
+   *
+   * `[docpilot] ` plus a ten-wide label lands every value at column 21, which is
+   * what `PAD` is — the continuation lines are indented to the column their
+   * parent's value starts at, not to a count somebody typed. Held by hand, it
+   * drifted: `chat` and `embed` were padded to nine and printed one column short
+   * of `config`, `index` and `ready`, which is close enough to read as a
+   * rendering fault rather than as two labels of different lengths.
+   */
+  const say = (label, value) => console.log(`[docpilot] ${label.padEnd(10)}${value}`)
+  const PAD = ' '.repeat(21)
+
+  say('config', configPath)
+  say('docs', resolved.docsDir)
+  say('index', indexDirOf(resolved))
 
   /**
    * `--proxy` prints the contract a production reverse proxy has to satisfy.
@@ -366,27 +430,71 @@ if (cmd === 'doctor') {
     const contract = proxyContract(resolved, env)
     console.log('')
     for (const r of contract.routes) {
-      console.log(`[docpilot] proxy     ${r.path}`)
-      console.log(`                     → ${r.upstream}${r.rewrite}`)
-      console.log(
-        `                     ${r.header}: ${r.envKey ? `<${r.envKey}>` : 'NO KEY — none set'}`,
-      )
+      say('proxy', r.path)
+      console.log(`${PAD}→ ${r.upstream}${r.rewrite}`)
+      console.log(`${PAD}${r.header}: ${r.envKey ? `<${r.envKey}>` : 'NO KEY — none set'}`)
     }
     if (contract.routes.length) {
       for (const n of contract.notes) console.log(`  · ${n}`)
     } else {
       // Printing four rules for a proxy that does not exist reads as four things
       // left undone.
-      console.log('[docpilot] proxy     none needed — every provider is called directly')
+      say('proxy', 'none needed — every provider is called directly')
     }
     console.log('')
   }
+  /**
+   * `--models` is the ONLY thing in this command that touches the network, and
+   * it is a flag rather than a default for that reason: `doctor` runs in CI, and
+   * a check that fails when a third party is slow is a check that gets removed.
+   *
+   * What it answers is the one question a baked list cannot answer for itself —
+   * whether the free ids this package shipped with are still being served. They
+   * are retired weekly. A pool whose members have all been retired fails in the
+   * least legible way available: every model 404s in turn and the reader is told
+   * the last one's name.
+   */
+  if (rest.includes('--models')) {
+    const { fetchFreePool } = await import('../src/theme/docpilot/openrouter.js')
+    console.log('')
+    for (const [half, shipped] of [
+      ['chat', chatModels(resolved)],
+      ['embed', embedModels(resolved)],
+    ]) {
+      if (!shipped?.length) continue
+      // Only where a catalogue exists to be asked. `chatModels` also returns an
+      // author's own list on a provider that publishes nothing, and checking a
+      // list of OpenAI ids against OpenRouter's catalogue reports every one of
+      // them retired.
+      const provider = poolProviderOf(resolved, half)
+      if (!provider) {
+        say(half, `${shipped.length} model(s), no catalogue to check them against`)
+        continue
+      }
+      // `fallback: false`: the merged list contains the baked one by
+      // construction, so asking "which of ours is gone" of it always answers
+      // "none" — the check would be a check that cannot fail.
+      const live = await fetchFreePool(half, { fallback: false })
+      if (!live) {
+        say(half, `${provider}'s catalogue is unreachable — cannot check`)
+        continue
+      }
+      const gone = shipped.filter((m) => !live.includes(m))
+      const fresh = live.filter((m) => !shipped.includes(m))
+      say(half, `${shipped.length} in the pool, ${live.length} free upstream`)
+      if (gone.length) console.log(`${PAD}RETIRED: ${gone.join(', ')}`)
+      if (fresh.length) console.log(`${PAD}new upstream: ${fresh.slice(0, 6).join(', ')}`)
+      if (!gone.length && !fresh.length) console.log(`${PAD}the shipped pool matches the catalogue`)
+    }
+    console.log('')
+  }
+
   if (ready.ok) {
-    console.log('[docpilot] ready     yes — the panel will render')
+    say('ready', 'yes — the panel will render')
     for (const n of ready.notes) console.log(`  · ${n}`)
     process.exit(0)
   }
-  console.log(`[docpilot] ready     NO — ${ready.missing.length} to fix\n`)
+  say('ready', `NO — ${ready.missing.length} to fix\n`)
   for (const m of ready.missing) console.log(`  · ${m.what}\n      ${m.fix}`)
   for (const n of ready.notes) console.log(`  · ${n}`)
   // Exit 1 so CI can gate on it. The BUILD never fails for these; `doctor` is
@@ -399,6 +507,7 @@ const ENTRY = {
   eval: '../src/eval/run.js',
   calibrate: '../src/eval/calibrate.js',
   bench: '../src/eval/answer-bench.js',
+  tune: '../src/eval/tune.js',
   lint: '../src/eval/lint-golden.js',
 }
 /**

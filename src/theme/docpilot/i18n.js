@@ -17,7 +17,7 @@
  * TWO SELECTORS, ONE KEY SPACE. There are two different "reader's language"s in
  * this panel and conflating them regresses behaviour that ships today:
  *
- *   · uiLocale    — the locale of the PAGE (`useData().lang`). Drives all panel
+ *   · uiLocale    — the locale of the PAGE (the host binding's `lang`). Drives all panel
  *                   chrome: buttons, aria labels, status lines, refusals.
  *   · replyLocale — the language the reader TYPED (`detectLanguage`, mapped to a
  *                   subtag by `localeOf`). Drives only `reply.*`, the two copies
@@ -71,6 +71,9 @@ const UI_EN = {
   panel: {
     title: 'DocPilot',
     newChat: 'New chat',
+    // The whole conversation as Markdown — ui-specs/009. Per-turn copy already
+    // existed; the artefact a support engineer wants is the thread.
+    copyThread: 'Copy conversation',
     close: 'Close',
     conversation: 'Conversation',
     reasoning: 'Model reasoning',
@@ -82,6 +85,22 @@ const UI_EN = {
   empty: {
     heading: 'How can I help you today?',
     body: 'I search through your documentation to help you find setup guides, feature details and troubleshooting tips, fast.',
+    // ── ui-specs/009 ────────────────────────────────────────────────────────
+    // Under a narrow scope the panel used to offer nothing at all, because the
+    // built-in three would fall outside it and the gate would refuse all of
+    // them. What goes there instead is the pages the reader scoped TO, which is
+    // the question they actually have at that moment.
+    scopedLead: 'Asking about these pages',
+    // A follow-up is a heading, not an invented question. The template is
+    // grammatical for any heading in any corpus, which is the whole reason it
+    // is a template and not a generator — see 009 on the A5/B3 asymmetry.
+    followUp: 'Tell me about {heading}',
+    followUpsLabel: 'Follow-up questions',
+    // The one thing a reader will not find on their own. Named once, on a first
+    // visit, and never again — an onboarding overlay is what a panel gets
+    // removed for.
+    hint: 'Select any passage to ask about it.',
+    hintDismiss: 'Got it',
   },
   status: {
     searching: 'Searching the docs',
@@ -98,9 +117,32 @@ const UI_EN = {
     thoughtFor: 'Thought for {n}s',
     thinkingFor: 'Thinking for {n}s',
   },
+  /**
+   * A citation, and what a reader can do with it besides believe it —
+   * ui-specs/009.
+   *
+   * Its own block rather than more keys under `panel`, because these follow the
+   * `citations.*` settings and a reader of either one should find the other.
+   */
+  citation: {
+    // A disclosure, so the label says what pressing it DOES rather than what is
+    // behind it — and it changes with the state, because the control is the same
+    // control either way and `aria-expanded` is not read aloud by every tool.
+    showPassage: 'Show the passage',
+    hidePassage: 'Hide the passage',
+    // Names the region the passage opens into. Not "Passage": the point of the
+    // control is that this is the text the citation was actually drawn from, and
+    // the accessible name is where that survives without a visible caption.
+    passageLabel: 'The passage this citation was drawn from',
+    // The heading over the source list appended to a copied answer. One word,
+    // because it lands in somebody's ticket under text they wrote themselves.
+    copyHeading: 'Sources:',
+  },
   refusal: {
     closestPages: 'Closest pages',
     closestPagesElsewhere: 'Closest pages elsewhere',
+    // What "read N pages" was actually reading — `citations.pagesRead`.
+    pagesReadLabel: 'Pages read',
     widen: 'Clear the scope and search all docs',
     searched: 'Searched {scope}',
     searchedAndRead: 'Searched {scope} and read {n} {n, page|pages}',
@@ -113,6 +155,24 @@ const UI_EN = {
     lead: "The AI service didn't respond.",
     retry: 'Retry',
     search: 'Search the docs',
+    // ── the free tier's daily budget ────────────────────────────────────────
+    // A quota is not a failure, and saying "The AI service didn't respond" to a
+    // reader who has spent the day's fiftieth request is both wrong and
+    // unactionable: the service answered, and it said exactly when it will
+    // answer again. Its own sentence, so `retry` never appears under it —
+    // pressing it would spend nothing and change nothing.
+    rateLimited: "The free daily limit for this site's AI is used up.",
+    // `{when}` is a clock time in the reader's locale, never the epoch the API
+    // sent — the panel is the only thing here that knows what time it is where
+    // the reader is.
+    rateResets: 'Answers resume {when}.',
+    // The count sits under the composer, in the tense of the decision it
+    // informs: what is left, not what was spent.
+    budgetLeft: '{n} of {limit} free answers left today',
+    // Below the cutoff the panel drops to one model call per question, which
+    // a reader experiences as shorter, less researched answers. Stating the
+    // trade beats letting them conclude the panel got worse.
+    budgetLow: 'Running low — answers get shorter to stretch the daily limit.',
   },
   actions: {
     copy: 'Copy answer',
@@ -153,6 +213,13 @@ const UI_EN = {
     counter: '{n}/500',
     submit: 'Send',
     skip: 'Skip',
+    // ── ui-specs/009 ──────────────────────────────────────────────────────
+    // Submitting used to remove the form and say nothing a sighted reader could
+    // see, which is indistinguishable from closing it unsent. TWO lines,
+    // because one of them would be false under two of the four `send` modes —
+    // the same reason `disclaimer` has three.
+    thanks: 'Thanks — this is recorded on your device.',
+    thanksSent: 'Thanks — sent to the docs team.',
   },
   picker: {
     label: 'Scope',
@@ -162,6 +229,12 @@ const UI_EN = {
     section: 'This section',
     close: 'Close the scope picker',
     list: 'Pages to search',
+    // ── ui-specs/009 ──────────────────────────────────────────────────────
+    // A flat list of every page in a `min(240px, 32dvh)` scroller is fine at
+    // twelve pages and unusable at three hundred. The field is OUTSIDE the
+    // listbox — a text input is not an option — and bound to it by aria-controls.
+    filterLabel: 'Filter the pages',
+    filterPlaceholder: 'Filter',
   },
   history: {
     open: 'Past conversations',
@@ -246,6 +319,7 @@ const UI_EN = {
     copied: 'Copied',
     questionCopied: 'Question copied',
     codeCopied: 'Code copied',
+    threadCopied: 'Conversation copied',
     // Says what was destroyed, not just what was changed: the turns below the
     // edited one are gone, and a reader who cannot see the thread has no other
     // way to learn that.

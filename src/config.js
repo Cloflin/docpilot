@@ -7,11 +7,27 @@ import {parseAllowlist} from './build/lib/sources.js'
 import {validateI18n, summariseI18n} from './theme/docpilot/i18n.js'
 import {resolveUi} from './theme/docpilot/ui.js'
 import {resolveFeedback} from './theme/docpilot/feedback.js'
+// ui-specs/009 — the switches behind rule 11. Same terms as `ui.js`: no imports
+// of their own, so the build and the browser can both call them.
+import {
+    resolveQuote,
+    resolveCitations,
+    resolveComposer,
+    resolveScope,
+    resolveHistory,
+    resolveSuggestions,
+    resolveBudget,
+} from './theme/docpilot/switches.js'
 // The adapters, for their PATHS only — `providerFor(...).chatUrl('/ai')` is the
 // URL the browser posts to, so `proxyContract` reads it from here instead of
 // keeping a second, silently drifting copy. The module imports nothing and
 // touches the network only when a request function is called.
 import {providerFor} from './theme/docpilot/providers.js'
+// The free tier, as a pool. Imported for its LISTS and its one predicate — the
+// module fetches nothing unless `fetchFreePool` is called, which nothing here
+// does: a config file is read synchronously, and a build that reached for the
+// network to decide what a default means would be a build that fails offline.
+import {isAutoModel, FREE_CHAT, FREE_EMBED} from './theme/docpilot/openrouter.js'
 
 /**
  * DocPilot plumbing. NO SETTINGS LIVE HERE — the `docPilot` object in ./config.mjs is
@@ -27,8 +43,10 @@ import {providerFor} from './theme/docpilot/providers.js'
  * `embedModel` is the service's own embedding model — what `embed: 'auto'`
  * picks so that ONE provider covers both halves. Absent means the service ships
  * no embeddings endpoint at all, which is the majority: inference-only hosts
- * almost never have one, OpenRouter routes chat and nothing else, and Anthropic
- * has never had one.
+ * almost never have one and Anthropic has never had one. OpenRouter is the
+ * counter-example worth naming, because this file used to assert the opposite:
+ * it serves `/v1/embeddings` and publishes its own catalogue of embedding
+ * models.
  *
  * These names are defaults, not guarantees — catalogues change. A wrong one
  * fails loudly on the first chunk of `npx docpilot index`, not silently at
@@ -63,11 +81,44 @@ const PROVIDERS = {
         embedModel: 'BAAI/bge-en-icl',
     }),
 
+    /**
+     * OpenRouter, and it covers BOTH halves — which is a correction, not a
+     * feature. This entry carried no `embedModel` and a comment saying the
+     * service "routes chat completions and has no embeddings endpoint"; it
+     * serves `/v1/embeddings` and publishes a catalogue of 32 embedding models
+     * at `/v1/embeddings/models`. The comment was true when it was written and
+     * silently wrong afterwards, which cost every OpenRouter user a second
+     * provider they did not need.
+     *
+     * `freePool` is the part that is new. Both halves may be left unnamed, and
+     * an unnamed half resolves to an ordered list of free ids rather than to one
+     * default — see openrouter.js for why a shared free tier is a pool rather
+     * than a model, and why only the chat half may rotate at runtime.
+     *
+     * `extraBody` is the brand-specific fragment the CLIENT merges into the
+     * request body, and it lives here because this file is where brands are
+     * known and the adapter is deliberately brand-agnostic. What it says is
+     * `require_parameters`: route this request only to an upstream that actually
+     * honours `response_format`. Without it OpenRouter drops the strict
+     * json_schema in silence and picks whichever upstream is cheapest, and six
+     * of the ten free chat models measured against this corpus then answered the
+     * FINAL call with prose. llm.js reads a well-formed response as a completed
+     * request, so the request is spent, the parse fails, and the reader is shown
+     * `not-answerable` for a question the model in fact answered.
+     *
+     * `rateLimited` says this service publishes a daily REQUEST ceiling — 50 on
+     * the free tier, counted in requests and not in tokens. It is what tells the
+     * browser there is a budget worth counting and a line worth showing; every
+     * other provider here bills per token, where a request count means nothing.
+     */
+    openrouter: openaiCompatible('https://openrouter.ai/api', ['OPENROUTER_API_KEY'], {
+        embedModel: FREE_EMBED[0],
+        freePool: {chat: FREE_CHAT, embed: FREE_EMBED},
+        extraBody: {provider: {require_parameters: true}},
+        rateLimited: true,
+    }),
+
     // ── chat only ────────────────────────────────────────────────────────────
-    // OpenRouter is here, not above: it routes chat completions and has no
-    // embeddings endpoint. Choosing it as the single provider hits the same wall
-    // that took the panel down.
-    openrouter: openaiCompatible('https://openrouter.ai/api', ['OPENROUTER_API_KEY']),
     deepseek: openaiCompatible('https://api.deepseek.com', ['DEEPSEEK_API_KEY']),
     groq: openaiCompatible('https://api.groq.com/openai', ['GROQ_API_KEY']),
     xai: openaiCompatible('https://api.x.ai', ['XAI_API_KEY']),
@@ -101,31 +152,209 @@ export const PROVIDER_IDS = ['ollama', ...Object.keys(PROVIDERS)]
 const LOCAL_BASE_URL = 'http://localhost:11434'
 const LOCAL_EMBED_MODEL = 'bge-m3'
 
+/**
+ * Where `embed: 'auto'` goes when the chat provider cannot embed.
+ *
+ * Chosen because it is the one provider in this file whose embedding half costs
+ * nothing and needs no second decision: an unnamed model there resolves to the
+ * free pool, the indexer walks that pool, and the winner is written into the
+ * manifest. Any other choice would have to name a model and a price.
+ */
+const EMBED_FALLBACK = 'openrouter'
+
 const hostedOf = (id) => PROVIDERS[id] || null
 
 const canEmbed = (id) => (id === 'ollama' ? true : Boolean(PROVIDERS[id]?.embedModel))
 
 /**
+ * The ordered list of models a half falls back through when the author named
+ * none — null for every provider that has no such list, which is every provider
+ * but one.
+ */
+const freePoolFor = (id, half) => hostedOf(id)?.freePool?.[half] || null
+
+/**
+ * The chat pool for this configuration, or null when a model was named.
+ *
+ * Exported because three callers need the same answer and a second copy of the
+ * rule would drift: the browser gets it through `themeDocPilot`, the indexer
+ * and `docpilot import` get it through `nodeChatTarget`, and `doctor` prints it.
+ */
+export function chatModels(docPilot) {
+    // An author's own list wins, and it wins even beside a named `model`: the
+    // pair reads as "this one, and these if it is busy", which is the shape a
+    // paid primary with free understudies wants.
+    if (ownChatModels(docPilot)) return [...docPilot.chat.models]
+    return isAutoModel(docPilot.chat.model) ? freePoolFor(docPilot.chat.provider, 'chat') : null
+}
+
+/** An author's own ordered list, written down in `chat.models`. */
+const ownChatModels = (docPilot) =>
+    Array.isArray(docPilot.chat.models) && docPilot.chat.models.length > 0
+
+/**
+ * Whether the answering half runs on the PROVIDER'S OWN free pool — the one
+ * question that decides whether there is a daily REQUEST ceiling to ration
+ * against.
+ *
+ * It exists because `rateLimited` was being read for this and cannot answer it.
+ * That flag says the service publishes limits, and it sits on the provider entry
+ * — so `chat: {provider: 'openrouter', model: 'anthropic/claude-sonnet-4'}` on a
+ * funded key, which has no 50-a-day cap of any kind, read as metered: the browser
+ * seeded a 50-request ceiling, counted local requests against it, and silently
+ * dropped a PAYING deployment to one request per turn after 35 questions. The
+ * feature meant to keep a free tier usable was rationing the people funding it.
+ *
+ * An author's own `chat.models` is NOT the free pool, however many free ids
+ * happen to be in it. The list is theirs, it may be paid, and the request ceiling
+ * this flag stands for belongs to the provider's free catalogue rather than to
+ * the fact that a list exists.
+ */
+function freeChatPool(docPilot) {
+    if (ownChatModels(docPilot)) return false
+    return Boolean(chatModels(docPilot))
+}
+
+/**
+ * The embed pool — read by the INDEXER and by nothing in the browser.
+ *
+ * Two embedding models are two vector spaces, so the choice is made once, when
+ * the index is built, and written into the manifest. A reader's browser does not
+ * get to reconsider it: a query vector from a different free model would score
+ * noise against those chunks, which is worse than the lexical-only mode a
+ * missing embedder already falls back to.
+ */
+export function embedModels(docPilot) {
+    const e = resolveEmbed(docPilot)
+    return isAutoModel(e.model) ? freePoolFor(e.provider, 'embed') : null
+}
+
+/**
+ * Whether this half is served by a provider that publishes a free catalogue —
+ * the only case in which comparing a configured list against one means anything.
+ *
+ * `chatModels` returns an author's own `chat.models` for ANY provider, so a
+ * caller that reads it as "a free pool" will happily check a list of OpenAI
+ * models against OpenRouter's catalogue and report every one of them retired.
+ */
+export function poolProviderOf(docPilot, half) {
+    const id = half === 'embed' ? resolveEmbed(docPilot).provider : docPilot.chat.provider
+    return freePoolFor(id, half) ? id : null
+}
+
+// The catalogue URLs are openrouter.js's to publish; `doctor --models` imports
+// `fetchFreePool` from there and needs no second name for them here.
+
+/**
+ * The no-embed spelling, in one place rather than re-matched by every caller.
+ *
+ * `false` is canonical — the union shape `budget: false` already sets for a
+ * whole block switched off in one word — and `'none'` is the alias people write
+ * anyway. Exported because the INDEXER has to have the answer several steps
+ * before it would otherwise ask for a target: a build that resolved an embedder
+ * first and then decided not to use it is a build that can still fail on a
+ * missing key it was never going to send.
+ */
+export const noEmbed = (docPilot) => docPilot.embed === false || docPilot.embed === 'none'
+
+/**
  * The embedder, resolved.
  *
  * `embed: 'auto'` — the default, and the reason a single-provider setup needs no
- * second decision: the chat provider embeds too, with its own model. Any object
- * is an explicit split, for when the chat provider cannot embed (Anthropic,
- * DeepSeek, Groq, OpenRouter …) or when its key is scoped to chat models only.
+ * second decision: the chat provider embeds too, with its own model, and where
+ * it cannot (Anthropic, DeepSeek, Groq …) the free OpenRouter pool below stands
+ * in for it. Any object is an explicit split, for when that borrow is not
+ * wanted — an internal corpus that may not leave, a self-hosted embedder — or
+ * when the chat key is scoped to chat models only.
  *
- * There is no third option. Dropping the embedder was measured on this corpus:
- * recall@8 0.97 → 0.41, retrieval F1 0.35 → 0.18, and 11 of 44 answerable
- * questions refused outright. Reproduce with `npx docpilot eval --gate-only
- * --lexical`.
+ * `embed: false` is the third option, and it is a DECLARATION rather than a
+ * failure: no embedder, no vectors in the index, retrieval by BM25 over the
+ * chunk text alone. It exists because a corpus that may not be sent anywhere,
+ * or a site with no embedding service it can reach, is better served by a mode
+ * it chose than by the same retrieval arriving as an unexplained outage. The
+ * numbers stay here as the warning they always were — dropping the embedder was
+ * measured on this corpus: recall@8 0.97 → 0.41, retrieval F1 0.35 → 0.18, and
+ * 11 of 44 answerable questions refused outright, and the lexical channel scores
+ * zero for a question asked in a language the corpus is not written in.
+ * Reproduce with `npx docpilot eval --gate-only --lexical`.
  */
 export function resolveEmbed(docPilot) {
     const e = docPilot.embed
-    if (e && typeof e === 'object') return e
+
+    // Every key stated and every absent one an EXPLICIT null, for the reason
+    // written out on the object arm below: this value is JSON round-tripped into
+    // themeConfig, `JSON.stringify` deletes an undefined key, and session.js
+    // then fills the hole from its own defaults. `lexicalOnly` is the flag every
+    // other layer reads; `manifest.vectors === null` is the index's half of the
+    // same statement.
+    if (noEmbed(docPilot)) {
+        return {provider: null, model: null, baseURL: null, auto: false, lexicalOnly: true}
+    }
+
+    if (e && typeof e === 'object') {
+        // NORMALISED, not returned verbatim — and the difference is a whole
+        // deployment. `embed: {provider: 'openrouter'}` leaves `model`
+        // `undefined`; `themeDocPilot` copies that into the client object;
+        // VitePress serialises themeConfig with JSON.stringify, which DELETES an
+        // undefined key; and session.js then fills the hole from its own
+        // defaults with Ollama's `bge-m3`. The browser ends up certain it embeds
+        // with a model no part of this configuration named, disagrees with the
+        // manifest on every turn, and runs lexical-only for the life of the
+        // deployment with nothing failing anywhere. An explicit `null` survives
+        // the round trip; `undefined` does not.
+        return {...e, model: isAutoModel(e.model) ? null : e.model}
+    }
 
     const id = docPilot.chat.provider
+
+    /**
+     * A chat provider with no embeddings endpoint is no longer a dead end.
+     *
+     * It used to be a build-stopping error telling the author to pick a
+     * different chat provider or stand up a second one — which is the correct
+     * DIAGNOSIS and the wrong DEFAULT. Anthropic, DeepSeek, Groq, xAI and
+     * Cerebras are the providers people actually choose for the answering half,
+     * and every one of them made a working config file into a five-minute
+     * detour over a decision with an obvious answer: OpenRouter's free embed
+     * pool, which costs nothing and names nothing, exactly as it already does
+     * for an unnamed OpenRouter of either half.
+     *
+     * `borrowed` records who we came from — nothing downstream needs it to
+     * WORK, and `readiness` and `logDocPilot` need it to say out loud that the
+     * corpus is being embedded by a provider the author did not name. It is
+     * read by Node only; `themeDocPilot` copies `provider`, `baseURL` and
+     * `model`, so it never reaches the page.
+     *
+     * Not conditional on the key being present, on purpose: `resolveEmbed`
+     * takes no `env`, and a resolver that changed its answer with the
+     * environment would give a CI box without `OPENROUTER_API_KEY` a different
+     * configuration than the laptop that built the index. The missing key is
+     * `readiness`'s to report, on the same terms as any other missing key.
+     */
+    if (!canEmbed(id)) {
+        return {
+            provider: EMBED_FALLBACK,
+            // Null for the same reason it is null for an unnamed OpenRouter:
+            // which free embedder answered is a fact about the minute the index
+            // was built, and the manifest is where that fact is recorded.
+            model: null,
+            baseURL: PROVIDERS[EMBED_FALLBACK].directBase,
+            auto: true,
+            borrowed: id,
+        }
+    }
+
     return {
         provider: id,
-        model: id === 'ollama' ? LOCAL_EMBED_MODEL : PROVIDERS[id]?.embedModel,
+        // A POOLED provider names nothing here, on purpose. Which free embedder
+        // was reachable is a fact about the minute the index was built, and the
+        // manifest is where that fact is recorded — naming one now would put a
+        // second, older answer in the config for the browser to disagree with.
+        model: freePoolFor(id, 'embed')
+            ? null
+            : id === 'ollama'
+              ? LOCAL_EMBED_MODEL
+              : PROVIDERS[id]?.embedModel,
         // The chat provider's host, not just its name. `auto` means "the same
         // provider as chat", and a provider is where it is served from as much as
         // what it is called — a hosted one supplies its own `directBase` and this
@@ -157,14 +386,38 @@ export function providerKey(env, id) {
  * the browser; a Node tool has nothing to hide it with.
  */
 export function nodeEmbedTarget(docPilot, env = {}) {
-    assertProviders(docPilot)
+    // The EMBED half only. An index build has no opinion about which model
+    // answers questions, and refusing to build one over that is a failure in the
+    // wrong place — see `assertChat`.
+    assertEmbed(docPilot)
     const embed = resolveEmbed(docPilot)
+
+    // No target, said in the shape the caller already destructures rather than
+    // as a null the caller would have to remember to check. A `baseURL` here
+    // would be somewhere the indexer COULD post, and the point of this mode is
+    // that there is nothing it should post: the embedding pass is skipped and
+    // the manifest records `vectors: null`.
+    if (embed.lexicalOnly) {
+        return {
+            lexicalOnly: true,
+            id: null,
+            provider: null,
+            baseURL: null,
+            model: null,
+            models: null,
+            apiKey: null,
+        }
+    }
+
     const hosted = hostedOf(embed.provider)
     return {
         id: embed.provider,
         provider: hosted ? hosted.adapter : 'ollama',
         baseURL: hosted ? hosted.directBase : embed.baseURL || LOCAL_BASE_URL,
         model: embed.model,
+        // Null unless the author left the model to the provider. The indexer
+        // walks this in order and writes the winner into the manifest.
+        models: embedModels(docPilot),
         apiKey: keyOf(env, embed.provider),
     }
 }
@@ -186,14 +439,45 @@ export function nodeChatTarget(docPilot, env = {}) {
         provider: hosted ? hosted.adapter : 'ollama',
         baseURL: hosted ? hosted.directBase : docPilot.chat.baseURL || LOCAL_BASE_URL,
         model: docPilot.chat.model,
+        models: chatModels(docPilot),
         apiKey: keyOf(env, docPilot.chat.provider),
         maxTokens: docPilot.chat.maxTokens,
         numCtx: docPilot.chat.numCtx,
+        // The same body fragment the browser gets — and the same override —
+        // for the same reason: without `require_parameters` OpenRouter may route
+        // `docpilot import`'s annotation pass to an upstream that ignores the
+        // strict schema, and a CLI that silently annotates worse than the panel
+        // does is a difference nobody would think to look for. An author who
+        // declines it in `chat.extraBody` declines it in both places, because a
+        // site whose panel and whose CLI post different bodies is the same
+        // difference from the other direction.
+        extraBody: extraBodyOf(docPilot.chat.extraBody, hosted),
     }
 }
 
+/**
+ * The request-body fragment, with the author's word last.
+ *
+ * `require_parameters` defaults ON and that is not a neutral default: it narrows
+ * OpenRouter's routing to upstreams that actually honour `response_format`, so
+ * it changes WHICH model answers and can turn a request that would have been
+ * served into "no provider available". It is on because the alternative is the
+ * silent schema drop measured on this corpus — six of ten free chat models
+ * answering the final call with prose, every one of those requests spent and
+ * thrown away. But a behaviour change an author cannot decline is a decision
+ * taken on their behalf, and this is the seam where they take it back.
+ *
+ * PRESENCE decides, not truthiness. `chat: {extraBody: null}` posts the plain
+ * body the adapter would have built on its own; an object replaces the
+ * provider's fragment outright rather than merging with it, because a merge
+ * would leave `require_parameters` in place with no way to spell its removal.
+ * `undefined` — which is also what an omitted key and a JSON round trip both
+ * produce — means the author said nothing, and the provider default stands.
+ */
+const extraBodyOf = (own, hosted) => (own !== undefined ? own || null : hosted?.extraBody || null)
+
 /** A configured half — chat or embed — as the client half sees it. */
-function targetOf({provider, baseURL}) {
+function targetOf({provider, baseURL, extraBody}) {
     const hosted = hostedOf(provider)
     return {
         // The client knows adapters, not brands: gemini and openrouter ARE the
@@ -201,88 +485,109 @@ function targetOf({provider, baseURL}) {
         // browser sees, because all three arrive through the same `/ai`.
         provider: hosted ? hosted.adapter : 'ollama',
         baseURL: hosted ? '/ai' : baseURL || LOCAL_BASE_URL,
+        // The two brand facts that have to survive the trip anyway, carried as
+        // DATA so the rule above holds. `extraBody` is a body fragment the
+        // adapter merges without reading; `rateLimited` is a boolean the panel
+        // reads. Neither names the brand, so a client that branches on either is
+        // still branching on a capability rather than on who is serving it — and
+        // the alternative, an adapter with an `if (provider === 'openrouter')`
+        // in it, is a second place the provider table would have to be kept.
+        //
+        // Null rather than undefined, deliberately: this object is serialised
+        // into every page by JSON.stringify, which DELETES an undefined key, and
+        // session.js then fills the hole from its own defaults. The whole of
+        // that failure is recorded on `resolveEmbed` above. `extraBodyOf` is
+        // where the author's own fragment, or their explicit null, outranks the
+        // provider's.
+        extraBody: extraBodyOf(extraBody, hosted),
+        rateLimited: Boolean(hosted?.rateLimited),
     }
 }
 
 /**
- * The empty-state questions — UI-SPEC §13.
+ * The empty-state questions — UI-SPEC §13, and the two behaviours beside them.
  *
- * An ARRAY OF STRINGS, and deliberately not an array of objects. A `{label,
- * question}` pair was the obvious richer shape and is refused: the row submits
- * on activation, so a label that differs from the question means the reader
- * watches a question they did not read appear in the thread. The row is already
- * truncated to one line by CSS, which is the problem `label` would have solved.
+ * THE RESOLVER MOVED — ui-specs/009. It lives in `theme/docpilot/switches.js`
+ * now, because `suggestions` became a union (`string[]` or an object carrying
+ * `questions`, `scoped` and `followUps`) and the browser has to be able to
+ * resolve a hand-written themeConfig for itself, exactly as it does for `ui` and
+ * `feedback`. A resolver reachable only from Node cannot do that. It is
+ * re-exported from here so the public entry point keeps its name.
  *
- * Empty is the meaningful default, not a placeholder: it hands the slot back to
- * DEFAULT_SUGGESTIONS in DocPilot.vue, which is what "fall back to the built-in
- * three" means at runtime. There is no `null` and no `false` — an empty array
- * and an absent key behave identically, so there is nothing to remember.
- *
- * Normalisation rather than a throw. A bad entry here is a typo in copy, and
- * failing a docs build over one is out of proportion when the fallback is three
- * working questions. Every drop is named on stdout, because the alternative is
- * a reader seeing two rows where three were configured and nobody knowing why.
+ * An ARRAY OF STRINGS is still legal and still means the same thing, and the
+ * questions are still deliberately not `{label, question}` pairs: the row
+ * submits on activation, so a label that differs from the question means the
+ * reader watches a question they did not read appear in the thread.
  */
-const SUGGESTION_LIMIT = 3
-
-export function resolveSuggestions(docPilot, warn = console.warn) {
-    const raw = docPilot.suggestions
-    if (raw == null) return []
-    if (!Array.isArray(raw)) {
-        warn(`[docpilot] suggestions must be an array of strings, got ${typeof raw} — using the built-in three`)
-        return []
-    }
-
-    const clean = []
-    for (const [i, entry] of raw.entries()) {
-        if (typeof entry !== 'string') {
-            warn(`[docpilot] suggestions[${i}] is ${typeof entry}, not a string — dropped`)
-            continue
-        }
-        const q = entry.trim().replace(/\s+/g, ' ')
-        if (!q) {
-            warn(`[docpilot] suggestions[${i}] is empty — dropped`)
-            continue
-        }
-        if (clean.includes(q)) {
-            warn(`[docpilot] suggestions[${i}] repeats an earlier one — dropped`)
-            continue
-        }
-        clean.push(q)
-    }
-
-    // No silent cap. The component slices at three; saying so here is the
-    // difference between a design decision and a bug the author cannot see.
-    if (clean.length > SUGGESTION_LIMIT) {
-        warn(
-            `[docpilot] ${clean.length} suggestions configured, ${SUGGESTION_LIMIT} shown — ` +
-                `dropping: ${clean.slice(SUGGESTION_LIMIT).map((q) => `"${q}"`).join(', ')}`,
-        )
-    }
-    return clean.slice(0, SUGGESTION_LIMIT)
-}
+export {resolveSuggestions} from './theme/docpilot/switches.js'
 
 /** The client half: safe to compile into the bundle, carries no credential. */
 export function themeDocPilot(docPilot, env = {}) {
     assertProviders(docPilot)
     const chat = targetOf(docPilot.chat)
     const embedCfg = resolveEmbed(docPilot)
-    const embed = targetOf(embedCfg)
+    // NOT `targetOf` when there is no embedder, and the structure says so rather
+    // than a comment alone: `targetOf` reads a provider it does not recognise as
+    // the local one, so a null provider comes back as an Ollama at
+    // localhost:11434 — a deployment that declared no embedder would spend every
+    // question on a connection refused to a service nobody installed.
+    const embed = embedCfg.lexicalOnly ? null : targetOf(embedCfg)
     return {
         enabled: docPilot.enabled,
         llm: {
             provider: chat.provider,
             baseURL: chat.baseURL,
             model: docPilot.chat.model,
+            /**
+             * The pool, when the author named no model — an ORDERED list the
+             * transport walks until one member answers. Null everywhere else,
+             * and null is what `chat()` treats as "no rotation", so every other
+             * provider posts the request it always did.
+             *
+             * A BAKED list rather than a live one, for two reasons that point
+             * the same way. This object is inlined into every page's hydration
+             * payload, and a reader's browser reaching out to a third party to
+             * ask which models are free is a request the site owner did not
+             * agree to serve. And a list fetched at build time would make the
+             * build's output depend on the minute it ran.
+             *
+             * The list ages, and `npx docpilot doctor` is where that is caught:
+             * it reads the live catalogue and names any shipped id the service
+             * has retired. `chat.models` is the override for an author who wants
+             * their own order.
+             */
+            models: chatModels(docPilot),
             temperature: docPilot.chat.temperature,
             maxTokens: docPilot.chat.maxTokens,
             numCtx: docPilot.chat.numCtx,
+            // Named here rather than spread, on the same terms as every other
+            // key in this block: `targetOf` answers for the EMBED half too, and
+            // a request-body fragment meant for chat completions has no business
+            // being posted to an embeddings endpoint.
+            extraBody: chat.extraBody,
+            rateLimited: chat.rateLimited,
+            // What `rateLimited` was being mistaken for, stated precisely: this
+            // deployment answers off the provider's own FREE pool, so its
+            // allowance is counted in requests per day and there is a budget
+            // worth rationing. `rateLimited` stays what it always said — the
+            // service publishes limits at all — and the two are only ever equal
+            // by accident. See `freeChatPool` for the deployment that made the
+            // difference expensive.
+            freePool: freeChatPool(docPilot),
         },
-        embed: {
-            provider: embed.provider,
-            baseURL: embed.baseURL,
-            model: embedCfg.model,
-        },
+        // `lexicalOnly` on BOTH arms, because the key has to exist either way:
+        // session.js branches on `cfg.embed.lexicalOnly` to decide whether to
+        // embed the question at all, and an omitted key is an undefined one that
+        // JSON.stringify deletes on the way into themeConfig — leaving the
+        // browser to read the absence as "not chosen" only by luck.
+        embed: embedCfg.lexicalOnly
+            ? {provider: null, baseURL: null, model: null, lexicalOnly: true}
+            : {
+                  provider: embed.provider,
+                  baseURL: embed.baseURL,
+                  model: embedCfg.model,
+                  lexicalOnly: false,
+              },
         topK: docPilot.topK,
         maxIterations: docPilot.maxIterations,
         product: docPilot.product,
@@ -298,14 +603,30 @@ export function themeDocPilot(docPilot, env = {}) {
         // the client's second pass changes nothing.
         feedback: resolveFeedback(docPilot),
         guard: {...docPilot.guard},
-        scope: {...docPilot.scope},
-        history: {...docPilot.history},
+        // Resolved rather than spread, since ui-specs/009 put two new keys in
+        // each: a spread carries a typo straight through to the browser, and the
+        // build is where the author is looking. Both resolvers are idempotent.
+        scope: resolveScope(docPilot),
+        history: resolveHistory(docPilot),
         // Was missing, and its absence is why `docPilot.suggestions` looked like a
         // setting that did nothing: DocPilot.vue has read `config.suggestions` with
         // a built-in fallback since it shipped, and UI-SPEC §13 has documented
         // the key — but nothing ever put it in the object the client receives,
         // so the fallback was the only branch that could ever run.
         suggestions: resolveSuggestions(docPilot),
+        // ── the switches — ui-specs/009 ─────────────────────────────────────
+        // Every reader-visible action this panel performs is removable, and rule
+        // 11 in the suite asserts that each of these keys is both read by the
+        // theme and written down in docs/reference/config.md.
+        quote: resolveQuote(docPilot),
+        citations: resolveCitations(docPilot),
+        composer: resolveComposer(docPilot),
+        // Resolved here for the same reason and on the same terms — and this one
+        // has a second job: `budget` is a union whose off form is the single
+        // word `false`, and the browser must receive the finished object either
+        // way. `resolveBudget` is idempotent, so the client's own second pass
+        // over this changes nothing.
+        budget: resolveBudget(docPilot),
         prompt: {...docPilot.prompt},
         // RESOLVED here, and resolved again in the browser — `resolveUi` is
         // idempotent for exactly this. The build is where a bad value should be
@@ -313,6 +634,11 @@ export function themeDocPilot(docPilot, env = {}) {
         // repeats the call because `session.configure` also receives the
         // `{enabled: false}` payload, which carries no `ui` at all.
         ui: resolveUi(docPilot),
+        // Spread rather than resolved: every value here is a plain string the
+        // author either wrote or did not, and the layering that gives it meaning
+        // — author, then binding, then default — can only happen in the browser,
+        // where the binding exists. `hostConfig()` is where it happens.
+        host: {...docPilot.host},
         // Validated here, MERGED in the browser. themeConfig is inlined into
         // every page's hydration payload, so merging server-side would ship the
         // whole default tree — eighty UI strings plus eighteen languages of
@@ -328,16 +654,17 @@ export function themeDocPilot(docPilot, env = {}) {
 export function devProxy(docPilot, env = {}) {
     assertProviders(docPilot)
     const routes = {}
-    // Most specific first. Vite matches proxy keys by prefix in insertion order,
-    // so the embeddings route has to be declared before the catch-all `/ai` or a
-    // split setup would send both halves to the chat provider.
+    // Most specific first, and kept that way even though `route` now anchors
+    // each key: the order is what the reader compares against `proxyContract`,
+    // which is prefix-matched by whatever the owner builds from it.
     //
-    // The chat path is asked of the adapter, not written as the bare `/ai`
-    // prefix it used to be. Vite matches by prefix, and this route attaches the
+    // The paths are asked of the adapter rather than written as the bare `/ai`
+    // prefix they used to be. Vite matched by prefix and this route attaches the
     // owner's API key on the way out — so `/ai` proxied EVERYTHING under it with
     // that key attached, and `vitepress dev --host` puts that on the LAN.
     // `proxyContract` already warns production about exactly this ("a prefix
-    // match on /ai would proxy anything under it"); dev deserves the same shape.
+    // match on /ai would proxy anything under it"); dev deserves the same shape,
+    // which is why `route` builds an anchored key rather than a bare string.
     const embedId = resolveEmbed(docPilot).provider
     const embedHosted = hostedOf(embedId)
     route(
@@ -352,16 +679,42 @@ export function devProxy(docPilot, env = {}) {
     return Object.keys(routes).length ? routes : undefined
 }
 
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * One proxied path, keyed so it matches THAT path and nothing under it.
+ *
+ * Vite's matcher is `context[0] === '^' && new RegExp(context).test(url) ||
+ * url.startsWith(context)`, against the raw `req.url`. A plain string key is
+ * therefore a prefix, and this route attaches the owner's API key on the way
+ * out — so `/ai/v1/messages` as a string also proxied
+ * `/ai/v1/messages/../../v1/models`, with that key on it. The leading `^`
+ * switches Vite to a regexp and the `$` closes the prefix; the optional query
+ * group is there so a provider that starts appending one does not silently stop
+ * being proxied. `proxyContract` asks production for the same thing in words
+ * ("match these paths EXACTLY").
+ */
 function route(routes, path, providerId, env) {
     const hosted = hostedOf(providerId)
     if (!hosted) return // a local provider is called directly, with no proxy
     const key = keyOf(env, providerId)
-    routes[path] = {
+    routes[`^${escapeRe(path)}(?:\\?.*)?$`] = {
         target: hosted.upstream,
         changeOrigin: true,
         rewrite: hosted.rewrite,
         configure(proxy) {
             proxy.on('proxyReq', (proxyReq) => {
+                // Exactly what `proxyContract` requires of a production proxy,
+                // done here too. `http-proxy` forwards what the browser sent
+                // unless told otherwise, so an `authorization:` from the LAN
+                // reached `api.anthropic.com` alongside the owner's `x-api-key`,
+                // and a docs origin behind SSO handed its session `Cookie` to
+                // the provider. Stripped before the key check, because the route
+                // exists without a key and "we had nothing to add" is no reason
+                // to pass somebody else's credentials upstream.
+                proxyReq.removeHeader('authorization')
+                proxyReq.removeHeader('x-api-key')
+                proxyReq.removeHeader('cookie')
                 if (!key) return
                 for (const [name, value] of Object.entries(hosted.header(key))) {
                     proxyReq.setHeader(name, value)
@@ -448,7 +801,25 @@ export function manifestPathOf(docPilot) {
 function indexInfo(docPilot) {
     try {
         const m = JSON.parse(readFileSync(manifestPathOf(docPilot), 'utf8'))
-        return {embedModel: m.embedModel, chunkCount: m.chunkCount, hash: m.hash, dims: m.dims}
+        // `vectors` is carried because it is the ONE signal that an index has no
+        // vector space to score against — the name of the blob, or null. `dims`
+        // is a consequence and not a statement, so a caller reading `dims === 0`
+        // as the mode would call a half-written manifest a deliberate choice.
+        //
+        // No reader below may treat a MISSING key as a vectorless index: that
+        // manifest is one `loadIndex` would fetch `${base}/undefined` for, and
+        // answering it with "rebuild without vectors" is a diagnosis of the
+        // wrong fault. So "was it built without vectors" is asked strictly
+        // (`=== null`) and "does it carry a blob" is asked for a name — an
+        // absent key answers no to both, which is the only honest pair of
+        // answers about a manifest nothing wrote.
+        return {
+            embedModel: m.embedModel,
+            chunkCount: m.chunkCount,
+            hash: m.hash,
+            dims: m.dims,
+            vectors: m.vectors,
+        }
     } catch {
         return null
     }
@@ -479,24 +850,60 @@ function assertKnown(half, id) {
  * time; that is the only moment anyone is looking.
  */
 function assertProviders(docPilot) {
+    assertChat(docPilot)
+    assertEmbed(docPilot)
+}
+
+/**
+ * The chat half, alone.
+ *
+ * Split out because `nodeEmbedTarget` was asserting both, and `npx docpilot
+ * index` does not call a chat model — so a missing `chat.model` stopped the
+ * INDEXER, which is the wrong layer to hear about it and the wrong run to lose.
+ * The build still refuses that configuration; it refuses it where the panel is
+ * being assembled.
+ */
+function assertChat(docPilot) {
     assertKnown('chat', docPilot.chat.provider)
 
-    const embed = resolveEmbed(docPilot)
-    assertKnown('embed', embed.provider)
-
-    if (canEmbed(embed.provider) && embed.model) return
-
-    // Under `auto` the chat provider was asked to do both and cannot. Say which
-    // of the two ways out applies rather than name the failure abstractly.
-    if (embed.auto) {
+    // A provider named with no model behind it. Legal where a pool answers the
+    // question — see `chat.models` — and a build-stopping omission everywhere
+    // else, because the alternative is a 400 in the reader's browser naming a
+    // model that appears nowhere in the config file. This became reachable the
+    // day `resolveChat` stopped handing Ollama's default to other providers.
+    if (!docPilot.chat.model && !chatModels(docPilot)) {
         throw new Error(
-            `[docpilot] embed: 'auto' follows chat.provider "${embed.provider}", which has no\n` +
-                '  embeddings endpoint — it answers, it does not retrieve. Either pick a chat\n' +
-                `  provider that does both (${EMBEDDERS()}), or split the two:\n` +
-                "    embed: {provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434'}\n" +
-                '  then rebuild the index with `npx docpilot index`.',
+            `[docpilot] chat.model is not set for "${docPilot.chat.provider}", and that\n` +
+                '  provider has no free pool to fall back through. Name the model —\n' +
+                `    chat: {provider: '${docPilot.chat.provider}', model: '…'}\n` +
+                '  — or give it your own ordered pool with chat.models.',
         )
     }
+}
+
+/** The embed half, alone — everything `docpilot index` needs to be true. */
+function assertEmbed(docPilot) {
+    const embed = resolveEmbed(docPilot)
+
+    // Nothing to be true. `assertKnown` below would be handed a null provider,
+    // decide it is not one this build knows, and stop the build with the list of
+    // providers to pick from — advice for a mistake nobody made, on the one
+    // configuration that deliberately names no embedder at all.
+    if (embed.lexicalOnly) return
+
+    assertKnown('embed', embed.provider)
+
+    // An unnamed model is a configuration ERROR everywhere except where a pool
+    // stands behind it, which is the one case where "you choose" is a complete
+    // instruction rather than an omission.
+    if (canEmbed(embed.provider) && (embed.model || freePoolFor(embed.provider, 'embed'))) return
+
+    // There used to be an `if (embed.auto)` arm here, for a chat provider that
+    // cannot embed. It is unreachable now: `resolveEmbed` sends that case to
+    // OpenRouter's free embed pool rather than raising, so an `auto` embedder is
+    // always one that embeds. Everything below is about an EXPLICIT `embed:
+    // {provider: …}` — a sentence the author wrote, which this package will not
+    // quietly rewrite into a third party's.
 
     // The provider CAN embed; what is missing is the model. Said separately
     // because the message below sends the reader off to change providers, and
@@ -516,7 +923,9 @@ function assertProviders(docPilot) {
     throw new Error(
         `[docpilot] embed.provider "${embed.provider}" has no embeddings endpoint — it can\n` +
             `  answer, not retrieve. Point embed at a service that can: ${EMBEDDERS()}\n` +
-            '  — then rebuild the index with `npx docpilot index`.',
+            `  — or drop the setting entirely: embed: 'auto' falls through to\n` +
+            `  ${EMBED_FALLBACK}'s free pool, which costs nothing and names nothing.\n` +
+            '  Then rebuild the index with `npx docpilot index`.',
     )
 }
 
@@ -535,12 +944,19 @@ function promptSummary(docPilot) {
     return `${base}${extend} · disclosure ${disclosure}`
 }
 
-function describe(cfg, env) {
+function describe(cfg, env, pool = null) {
     const hosted = hostedOf(cfg.provider)
     const route = hosted ? `/ai → ${hosted.upstream}` : cfg.baseURL || LOCAL_BASE_URL
     const name = keyNameOf(env, cfg.provider)
     const key = !hosted ? 'no key needed' : name ? `key ${name}` : `NO KEY — set ${hosted.envKeys[0]}`
-    return `${`${cfg.provider}/${cfg.model}`.padEnd(28)} ${route.padEnd(46)} ${key}`
+    // A pooled half has no single name to print, and printing `null` reads as a
+    // bug. Say what it is instead: the size of the list and its head.
+    const what = cfg.model
+        ? `${cfg.provider}/${cfg.model}`
+        : pool?.length
+          ? `${cfg.provider}/auto — ${pool.length} free, ${pool[0]} first`
+          : `${cfg.provider}/(no model)`
+    return `${what.padEnd(28)} ${route.padEnd(46)} ${key}`
 }
 
 /**
@@ -575,24 +991,52 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
     assertProviders(docPilot)
 
     const embed = resolveEmbed(docPilot)
-    console.log(`[docpilot] chat   ${describe(docPilot.chat, env)}`)
-    console.log(`[docpilot] embed  ${describe(embed, env)}${embed.auto ? '   (auto)' : ''}`)
+    console.log(`[docpilot] chat   ${describe(docPilot.chat, env, chatModels(docPilot))}`)
+    if (embed.lexicalOnly) {
+        // `describe` would print a provider, a route and a key check for a half
+        // that has none of the three, and a reader debugging retrieval on this
+        // site needs the mode named in the line they are already reading.
+        console.log(
+            '[docpilot] embed  none — embed: false, retrieval is lexical-only (BM25 over the chunk text)',
+        )
+    } else {
+        // `(auto)` alone would be a lie in the borrowed case: it reads as "the
+        // same provider as chat", which is exactly what this one is not.
+        const autoNote = embed.borrowed
+            ? `   (auto — ${embed.borrowed} cannot embed, borrowed from ${embed.provider})`
+            : embed.auto
+              ? '   (auto)'
+              : ''
+        console.log(`[docpilot] embed  ${describe(embed, env, embedModels(docPilot))}${autoNote}`)
+    }
 
     const idx = indexInfo(docPilot)
     if (!idx) {
         console.log('[docpilot] index  none on disk — run `npx docpilot index`')
     } else {
+        // `!embed.model` is the pooled case: the config named nothing, the
+        // index named the winner, and the browser follows the index. There is
+        // no second opinion to disagree with.
         const mismatch =
-            idx.embedModel === embed.model
+            !embed.model || idx.embedModel === embed.model
                 ? ''
                 : `  ← MISMATCH with embed.model "${embed.model}": retrieval will be lexical-only`
+        // `null · 0d` is what a vectorless manifest prints through the ordinary
+        // line, and it reads as a broken build rather than as the mode it is.
+        const built = idx.vectors === null ? 'no vectors' : `${idx.embedModel} · ${idx.dims}d`
         console.log(
-            `[docpilot] index  ${idx.embedModel} · ${idx.dims}d · ${idx.chunkCount} chunks · ${idx.hash}${mismatch}`,
+            `[docpilot] index  ${built} · ${idx.chunkCount} chunks · ${idx.hash}${mismatch}`,
         )
     }
 
+    // Printing a bare number here would name a value nobody chose: the default
+    // is null, and null resolves in the browser against the manifest's swept
+    // levers. The line has to say WHICH of the two layers is in force, because
+    // that is the whole question an operator reads it to answer — a k they set
+    // by hand, or the one `docpilot tune` measured on this corpus.
+    const topK = typeof docPilot.topK === 'number' ? `${docPilot.topK} (config)` : 'tuned (manifest)'
     console.log(
-        `[docpilot] turn   topK ${docPilot.topK} · maxIterations ${docPilot.maxIterations} · ` +
+        `[docpilot] turn   topK ${topK} · maxIterations ${docPilot.maxIterations} · ` +
             `temperature ${docPilot.chat.temperature}`,
     )
     console.log(`[docpilot] prompt ${promptSummary(docPilot)}`)
@@ -608,9 +1052,14 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
     }
     // Which of the two sources is in force. The whole point of the key is that
     // the built-in three stop being invisible defaults nobody chose.
+    // `.questions`, not `.length`: `resolveSuggestions` returned an array until
+    // the union landed and returns `{questions, scoped, followUps}` now, so this
+    // line read `undefined` off an object and printed "built-in suggestions" for
+    // every build — including the ones that had configured their own.
     const sugg = resolveSuggestions(docPilot)
+    const n = sugg.questions.length
     console.log(
-        `[docpilot] empty  ${sugg.length ? `${sugg.length} configured suggestion${sugg.length === 1 ? '' : 's'}` : 'built-in suggestions'}`,
+        `[docpilot] empty  ${n ? `${n} configured suggestion${n === 1 ? '' : 's'}` : 'built-in suggestions'}`,
     )
     // Same silence rule as i18n below: the shipped pair is what almost every
     // build has, and a line restating it is noise. Printed the moment either
@@ -715,6 +1164,20 @@ export const DEFAULTS = {
     chat: {
         provider: 'ollama',
         model: 'qwen3:8b',
+        /**
+         * An ORDERED fallback pool, tried in turn until one member answers.
+         *
+         * Null for every provider that bills per token, because rotation there
+         * changes what a turn costs without being asked. It exists for shared
+         * free tiers — OpenRouter's, today — where a 429 is a statement about
+         * how many other people are asking rather than about the model, and
+         * where naming one free id buys a panel that works until it does not.
+         *
+         * Left null with `provider: 'openrouter'` and no `model`, the shipped
+         * free pool is used. Set it to pin your own order; set `model` beside it
+         * for a primary with understudies.
+         */
+        models: null,
         temperature: 0.2,
         maxTokens: 2048,
         // Ollama's server default context is 4096 tokens, and a primed turn plus
@@ -723,10 +1186,118 @@ export const DEFAULTS = {
         // unexplained refusal. Sent only on the ollama transport.
         numCtx: 8192,
     },
+    /**
+     * Who embeds the corpus, and whether anyone does.
+     *
+     * A UNION of three, like `budget` below and `suggestions` under it, and
+     * passed through rather than merged for the same reason — see
+     * `resolveDocPilot`. `'auto'` is the chat provider, or OpenRouter's free
+     * embedding pool where the chat provider has no embeddings endpoint. An
+     * object is the explicit split: `{provider, model, baseURL}`.
+     *
+     * `false` — `'none'` spells the same thing — is no embedder at all. The
+     * index is built without vectors and retrieval is BM25 over the chunk text,
+     * which is a real mode and a measurably worse one: recall@8 0.97 → 0.41 on
+     * this corpus, retrieval F1 0.35 → 0.18, 11 of 44 answerable questions
+     * refused outright, and zero score for a question asked in a language the
+     * corpus is not written in. It is for a corpus that may not be sent to an
+     * embedding service and for a site that cannot reach one; anywhere else the
+     * numbers above are the argument against it. `resolveEmbed` carries the
+     * rest of the reasoning.
+     */
     embed: 'auto',
-    topK: 12,
+    /**
+     * How many excerpts the gate hands the model — the retriever's `GATE_K`
+     * under its documented name, and the k every retrieval number in the eval
+     * report is measured at.
+     *
+     * null, not a number, and the change matters: this key was documented from
+     * the first release and READ BY NOTHING. The gate's k was the literal in
+     * retriever.js, so the 12 that used to sit here was never in force, and the
+     * 5 that used to sit in session.js's own defaults never was either. null now
+     * means "use what this corpus measured" — `docpilot tune` writes tuning.json,
+     * `docpilot index` inlines it into the manifest, and session.js lets it
+     * through untouched. A number is the author overriding that by hand, clamped
+     * to the swept band 1..12 and stamped `source: 'config'` in the manifest's
+     * place, exactly as a hand-set `guard.tau` is.
+     *
+     * So a site that already sets this key starts getting the effect the
+     * reference always promised it. That is the intended fix and it is still a
+     * behaviour change on upgrade.
+     */
+    topK: null,
     maxIterations: 2,
-    suggestions: [],
+    /**
+     * What a turn is allowed to SPEND, on a tier that is metered in requests.
+     *
+     * `maxIterations` above is the token argument; this is the request one, and
+     * they are different scarcities. OpenRouter's free tier caps at 50 requests
+     * a day while the models behind it offer 128k-512k of context, so a turn
+     * costing three or four requests — the tool probe, the loop, the forced
+     * final call — gives a reader about fourteen questions before the panel
+     * starts reporting an outage that is not one.
+     *
+     * A UNION, like `suggestions`: `budget: false` is the whole block off in one
+     * word, and it is passed through rather than merged for exactly that reason
+     * — see `resolveDocPilot`. Stated here in the RESOLVED shape so rule 11b can
+     * see every leaf.
+     *
+     * `mode: 'auto'` does nothing until there is a budget the package can
+     * DEFEND, which is two questions rather than one: a daily allowance has to
+     * exist to be rationed — `dailyLimit` written down here, or a chat half
+     * running on the provider's own free pool — and the number describing it has
+     * to be daily, which a header count is trusted to be only when its reset is
+     * ten minutes or more out. `x-ratelimit-remaining` alone answers neither:
+     * every gateway in front of a self-hosted model publishes it for a
+     * PER-MINUTE window, and a funded key on a metered provider publishes it for
+     * an allowance with no daily ceiling at all. `budget.js` owns the predicate;
+     * the reasoning behind each value lives with the resolver, in
+     * `src/theme/docpilot/switches.js`.
+     */
+    budget: {
+        mode: 'auto',
+        oneShotBelow: 15,
+        rotateAbove: 6,
+        maxContinuations: 1,
+        showRemaining: true,
+        probe: 'auto',
+        dailyLimit: null,
+    },
+    /**
+     * A UNION — ui-specs/009. `suggestions: ['One?', 'Two?']` is still legal and
+     * still means the same thing; the object form adds the two behaviours beside
+     * the questions. Stated here in the resolved shape so rule 11b can see every
+     * leaf, and replaced WHOLE by `resolveDocPilot` rather than merged, because
+     * an array merged into an object is neither.
+     *
+     * `scoped` is what an empty panel offers when the scope is not `all`: the
+     * pages in the scope, as rows. It generates no text. `followUps` is off —
+     * see switches.js, where the reason is a measurement rather than a taste.
+     */
+    suggestions: {questions: [], scoped: true, followUps: false},
+    /**
+     * Quoting a passage — ui-specs/007 for the mechanism, 009 for the switches.
+     *
+     * `fromDocs` extends the selection popover to the host's own article. Off:
+     * it paints a control on somebody else's prose, and a reader selecting a
+     * command in order to copy it must not meet a button every time.
+     */
+    quote: {fromAnswer: true, fromDocs: false},
+    /**
+     * What a citation is worth to a reader who wants to check it — ui-specs/009.
+     *
+     * NOT `sources`, which is taken above by the origin allowlist. `passage`
+     * expands a source row to the exact retrieved chunk, which is already in the
+     * browser; `inCopy` appends the source list to a copied answer, so a `[1]`
+     * pasted into a ticket arrives with something behind it.
+     */
+    citations: {passage: true, inCopy: true, pagesRead: false},
+    /**
+     * Two composer affordances — ui-specs/009. `editLastOnArrowUp` is ChatGPT's
+     * own behaviour and readline's before it; `deepLink` reads `?dp-ask=` into
+     * the composer and deliberately does not submit it.
+     */
+    composer: {editLastOnArrowUp: true, deepLink: true},
     /** Where a thumbs-up/down POSTs. Null keeps every vote in localStorage. */
     feedbackEndpoint: null,
     /**
@@ -748,9 +1319,9 @@ export const DEFAULTS = {
      * text a reader types is redacted and capped in feedback.js — that ceiling
      * is not a setting, for the same reason history.js's byte ceiling is not.
      */
-    feedback: {send: 'both', comment: true},
+    feedback: {send: 'both', comment: true, confirm: true},
     guard: {mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers: 3},
-    scope: {enabled: true, default: 'all', promptListLimit: 12},
+    scope: {enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true},
     /**
      * The reader's own conversations, kept on their device.
      *
@@ -772,7 +1343,7 @@ export const DEFAULTS = {
      * ~5MB per ORIGIN and this panel is a guest on someone else's docs site, so
      * no author should have to reason about its share. See history.js.
      */
-    history: {enabled: true, maxConversations: 20},
+    history: {enabled: true, maxConversations: 20, exportThread: true},
     prompt: {show: false, allowAppend: false, appendMaxChars: 500, override: null, extend: ''},
     /**
      * Where the button lives, what shape the panel takes, and what the floating
@@ -786,7 +1357,61 @@ export const DEFAULTS = {
      * `src/theme/docpilot/ui.js` for the resolver and ui-specs/005 for why;
      * this is the only place the shipped set is stated.
      */
-    ui: {trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true},
+    ui: {
+        trigger: 'nav',
+        panel: 'auto',
+        fabLabel: true,
+        fabIcon: true,
+        layout: 'overlay',
+        prefetch: 'hover',
+        firstRunHint: false,
+    },
+    /**
+     * The site the panel is mounted on — the four things it cannot infer.
+     *
+     * EVERY VALUE HERE IS NULL, and that is the design rather than an omission.
+     * Null means "nobody said", which has to stay distinguishable from a value
+     * the author chose — `article: 'main'` as a DEFAULT would silently outrank
+     * the `.vp-doc, main` that the VitePress binding supplies, and the
+     * selection-to-quote offer would stop appearing on half the pages of a
+     * VitePress site with nothing to explain why.
+     *
+     * Host-specific values belong to the host binding
+     * (`src/theme/docpilot/host-vitepress.js`); the neutral fallbacks belong to
+     * `hostConfig()` in `src/theme/docpilot/host.js`, which is the one place the
+     * three layers are resolved: what the author wrote here, then what the
+     * binding supplies, then the neutral value.
+     *
+     *   base      the site's base path — `/docs/` for a site served in a
+     *             subdirectory. Neutral `/`. Applied at exactly two egress
+     *             points, the index fetch and `router.go`, and nowhere else:
+     *             manifest paths and citation hrefs are base-less everywhere,
+     *             which is what lets `isKnownPath` compare them literally.
+     *   ragBase   where the built index is served from. Derived as `${base}rag`,
+     *             which is what a static host does with `public/rag`. Set it
+     *             when the index lives somewhere else.
+     *   article   the host's article element. Bounds the selection-to-quote
+     *             offer: a selection outside it is not a passage of
+     *             documentation, and offering to ask about a sidebar link is a
+     *             control that makes no sense. Neutral `main`.
+     *   search    the host's own search button, which the panel's degraded and
+     *             error states offer as the alternative. There is no neutral
+     *             value — no site has a standard search selector — so without
+     *             one from either layer THE AFFORDANCE IS NOT RENDERED. A button
+     *             that clicks nothing is worse than no button. `false` says so
+     *             explicitly, for a host whose binding supplies one and whose
+     *             author does not want it.
+     *   content   the focus target of last resort when the panel closes and the
+     *             element that opened it has gone with a route change. Neutral
+     *             `main`.
+     */
+    host: {
+        base: null,
+        ragBase: null,
+        article: null,
+        search: null,
+        content: null,
+    },
     /**
      * Reader-facing copy, replaced string by string.
      *
@@ -808,12 +1433,73 @@ export const DEFAULTS = {
  */
 export const SERVER_ONLY = ['docsDir', 'indexDir', 'evalDir', 'importDir', 'sources']
 
+/**
+ * Settings the THEME reads that `docPilot` deliberately does not carry.
+ *
+ * The mirror of `SERVER_ONLY`, and it exists for the same reason that one does:
+ * "nothing can set this" is a decision, and a key nobody remembered to emit
+ * looks identical from here. ui-specs/009's rule 11a walks every
+ * `config.<group>.<key>` read anywhere under `src/theme/` and requires it to
+ * resolve — against this list, which is the whole set of allowed exceptions.
+ *
+ * The list stayed short on purpose. When it first ran, rule 11a turned up a
+ * fourth entry — `llm.think` — that had no writer in any code path and always
+ * resolved to `true`. That one was deleted rather than added here, which is the
+ * outcome this rule is for.
+ */
+export const THEME_ONLY = [
+    /**
+     * The offline eval runner builds its own `llm` object to drive the SAME
+     * harness the panel does, and is allowed to configure things a documentation
+     * site is not: how long one step may take, and whether the model it is
+     * measuring can think at all.
+     */
+    'llm.stepTimeoutMs',
+    'llm.thinkSupported',
+    /**
+     * A self-hosted endpoint on a private network, written by hand into
+     * themeConfig. `themeDocPilot` must never emit it and never will:
+     * themeConfig is compiled into the client bundle, so a key written there is
+     * a key published. In production the panel calls a same-origin path and the
+     * proxy attaches the credential.
+     */
+    'llm.apiKey',
+    'embed.apiKey',
+]
+
 /** Settings with defaults filled in. Nested objects merge; `embed` does not. */
+/**
+ * `chat`, merged — with the one key that must not be inherited across a
+ * provider change held back.
+ *
+ * `DEFAULTS.chat.model` is `qwen3:8b`, which is a statement about Ollama. Merged
+ * blindly, an author who wrote `chat: {provider: 'openrouter'}` and nothing else
+ * had that name posted to OpenRouter: a 404 on every question, naming a model
+ * they never typed, in a config file where the name does not appear. A provider
+ * named without a model now means what it reads as — you choose — and who
+ * chooses depends on the provider: a pool where there is one, and the error
+ * `assertProviders` already raises where there is not.
+ */
+function resolveChat(chat = {}) {
+    const merged = {...DEFAULTS.chat, ...chat}
+    if (chat.provider && chat.provider !== DEFAULTS.chat.provider && chat.model === undefined) {
+        merged.model = null
+    }
+    // `model: 'auto'` is a spelling openrouter.js advertises, and a spelling that
+    // is recognised but never STRIPPED is worse than one that is not recognised
+    // at all: `chatModels` read it as "you choose" and the transport read it as a
+    // model id, so the pool was resolved correctly and then `auto` was posted at
+    // the head of it. Normalise once, here, and every reader downstream sees the
+    // same null the omitted case produces.
+    if (isAutoModel(merged.model)) merged.model = null
+    return merged
+}
+
 export function resolveDocPilot(settings = {}, env = {}) {
     return {
         ...DEFAULTS,
         ...settings,
-        chat: {...DEFAULTS.chat, ...(settings.chat || {})},
+        chat: resolveChat(settings.chat),
         // `embed` is a union — the string 'auto' or an object — so a spread
         // would turn 'auto' into an object of numbered characters.
         embed: settings.embed ?? DEFAULTS.embed,
@@ -828,6 +1514,25 @@ export function resolveDocPilot(settings = {}, env = {}) {
         // Merged, NOT resolved — same split as `ui` below. A flat pair of
         // scalars, so one level is all there is to lose.
         feedback: {...DEFAULTS.feedback, ...(settings.feedback || {})},
+        // Merged the same way, but only when there is an object to merge. This
+        // one is a union whose off form is `false`, and `{...DEFAULTS.budget,
+        // ...false}` spreads to nothing: the author would write one word to
+        // switch the block off and be handed the shipped block back, with
+        // nothing anywhere saying so. Anything else that is not an object — the
+        // `budget: 'off'` somebody will write — passes through untouched, so the
+        // complaint comes from `resolveBudget`, in one voice, where the other
+        // budget complaints come from.
+        //
+        // AN ARRAY IS NOT AN OBJECT HERE, whatever `typeof` says. `budget: []`
+        // took the merge arm, `{...DEFAULTS.budget, ...[]}` yielded the shipped
+        // block, and the author's mistake was answered with silence — the exact
+        // failure the paragraph above says this arrangement exists to prevent.
+        // `resolveBudget` has had an `Array.isArray` guard the whole time and
+        // nothing could reach it from here.
+        budget:
+            settings.budget && typeof settings.budget === 'object' && !Array.isArray(settings.budget)
+                ? {...DEFAULTS.budget, ...settings.budget}
+                : (settings.budget ?? DEFAULTS.budget),
         prompt: {...DEFAULTS.prompt, ...(settings.prompt || {})},
         // Merged, NOT resolved: `'auto'` survives this function. Resolution
         // belongs to whoever emits — `themeDocPilot` — because the resolved shape
@@ -895,19 +1600,116 @@ export function readiness(docPilot, env = {}) {
         })
     }
 
+    /**
+     * A NOTE, because nothing is missing — the author asked for this and the
+     * panel answers. What the config file cannot show them is the size of what
+     * they gave up, so the measurement is quoted here: this block prints on the
+     * build, which is where the decision is still cheap to reverse.
+     *
+     * The cross-language sentence is separate because it is a different
+     * failure. The lexical channel does not merely degrade for a question asked
+     * in another language than the corpus — it scores zero, so a site with
+     * readers in one language and documentation in another has no retrieval at
+     * all rather than a weaker one.
+     */
+    if (embed.lexicalOnly) {
+        notes.push(
+            'embed: false — there is no embedder, so retrieval is BM25 over the chunk text ' +
+                'alone. Measured once, on a 1191-chunk corpus: recall@8 0.97 → 0.41, ' +
+                'retrieval F1 0.35 → 0.18, and 11 of 44 answerable questions refused outright. ' +
+                'A question asked in a language the corpus is not written in scores zero. ' +
+                'Reproduce with `npx docpilot eval --gate-only --lexical`.',
+        )
+    }
+
+    /**
+     * A NOTE, not a `missing` — the configuration works — and it is here because
+     * the alternative is a default nobody was told about.
+     *
+     * `embed: 'auto'` beside a chat provider that cannot embed now resolves to
+     * OpenRouter's free pool, which means every chunk of the corpus is posted to
+     * a service that appears nowhere in the author's config file. That is a fine
+     * default and a poor secret: an internal docs site may not be allowed to
+     * send its text to a third party at all, and the place to find that out is
+     * the first build, not an audit.
+     */
+    if (embed.borrowed) {
+        notes.push(
+            `embed: 'auto' — "${embed.borrowed}" has no embeddings endpoint, so the index is ` +
+                `built with ${embed.provider}'s free embedding pool. The whole corpus is sent ` +
+                'there at build time (questions still go to ' +
+                `"${docPilot.chat.provider}"). Name an embedder explicitly to keep it elsewhere.`,
+        )
+    }
+
+    const embedPool = embedModels(docPilot)
     const idx = indexInfo(docPilot)
     if (!idx) {
         missing.push({
             what: `no index at ${indexDirOf(docPilot)}`,
             fix: 'npx docpilot index',
         })
-    } else if (idx.embedModel !== embed.model) {
+    } else if (embed.lexicalOnly && idx.vectors) {
+        /**
+         * A note, not a `missing`: retrieval is exactly what was declared and
+         * every question is answered. What is wrong is the weight — the browser
+         * fetches whatever `manifest.vectors` names, so the whole quantised blob
+         * is downloaded by every reader and no part of this configuration ever
+         * scores against it. Bandwidth, not behaviour, which is why it does not
+         * switch the panel off.
+         */
+        notes.push(
+            `the index at ${indexDirOf(docPilot)} still carries vectors ("${idx.embedModel}", ` +
+                `${idx.dims}d) and this configuration never queries them — every reader ` +
+                'downloads that blob and none of it is read. `npx docpilot index` rebuilds it ' +
+                'without them.',
+        )
+    } else if (!embed.lexicalOnly && idx.vectors === null) {
+        /**
+         * The same disagreement from the other side, and this one IS fatal to
+         * the deployment's intent rather than to its answers.
+         *
+         * A configured embedder means a key, a bill or a self-hosted service,
+         * and the browser embedding every question against an index that has no
+         * vector space to score it in — so the site pays for semantic retrieval
+         * on every turn and gets BM25. It fails silently because lexical-only is
+         * a working mode: nothing errors, the answers are merely worse than the
+         * ones being paid for.
+         */
+        missing.push({
+            what:
+                `the index at ${indexDirOf(docPilot)} was built without vectors, but ` +
+                `embed names "${embed.provider}" — every question would be embedded and ` +
+                'nothing would be scored against it',
+            fix: 'npx docpilot index   (or set `embed: false` to declare lexical-only retrieval)',
+        })
+    } else if (embed.model && idx.embedModel !== embed.model) {
         // Not fatal to the build, but fatal to retrieval: a query scored
         // against a foreign vector space is not a worse answer, it is no
         // answer, and the calibrated gate starts refusing answerable questions.
         missing.push({
             what: `the index was built with "${idx.embedModel}" but embed.model is "${embed.model}"`,
             fix: 'npx docpilot index   (or change embed.model back to the one that built it)',
+        })
+    } else if (!embed.model && embedPool?.length && !embedPool.includes(idx.embedModel)) {
+        /**
+         * The pooled half's version of the same disagreement, and it needed
+         * saying the moment `embed: 'auto'` started borrowing a pool.
+         *
+         * "The config names nothing, so the index names the winner and the
+         * browser follows it" is only sound while the index was built by THIS
+         * provider. Switch `chat.provider` from ollama to anthropic and the
+         * embedder silently becomes OpenRouter's pool — while the manifest on
+         * disk still says `bge-m3`, which the browser then dutifully posts to
+         * OpenRouter. That is a 404 per question and lexical-only retrieval for
+         * the life of the deployment, with nothing failing anywhere.
+         */
+        missing.push({
+            what:
+                `the index was built with "${idx.embedModel}", which is not in ` +
+                `${embed.provider}'s free embedding pool — the browser would ask ` +
+                `${embed.provider} for a model it does not serve`,
+            fix: 'npx docpilot index',
         })
     }
 

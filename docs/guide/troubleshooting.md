@@ -32,11 +32,32 @@ The build never fails for these on purpose: a dependency that can break someone
 else's docs build on the day it lands is a dependency they remove. Run
 `npx docpilot doctor` to turn the same facts into a non-zero exit.
 
-### `embed: 'auto' follows chat.provider "…", which has no embeddings endpoint`
+One cause of this block is worth naming because it looks like nothing:
+**you built with `npx docpilot index --no-embed` and left the config naming an
+embedder.** That pairing is refused rather than warned about — the deployment
+would embed every question and have nothing to score it against — so the panel
+is switched off until the config says [`embed: false`](/reference/config#embed-false)
+as well.
 
-The chat provider answers but does not retrieve — `anthropic`, `openrouter`,
-`deepseek`, `groq`, `xai` and `cerebras` all do. Either pick a provider that
-serves both, or split the two halves:
+### `embed: "openrouter" needs a key and none is set` — on a provider you never named
+
+Not a bug. The chat provider answers but does not retrieve — `anthropic`,
+`deepseek`, `groq`, `xai` and `cerebras` all do — so `embed: 'auto'` borrows
+OpenRouter's free embedding pool for the retrieval half. Set the key:
+
+```bash
+OPENROUTER_API_KEY=…     # free tier; the index only
+```
+
+The startup block and `npx docpilot doctor` both name the borrow:
+
+```
+[docpilot] embed  openrouter/auto — 2 free, nvidia/nemotron-3-embed-1b:free first   …   (auto — anthropic cannot embed, borrowed from openrouter)
+```
+
+Read that as **the text of every chunk is posted to OpenRouter at build time**.
+Questions still go to the chat provider. If your corpus may not leave for a third
+party, name an embedder instead — an explicit `embed` is never rewritten:
 
 ```js
 export const docPilot = {
@@ -46,8 +67,15 @@ export const docPilot = {
 ```
 
 Then rebuild the index. A project-scoped key limited to chat models hits the same
-wall with a provider that *does* embed, and the same split is the fix. See
+wall with a provider that *does* embed, and the split is the fix there too. See
 [Choosing providers](./providers).
+
+### `embed.provider "…" has no embeddings endpoint`
+
+You named one explicitly, and it cannot. Only the *unnamed* case borrows the free
+pool; a provider you wrote down is a sentence this package will not rewrite.
+Point `embed` at a service that embeds, or drop the setting and let `auto` fall
+through to the free pool.
 
 ### `chat.provider "…" is not a provider this build knows`
 
@@ -108,7 +136,15 @@ around by moving the key into `themeConfig` — that publishes it. Run
 
 ### Every question is refused
 
-Three causes, in the order worth checking.
+Four causes, in the order worth checking.
+
+**This site declared `embed: false`.** Then every turn is lexical-only by design
+and `tauLexical` is the *entire* gate — not the fallback it is on a hybrid site,
+where a bad value only bites during an outage. An uncalibrated lexical-only index
+ships the provisional `tauLexical` 0.3 and over-refuses permanently. Run
+`npx docpilot calibrate`: on a vectorless index it sweeps that one threshold and
+nothing else. The panel is not reporting an outage — see
+[No embedder at all](/guide/providers#no-embedder-at-all).
 
 **The thresholds are provisional.** Until `npx docpilot calibrate` has run
 against your own index, the gate uses values measured on a different corpus and
@@ -148,11 +184,17 @@ picker.
 
 ### Retrieval feels like keyword matching
 
-Check that the embedding call is actually reaching a model. Dropping the embedder
-was measured on a 1191-chunk corpus: recall@8 fell from 0.97 to 0.41 and 11 of 44
-answerable questions were refused outright. A question asked in a language your
-corpus is not written in scores zero on the lexical channel alone, so this shows
-up first for multilingual readers.
+First, which of the two is it. On a site configured `embed: false` retrieval **is**
+keyword matching, by declaration, and nothing is wrong — `npx docpilot doctor`
+says so in one line, and [No embedder at all](/guide/providers#no-embedder-at-all)
+is the page for it. Everywhere else, check that the embedding call is actually
+reaching a model: the browser console names the service and the model when it
+cannot, and the panel marks its refusals degraded.
+
+Dropping the embedder was measured on a 1191-chunk corpus: recall@8 fell from 0.97
+to 0.41 and 11 of 44 answerable questions were refused outright. A question asked
+in a language your corpus is not written in scores zero on the lexical channel
+alone, so this shows up first for multilingual readers.
 
 ## Answers
 

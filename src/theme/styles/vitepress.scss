@@ -113,6 +113,37 @@
 }
 
 /**
+ * `ui.layout: 'push'` — the panel moves the host's content instead of covering
+ * it. ui-specs/009.
+ *
+ * The desktop drawer is `position: fixed` at the trailing edge, so it sits over
+ * the host's aside and, on a narrow desktop, over part of the prose column —
+ * while the component's own header calls the panel non-modal because *docs stay
+ * readable beside the answer*. This is the mode that makes that sentence true.
+ *
+ * A FOREIGN SELECTOR, which is why it is here and not in the core: rule 2 of
+ * this file admits exactly this, and the core may not name `.VPContent` at all.
+ * A consumer on another theme overrides this one rule instead of patching a
+ * component.
+ *
+ * `padding-inline-end`, not a margin or a width: it composes with whatever the
+ * theme already does to that element, and it cannot make the content narrower
+ * than the theme's own max-width intended. The class is written by the panel and
+ * only above the sheet breakpoint — below it the panel is edge to edge and there
+ * is nothing to push.
+ */
+html.docpilot-push .VPContent {
+  padding-inline-end: var(--dp-width);
+  transition: padding-inline-end var(--dp-dur) var(--dp-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.docpilot-push .VPContent {
+    transition: none;
+  }
+}
+
+/**
  * Shiki, both halves.
  *
  * The core picks a theme off `prefers-color-scheme`, which is the only signal

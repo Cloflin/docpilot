@@ -1,8 +1,8 @@
 {
   "name": "@cloflin/docpilot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "A grounded AI answer panel for VitePress docs. Retrieval runs in the browser against a static index; a calibrated gate refuses before the model is called; every citation is checked against what the host actually retrieved.",
+  "description": "A grounded AI answer panel for documentation sites — VitePress, Docusaurus, Vue, React, or a plain script tag. Retrieval runs in the browser against a static index; a calibrated gate refuses before the model is called; every citation is checked against what the host actually retrieved.",
   "keywords": [
     "vitepress",
     "vitepress-plugin",
@@ -12,23 +12,96 @@
     "ai",
     "search",
     "docpilot",
-    "llm"
+    "llm",
+    "docusaurus",
+    "react",
+    "ask-ai",
+    "docs"
   ],
   "license": "MIT",
+  "author": "Cloflin (https://github.com/Cloflin)",
+  "homepage": "https://docpilot.vercel.app",
+  "bugs": {
+    "url": "https://github.com/Cloflin/docpilot/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
   "exports": {
-    ".": "./src/index.js",
-    "./config": "./src/config.js",
-    "./sidebar": "./src/sidebar.js",
-    "./theme": "./src/theme/index.js",
-    "./theme-without-styles": "./src/theme/no-styles.js",
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./config": {
+      "types": "./types/config.d.ts",
+      "default": "./src/config.js"
+    },
+    "./sidebar": {
+      "types": "./types/sidebar.d.ts",
+      "default": "./src/sidebar.js"
+    },
+    "./theme": {
+      "types": "./types/theme.d.ts",
+      "default": "./src/theme/index.js"
+    },
+    "./theme-without-styles": {
+      "types": "./types/theme.d.ts",
+      "default": "./src/theme/no-styles.js"
+    },
     "./theme/components/*.vue": "./src/theme/components/*.vue",
     "./style.css": "./dist/docpilot.css",
     "./style/core.css": "./dist/docpilot-core.css",
     "./style/vitepress.css": "./dist/docpilot-vitepress.css",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./host": {
+      "types": "./types/host.d.ts",
+      "default": "./src/theme/docpilot/host.js"
+    },
+    "./highlight": {
+      "types": "./types/highlight.d.ts",
+      "default": "./src/theme/docpilot/highlight.js"
+    },
+    "./shiki": {
+      "types": "./types/shiki.d.ts",
+      "default": "./src/theme/docpilot/highlighters/shiki.js"
+    },
+    "./prism": {
+      "types": "./types/prism.d.ts",
+      "default": "./src/theme/docpilot/highlighters/prism.js"
+    },
+    "./hljs": {
+      "types": "./types/hljs.d.ts",
+      "default": "./src/theme/docpilot/highlighters/hljs.js"
+    },
+    "./mount": {
+      "types": "./types/mount.d.ts",
+      "default": "./src/mount.js"
+    },
+    "./web": {
+      "types": "./types/web.d.ts",
+      "default": "./dist/docpilot.web.mjs"
+    },
+    "./web.css": "./dist/docpilot.web.css",
+    "./style/docusaurus.css": "./dist/docpilot-docusaurus.css",
+    "./vue": {
+      "types": "./types/vue.d.ts",
+      "default": "./src/adapters/vue.js"
+    },
+    "./react": {
+      "types": "./types/react.d.ts",
+      "default": "./src/adapters/react.js"
+    },
+    "./docusaurus": {
+      "types": "./types/docusaurus.d.ts",
+      "default": "./src/adapters/docusaurus/index.js"
+    },
+    "./docusaurus/client": {
+      "types": "./types/docusaurus-client.d.ts",
+      "default": "./src/adapters/docusaurus/client.js"
+    }
   },
   "sideEffects": [
     "*.css",
@@ -38,16 +111,19 @@
     "docpilot": "./bin/docpilot.js"
   },
   "files": [
-    "src/",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
     "bin/",
     "dist/",
     "skills/",
-    "README.md",
-    "LICENSE"
+    "src/",
+    "types/"
   ],
   "scripts": {
-    "prepare": "node bin/build-css.js",
-    "build": "node bin/build-css.js",
+    "prepare": "node bin/build-css.js && node bin/build-web.js",
+    "prepublishOnly": "npm run verify && npm run build && node scripts/check-publish.js",
+    "build": "node bin/build-css.js && node bin/build-web.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "check": "bash scripts/check-docpilot.sh",
@@ -55,35 +131,81 @@
     "docs:index": "node bin/docpilot.js index",
     "docs:dev": "npm run build && vitepress dev docs",
     "docs:build": "npm run build && vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "build:css": "node bin/build-css.js",
+    "build:web": "node bin/build-web.js"
   },
   "dependencies": {
     "markdown-it": "^15.0.0",
     "minisearch": "^7.2.0"
   },
   "peerDependencies": {
+    "@shikijs/core": "^4.0.0",
+    "@shikijs/engine-javascript": "^4.0.0",
+    "@shikijs/langs": "^4.0.0",
+    "@shikijs/themes": "^4.0.0",
+    "highlight.js": "^11.0.0",
     "linkedom": "^0.18.0",
-    "vitepress": "^1.6.4",
-    "vue": "^3.5.41"
+    "prismjs": "^1.29.0",
+    "vitepress": "^1.6.4 || ^2.0.0-alpha.16",
+    "vue": "^3.5.41",
+    "react": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
     "linkedom": {
+      "optional": true
+    },
+    "@shikijs/core": {
+      "optional": true
+    },
+    "@shikijs/engine-javascript": {
+      "optional": true
+    },
+    "@shikijs/langs": {
+      "optional": true
+    },
+    "@shikijs/themes": {
+      "optional": true
+    },
+    "prismjs": {
+      "optional": true
+    },
+    "highlight.js": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vitepress": {
+      "optional": true
+    },
+    "vue": {
       "optional": true
     }
   },
   "devDependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@shikijs/core": "^4.4.3",
+    "@shikijs/engine-javascript": "^4.4.3",
+    "@shikijs/langs": "^4.4.3",
+    "@shikijs/themes": "^4.4.3",
     "@types/node": "^26.2.0",
+    "@vitejs/plugin-vue": "^6.0.8",
     "@voidzero-dev/vitepress-theme": "^5.0.5",
+    "happy-dom": "^20.11.2",
+    "highlight.js": "^11.11.1",
     "linkedom": "^0.18.13",
+    "prismjs": "^1.30.0",
     "sass": "^1.102.0",
     "typescript": "^7.0.2",
+    "vite": "^8.2.1",
     "vitepress": "^2.0.0-alpha.19",
     "vitest": "^4.1.10",
     "vue": "^3.5.41"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cloflin/docpilot.git"
-  }
+    "url": "git+https://github.com/Cloflin/docpilot.git"
+  },
+  "types": "./types/index.d.ts"
 }

@@ -1,0 +1,39 @@
+{
+  "framework": null,
+  "installCommand": "npm ci --include=dev",
+  "buildCommand": "bash scripts/vercel-build.sh",
+  "outputDirectory": "docs/.vitepress/dist",
+  "cleanUrls": true,
+  "functions": {
+    "api/ai/*.js": {
+      "maxDuration": 60,
+      "supportsCancellation": true
+    }
+  },
+  "rewrites": [
+    { "source": "/ai/v1/chat/completions", "destination": "/api/ai/chat" },
+    { "source": "/ai/v1/embeddings", "destination": "/api/ai/embeddings" }
+  ],
+  "headers": [
+    {
+      "source": "/rag/manifest.json",
+      "headers": [{ "key": "cache-control", "value": "no-cache" }]
+    },
+    {
+      "source": "/rag/chunks-(.*).json",
+      "headers": [{ "key": "cache-control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/rag/df.(.*).json",
+      "headers": [{ "key": "cache-control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/rag/vectors.(.*).bin",
+      "headers": [{ "key": "cache-control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "cache-control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ]
+}

@@ -3,14 +3,38 @@
   <img alt="DocPilot" src="docs/public/logo-light.svg" width="320">
 </picture>
 
-A grounded AI answer panel for VitePress documentation.
+A grounded AI answer panel for documentation — VitePress, Docusaurus, Vue, React, or a blog with a `<script>` tag.
 
 Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
-```bash
-npm i @cloflin/docpilot
-npx docpilot init
-```
+## Install
+
+| | install | then |
+|---|---|---|
+| npm | `npm i @cloflin/docpilot` | `npx docpilot init` |
+| Yarn | `yarn add @cloflin/docpilot` | `yarn docpilot init` |
+| pnpm | `pnpm add @cloflin/docpilot` | `pnpm exec docpilot init` |
+| Bun | `bun add @cloflin/docpilot` | `bunx docpilot init` |
+| Deno | `deno add npm:@cloflin/docpilot` | `deno run -A npm:@cloflin/docpilot init` |
+
+`pnpm exec docpilot`, not `pnpm docpilot`: `pnpm run` looks for a package.json script and reports the bin as missing. Nothing here runs `dlx` or `npx` against the bare name — the unscoped `docpilot` on the registry is not this package.
+
+Node 20 or newer. Every command below is written `npx docpilot …`; substitute the runner from your own row — it is the same bin either way.
+
+## Where it mounts
+
+The question is not which framework you use — it is whether your bundler compiles a `.vue` file, because that decides whether you get the source or a prebuilt bundle.
+
+| your setup | entry point |
+|---|---|
+| VitePress | `@cloflin/docpilot/theme` |
+| Docusaurus | `@cloflin/docpilot/docusaurus` |
+| Vue | `@cloflin/docpilot/vue` |
+| React | `@cloflin/docpilot/react` |
+| any bundler | `@cloflin/docpilot/mount` or `/web` |
+| a `<script>` tag | `dist/docpilot.web.js` |
+
+Every entry point ships TypeScript declarations. The full matrix is in the docs — see [Documentation](#documentation) — and what follows is VitePress.
 
 ## Add it
 
@@ -21,8 +45,7 @@ import { defineDocPilot } from '@cloflin/docpilot'
 
 export const docPilot = {
   product: 'Acme Editor',
-  chat:  { provider: 'openai', model: 'gpt-4o-mini' },
-  embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
+  chat: { provider: 'openai', model: 'gpt-4o-mini' },
 }
 
 const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
@@ -50,7 +73,7 @@ The `docPilot` **named export** is the contract between the build and the CLI: b
 
 `product` is optional. It is what the assistant says it answers questions about — in the instruction, in the composer placeholder, and when a reader says hello. Left out, all three read "this documentation".
 
-**`vitepress dev` proxies `/ai/*` for you; a built site does not.** `npx docpilot doctor --proxy` prints the two rules a production reverse proxy needs.
+**`vitepress dev` proxies `/ai/*` for you; a built site does not.** `npx docpilot doctor --proxy` prints the contract for the configuration you actually have: one route per hosted half — its exact path, its upstream, and the *name* of the variable holding the key, never the key — followed by the five rules those routes have to satisfy. The paths are asked of the adapter the browser will use rather than written out, so an Anthropic chat provider prints `/ai/v1/messages`; a setup that calls a local Ollama for both halves prints `none needed`.
 
 ## Nothing configured yet?
 
@@ -95,10 +118,16 @@ Three claims this README will not make. *"It only answers from the documentation
 | `npx docpilot lint` | check the golden set against the index it measures |
 | `npx docpilot eval` | run your golden set and write a report |
 | `npx docpilot bench` | A/B two retrieval configurations on answer quality, with no API key |
+| `npx docpilot tune` | sweep the retrieval levers (lambda, k) against the golden set into `docpilot/tuning.json`, with a report of the grid beside it |
+| `npx docpilot feedback` | turn readers' votes into candidates for the eval sets |
 | `npx docpilot doctor` | check the configuration without a full build; exits non-zero when not ready |
 | `npx docpilot init` | scaffold the environment, the eval sets and the authoring skills |
 
-The loop is `index → calibrate → lint → eval → bench`. The first two make the panel work; the last three tell you whether it works well, and they are the half that gets skipped.
+`eval`, `bench` and `tune` each take a `--level=low|medium|high|xhigh|max|ultra`, and the six tiers are cumulative: `--level=medium` runs low + medium, no `--level` runs everything. Two reports are comparable only within one tier.
+
+The loop is `index → calibrate → lint → eval → bench`, with `tune` where it is retrieval that has to move — **and then `index` again, because that is the step that inlines `tuning.json` into the manifest a reader downloads.** Until it runs, a swept lever is a file on disk and nothing more. The first two make the panel work; the last three tell you whether it works well, and they are the half that gets skipped.
+
+`feedback` sits outside the loop: it reads what your own endpoint collected and *proposes* probes for it. It never writes to the eval sets — a stratum is a judgement and a gold answer is written by a person.
 
 **Calibrate before you ship.** Thresholds are a statement about one corpus and do not transfer between projects. Until `calibrate` has run, the gate uses provisional values and every record says so.
 
@@ -106,11 +135,17 @@ The loop is `index → calibrate → lint → eval → bench`. The first two mak
 
 One provider is usually enough. `embed: 'auto'` follows `chat.provider` and uses that service's own embedding model.
 
-Chat **and** embeddings: `openai`, `together`, `fireworks`, `mistral`, `nebius`, `gemini`, `ollama`, `custom`.
+Chat **and** embeddings: `openai`, `together`, `fireworks`, `mistral`, `nebius`, `gemini`, `openrouter`, `ollama`, `custom`.
 
-Chat only — these need `embed` pointed elsewhere: `anthropic`, `openrouter`, `deepseek`, `groq`, `xai`, `cerebras`.
+Chat only — no embeddings endpoint: `anthropic`, `deepseek`, `groq`, `xai`, `cerebras`.
 
-Choosing a chat-only provider with `embed: 'auto'` stops the build and names both ways out.
+Choosing one of them with `embed: 'auto'` borrows **OpenRouter's free embedding pool** for the retrieval half: set `OPENROUTER_API_KEY`, and `npx docpilot index` picks whichever free embedder answers. The borrow is printed rather than assumed — the text of every chunk is posted to OpenRouter at build time, so name `embed` explicitly if your corpus may not leave for a third party.
+
+`chat: { provider: 'openrouter' }` with no model named runs both halves on the **free tier**: chat rotates through a pool of free models per call, and `npx docpilot index` picks whichever free embedder answers and records it in the manifest. That tier meters **requests, not tokens** — 50 a day under 10 credits bought — and one turn is an embedding request plus two or three model calls, so fifty is a dozen-odd questions rather than fifty. What the panel does about that, and what you have to decide, is [Living on the free tier](docs/guide/free-tier.md).
+
+`embed: false` runs no embedder at all: the index carries no vectors and every question is retrieved by keyword. It is supported, and it costs most of the recall — measured on a 1191-chunk corpus, recall@8 fell from 0.97 to 0.41, retrieval F1 from 0.35 to 0.18, and 11 of 44 answerable questions were refused outright. Keyword matching also scores zero for a question asked in a language your corpus is not written in. Measure your own corpus with `npx docpilot eval --gate-only --lexical` before choosing it — it reads the golden set you wrote, so that comes first.
+
+See [Choosing providers](docs/guide/providers.md).
 
 ## Credentials
 
@@ -136,7 +171,7 @@ Point `importDir` at a directory outside your docs and the assistant will answer
 
 ## Translating it
 
-Every reader-facing string — about a hundred of them — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
+Every reader-facing string — 158 of them, in 22 groups — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
 
 ```js
 i18n: {
@@ -152,7 +187,7 @@ Panel chrome follows the page's locale; the credential and greeting replies foll
 
 ## Documentation
 
-Full documentation — configuration reference, the retrieval contract, translation, imported pages, deploying it (nginx, containers, cache rules for the index) and mounting it on a site that is not VitePress: run `npm run docs:dev` in this repository.
+Full documentation — the install matrix for every host, the configuration reference, the [pluggable highlighter API](docs/reference/highlighting.md) (Shiki, Prism or highlight.js, none of them installed by default), the retrieval contract, translation, imported pages, and deploying it (nginx, containers, cache rules for the index): run `npm run docs:dev` in this repository.
 
 ## License
 

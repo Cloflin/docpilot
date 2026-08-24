@@ -2,10 +2,32 @@ node_modules/
 dist/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
-# The retrieval index is a build artifact — megabytes of quantised vectors,
-# rebuilt by `npm run docs:index` whenever the docs change. Its presence is also
-# what mounts the panel on this site; see docs/.vitepress/config.mjs.
-docs/public/rag/
+
+# The retrieval index is COMMITTED, deliberately, and this is the note that
+# stops someone re-adding it here.
+#
+# It is a build artifact everywhere else, and this repository is the exception
+# because it is also the deployed site. Building it during the deploy would spend
+# an embedding request per 32 chunks on every push — against a daily ceiling the
+# readers of this site share — so it is built locally and committed instead.
+# `test/docs-links.test.js` re-derives the index hash from the docs offline and
+# fails when the two disagree, which is what keeps a committed index honest.
+#
+# A CONSUMER's project should still ignore theirs: `docs/public/rag/` there is a
+# pure build artifact with no such tradeoff. `docpilot init` writes that entry.
+
 .env
 .env.local
 *.log
+
+# Repo-internal scan output, and one design note kept in Russian for its author.
+CLAUDE-SECURITY-RESULTS.md
+ui-specs/IDEAS.ru.md
+
+# The Vercel CLI's local link state.
+.vercel/
+
+# Both of these are currently excluded only by the author's ~/.gitignore_global,
+# so the second person to clone this repository would commit them.
+.DS_Store
+.claude/settings.local.json

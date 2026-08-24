@@ -20,9 +20,24 @@ import fs from 'node:fs'
 const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
 
 const CORE = read('src/theme/styles/core.scss')
-const ADAPTER = read('src/theme/styles/vitepress.scss')
 const ENTRY = read('src/theme/styles/docpilot.scss')
 const BREAKS = read('src/theme/styles/_breakpoints.scss')
+
+/**
+ * Every host adapter, by name — the mirror of `$ADAPTERS` in
+ * `scripts/check-docpilot.sh`, and the only line that changes when a host is
+ * added.
+ *
+ * A list rather than the one file this started as, because the two rules below
+ * are the whole of what makes an adapter safe to load, and an adapter nobody
+ * checks is one that can introduce a token the core cannot render without, or
+ * miss a dark value and paint one light element into a dark panel. Neither
+ * failure is visible on the host the author happened to be testing.
+ */
+const ADAPTERS = [
+  ['vitepress.scss', read('src/theme/styles/vitepress.scss')],
+  ['docusaurus.scss', read('src/theme/styles/docusaurus.scss')],
+]
 
 /** Comments state the rules verbatim, so a naive grep would flag the prose. */
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
@@ -45,46 +60,53 @@ function blockAfter(css, marker) {
 }
 
 describe('stylesheet split', () => {
-  it('keeps VitePress out of the core', () => {
+  // Every host, not just the first one this was written for: the core has to
+  // render a correct panel with NO adapter loaded, and an Infima token smuggled
+  // in breaks that exactly as a VitePress one would.
+  it('keeps every host out of the core', () => {
     const code = stripComments(CORE)
-    for (const pattern of [/--vp-/, /\.VP/, /html\.dark/]) {
+    for (const pattern of [/--vp-/, /\.VP/, /html\.dark/, /--ifm-/, /\[data-theme/]) {
       expect(pattern.test(code), `${pattern} in core.scss`).toBe(false)
     }
   })
 
   it('declares every token it uses, in the core', () => {
     const declared = declarations(stripComments(CORE))
-    for (const used of [...references(stripComments(CORE)), ...references(stripComments(ADAPTER))]) {
-      expect(declared.has(used), `${used} is used but never declared in core.scss`).toBe(true)
+    const used = [
+      ...references(stripComments(CORE)),
+      ...ADAPTERS.flatMap(([, css]) => [...references(stripComments(css))]),
+    ]
+    for (const token of used) {
+      expect(declared.has(token), `${token} is used but never declared in core.scss`).toBe(true)
     }
   })
 
-  // The adapter OVERRIDES; it must never INTRODUCE. A token that exists only
-  // here is a token the core cannot render without it, which is the failure the
+  // An adapter OVERRIDES; it must never INTRODUCE. A token that exists only
+  // there is a token the core cannot render without it, which is the failure the
   // whole split is meant to make impossible.
-  it('introduces no token of its own', () => {
+  it.each(ADAPTERS)('introduces no token of its own: %s', (name, css) => {
     const core = declarations(stripComments(CORE))
-    for (const token of declarations(stripComments(ADAPTER))) {
-      expect(core.has(token), `${token} is declared only in vitepress.scss`).toBe(true)
+    for (const token of declarations(stripComments(css))) {
+      expect(core.has(token), `${token} is declared only in ${name}`).toBe(true)
     }
   })
 
   /**
    * The load-bearing half of the cascade argument.
    *
-   * The core's dark values come from `prefers-color-scheme`. VitePress switches
-   * appearance by class and lets a reader pin a site to light. So every token
-   * the core darkens has to be re-declared UNCONDITIONALLY by the adapter — a
-   * token left out keeps the OS-driven value and paints one dark element into
-   * an otherwise light panel.
+   * The core's dark values come from `prefers-color-scheme`. Every host that
+   * switches appearance by class or attribute — VitePress's `html.dark`,
+   * Docusaurus's `[data-theme]` — lets a reader pin a site against their OS. So
+   * every token the core darkens has to be re-declared UNCONDITIONALLY by the
+   * adapter: a token left out keeps the OS-driven value and paints one dark
+   * element into an otherwise light panel.
    */
-  it('re-declares every dark-scheme token unconditionally', () => {
+  it.each(ADAPTERS)('re-declares every dark-scheme token unconditionally: %s', (name, css) => {
     const dark = declarations(blockAfter(stripComments(CORE), '@media (prefers-color-scheme: dark)'))
     expect(dark.size).toBeGreaterThan(5)
-    const rootBlock = blockAfter(stripComments(ADAPTER), ':root')
-    const mapped = declarations(rootBlock)
+    const mapped = declarations(blockAfter(stripComments(css), ':root'))
     for (const token of dark) {
-      expect(mapped.has(token), `${token} darkens in core.scss but is not mapped`).toBe(true)
+      expect(mapped.has(token), `${token} darkens in core.scss but ${name} does not map it`).toBe(true)
     }
   })
 

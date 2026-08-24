@@ -13,6 +13,12 @@
  * numbers on any machine. There is no LLM judge here and there must never be one
  * (`eval/metrics.js` states the same constraint for the same reason).
  *
+ * On an index built with `npx docpilot index --no-embed` there is no endpoint to
+ * need: no vectors means no dense channel, so only the lexical-only calibration
+ * of step 7 runs. `tau` is a threshold ON the dense channel and is left null —
+ * unmeasurable is not the same as zero, and writing a number there would stamp a
+ * hybrid gate as calibrated on an index that cannot have one.
+ *
  * `tau`, `tauLexical`, `wDense` and `wLexical` are set ONLY here (RAG-SPEC 7).
  * Everything downstream reads `${evalDir}/calibration.json`; nothing else may write it.
  *
@@ -29,7 +35,7 @@ import { pathToFileURL } from 'node:url'
 
 import { assembleIndex } from '../theme/docpilot/store.js'
 import { embedQuery } from '../theme/docpilot/embed.js'
-import { createRetrieval } from '../theme/docpilot/retriever.js'
+import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { wilsonUpper95 } from './metrics.js'
 import { nodeEmbedTarget } from '../config.js'
 
@@ -82,6 +88,12 @@ const EMBED_BASE = process.env.DOCPILOT_EMBED_URL || EMBED_TARGET.baseURL
 const EMBED_KEY = process.env.DOCPILOT_EMBED_KEY || EMBED_TARGET.apiKey || null
 
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
+
+// Named once because both probe paths report it, and two copies of a script
+// range are two things that stop agreeing. It flags the probes whose lexical
+// channel scores zero against an English corpus whatever the answer is worth —
+// the single largest cost of the lexical-only mode.
+const CYRILLIC = /[Ѐ-ӿ]/
 
 // ── strata ───────────────────────────────────────────────────────────────────
 
@@ -139,11 +151,16 @@ function rng(seed) {
 function loadIndex() {
   const manifest = JSON.parse(fs.readFileSync(path.join(RAG, 'manifest.json'), 'utf8'))
   const shards = manifest.shards.map((s) => JSON.parse(fs.readFileSync(path.join(RAG, s), 'utf8')))
-  // `.buffer` on a Buffer is NOT the file: Node pools small allocations, so for
-  // any vector blob under ~8 KB it is the whole pool and `assembleIndex`'s
-  // length check refuses the index. Slice to the view's own bytes.
-  const vecBuf = fs.readFileSync(path.join(RAG, manifest.vectors))
-  const vectorBuffer = vecBuf.buffer.slice(vecBuf.byteOffset, vecBuf.byteOffset + vecBuf.byteLength)
+  // A `--no-embed` index writes `vectors: null` and no blob beside it, so there is
+  // nothing here to read and no path to build out of `null`.
+  let vectorBuffer = null
+  if (manifest.vectors !== null) {
+    // `.buffer` on a Buffer is NOT the file: Node pools small allocations, so for
+    // any vector blob under ~8 KB it is the whole pool and `assembleIndex`'s
+    // length check refuses the index. Slice to the view's own bytes.
+    const vecBuf = fs.readFileSync(path.join(RAG, manifest.vectors))
+    vectorBuffer = vecBuf.buffer.slice(vecBuf.byteOffset, vecBuf.byteOffset + vecBuf.byteLength)
+  }
   const dfDoc = JSON.parse(fs.readFileSync(path.join(RAG, manifest.df), 'utf8'))
   return assembleIndex({ manifest, shards, vectorBuffer, dfDoc })
 }
@@ -175,24 +192,24 @@ function loadProbes() {
  * The retrieval constants in force, so a cached row from a different sweep is
  * never silently reused. tau and friends are absent on purpose: they are what
  * this file produces, and nothing cached here depends on them.
+ *
+ * It used to read the eight `DOCPILOT_*` variables straight out of the
+ * environment, which was the whole answer while an environment variable was the
+ * only way to move a lever. It is not any more: `docpilot tune` writes
+ * `tuning.json`, `docpilot index` inlines it as `manifest.tuning`, and a corpus
+ * tuned to `MMR_LAMBDA 0.85` therefore probes with a retriever this key could not
+ * see. Two indexes of the same corpus with different tuning share a hash — the
+ * hash is sha256 over chunk id and text — so the rows of one would have been
+ * handed back as the rows of the other, silently, and `calibrate` would publish
+ * thresholds measured under levers nobody is running.
+ *
+ * `resolveLevers` rather than a second read of the manifest: it is the ONE
+ * implementation of env > tuning > literal, and a cache key derived from a
+ * different precedence rule than the retrieval it keys is a key that is wrong
+ * exactly when the two disagree.
  */
-function levers() {
-  const names = [
-    'RRF_K',
-    'W_LEXICAL_RRF',
-    'W_DENSE_RRF',
-    'MMR_LAMBDA',
-    'CANDIDATES',
-    'FUSED',
-    'EXPAND_BELOW_TOKENS',
-    'GATE_K',
-  ]
-  const out = {}
-  for (const n of names) {
-    const v = process.env[`DOCPILOT_${n}`]
-    if (v !== undefined && v !== '' && Number.isFinite(Number(v))) out[n] = Number(v)
-  }
-  return out
+function levers(manifest) {
+  return resolveLevers(manifest?.tuning)
 }
 
 // Bump when a row gains a field the sweep READS. A cache line written before
@@ -278,7 +295,32 @@ async function embed(text, index) {
  */
 async function probeOne({ rec, index, guard, ladderPages }) {
   const scope = rec.scope || ALL_SCOPE
-  const retrieval = createRetrieval({ index, scope, guard })
+  /**
+   * `tuning`, for the reason `levers()` above states about the KEY: `sigOf`
+   * resolves env > tuning > literal, so the retrieval it keys has to resolve the
+   * same three layers. Without it the key moved with `manifest.tuning` and the
+   * measurement did not — which is a claim on disk that these rows are a function
+   * of the levers, made by a probe that ignored them.
+   *
+   * What that cost, measured: after `tune` → `index` → `calibrate`, every sig
+   * changed, the whole `calibration.raw.jsonl` cache missed, and each probe was
+   * re-embedded against a paid endpoint to reproduce a row identical to the one
+   * already on disk — with `--sweep-only` dying on the first probe it could not
+   * find. It is `sigOf` that keys on levers, so this does not stop that re-embed;
+   * what it buys is that the re-embed is now a real re-measurement.
+   *
+   * And the direction that actually publishes a wrong number: a lever that moves
+   * the gate would reach the browser through `manifest.tuning` and not reach this
+   * probe, so tau would be published as calibrated under levers nobody runs. No
+   * shipped lever moves a row TODAY — `L` reads the top three LEXICAL ids and `D`
+   * the scoped max cosine, neither of which `GATE_K` or `MMR_LAMBDA` touches (only
+   * `CANDIDATES`, and only below 3, against a default of 30). That is an
+   * implementation detail of `evaluate()`, not a guarantee, and it is not the one
+   * the cache key was written against.
+   */
+  const retrieval = createRetrieval({ index, scope, guard, tuning: index.manifest.tuning })
+
+  if (index.manifest.vectors === null) return probeLexicalOnly({ rec, retrieval, scope })
 
   const vec = await embed(rec.question, index)
   const composedText = rec.prev_question ? `${rec.prev_question}\n${rec.question}` : null
@@ -332,7 +374,11 @@ async function probeOne({ rec, index, guard, ladderPages }) {
     const start = Math.floor(rng(hashSeed(rec.id))() * ladderPages.length)
     for (const target of LADDER_N) {
       const s = target === null ? ALL_SCOPE : contiguousScope(ladderPages, target, start)
-      const r = createRetrieval({ index, scope: s, guard: zGuard })
+      // Same `tuning` as the probe above. The ladder varies ONE thing — the size
+      // of the scope — so every other input has to be the one the probe ran
+      // under; a rung ranked on the package literals would attribute the lever
+      // difference to n.
+      const r = createRetrieval({ index, scope: s, guard: zGuard, tuning: index.manifest.tuning })
       const g = r.evaluate({ question: rec.question, queryVec: vec })
       ladder.push({ n: g.n, z: g.z })
     }
@@ -343,7 +389,7 @@ async function probeOne({ rec, index, guard, ladderPages }) {
     stratum: rec.stratum,
     scoped: scope.kind !== 'all',
     followUp: Boolean(rec.prev_question),
-    russian: /[Ѐ-ӿ]/.test(rec.question),
+    russian: CYRILLIC.test(rec.question),
     G: hybrid.G,
     G_raw: rawOnly.G,
     G_composed: composedOnly ? composedOnly.G : null,
@@ -370,6 +416,73 @@ async function probeOne({ rec, index, guard, ladderPages }) {
     unscopedG_lex: lexical.unscopedG,
     retrievalMiss,
     ladder,
+  }
+}
+
+/**
+ * The same probe on an index that has no vectors — RAG-SPEC 5.6 step 7, alone.
+ *
+ * Every dense-derived field is recorded as NULL rather than filled in from the
+ * lexical channel. `sweepRow` reads `r.G`, and `null < tau` is `0 < tau`, so a
+ * lexical score parked in the hybrid column would sweep cleanly and publish as
+ * `tau` — a threshold on a channel this index does not have, indistinguishable
+ * on disk from one that was measured. The lexical numbers live in `G_lex` and
+ * `unscopedG_lex`, where the step-7 sweep already looks for them.
+ *
+ * There is no zExp ladder either: it is the median of `(max c − m)/s` over
+ * cosines, and the closed form is only consulted in `zscore` mode, which a
+ * vectorless index can never be in.
+ */
+async function probeLexicalOnly({ rec, retrieval, scope }) {
+  const composedText = rec.prev_question ? `${rec.prev_question}\n${rec.question}` : null
+  const lexical = retrieval.evaluate({
+    question: rec.question,
+    previousQuestion: rec.prev_question,
+    queryVec: null,
+    // undefined means "no second query to score", null means "score it
+    // lexically" — the same distinction the hybrid path keeps, for the same
+    // reason: collapsing them drops the composed channel from every follow-up.
+    composedVec: composedText ? null : undefined,
+    mode: 'lexical-only',
+  })
+
+  // Only the lexical half of the two-channel check above. A dense `closest()`
+  // here would rank on empty cosines and report every gold page as missed,
+  // charging the probe set for the absence of an embedder.
+  let retrievalMiss = null
+  if (rec.gold_page && STRATA[rec.stratum].positive) {
+    const lex = retrieval
+      .closest({ query: composedText || rec.question, queryVec: null, limit: 20 })
+      .map((p) => p.path)
+    retrievalMiss = !lex.includes(rec.gold_page)
+  }
+
+  return {
+    id: rec.id,
+    stratum: rec.stratum,
+    scoped: scope.kind !== 'all',
+    followUp: Boolean(rec.prev_question),
+    russian: CYRILLIC.test(rec.question),
+    G: null,
+    G_raw: null,
+    G_composed: null,
+    D: null,
+    L: lexical.L,
+    z: null,
+    z_raw: null,
+    L_raw: null,
+    z_composed: null,
+    L_composed: null,
+    n: lexical.n,
+    mode: lexical.mode,
+    channel: lexical.channel,
+    admissible: lexical.admissible,
+    unscopedG: null,
+    G_lex: lexical.G,
+    channel_lex: lexical.channel,
+    unscopedG_lex: lexical.unscopedG,
+    retrievalMiss,
+    ladder: [],
   }
 }
 
@@ -601,18 +714,28 @@ async function main() {
   const index = loadIndex()
   const guard = index.manifest.guard
   const hash = index.manifest.hash
+  /**
+   * `manifest.vectors === null` — a `--no-embed` build, and the whole of the
+   * signal. What follows is step 7 on its own: the cosine window, the tau sweep,
+   * the zExp ladder and the three positive UB95 bounds are all statements about a
+   * dense channel, and this index has none of one. Skipped rather than measured
+   * against nothing, because a sweep over null Gs terminates perfectly happily
+   * and produces a number.
+   */
+  const LEXICAL_ONLY = index.manifest.vectors === null
   // What produced the numbers, as opposed to what produced the text. See sigOf.
   const embedIdentity = [
     index.manifest.embedModel ?? null,
     index.manifest.dims ?? null,
     index.manifest.guard?.denseMode ?? null,
   ]
-  const lev = levers()
+  const lev = levers(index.manifest)
   const probes = loadProbes()
 
   console.log(`\nDocPilot gate calibration — RAG-SPEC 5.6`)
   console.log(
-    `  index ${hash}  chunks ${index.manifest.chunkCount}  embed ${index.manifest.embedModel}`,
+    `  index ${hash}  chunks ${index.manifest.chunkCount}  ` +
+      (LEXICAL_ONLY ? 'no vectors — LEXICAL-ONLY (BM25) calibration' : `embed ${index.manifest.embedModel}`),
   )
   console.log(
     `  guard in: mode=${guard.denseMode} tau=${guard.tau} tauLexical=${guard.tauLexical} ` +
@@ -696,7 +819,7 @@ async function main() {
   // list, `scored`, which shares these objects) sees one consistent G. The RAW
   // cache is already on disk by this point and keeps the values as MEASURED,
   // which is what makes `--sweep-only` able to try a different window for free.
-  const searched = guard.denseMode === 'cosine' ? chooseWindow(scored, guard) : null
+  const searched = !LEXICAL_ONLY && guard.denseMode === 'cosine' ? chooseWindow(scored, guard) : null
   const win = searched ? searched.window : { cosFloor: guard.cosFloor, cosCeil: guard.cosCeil }
   if (searched) {
     regate(rows, win, guard).forEach((r, i) => Object.assign(rows[i], r))
@@ -713,6 +836,8 @@ async function main() {
           `${(100 * s.rampShare).toFixed(0)}%`,
       )
     }
+  } else if (LEXICAL_ONLY) {
+    console.log(`  window: not swept — cosFloor/cosCeil map a cosine, and there are none`)
   } else if (guard.denseMode === 'cosine') {
     console.log(
       `  window: no candidate of ${WINDOWS.length} yields a feasible tau above wLexical ` +
@@ -721,8 +846,12 @@ async function main() {
   }
   const guardOut = { ...guard, cosFloor: win.cosFloor, cosCeil: win.cosCeil }
 
-  const sweep = searched ? searched.sweep : TAU_STEPS.map((t) => sweepRow(scored, t, 'G'))
-  const best = searched ? searched.best : chooseTau(sweep)
+  // No hybrid sweep on a vectorless index. `sweepRow` compares `r.G < tau`, and
+  // `G` is null on every row here — `null < tau` is `0 < tau`, so the sweep would
+  // run to completion reporting every probe refused, and `chooseTau` would hand
+  // back a row that reads exactly like a measurement of a real distribution.
+  const sweep = LEXICAL_ONLY ? [] : searched ? searched.sweep : TAU_STEPS.map((t) => sweepRow(scored, t, 'G'))
+  const best = LEXICAL_ONLY ? null : searched ? searched.best : chooseTau(sweep)
   const tau = best ? best.tau : null
 
   const sweepLex = TAU_STEPS.map((t) => sweepRow(scored, t, 'G_lex'))
@@ -730,7 +859,11 @@ async function main() {
   const tauLexical = bestLex ? bestLex.tau : null
 
   const fails = []
-  if (tau === null || tau < 0.05) {
+  // `no-feasible-tau` diagnoses a score function that cannot separate this corpus.
+  // A null tau on a vectorless index diagnoses nothing — half the score function
+  // is absent by construction — and failing the run for it would leave the one
+  // threshold this index does use, `tauLexical`, unwritten.
+  if (!LEXICAL_ONLY && (tau === null || tau < 0.05)) {
     fails.push({
       name: 'no-feasible-tau',
       detail:
@@ -816,6 +949,7 @@ async function main() {
     bestLex,
     tau,
     tauLexical,
+    lexicalOnly: LEXICAL_ONLY,
     fails,
     // Carries the SWEPT window, so `calibration.json` ships the pair that was
     // measured rather than the pair the index happened to be built with.
@@ -876,12 +1010,20 @@ function backlog(rows, tau, field = 'G') {
 }
 
 function report(ctx) {
-  const { rows, best, bestLex, tau, tauLexical, sweep, retrievalMissRate, withGold, misses, bounding } = ctx
+  const { rows, best, bestLex, tau, tauLexical, sweep, sweepLex, lexicalOnly, retrievalMissRate, withGold, misses, bounding } = ctx
   const line = (k, v) => console.log(`  ${String(k).padEnd(30)} ${v}`)
 
-  console.log('\n── sweep (every 5th step) ──────────────────────────────────────')
+  // The columns mean the same thing either way; what changes is the score under
+  // them. On a vectorless index there is no `G` sweep to print, and printing an
+  // empty table under the usual heading would read as a run that found nothing.
+  const shownSweep = lexicalOnly ? sweepLex : sweep
+  console.log(
+    lexicalOnly
+      ? '\n── sweep on G_lex (every 5th step) ─────────────────────────────'
+      : '\n── sweep (every 5th step) ──────────────────────────────────────',
+  )
   console.log('   tau    U ovr  UB95    S ovr  UB95    F ovr  UB95   negCaught  N4')
-  for (const r of sweep) {
+  for (const r of shownSweep) {
     if (Math.round(r.tau * 100) % 5) continue
     const c = (k) => `${String(r.byStratum[k].failures).padStart(3)}/${String(r.byStratum[k].n).padEnd(3)} ${num(r.byStratum[k].ub95)}`
     console.log(
@@ -891,7 +1033,12 @@ function report(ctx) {
   }
 
   console.log('\n── chosen ──────────────────────────────────────────────────────')
-  line('tau (largest feasible)', tau === null ? 'NONE' : tau.toFixed(2))
+  // "NONE" means the sweep looked and found nothing shippable. On a vectorless
+  // index nothing was swept, and the two must not print the same word.
+  line(
+    'tau (largest feasible)',
+    lexicalOnly ? 'not measurable — index has no vectors' : tau === null ? 'NONE' : tau.toFixed(2),
+  )
   line('tauLexical', tauLexical === null ? 'NONE' : tauLexical.toFixed(2))
   if (best) {
     for (const k of POSITIVE_STRATA) {
@@ -909,7 +1056,13 @@ function report(ctx) {
     }
   }
   if (bestLex) {
-    console.log('\n  lexical-only (reported separately, never pooled — RAG-SPEC 3.2)')
+    // On a vectorless index this is not the degradation row RAG-SPEC 3.2 keeps
+    // unpooled — there is nothing to pool it with. It is the calibration.
+    console.log(
+      lexicalOnly
+        ? '\n  lexical-only — the whole of the gate on this index'
+        : '\n  lexical-only (reported separately, never pooled — RAG-SPEC 3.2)',
+    )
     for (const k of POSITIVE_STRATA) {
       const s = bestLex.byStratum[k]
       line(`  ${k} over-refusal`, `${s.failures}/${s.n}  UB95 ${num(s.ub95)}`)
@@ -938,7 +1091,7 @@ function nForFailures(bound, f) {
 }
 
 function buildDoc(ctx) {
-  const { rows, scored, sweep, sweepLex, best, bestLex, tau, tauLexical, guard, index, zexp, retrievalMissRate, withGold, misses, probeFile, fails, bounding, withoutBounding } = ctx
+  const { rows, scored, sweep, sweepLex, best, bestLex, tau, tauLexical, lexicalOnly, guard, index, zexp, retrievalMissRate, withGold, misses, probeFile, fails, bounding, withoutBounding } = ctx
   const byStratumN = {}
   for (const k of Object.keys(STRATA)) {
     const n = rows.filter((r) => r.stratum === k).length
@@ -946,12 +1099,29 @@ function buildDoc(ctx) {
   }
   const spec = SPEC_SIZE
 
+  // The sweep row that describes the gate this index actually ships. On a
+  // vectorless index that is the lexical one — reporting a calibrated guard with
+  // no over-refusal and no precision beside it is the shape of an uncalibrated
+  // one, and `source` already says which channel the numbers came off.
+  const measured = lexicalOnly ? bestLex : best
+
   const doc = {
     ok: fails.length === 0,
     fails,
     version: 1,
     calibratedAt: index.manifest.hash,
     embedModel: index.manifest.embedModel,
+    /**
+     * Whether the index this was measured on has vectors at all.
+     *
+     * `guard.tau: null` alone is ambiguous in the one way that matters: it is
+     * also what a hybrid run writes when no threshold in the grid is feasible,
+     * and that is a FAILURE that must be fixed, while this is a measurement that
+     * is finished. `embedModel: null` implies it but does not say it, and
+     * RAG-SPEC 6 keeps `manifest.vectors` as the single signal for this — so it
+     * is restated here rather than re-derived by every reader of this file.
+     */
+    lexicalOnly,
     chunkCount: index.manifest.chunkCount,
     probeFile,
     probeCount: rows.length,
@@ -968,12 +1138,17 @@ function buildDoc(ctx) {
       // NOT "calibrated": the probe set is below the RAG-SPEC 5.6 size, so the
       // UB95 intervals are wider than the spec sized them for. The suffix, and
       // the per-stratum n above, are what stop this being read as the full run.
-      source: 'calibrated-reduced',
+      //
+      // The lexical-only variant says which half of the guard was measured. Half
+      // of it — `tau`, `cosFloor`, `cosCeil`, `zexp` — is not stale here, it was
+      // never measurable, and a `source` that did not distinguish the two would
+      // make an untouched provisional value read as a calibrated one.
+      source: lexicalOnly ? 'calibrated-reduced-lexical' : 'calibrated-reduced',
       calibratedAt: index.manifest.hash,
       zexp,
       zexpSource: zexp.length >= 2 ? 'measured' : 'closed-form',
-      overRefusalUB95: best ? best.byStratum.U.ub95 : null,
-      gatePrecision: best ? best.gatePrecision : null,
+      overRefusalUB95: measured ? measured.byStratum.U.ub95 : null,
+      gatePrecision: measured ? measured.gatePrecision : null,
     },
     // Each bound with the arithmetic that decides whether it can bind at all.
     // `tolerates` is the number of failures the stratum's own n can absorb —
@@ -1015,19 +1190,36 @@ function buildDoc(ctx) {
     retrievalMisses: { rate: retrievalMissRate, n: withGold, ids: misses.map((r) => r.id) },
     boundingProbes: bounding,
     tauWithoutBoundingProbes: withoutBounding ? withoutBounding.tau : null,
-    backlog: backlog(scored, tau, 'G'),
-    sweep: sweep.map((r) => ({
-      tau: r.tau,
-      feasible: r.feasible,
-      gatePrecision: r.gatePrecision,
-      blatantRefusalRate: r.blatantRefusalRate,
-      byStratum: Object.fromEntries(
-        Object.entries(r.byStratum).map(([k, v]) => [k, { failures: v.failures, n: v.n, ub95: v.ub95 }]),
-      ),
-    })),
+    // The backlog is the positives nearest the threshold a reader will actually
+    // be gated by. On a vectorless index that is `tauLexical` over `G_lex`; asked
+    // for `G` it would sort ten nulls and hand back a list of them.
+    backlog: lexicalOnly ? backlog(scored, tauLexical, 'G_lex') : backlog(scored, tau, 'G'),
+    sweep: sweep.map(sweepDoc),
+    /**
+     * The step-7 sweep, which had no record on disk at all — only a four-row
+     * table in the markdown.
+     *
+     * `chosenLexical` names the row that was taken without showing how close the
+     * alternatives were, so `tauLexical` could not be re-derived or second-guessed
+     * from this file the way `tau` always could. On a vectorless index it is the
+     * only sweep there is, which is what made the omission worth fixing rather
+     * than worth noting.
+     */
+    sweepLexical: sweepLex.map(sweepDoc),
   }
   return doc
 }
+
+/** One sweep row as `calibration.json` records it — both sweeps, one shape. */
+const sweepDoc = (r) => ({
+  tau: r.tau,
+  feasible: r.feasible,
+  gatePrecision: r.gatePrecision,
+  blatantRefusalRate: r.blatantRefusalRate,
+  byStratum: Object.fromEntries(
+    Object.entries(r.byStratum).map(([k, v]) => [k, { failures: v.failures, n: v.n, ub95: v.ub95 }]),
+  ),
+})
 function markdown(doc, ctx) {
   const { rows, scored, sweep, sweepLex, best, bestLex, misses } = ctx
   const L = []
@@ -1036,11 +1228,43 @@ function markdown(doc, ctx) {
   const t2 = (v) => (v == null ? '**NONE**' : v.toFixed(2))
   const questionOf = (id) => (QUESTIONS.get(id) || '').replace(/\|/g, '\\|').slice(0, 88)
 
+  /**
+   * On a vectorless index every "at the chosen tau" section below is about
+   * `tauLexical` over `G_lex`, because that pair IS the shipped gate — there is
+   * no second one to keep it separate from. Named once here: `G` is null on
+   * every row of such a run, and a table that read it would print a column of
+   * dashes under a heading claiming to describe the gate.
+   */
+  const chosen = doc.lexicalOnly ? bestLex : best
+  const gField = doc.lexicalOnly ? 'G_lex' : 'G'
+  const uField = doc.lexicalOnly ? 'unscopedG_lex' : 'unscopedG'
+  const chosenTau = doc.lexicalOnly ? doc.guard.tauLexical : doc.guard.tau
+
   L.push(`# Gate calibration — \`${doc.calibratedAt}\``)
   L.push('')
-  L.push(`Produced by \`npx docpilot calibrate\` (RAG-SPEC 5.6). Embed endpoint only — no chat`)
-  L.push(`model, no LLM judge, no unseeded randomness. Same corpus + same probes ⇒ same output.`)
+  L.push(
+    `Produced by \`npx docpilot calibrate\` (RAG-SPEC 5.6). ` +
+      (doc.lexicalOnly
+        ? `No endpoint contacted at all — no embedder, no chat model,`
+        : `Embed endpoint only — no chat model,`),
+  )
+  L.push(`no LLM judge, no unseeded randomness. Same corpus + same probes ⇒ same output.`)
   L.push('')
+
+  if (doc.lexicalOnly) {
+    L.push(`> ## Lexical-only index`)
+    L.push(`>`)
+    L.push(`> \`${doc.calibratedAt}\` was built with \`--no-embed\` and carries no vectors, so`)
+    L.push(`> there is no dense channel to put a threshold on: **\`tau\` is null**, and null`)
+    L.push(`> here means *not measurable*, not *measured and rejected*. \`tauLexical\` below is`)
+    L.push(`> the only threshold this run produces, and on this index it is the only one the`)
+    L.push(`> gate ever consults — \`G = L\` for every question.`)
+    L.push(`>`)
+    L.push(`> The lexical channel scores \`L = 0\` for a question asked in a language the corpus`)
+    L.push(`> is not written in, whatever the answer is worth. Every over-refusal number below`)
+    L.push(`> is to be read against that, and it is a property of the mode, not of \`tauLexical\`.`)
+    L.push('')
+  }
 
   if (!doc.ok) {
     L.push(`> ## CALIBRATION FAILED`)
@@ -1057,14 +1281,21 @@ function markdown(doc, ctx) {
 
   L.push(`| | |`)
   L.push(`|---|---|`)
-  L.push(`| index | \`${doc.calibratedAt}\`, ${doc.chunkCount} chunks, ${doc.embedModel} |`)
+  L.push(
+    `| index | \`${doc.calibratedAt}\`, ${doc.chunkCount} chunks, ` +
+      `${doc.lexicalOnly ? 'no embedder (BM25 only)' : doc.embedModel} |`,
+  )
   L.push(`| probes | ${doc.probeCount} from \`${doc.probeFile}\` |`)
-  L.push(`| **tau** | **${t2(doc.guard.tau)}** |`)
+  L.push(
+    `| **tau** | ${doc.lexicalOnly ? '— *not measurable, no dense channel*' : `**${t2(doc.guard.tau)}**`} |`,
+  )
   L.push(`| **tauLexical** | **${t2(doc.guard.tauLexical)}** |`)
   L.push(`| wDense / wLexical | ${doc.guard.wDense} / ${doc.guard.wLexical} |`)
-  L.push(`| denseMode | ${doc.guard.denseMode}, window [${doc.guard.cosFloor}, ${doc.guard.cosCeil}] |`)
+  L.push(
+    `| denseMode | ${doc.lexicalOnly ? 'none — the index has no vectors' : `${doc.guard.denseMode}, window [${doc.guard.cosFloor}, ${doc.guard.cosCeil}]`} |`,
+  )
   L.push(`| source | \`${doc.guard.source}\` |`)
-  L.push(`| gatePrecision | ${p(doc.guard.gatePrecision)} (target 60%, never a constraint) |`)
+  L.push(`| gatePrecision | ${p(chosen?.gatePrecision)} (target 60%, never a constraint) |`)
   L.push('')
 
   L.push(`## Probe set, and what the reduction costs`)
@@ -1098,8 +1329,14 @@ function markdown(doc, ctx) {
     )
   }
   L.push('')
+  if (doc.lexicalOnly) {
+    L.push(`None of the three bind on this index. \`chooseTauLexical\` does not test feasibility:`)
+    L.push(`RAG-SPEC 3.2 makes the single-channel invariant unsatisfiable by construction with`)
+    L.push(`dense disabled, so the ceilings above are there to be read against, not cleared.`)
+    L.push('')
+  }
   const zeroTol = Object.entries(doc.bounds).filter(([, b]) => b.tolerates === 0)
-  if (zeroTol.length) {
+  if (zeroTol.length && !doc.lexicalOnly) {
     L.push(
       `${zeroTol.map(([m]) => `\`${m}\``).join(' and ')} tolerate **zero** failures at this n: a ` +
         `single refused probe decides \`tau\`. That is the outcome RAG-SPEC 5.4 introduced UB95 ` +
@@ -1112,29 +1349,37 @@ function markdown(doc, ctx) {
 
   L.push(`## Sweep (RAG-SPEC 5.6 step 3)`)
   L.push('')
-  L.push(`\`X\` probes are scored on refusal alone, cause-agnostic, during the sweep —`)
-  L.push(`\`wouldPassUnscoped\` is itself a function of tau. The cause is checked once, below.`)
-  L.push(`Positives that are \`retrievalMisses\` are excluded from the three bounds (RAG-SPEC 5.4).`)
-  L.push('')
-  L.push(`| tau | U | UB95 | S | UB95 | F | UB95 | gatePrecision | N4 | feasible |`)
-  L.push(`|---|---|---|---|---|---|---|---|---|---|`)
-  for (const r of sweep) {
-    if (Math.round(r.tau * 100) % 5 && (doc.guard.tau == null || Math.abs(r.tau - doc.guard.tau) > 1e-9)) continue
-    const c = (k) => `${r.byStratum[k].failures}/${r.byStratum[k].n}`
-    L.push(
-      `| ${r.tau.toFixed(2)} | ${c('U')} | ${n3(r.byStratum.U.ub95)} | ${c('S')} | ` +
-        `${n3(r.byStratum.S.ub95)} | ${c('F')} | ${n3(r.byStratum.F.ub95)} | ` +
-        `${p(r.gatePrecision)} | ${p(r.blatantRefusalRate)} | ${r.feasible ? 'yes' : ''} |`,
-    )
+  if (doc.lexicalOnly) {
+    L.push(`Not run. \`G = wDense·D + wLexical·L\` has no \`D\` on this index, so there is no`)
+    L.push(`hybrid threshold to sweep for. The sweep that WAS run is on \`G_lex\`, and it is in`)
+    L.push(`[Lexical-only](#lexical-only-rag-spec-56-step-7) below — the same table, over the`)
+    L.push(`only score this deployment computes.`)
+    L.push('')
+  } else {
+    L.push(`\`X\` probes are scored on refusal alone, cause-agnostic, during the sweep —`)
+    L.push(`\`wouldPassUnscoped\` is itself a function of tau. The cause is checked once, below.`)
+    L.push(`Positives that are \`retrievalMisses\` are excluded from the three bounds (RAG-SPEC 5.4).`)
+    L.push('')
+    L.push(`| tau | U | UB95 | S | UB95 | F | UB95 | gatePrecision | N4 | feasible |`)
+    L.push(`|---|---|---|---|---|---|---|---|---|---|`)
+    for (const r of sweep) {
+      if (Math.round(r.tau * 100) % 5 && (doc.guard.tau == null || Math.abs(r.tau - doc.guard.tau) > 1e-9)) continue
+      const c = (k) => `${r.byStratum[k].failures}/${r.byStratum[k].n}`
+      L.push(
+        `| ${r.tau.toFixed(2)} | ${c('U')} | ${n3(r.byStratum.U.ub95)} | ${c('S')} | ` +
+          `${n3(r.byStratum.S.ub95)} | ${c('F')} | ${n3(r.byStratum.F.ub95)} | ` +
+          `${p(r.gatePrecision)} | ${p(r.blatantRefusalRate)} | ${r.feasible ? 'yes' : ''} |`,
+      )
+    }
+    L.push('')
   }
-  L.push('')
 
-  L.push(`## Every stratum at the chosen tau`)
+  L.push(`## Every stratum at the chosen ${doc.lexicalOnly ? 'tauLexical' : 'tau'}`)
   L.push('')
   L.push(`| stratum | what it is | n | correct | wrong |`)
   L.push(`|---|---|---|---|---|`)
   for (const [k, v] of Object.entries(STRATA)) {
-    const s = best?.byStratum[k]
+    const s = chosen?.byStratum[k]
     if (!s?.n) continue
     L.push(
       `| ${k} | ${v.label} | ${s.n} | ${p(1 - s.rate)} | ${s.failures}` +
@@ -1142,25 +1387,26 @@ function markdown(doc, ctx) {
     )
   }
   L.push('')
-  L.push(`\`gatePrecision\` **${p(best?.gatePrecision)}** against a target of 60%. RAG-SPEC 5.6`)
-  L.push(`step 6: it may never justify raising tau past step 4, and \`chooseTau()\` is not given`)
-  L.push(`the number — the constraint is structural, not a promise.`)
+  L.push(`\`gatePrecision\` **${p(chosen?.gatePrecision)}** against a target of 60%. RAG-SPEC 5.6`)
+  L.push(`step 6: it may never justify raising the threshold past the rule that chose it, and`)
+  L.push(`\`${doc.lexicalOnly ? 'chooseTauLexical' : 'chooseTau'}()\` is not given the number — the`)
+  L.push(`constraint is structural, not a promise.`)
   L.push('')
 
-  L.push(`### Where the strata sit on the G axis`)
+  L.push(`### Where the strata sit on the ${gField} axis`)
   L.push('')
   L.push(`The separability question, before any threshold is chosen.`)
   L.push('')
-  L.push(`| stratum | min G | median G | max G |`)
+  L.push(`| stratum | min ${gField} | median ${gField} | max ${gField} |`)
   L.push(`|---|---|---|---|`)
   for (const k of Object.keys(STRATA)) {
-    const g = rows.filter((r) => r.stratum === k).map((r) => r.G).sort((a, b) => a - b)
+    const g = rows.filter((r) => r.stratum === k).map((r) => r[gField]).sort((a, b) => a - b)
     if (!g.length) continue
     L.push(`| ${k} | ${n3(g[0])} | ${n3(g[g.length >> 1])} | ${n3(g[g.length - 1])} |`)
   }
   L.push('')
 
-  L.push(`## The probes that bound the chosen tau`)
+  L.push(`## The probes that bound the chosen ${doc.lexicalOnly ? 'threshold' : 'tau'}`)
   L.push('')
   if (doc.boundingProbes.blocked.length) {
     L.push(
@@ -1187,45 +1433,69 @@ function markdown(doc, ctx) {
       )
       L.push('')
     }
+  } else if (doc.lexicalOnly) {
+    L.push(`\`tau\` is not measured on this index, so nothing bounds it. \`tauLexical\` is not`)
+    L.push(`bounded by a probe either: \`chooseTauLexical\` takes the smallest threshold clearing`)
+    L.push(`the \`N4\` floor, so what pins it is the blatant stratum, not a positive one.`)
+    L.push('')
   } else {
     L.push(`No positive probe flips at tau + 0.01, so \`tau\` is not bounded by a named probe.`)
     L.push('')
   }
 
-  L.push(`## Over-refusal backlog — the ten positives closest to tau`)
+  L.push(`## Over-refusal backlog — the ten positives closest to ${doc.lexicalOnly ? 'tauLexical' : 'tau'}`)
   L.push('')
-  L.push(`These pass today with the least margin: the first questions a reader loses if \`tau\``)
-  L.push(`moves, and the shortlist for a documentation fix.`)
+  L.push(`These pass today with the least margin: the first questions a reader loses if the`)
+  L.push(`threshold moves, and the shortlist for a documentation fix.`)
   L.push('')
-  L.push(`| probe | stratum | G | margin | question |`)
+  L.push(`| probe | stratum | ${gField} | margin | question |`)
   L.push(`|---|---|---|---|---|`)
   for (const b of doc.backlog) {
     L.push(`| \`${b.id}\` | ${b.stratum} | ${n3(b.G)} | ${n3(b.margin)} | ${questionOf(b.id)} |`)
   }
   L.push('')
 
-  L.push(`## Refusal causes at the chosen tau (RAG-SPEC 5.6 step 3)`)
+  L.push(`## Refusal causes at the chosen ${doc.lexicalOnly ? 'tauLexical' : 'tau'} (RAG-SPEC 5.6 step 3)`)
   L.push('')
   L.push(`\`X\` was scored cause-agnostically during the sweep. Here the cause is checked once:`)
-  L.push(`a refused \`X\` probe whose \`wouldPassUnscoped\` is false at this tau is a`)
+  L.push(`a refused \`X\` probe whose \`wouldPassUnscoped\` is false at this threshold is a`)
   L.push(`**stratum-authoring miss**, not a gate failure.`)
   L.push('')
+  if (doc.lexicalOnly) {
+    // Not a caveat about this report — a property of the runtime the report
+    // describes. `evaluate()` derives unscopedG from the UNSCOPED dense cosines
+    // and skips it when there are none, so on a vectorless index the panel
+    // cannot offer the widen affordance either. Reporting every refusal as an
+    // authoring miss would blame the probe set for that.
+    L.push(`\`wouldPassUnscoped\` is **not derivable** here. It comes from the best cosine over`)
+    L.push(`the whole corpus, and this index has no cosines — which is also why the panel`)
+    L.push(`cannot offer "search all docs" on a refusal in this mode. Every \`X\` probe below is`)
+    L.push(`therefore scored on refusal alone, and the \`refuse:out-of-scope\` cause is out of`)
+    L.push(`reach for the deployment as well as for the report.`)
+    L.push('')
+  }
   L.push(`| probe | refused | wouldPassUnscoped | cause | verdict |`)
   L.push(`|---|---|---|---|---|`)
   for (const r of rows.filter((x) => x.stratum === 'X')) {
-    const refused = doc.guard.tau != null && r.G < doc.guard.tau
-    const wpu = r.unscopedG != null && doc.guard.tau != null && r.unscopedG >= doc.guard.tau
+    const refused = chosenTau != null && r[gField] < chosenTau
+    const wpu = r[uField] != null && chosenTau != null && r[uField] >= chosenTau
     const cause = !refused ? '—' : wpu ? '`refuse:out-of-scope`' : '`refuse:no-evidence`'
-    const verdict = !refused ? 'ESCAPED' : wpu ? 'correct' : 'authoring miss'
+    const verdict = !refused ? 'ESCAPED' : doc.lexicalOnly ? 'correct' : wpu ? 'correct' : 'authoring miss'
     L.push(`| \`${r.id}\` | ${refused ? 'yes' : 'no'} | ${wpu ? 'yes' : 'no'} | ${cause} | ${verdict} |`)
   }
   L.push('')
 
   L.push(`## Lexical-only (RAG-SPEC 5.6 step 7)`)
   L.push('')
-  L.push(`Dense disabled — the mode RAG-SPEC 3.2 defines for an unreachable embedder, where`)
-  L.push(`\`G = L\` against \`tauLexical\`. Its rates are reported here and **never pooled**`)
-  L.push(`with the hybrid numbers.`)
+  if (doc.lexicalOnly) {
+    L.push(`Not a degradation on this index — the whole of the gate. There is no hybrid row to`)
+    L.push(`keep these numbers out of, and \`G = L\` against \`tauLexical\` is what every reader of`)
+    L.push(`this site is scored by.`)
+  } else {
+    L.push(`Dense disabled — the mode RAG-SPEC 3.2 defines for an unreachable embedder, where`)
+    L.push(`\`G = L\` against \`tauLexical\`. Its rates are reported here and **never pooled**`)
+    L.push(`with the hybrid numbers.`)
+  }
   L.push('')
   L.push(`Step 4's selection rule is not repeated literally: RAG-SPEC 3.2 says the`)
   L.push(`single-channel invariant is *unsatisfiable by construction* in this mode, and`)
@@ -1248,22 +1518,48 @@ function markdown(doc, ctx) {
   L.push(`| blatantRefusalRate | ${p(bestLex?.blatantRefusalRate)} | >= 80% |`)
   L.push('')
 
-  L.push(`## zExp ladder (RAG-SPEC 3.4.1)`)
+  L.push(`### The \`G_lex\` sweep`)
   L.push('')
-  L.push(`Median of \`(max c − m)/s\` over the unscoped positives, at real page-contiguous`)
-  L.push(`scopes — never random chunk samples, because adjacent paragraphs of one page are`)
-  L.push(`exactly the correlation the ladder exists to measure.`)
+  L.push(`Every fifth step, plus the chosen row. \`chooseTauLexical\` reads the \`N4\` column and`)
+  L.push(`nothing else, so this is where the over-refusal it costs becomes visible.`)
   L.push('')
-  L.push(`| n | z | closed form sqrt(2·ln n) |`)
-  L.push(`|---|---|---|`)
-  for (const e of doc.guard.zexp) {
-    L.push(`| ${e.n} | ${e.z} | ${Math.sqrt(2 * Math.log(Math.max(e.n, 2))).toFixed(4)} |`)
+  L.push(`| tauLexical | U | UB95 | S | UB95 | F | UB95 | gatePrecision | N4 |`)
+  L.push(`|---|---|---|---|---|---|---|---|---|`)
+  for (const r of sweepLex) {
+    if (Math.round(r.tau * 100) % 5 && (doc.guard.tauLexical == null || Math.abs(r.tau - doc.guard.tauLexical) > 1e-9)) continue
+    const c = (k) => `${r.byStratum[k].failures}/${r.byStratum[k].n}`
+    L.push(
+      `| ${r.tau.toFixed(2)} | ${c('U')} | ${n3(r.byStratum.U.ub95)} | ${c('S')} | ` +
+        `${n3(r.byStratum.S.ub95)} | ${c('F')} | ${n3(r.byStratum.F.ub95)} | ` +
+        `${p(r.gatePrecision)} | ${p(r.blatantRefusalRate)} |`,
+    )
   }
   L.push('')
-  L.push(`\`denseMode\` is \`${doc.guard.denseMode}\` on this index, so the ladder is **inert**:`)
-  L.push(`\`zExp(n)\` is only consulted in \`zscore\` mode. It is measured and recorded anyway so`)
-  L.push(`that a swap to an anisotropic embed model cannot silently inherit the closed form.`)
+
+  L.push(`## zExp ladder (RAG-SPEC 3.4.1)`)
   L.push('')
+  if (doc.lexicalOnly) {
+    L.push(`Not measured. The ladder is the median of \`(max c − m)/s\` over cosines and this`)
+    L.push(`index has none, so \`zexp\` is empty rather than stale. \`zExp(n)\` is consulted only`)
+    L.push(`in \`zscore\` mode, which a vectorless index can never be in — build one with an`)
+    L.push(`embedder and \`calibrate\` measures the ladder on that index, not on this one.`)
+    L.push('')
+  } else {
+    L.push(`Median of \`(max c − m)/s\` over the unscoped positives, at real page-contiguous`)
+    L.push(`scopes — never random chunk samples, because adjacent paragraphs of one page are`)
+    L.push(`exactly the correlation the ladder exists to measure.`)
+    L.push('')
+    L.push(`| n | z | closed form sqrt(2·ln n) |`)
+    L.push(`|---|---|---|`)
+    for (const e of doc.guard.zexp) {
+      L.push(`| ${e.n} | ${e.z} | ${Math.sqrt(2 * Math.log(Math.max(e.n, 2))).toFixed(4)} |`)
+    }
+    L.push('')
+    L.push(`\`denseMode\` is \`${doc.guard.denseMode}\` on this index, so the ladder is **inert**:`)
+    L.push(`\`zExp(n)\` is only consulted in \`zscore\` mode. It is measured and recorded anyway so`)
+    L.push(`that a swap to an anisotropic embed model cannot silently inherit the closed form.`)
+    L.push('')
+  }
 
   L.push(`## retrievalMisses`)
   L.push('')
@@ -1278,6 +1574,12 @@ function markdown(doc, ctx) {
   L.push(`Measured at PAGE level through \`retrieval.closest()\`: RAG-SPEC 5.6 step 1 gives the`)
   L.push(`probe set no gold chunk ids, so \`gold_page\` is the granularity available. Page level`)
   L.push(`is the more forgiving of the two — a miss reported here is a miss at chunk level too.`)
+  if (doc.lexicalOnly) {
+    L.push('')
+    L.push(`Over the **lexical top-20 only**. A miss here is a page BM25 cannot reach at any`)
+    L.push(`threshold, so it is excluded from \`tauLexical\` for the same reason a hybrid run`)
+    L.push(`excludes one from \`tau\`: it measures the probe set, not the gate.`)
+  }
   L.push('')
   return L.join('\n')
 }

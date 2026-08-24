@@ -14,9 +14,11 @@ Three surfaces, all of them same-origin:
 | `/rag/*` | the retrieval index: `manifest.json`, `chunks-NN.<hash>.json`, `vectors.<hash>.bin`, `df.<hash>.json` | the panel opens and says *AI answers are off in this environment* |
 | `/ai/…` | two POST endpoints, forwarded upstream with your key attached | every question fails after the gate has already passed it |
 
+A site configured [`embed: false`](/reference/config#embed-false) ships one file fewer and one endpoint fewer: there is no `vectors.<hash>.bin`, and `/ai/` carries the chat route alone. `npx docpilot doctor --proxy` prints the contract for the configuration you actually have, so use its output rather than this table when the two disagree.
+
 Only the third needs a program in front of the files. The first two are static, and the index is fetched **lazily** — nothing under `/rag/` is requested until a reader opens the panel for the first time, so a reader who never asks a question pays nothing.
 
-The index paths are absolute from the **origin root**, not from the site's `base`. See [a site under a base path](#a-site-under-a-base-path).
+The index paths above are absolute from the origin root, which is what a site served from `/` fetches. A site under a prefix fetches from under that prefix instead — see [a site under a base path](#a-site-under-a-base-path).
 
 ## Ask what the contract is
 
@@ -58,7 +60,7 @@ A fully local setup (Ollama for both halves) prints `none needed`: the browser c
 
 ## nginx
 
-The whole site, including the two rules above. `docpilot-common.conf` holds everything both endpoints share, so a fix lands in one place.
+The whole site, including the two rules above, in two files you write. The second block is everything both endpoints share, pulled out so a fix lands in one place; this page calls it `docpilot-common.conf` and the `include` path is whatever you name it.
 
 ```nginx
 # http {} — the zones have to be declared outside the server block
@@ -146,14 +148,14 @@ The upstream host needs a `resolver` only if it is resolved at runtime — that 
 
 ## Serving the index
 
-`npx docpilot index` writes four kinds of file into `docs/public/rag`, and VitePress copies `public/` to the site root:
+`npx docpilot index` writes four kinds of file into `docs/public/rag` — three of them on a [vectorless index](/reference/config#embed-false) — and VitePress copies `public/` to the site root:
 
 | file | cache | notes |
 |---|---|---|
 | `manifest.json` | `no-cache` | unhashed, names every other file, 64 KB at most — the indexer refuses to write a larger one |
 | `chunks-NN.<hash>.json` | `immutable` | the text, 250 chunks per shard; compresses well with gzip |
 | `df.<hash>.json` | `immutable` | document frequencies for the lexical half |
-| `vectors.<hash>.bin` | `immutable` | `chunkCount × dims` bytes, Int8 |
+| `vectors.<hash>.bin` | `immutable` | `chunkCount × dims` bytes, Int8 — absent on an index built `--no-embed` |
 
 `vectors.bin` is quantised already — 2,000 chunks at 1,024 dimensions is 2 MB — and compressing it again buys a few percent for real CPU. Leave it out of `gzip_types`, and make sure nothing in front of your host *transforms* it: a CDN "optimisation" that rewrites a response body corrupts the vectors, and the panel reports a buffer-length mismatch rather than a bad byte.
 
@@ -161,7 +163,10 @@ Everything but `manifest.json` carries a content hash, so a deploy that overwrit
 
 ## Docker
 
-Two stages: build the site with Node, serve it with nginx. `deploy/docs.conf.template` is the server block above with its two `limit_*_zone` lines at the top — a file in `conf.d/` is already inside `http`, so that is where they belong — and `deploy/docpilot-common.conf` is the shared file verbatim.
+Two stages: build the site with Node, serve it with nginx. **Nothing here is copied out of this package** — the two files the second stage needs are the two nginx blocks above, saved into your own build context. The `COPY` lines below expect them in a `nginx/` directory beside the `Dockerfile`; any layout works as long as the source paths match what you wrote.
+
+- `nginx/docs.conf.template` — the server block above with its two `limit_*_zone` lines moved to the top. A file dropped in `conf.d/` is already inside `http`, which is the context those two directives require.
+- `nginx/docpilot-common.conf` — the shared block above, verbatim.
 
 The interesting half is the index: `docpilot index` calls an embedding endpoint, so the build stage needs one reachable and a key that must not end up in a layer.
 
@@ -181,8 +186,8 @@ RUN npm run docs:build
 
 FROM nginx:1.27-alpine
 COPY --from=build /app/docs/.vitepress/dist /srv/docs
-COPY deploy/docpilot-common.conf /etc/nginx/docpilot-common.conf
-COPY deploy/docs.conf.template /etc/nginx/templates/docs.conf.template
+COPY nginx/docpilot-common.conf /etc/nginx/docpilot-common.conf
+COPY nginx/docs.conf.template /etc/nginx/templates/docs.conf.template
 # The nginx image runs envsubst over /etc/nginx/templates/*.template at startup
 # and writes the result into conf.d/. The filter limits substitution to this one
 # variable, so nginx's own $host and $binary_remote_addr survive it.
@@ -230,16 +235,40 @@ The index is a build artifact, not a source file — it is megabytes of quantise
 
 ## A site under a base path
 
-The panel fetches `/rag/manifest.json` and posts to `/ai/…` — both absolute from the origin root, and neither is rewritten by VitePress's `base`. A site served at `https://example.com/docs/` therefore needs those two prefixes at the root:
+A site served at `https://example.com/docs/` fetches its index from under that
+prefix, not from the origin root:
 
-```nginx
-location /rag/ {
-    alias /srv/docs/rag/;              # dist/rag, served at the origin root
-    add_header Cache-Control "public, max-age=31536000, immutable";
+```js
+export const docPilot = {
+  host: { base: '/docs/' },
 }
 ```
 
-`indexDir` moves where the index is **written**, not where it is **read**: the URL is fixed. If the origin root is not yours to configure, the panel cannot load its index there.
+That is the whole of it. `base` is applied at exactly two points — the index fetch
+and following a citation — so `/rag/manifest.json` becomes `/docs/rag/manifest.json`
+and a citation click lands on `/docs/guide/install`. On VitePress the theme reads
+the base from your build and you set nothing at all.
+
+If the index lives somewhere else entirely — a CDN, a separate origin — name it
+outright and the base is not consulted:
+
+```js
+host: { ragBase: 'https://cdn.example.com/rag' }
+```
+
+`indexDir` still moves only where the index is **written**. `host.ragBase` is where
+it is **read**.
+
+The `/ai/…` endpoints are a different question: those are same-origin paths your
+proxy owns, and they can sit wherever you put them — `llm.baseURL` in the client
+config is whatever path your `location` block matches.
+
+::: info This used to need a reverse-proxy workaround
+The panel fetched the literal `/rag/`, so a site under a base path had to mount
+that directory at the root of its origin with an nginx `alias` — and if the origin
+root was not yours to configure, the panel could not load its index at all. Both
+paths are configurable now.
+:::
 
 ## Content Security Policy
 
@@ -296,7 +325,7 @@ The rate limit still has to come from somewhere — the platform's own, or a cou
 
 ## Collecting feedback {#collecting-feedback}
 
-Set [`feedbackEndpoint`](/reference/config#feedbackendpoint-and-feedback) and every vote is POSTed to it as JSON. **This package ships no database driver and no receiver** — the endpoint is yours, the storage is yours, and what you keep is your decision. What follows is the contract, not a component.
+Set [`feedbackEndpoint`](/reference/config#feedbackendpoint) and every vote is POSTed to it as JSON. **This package ships no database driver and no receiver** — the endpoint is yours, the storage is yours, and what you keep is your decision. What follows is the contract, not a component.
 
 ### Make it same-origin
 

@@ -53,8 +53,10 @@ visible in a report rather than invisible in behaviour.
 Defaults are held to the same standard. `maxIterations` is 2 because the cost of
 a turn grows with the square of its steps, measured at 5.9k prompt tokens and
 0.7k output against an 8192-token context. The full loop —
-`index → calibrate → lint → eval → bench` — exists so that a claim about answer
-quality has a number behind it. See
+`index → calibrate → lint → eval → bench`, with `tune` where it is retrieval that
+has to move, and then `index` again because that is the step that inlines
+`tuning.json` into the manifest a reader downloads — exists so that a claim about
+answer quality has a number behind it. See
 [Calibration and evaluation](./evaluation).
 
 ## Nothing dropped in silence

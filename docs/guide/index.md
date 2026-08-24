@@ -2,7 +2,7 @@
 
 ## Overview
 
-DocPilot is a grounded AI answer panel for VitePress documentation. It consists
+DocPilot is a grounded AI answer panel for documentation. It consists
 of three parts:
 
 - **A build step** that turns your markdown into a static retrieval index, and a
@@ -19,14 +19,29 @@ of three parts:
 
 The rationale is in [Why DocPilot](./why), and the rules the project holds itself
 to are in [Philosophy](./philosophy). What follows is the ten minutes it takes to
-have it running.
+have it running **on VitePress**.
+
+::: tip Not VitePress?
+Only the mounting differs. [Installing](/install/) has a page each for
+[Docusaurus](/install/docusaurus), [Vue](/install/vue), [React](/install/react),
+[JavaScript](/install/javascript), [TypeScript](/install/typescript) and a bare
+[`<script>` tag](/install/web) — and the config, the index and the calibration
+below are identical on all of them.
+:::
 
 ## Installing
 
-```bash
-npm i @cloflin/docpilot
-npx docpilot init
-```
+DocPilot needs **Node 20 or newer**; the package declares `engines.node: ">=20"`.
+
+| manager | install | init |
+|---|---|---|
+| npm | `npm i @cloflin/docpilot` | `npx docpilot init` |
+| Yarn | `yarn add @cloflin/docpilot` | `yarn docpilot init` |
+| pnpm | `pnpm add @cloflin/docpilot` | `pnpm exec docpilot init` |
+| Bun | `bun add @cloflin/docpilot` | `bunx docpilot init` |
+| Deno | `deno add npm:@cloflin/docpilot` | `deno run -A npm:@cloflin/docpilot init` |
+
+`pnpm exec`, not a bare `pnpm docpilot`: `pnpm run` executes the scripts in `package.json`, `pnpm exec` runs a bin. Every `init` line runs the bin the install line beside it just put in the project — none of them fetches the package a second time, and none of them runs the unscoped `docpilot`, which is a different name on the registry and not this package.
 
 `init` scaffolds the whole loop and never overwrites: `.env.example`, a starter golden set and calibration set under `docpilot/`, and the two authoring skills into `.claude/skills/`. Every file is reported as written or kept.
 
@@ -39,8 +54,7 @@ import { defineDocPilot } from '@cloflin/docpilot'
 
 export const docPilot = {
   product: 'Acme Editor',
-  chat:  { provider: 'openai', model: 'gpt-4o-mini' },
-  embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
+  chat: { provider: 'openai', model: 'gpt-4o-mini' },
 }
 
 const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
@@ -56,6 +70,8 @@ Two details are load-bearing.
 **`docPilot` is exported by name.** The CLI imports it from this file, so the index is built with the model the site queries with. A second copy of that decision is a copy that drifts, and the failure is silent: a query scored against a foreign vector space degrades retrieval to keyword matching, and a calibrated gate then refuses questions your docs can answer, with nothing in the UI to say why.
 
 **`loadEnv` is called by you, not by the plugin.** `defineDocPilot` reads whatever object you hand it, defaulting to `process.env`. A package that decided which `.env` files your project has would be wrong for half of them.
+
+`embed` is absent on purpose. It defaults to `'auto'`, which embeds with the chat provider's own embedding model — `text-embedding-3-small` for OpenAI — so a single-provider setup needs no second decision and no second key. Where the chat provider serves no embeddings endpoint at all, `'auto'` borrows OpenRouter's free embedding pool and the build says so. Naming a second provider, or none, is [Choosing providers](./providers).
 
 `product` is optional and worth setting: it is what the assistant says it answers questions about, in the instruction and in the panel. Left out, everything reads "this documentation", which is correct and dull.
 
@@ -103,9 +119,12 @@ npx docpilot calibrate   # measure the refusal thresholds on YOUR corpus
 npx docpilot lint        # check the golden set against the index it measures
 npx docpilot eval        # run the golden set, write a report
 npx docpilot bench       # A/B two retrieval configurations, no key needed
+npx docpilot tune        # sweep the retrieval levers — and then index again
 ```
 
-The first two are what the panel needs to work at all. The last three are what tells you whether it works well, and they are the half that gets skipped — which is how a gate ends up shipping on provisional thresholds forever with nobody finding out.
+The first two are what the panel needs to work at all. The three after them are what tells you whether it works well, and they are the half that gets skipped — which is how a gate ends up shipping on provisional thresholds forever with nobody finding out.
+
+`tune` is for when it is retrieval itself that has to move: it sweeps the levers against the golden set into `docpilot/tuning.json`, with a report of the grid beside it. **Then run `index` again** — that is the step that inlines `tuning.json` into the manifest a reader downloads, and until it runs a swept lever is a file on disk and nothing more.
 
 ## Going to production
 
@@ -130,6 +149,8 @@ That is deliberate. A dependency that can break someone's docs build on the day 
 
 ## Next steps
 
+- A site that is not VitePress: [Installing](/install/).
+- Which highlighter colours the code in an answer: [Syntax highlighting](/reference/highlighting).
 - Two providers instead of one, or none at all: [Choosing providers](./providers).
 - What ends up in the index, and what to put in frontmatter to help it: [Building the index](./indexing).
 - What happens between a question and an answer: [How a turn works](/concepts/a-turn).

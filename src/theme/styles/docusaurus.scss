@@ -1,0 +1,97 @@
+/**
+ * The Docusaurus adapter — a mapping, and nothing else.
+ *
+ * Same two rules as the VitePress adapter, checked by the same lint:
+ *   1. `--dp-*` re-declared in terms of Infima's own tokens.
+ *   2. rules whose SELECTOR belongs to Docusaurus or to a highlighter.
+ *
+ * HOW IT WINS. By ORDER, not specificity — `:root` here and `:root` in the core
+ * are equal, and this file is loaded second. Which is also why the ENTIRE colour
+ * set is re-declared rather than the tokens that happen to differ: Docusaurus
+ * switches appearance with `[data-theme]` on `<html>` and lets a reader pin the
+ * site against their OS, so a token left out keeps the core's OS-driven value
+ * and paints one dark element into an otherwise light panel.
+ *
+ * WHY THIS FILE IS NOT IN `docpilot.scss`. That entry point is the VitePress
+ * bundle and is asserted to be exactly two `@use` lines. A second bundle would
+ * be a second thing to keep in step for no gain: the Docusaurus plugin lists
+ * `core.css` and then this file in `getClientModules()`, and the order the
+ * cascade needs is the order of two lines in a file this package owns.
+ */
+
+:root {
+  // ── Surfaces ────────────────────────────────────────────────────────────────
+  --dp-surface: var(--ifm-background-color);
+  // `--ifm-color-emphasis-100` rather than `--ifm-background-surface-color`:
+  // Infima flips the emphasis ramp between schemes, so 100 is a step away from
+  // the page in BOTH — which is what a raised surface has to be. The surface
+  // colour equals the background in Docusaurus's light theme, so mapping to it
+  // would make every raised object in the panel invisible in light mode.
+  --dp-surface-2: var(--ifm-color-emphasis-100);
+
+  // ── Line ────────────────────────────────────────────────────────────────────
+  --dp-line: var(--ifm-color-emphasis-300);
+
+  // ── Text ────────────────────────────────────────────────────────────────────
+  --dp-text: var(--ifm-font-color-base);
+  --dp-text-dim: var(--ifm-color-emphasis-700);
+  // Infima has no "text on an inverted fill" token. The inverted pair is used by
+  // toggles that are on and by the send button, so it has to read against
+  // `--dp-text` — which is what `--ifm-background-color` is by construction, in
+  // both schemes.
+  --dp-on-text: var(--ifm-background-color);
+
+  // ── Focus ───────────────────────────────────────────────────────────────────
+  --dp-focus: var(--ifm-color-primary);
+
+  // ── The single accent ───────────────────────────────────────────────────────
+  // Infima ships no soft brand fill, so this is the primary at low alpha rather
+  // than a second brand colour invented here. `color-mix` keeps it derived from
+  // whatever the site set its primary to.
+  --dp-accent-soft: color-mix(in srgb, var(--ifm-color-primary) 18%, transparent);
+
+  // ── Surfaces outside the panel ──────────────────────────────────────────────
+  --dp-chip: var(--ifm-color-emphasis-100);
+  --dp-code-bg: var(--ifm-code-background);
+  --dp-shadow: var(--ifm-global-shadow-lw);
+  // Infima has no backdrop token. Declared anyway, and unconditionally: the rule
+  // above is that a token the core darkens must be re-declared here, and a scrim
+  // that kept its OS-driven value would be the one thing following the operating
+  // system on a site the reader pinned the other way.
+  --dp-scrim: rgba(0, 0, 0, 0.6);
+
+  --dp-font: var(--ifm-font-family-base);
+  --dp-font-mono: var(--ifm-font-family-monospace);
+
+  // ── Structure ───────────────────────────────────────────────────────────────
+  // The one non-colour mapping: the panel hangs below the fixed navbar.
+  --dp-top: var(--ifm-navbar-height);
+}
+
+/**
+ * Shiki, both halves — only reached by a Docusaurus site that chose it.
+ *
+ * The core picks a theme off `prefers-color-scheme`, which is the only signal
+ * available with no host. Docusaurus switches appearance with an ATTRIBUTE and
+ * lets a reader pin the site against their OS, so both branches have to be
+ * stated. `html:not([data-theme='dark'])` is not decoration: without it the
+ * core's dark-scheme rule stays in force on a site pinned to light, and the code
+ * in the panel is the one thing painted for a dark background.
+ *
+ * Prism and highlight.js need nothing here. Their colours come from the host's
+ * own stylesheet, which is already switched by whatever mechanism switches the
+ * host's own code blocks.
+ */
+html[data-theme='dark'] .docpilot__answer {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark, inherit);
+  }
+}
+
+html:not([data-theme='dark']) .docpilot__answer {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-light, inherit);
+  }
+}

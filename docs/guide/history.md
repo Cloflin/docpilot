@@ -42,7 +42,7 @@ Two keys, in two different storages:
 | `docpilot:history` | `localStorage` | the archive — every conversation, shared by every tab of the site |
 | `docpilot:conversation` | `sessionStorage` | which conversation *this tab* is showing |
 
-Both are on the reader's device, under your site's origin, and neither is ever sent anywhere. The one thing that leaves the browser is a vote — with whatever reasons and sentence the reader attached to it — and only when you have configured `feedbackEndpoint`. Which verdicts travel is [`feedback.send`](/reference/config#feedbackendpoint-and-feedback); `'none'` keeps the thumbs on screen and sends nothing at all.
+Both are on the reader's device, under your site's origin, and neither is ever sent anywhere. The one thing that leaves the browser is a vote — with whatever reasons and sentence the reader attached to it — and only when you have configured `feedbackEndpoint`. Which verdicts travel is [`feedback.send`](/reference/config#feedback-send); `'none'` keeps the thumbs on screen and sends nothing at all.
 
 ## Two tabs {#two-tabs}
 

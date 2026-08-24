@@ -20,11 +20,11 @@
  * the sentence means.
  */
 import { computed } from 'vue'
-import { useData } from 'vitepress'
 import * as session from '../docpilot/session.js'
+import { useHost } from '../docpilot/host.js'
 import { resolveI18n, t as translate, normaliseLocale } from '../docpilot/i18n.js'
 
-const { theme, lang } = useData()
+const { theme, lang } = useHost()
 const enabled = computed(() => theme.value?.docPilot?.enabled !== false)
 const open = () => session.open()
 

@@ -5,6 +5,7 @@
  *   npx docpilot bench emit  --config=base  --out=docpilot/bench/base.tasks.jsonl
  *   npx docpilot bench emit  --config=swept --out=docpilot/bench/swept.tasks.jsonl \
  *     DOCPILOT_RRF_K=5 …                                   (levers via the environment)
+ *   npx docpilot bench emit  --config=base  --level=low    (one tier of the golden set)
  *   npx docpilot bench score --tasks=a.jsonl,b.jsonl --answers=a.ans.jsonl,b.ans.jsonl
  *
  * WHAT THIS MEASURES, AND WHAT IT DOES NOT.
@@ -33,7 +34,8 @@ import path from 'node:path'
 
 import { assembleIndex } from '../theme/docpilot/store.js'
 import { embedQuery } from '../theme/docpilot/embed.js'
-import { createRetrieval } from '../theme/docpilot/retriever.js'
+import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
+import { excerptWindow, TRUNCATED_NOTE } from '../theme/docpilot/excerpt.js'
 import { buildMessages, finalNote, OBS_NOTE, promptHash } from '../theme/docpilot/prompt.js'
 import { computeSupport } from '../theme/docpilot/support.js'
 import { nodeEmbedTarget } from '../config.js'
@@ -46,6 +48,8 @@ import {
   underPath,
   mean,
 } from './metrics.js'
+
+import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 
 import { ROOT, RAG, GOLDEN, DOCPILOT_DIR, settings as docPilot } from '../cli-context.js'
 
@@ -86,15 +90,60 @@ const die = (m) => {
   process.exit(1)
 }
 
+/**
+ * Every flag `arg()` and `list()` read, with an example of the form it wants.
+ *
+ * `arg()` matches `--name=` and nothing else, so a bare `--name value` leaves the
+ * value as a stray positional and the flag reads as absent. On `--level` that is
+ * silent and destructive: `parseLevelArg(undefined)` returns `ultra`, so
+ * `bench emit --config=base --level low` emits all sixty answer tasks and — since
+ * `ultra` adds no `.<level>` segment — writes them over `base.tasks.jsonl`, the
+ * file the last comparison was scored on. `--out` and `--history` fail the same
+ * way into a default path, and `--tasks`/`--answers` into an empty list. The
+ * whole table is checked rather than `--level` alone because the shape of the
+ * mistake is the flag parser's, not any one flag's.
+ *
+ * cli.md promises that "an unknown tier is refused rather than defaulted, by
+ * every command that takes the flag"; a bare flag is the same promise.
+ */
+const VALUE_FLAGS = {
+  config: 'base',
+  level: 'low',
+  out: 'docpilot/bench/base.tasks.jsonl',
+  history: 'docpilot/bench/base.ans.jsonl',
+  tasks: 'a.tasks.jsonl,b.tasks.jsonl',
+  answers: 'a.ans.jsonl,b.ans.jsonl',
+  shards: '10',
+  dir: 'docpilot/bench',
+  stage: '2',
+  'runs-a': 'a.r1.jsonl,a.r2.jsonl',
+  'runs-b': 'b.r1.jsonl,b.r2.jsonl',
+  key: 'docpilot/bench/judge.key.jsonl',
+  verdicts: 'docpilot/bench/verdicts.jsonl',
+}
+for (const [name, example] of Object.entries(VALUE_FLAGS)) {
+  // Exact match: `--level` alone. `--level=low` and `--levelish` both start with
+  // the name and neither is the mistake being caught here.
+  if (process.argv.includes(`--${name}`)) die(`--${name} takes a value: --${name}=${example}`)
+}
+
 /** Same loader as eval/run.js — the index is the artefact, not a copy of it. */
 function loadIndex() {
   const manifest = JSON.parse(fs.readFileSync(path.join(RAG, 'manifest.json'), 'utf8'))
   const shards = manifest.shards.map((s) => JSON.parse(fs.readFileSync(path.join(RAG, s), 'utf8')))
-  // `.buffer` on a Buffer is NOT the file: Node pools small allocations, so for
-  // any vector blob under ~8 KB it is the whole pool and `assembleIndex`'s
-  // length check refuses the index. Slice to the view's own bytes.
-  const vecBuf = fs.readFileSync(path.join(RAG, manifest.vectors))
-  const vectorBuffer = vecBuf.buffer.slice(vecBuf.byteOffset, vecBuf.byteOffset + vecBuf.byteLength)
+  // A `--no-embed` index writes `vectors: null` and no blob beside it. This is
+  // the THIRD reader of the same artefact, and the one that kept the old
+  // unconditional read: `path.join` with a null name throws an ERR_INVALID_ARG_TYPE
+  // out of the top-level await, before a single one of this command's own
+  // diagnostics gets to run.
+  let vectorBuffer = null
+  if (manifest.vectors !== null) {
+    // `.buffer` on a Buffer is NOT the file: Node pools small allocations, so for
+    // any vector blob under ~8 KB it is the whole pool and `assembleIndex`'s
+    // length check refuses the index. Slice to the view's own bytes.
+    const vecBuf = fs.readFileSync(path.join(RAG, manifest.vectors))
+    vectorBuffer = vecBuf.buffer.slice(vecBuf.byteOffset, vecBuf.byteOffset + vecBuf.byteLength)
+  }
   const dfDoc = JSON.parse(fs.readFileSync(path.join(RAG, manifest.df), 'utf8'))
   return assembleIndex({ manifest, shards, vectorBuffer, dfDoc })
 }
@@ -122,9 +171,25 @@ function render(messages) {
 
 async function emit() {
   const config = arg('config') || die('emit needs --config=<name>')
+  // `parseLevelArg` throws rather than defaulting, and a throw out of an async
+  // main under top-level await prints a stack instead of the six legal values.
+  // The prefix is stripped because `die` already frames the line — it belongs to
+  // callers that print a bare one.
+  let level
+  try {
+    level = parseLevelArg(arg('level'))
+  } catch (e) {
+    die(e.message.replace(/^\[docpilot\] /, ''))
+  }
   // Defaulted rather than required: the bench directory is a resolved setting,
   // so there is nothing for the caller to decide the first time they run this.
-  const out = arg('out') || path.join(BENCH, `${config}.tasks.jsonl`)
+  //
+  // The `.<level>` segment is what keeps a smoke emit from silently overwriting
+  // the full task file the last comparison was scored on — two files whose names
+  // differ by nothing, holding 10 tasks and 60. `ultra` adds no segment, so the
+  // default path and every script that hard-codes it are untouched.
+  const suffix = level === DEFAULT_RUN_LEVEL ? '' : `.${level}`
+  const out = arg('out') || path.join(BENCH, `${config}${suffix}.tasks.jsonl`)
   const historyFile = arg('history', '')
 
   // Answers from an earlier pass, so a follow-up record can carry the turn it
@@ -139,13 +204,55 @@ async function emit() {
   }
 
   const index = loadIndex()
-  const records = golden().filter((r) => r.expect === 'answer')
+  /**
+   * The retrieval configuration this emit actually ran under, stamped onto every
+   * task it writes — the bench's answer to run.js's `leverFingerprint`.
+   *
+   * `resolveLevers` is the one implementation of env > tuning > literal, so these
+   * are by construction the values the retriever below ranked on. Without them a
+   * task file says which index and which prompt produced it and nothing about the
+   * levers, which is the one axis this bench exists to A/B: two `.tasks.jsonl`
+   * emitted a sweep apart are byte-different and give no account of why.
+   *
+   * `searchChars` joins them because it is the same kind of knob — it is what cuts
+   * each primed excerpt, so it moves the observation the answerer is scored on.
+   * The keys are sorted for the reason run.js sorts its own: a consumer comparing
+   * two of these on a JSON string must not see a key reordering as a lever move.
+   */
+  const levers = (() => {
+    const fields = { ...resolveLevers(index.manifest.tuning), searchChars: SEARCH_CHARS }
+    const out = {}
+    for (const k of Object.keys(fields).sort()) out[k] = fields[k]
+    return out
+  })()
+  // Level first, `expect` second. The two predicates commute — the set is the
+  // same either way — but they are not the same KIND of filter, and the order
+  // says which. The level is the population, chosen by the caller and shared
+  // with `docpilot eval --level=`, so a bench and an eval at the same tier start
+  // from the same records; `expect === 'answer'` is this mode's own restriction
+  // to the rows it can measure at all. Hence the count below reads "answer tasks
+  // within the pool", never "the pool".
+  const records = filterByLevel(golden(), level).filter((r) => r.expect === 'answer')
   const tasks = []
   let skippedGate = 0
 
   for (const rec of records) {
     const scope = scopeOf(rec)
-    const retrieval = createRetrieval({ index, scope, guard: index.manifest.guard })
+    // `tuning` is not optional here even though the parameter is — the same rule
+    // run.js's `probeRecords` states. The manifest carries what `docpilot tune`
+    // measured on THIS corpus and it is what the browser bundle resolves its
+    // levers from; omitting it primed every task with the package literals
+    // instead. On a corpus tuned to `GATE_K: 9` that is five excerpts where the
+    // shipped page sends nine, and those excerpts ARE the observation, the
+    // `citable` set and `sources` — so every answer-quality, support and citation
+    // number scored off this file was measured against a context nobody serves,
+    // under this deployment's index hash.
+    const retrieval = createRetrieval({
+      index,
+      scope,
+      guard: index.manifest.guard,
+      tuning: index.manifest.tuning,
+    })
 
     // A follow-up needs its previous turn answered first. Pass 1 emits that
     // question under `<id>#prev`; pass 2 (with --history) emits the real record.
@@ -179,26 +286,47 @@ async function emit() {
   fs.mkdirSync(path.dirname(out), { recursive: true })
   fs.writeFileSync(out, tasks.map((t) => JSON.stringify(t)).join('\n') + '\n')
   console.log(`\n  config ${config}  prompt ${PROMPT_HASH}  index ${index.manifest.hash}`)
+  // The two levers a sweep actually moves, on screen beside the hashes. An emit
+  // whose gate width came from `manifest.tuning` and one that fell back to the
+  // package literal used to print identically.
+  console.log(`  levers  k=${levers.GATE_K} lambda=${levers.MMR_LAMBDA} searchChars=${levers.searchChars}`)
+  // Printed only when it partitions something, so the unfiltered run's output is
+  // what it always was — and when it does print, it is the line that stops a
+  // 10-task file being read as a comparison against a 60-task one.
+  if (level !== DEFAULT_RUN_LEVEL) {
+    console.log(`  level ${level} — ${records.length} answer task(s)`)
+  }
   console.log(`  ${tasks.length} task(s) → ${path.relative(ROOT, out)}`)
   if (skippedGate) console.log(`  ${skippedGate} record(s) refused by the gate — not an answer task`)
   console.log('')
 
   async function task({ index, retrieval, scope, id, question, rec, history, stage }) {
-    const vec = await embedQuery(question, {
-      baseURL: EMBED_BASE,
-      model: index.manifest.embedModel,
-      provider: EMBED_PROVIDER,
-      apiKey: EMBED_KEY,
-    }).catch((e) => die(`embed failed (${EMBED_BASE}): ${e.message}`))
+    // A vectorless index names no model and no host to embed against, and
+    // `evaluate()` drops the vector at the top in any case. The composed run
+    // still HAPPENS — `null` runs it with no vector, `undefined` skips it —
+    // for the same reason run.js keeps it under `--lexical`: a follow-up has a
+    // lexical channel too, and skipping it scores the follow-up on the raw
+    // question alone.
+    const vectorless = index.manifest.vectors === null
+    const vec = vectorless
+      ? null
+      : await embedQuery(question, {
+          baseURL: EMBED_BASE,
+          model: index.manifest.embedModel,
+          provider: EMBED_PROVIDER,
+          apiKey: EMBED_KEY,
+        }).catch((e) => die(`embed failed (${EMBED_BASE}): ${e.message}`))
 
     let composedVec
     if (history.length) {
-      composedVec = await embedQuery(`${history[0].question}\n${question}`, {
-        baseURL: EMBED_BASE,
-        model: index.manifest.embedModel,
-        provider: EMBED_PROVIDER,
-        apiKey: EMBED_KEY,
-      })
+      composedVec = vectorless
+        ? null
+        : await embedQuery(`${history[0].question}\n${question}`, {
+            baseURL: EMBED_BASE,
+            model: index.manifest.embedModel,
+            provider: EMBED_PROVIDER,
+            apiKey: EMBED_KEY,
+          })
     }
 
     const g = retrieval.evaluate({
@@ -211,14 +339,17 @@ async function emit() {
     // measures; there is no answer to bench.
     if (!g.pass) return null
 
-    // harness.js step 1, verbatim in rule: every primed chunk is spelled out
-    // once, trimmed to SEARCH_CHARS, and its id enters the citable set.
+    // harness.js step 1, and now verbatim in CODE rather than in rule: every
+    // primed chunk is spelled out once, cut to SEARCH_CHARS, and its id enters
+    // the citable set. The copy that used to live here had already drifted on the
+    // budget constant, which is why both sides now call one function.
     const spelled = new Set()
     const results = g.chunks.map((c) => {
       const head = { id: c.id, title: c.title, breadcrumb: c.breadcrumb, path: c.path }
       if (spelled.has(c.id)) return { ...head, repeated: 'shown in an earlier result' }
       spelled.add(c.id)
-      return { ...head, text: String(c.text || '').slice(0, SEARCH_CHARS) }
+      const w = excerptWindow(c.text, { max: SEARCH_CHARS })
+      return { ...head, text: w.text, ...(w.truncated ? { truncated: TRUNCATED_NOTE } : {}) }
     })
 
     const observations = [
@@ -231,6 +362,11 @@ async function emit() {
       id,
       stage,
       config,
+      // On every task rather than once per file: a `.tasks.jsonl` has no header
+      // line, and `cell()` and `shard()` both read it strictly one task per line.
+      // `shard()` copies only id/prompt/citable, so this never reaches an
+      // answerer.
+      levers,
       question,
       lang: rec.lang,
       prompt: render(messages),
@@ -608,4 +744,9 @@ else if (MODE === 'score') score()
 else if (MODE === 'runs') runs()
 else if (MODE === 'judge-emit') judgeEmit()
 else if (MODE === 'judge-score') judgeScore()
-else die('usage: answer-bench.js emit|shard|score|runs|judge-emit|judge-score …')
+else {
+  die(
+    'usage: answer-bench.js emit|shard|score|runs|judge-emit|judge-score …\n' +
+      '        emit --config=<name> [--out=<file>] [--history=<file>] [--level=low|medium|high|xhigh|max|ultra]',
+  )
+}

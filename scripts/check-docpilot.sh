@@ -12,11 +12,16 @@
 # platform, and `grep -P` does not exist in BSD grep, where the original's
 # `2>/dev/null` turned a missing flag into a silent pass.
 #
-# THE STYLESHEET IS TWO FILES. Every counting rule now reads BOTH, because the
-# way a split breaks a checker is not a rule that fails — it is a rule that
-# passes while looking at half the code, or at a file that no longer exists.
-# Hence the existence gate directly below: a renamed file must fail loudly here
-# rather than make every count trivially true.
+# THE STYLESHEET IS ONE CORE PLUS N ADAPTERS. Every counting rule reads ALL of
+# them, because the way a split breaks a checker is not a rule that fails — it is
+# a rule that passes while looking at half the code, or at a file that no longer
+# exists. Hence the existence gate directly below: a renamed file must fail
+# loudly here rather than make every count trivially true.
+#
+# `ADAPTERS` is the whole of what has to change when a host is added. It feeds
+# rule 0, `SCSS_ALL` (and through it rules 1, 2, 5, 6 and 7) and the two
+# per-adapter rules, 9a and 9b — so an adapter added to the list is examined by
+# every rule at once, and one forgotten there is examined by none.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -26,7 +31,9 @@ CORE=src/theme/styles/core.scss
 VPCSS=src/theme/styles/vitepress.scss
 BREAKS=src/theme/styles/_breakpoints.scss
 ENTRY=src/theme/styles/docpilot.scss
-SCSS_ALL="$CORE $VPCSS"
+DOCUCSS=src/theme/styles/docusaurus.scss
+ADAPTERS="$VPCSS $DOCUCSS"
+SCSS_ALL="$CORE $ADAPTERS"
 HARNESS=src/theme/docpilot/harness.js
 
 fail=0
@@ -38,7 +45,7 @@ printf '\nDocPilot design-direction checks\n\n'
 # Rule 0 — every file a rule below reads exists and is not empty. Without this,
 # a rename turns "0 borders" and "0 brand references" into passing rules.
 missing=''
-for f in "$VUE" "$CORE" "$VPCSS" "$BREAKS" "$ENTRY" "$HARNESS"; do
+for f in "$VUE" "$CORE" $ADAPTERS "$BREAKS" "$ENTRY" "$HARNESS"; do
   [ -s "$f" ] || missing="$missing $f"
 done
 [ -z "$missing" ] && ok "rule 0 — every checked file exists and is non-empty" \
@@ -146,13 +153,23 @@ morph=$(cat $SCSS_ALL | grep -nE 'transition[^;]*border-radius' | tr '\n' ' ')
 # and uses it, the adapter re-declares it — so what the rule always MEANT is
 # asserted instead: it is USED exactly once anywhere, and DECLARED exactly once
 # per file.
+#
+# Per FILE, over `$ADAPTERS`, rather than the two hardcoded names it grew up
+# with: an adapter that forgot the accent would otherwise leave the panel's one
+# tinted surface painted from the core's literal on a host that re-themes
+# everything around it, and no rule would say so.
 uses=$(cat $SCSS_ALL | grep -c 'var(--dp-accent-soft' || true)
-decl_core=$(grep -c '^\s*--dp-accent-soft:' "$CORE" || true)
-decl_vp=$(grep -c '^\s*--dp-accent-soft:' "$VPCSS" || true)
-if [ "$uses" -eq 1 ] && [ "$decl_core" -eq 1 ] && [ "$decl_vp" -eq 1 ]; then
+decls=''
+accent_ok=1
+for f in $CORE $ADAPTERS; do
+  n=$(grep -c '^\s*--dp-accent-soft:' "$f" || true)
+  decls="$decls $(basename "$f")=$n"
+  [ "$n" -eq 1 ] || accent_ok=0
+done
+if [ "$uses" -eq 1 ] && [ "$accent_ok" -eq 1 ]; then
   ok "rule 3 — accent declared once per file, used once"
 else
-  bad "rule 3 — accent used $uses times, declared $decl_core (core) / $decl_vp (adapter), expected 1/1/1"
+  bad "rule 3 — accent used $uses times, declared$decls, expected one use and one declaration per file"
 fi
 # `-e` is not optional: a pattern beginning with `--` is otherwise read as a
 # flag, grep exits 2 with a usage message, and the `if` takes the else branch —
@@ -228,55 +245,103 @@ fi
 # Rule 8 — the core knows nothing about VitePress. This is the whole point of
 # the split: `core.scss` has to render a correct panel with no adapter loaded,
 # on a site that is not VitePress at all.
-leak=$(strip_comments "$CORE" | grep -nE -e '--vp-' -e '\.VP' -e 'html\.dark' | tr '\n' ' ')
-[ -z "$(echo "$leak" | tr -d ' ')" ] && ok "rule 8 — core.scss names no VitePress token or selector" \
-                                    || bad "rule 8 — VitePress reaches the core: $leak"
+# Symmetric across hosts, because the rule was never about VitePress: the core
+# has to render a correct panel with NO adapter loaded, and a Docusaurus token
+# smuggled in breaks that exactly as a VitePress one would. Added when the second
+# adapter landed — a rule that names only the first host it was written for stops
+# being a rule the moment there is a second.
+leak=$(strip_comments "$CORE" \
+  | grep -nE -e '--vp-' -e '\.VP' -e 'html\.dark' -e '--ifm-' -e '\[data-theme' | tr '\n' ' ')
+[ -z "$(echo "$leak" | tr -d ' ')" ] && ok "rule 8 — core.scss names no host token or selector" \
+                                    || bad "rule 8 — a host reaches the core: $leak"
 
 # Rule 9 — the adapter is a MAPPING, not a second design.
 #
 # 9a: every selector it opens belongs to VitePress or to Shiki — never one of
 #     ours, because a rule on our own selector here would be invisible to anyone
 #     reading core.scss and would not exist for a consumer of core.css alone.
+#
+#     ONE EXCEPTION, added by ui-specs/009 and deliberately narrow:
+#     `html.docpilot-*` as a STATE QUALIFIER. `ui.layout: 'push'` needs the
+#     host's own `.VPContent` to move while the panel is open, so the SUBJECT of
+#     the rule is foreign — which is exactly what 9a exists to require — and our
+#     class only says when. It has to be anchored to `html.` so that a bare
+#     `.docpilot__thing` here still fails: the exception is about a root state
+#     flag, not about styling our elements from the adapter.
 # 9b: the `:root` blocks contain `--dp-*` and nothing else — that is what makes
 #     this file a translation table rather than a stylesheet.
 #
 # Nesting counts: a rule nested inside `.VPNavBar:has(…)` is still a rule about
 # the host's navbar, so only the OUTERMOST selector of each chain is checked —
 # and `@media` is transparent, because the selectors inside one are outermost.
-sel=$(strip_comments "$VPCSS" | awk '
-  BEGIN { depth = 0; ok[0] = 0 }
-  {
-    line = $0
-    gsub(/#\{[^}]*\}/, "", line)          # Sass interpolation is not a block
-    while (length(line)) {
-      o = index(line, "{"); c = index(line, "}")
-      if (o == 0 && c == 0) break
-      if (o != 0 && (c == 0 || o < c)) {
-        head = substr(line, 1, o - 1)
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", head)
-        depth++
-        if (head ~ /^@/ || head == "") ok[depth] = 0          # transparent
-        else if (ok[depth - 1]) ok[depth] = 1                 # nested in a checked chain
-        else {
-          ok[depth] = (head ~ /^(:root|\.VP|html\.dark|html:not|\.shiki)/)
-          if (!ok[depth]) print head
-        }
-        line = substr(line, o + 1)
-      } else {
-        if (depth > 0) depth--
-        line = substr(line, c + 1)
-      }
-    }
-  }' | tr '\n' ' ')
-[ -z "$(echo "$sel" | tr -d ' ')" ] && ok "rule 9 — adapter styles only foreign selectors" \
-                                    || bad "rule 9 — adapter styles a selector of ours: $sel"
+#
+# THE ALLOWLIST IS PER ADAPTER, not shared. Each host owns a different set of
+# foreign selectors, and one merged list would admit a `.VP…` rule into a
+# Docusaurus adapter — a rule that can never match, in the file whose whole job
+# is to be the translation for that host. An adapter with no entry here allows
+# NOTHING, so adding a stylesheet to `$ADAPTERS` without naming its host fails
+# loudly instead of passing unchecked.
+adapter_allow() {
+  case "$1" in
+    *vitepress.scss) printf '%s' '^(:root|\.VP|html\.dark|html:not|html\.docpilot-|\.shiki)' ;;
+    *docusaurus.scss) printf '%s' '^(:root|html\[data-theme|\[data-theme|html:not|html\.docpilot-|\.navbar|\.theme-doc|\.main-wrapper|\.shiki)' ;;
+    # Matches nothing: an empty selector head is already treated as transparent
+    # before the test is reached, so every head that gets here is non-empty.
+    *) printf '%s' '^$' ;;
+  esac
+}
 
-rooted=$(strip_comments "$VPCSS" | awk '
-  /^:root[[:space:]]*\{/ { inroot = 1; next }
-  inroot && /^\}/ { inroot = 0; next }
-  inroot && /[^[:space:]]/ && $0 !~ /^[[:space:]]*--dp-/ { print }' | tr '\n' ' ')
+# The pattern travels in the ENVIRONMENT, not through `awk -v`. `-v` runs escape
+# processing over the value, which turns `\.VP` into `.VP` — a regex matching any
+# character followed by `VP`, so the rule would keep printing "ok" while checking
+# something weaker than what is written above. `ENVIRON` is passed through
+# verbatim.
+foreign_selectors() {
+  strip_comments "$1" | ALLOW="$2" awk '
+    BEGIN { depth = 0; ok[0] = 0; allow = ENVIRON["ALLOW"] }
+    {
+      line = $0
+      gsub(/#\{[^}]*\}/, "", line)          # Sass interpolation is not a block
+      while (length(line)) {
+        o = index(line, "{"); c = index(line, "}")
+        if (o == 0 && c == 0) break
+        if (o != 0 && (c == 0 || o < c)) {
+          head = substr(line, 1, o - 1)
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", head)
+          depth++
+          if (head ~ /^@/ || head == "") ok[depth] = 0          # transparent
+          else if (ok[depth - 1]) ok[depth] = 1                 # nested in a checked chain
+          else {
+            ok[depth] = (head ~ allow)
+            if (!ok[depth]) print head
+          }
+          line = substr(line, o + 1)
+        } else {
+          if (depth > 0) depth--
+          line = substr(line, c + 1)
+        }
+      }
+    }'
+}
+
+sel=''
+for f in $ADAPTERS; do
+  hits=$(foreign_selectors "$f" "$(adapter_allow "$f")" | tr '\n' ' ')
+  [ -z "$(echo "$hits" | tr -d ' ')" ] || sel="$sel $(basename "$f"): $hits"
+done
+[ -z "$(echo "$sel" | tr -d ' ')" ] && ok "rule 9 — adapters style only foreign selectors" \
+                                    || bad "rule 9 — an adapter styles a selector of ours:$sel"
+
+rooted=''
+for f in $ADAPTERS; do
+  hits=$(strip_comments "$f" | awk '
+    /^:root[[:space:]]*\{/ { inroot = 1; next }
+    inroot && /^\}/ { inroot = 0; next }
+    inroot && /[^[:space:]]/ && $0 !~ /^[[:space:]]*--dp-/ { print }' | tr '\n' ' ')
+  [ -z "$(echo "$hits" | tr -d ' ')" ] || rooted="$rooted $(basename "$f"): $hits"
+done
 [ -z "$(echo "$rooted" | tr -d ' ')" ] && ok "rule 9 — :root carries only --dp-* declarations" \
-                                       || bad "rule 9 — non-token declaration on :root: $rooted"
+                                       || bad "rule 9 — non-token declaration on :root:$rooted"
 
 # The bundle is an entry point and must stay one: two @use lines and nothing
 # else, or a rule would exist in a file no other check reads.

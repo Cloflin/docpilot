@@ -16,13 +16,20 @@
  * measured 0.14 is mostly that ceiling, not a quality signal. A gold answer has
  * to be written at the length the product produces, or the metric measures
  * length.
+ *
+ * `level` is checked here and nowhere else. `filterByLevel` deliberately lets a
+ * record with an unrecognised tier fall into every pool rather than delete it
+ * from a run, so a typo costs nothing at eval time and would never be noticed —
+ * this is the one place that says the word out loud.
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { ROOT, RAG, GOLDEN } from '../cli-context.js'
 import { underPath } from './metrics.js'
+import { LEVELS, DEFAULT_RECORD_LEVEL, levelRank, levelHistogram } from './levels.js'
 
 const arg = (name, dflt) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -41,26 +48,21 @@ const EXPECTED = new Set([
   'refuse:out-of-scope',
 ])
 
-function main() {
-  const manifest = JSON.parse(fs.readFileSync(path.join(RAG, 'manifest.json'), 'utf8'))
-  const chunks = manifest.shards.flatMap((s) =>
-    JSON.parse(fs.readFileSync(path.join(RAG, s), 'utf8')),
-  )
-  const ids = new Set(chunks.map((c) => c.id))
-  const pages = new Set(manifest.pages.map((p) => p.path))
-
-  const records = fs
-    .readFileSync(FILE, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((l, i) => {
-      try {
-        return JSON.parse(l)
-      } catch (e) {
-        fail(`line ${i + 1} is not JSON: ${e.message}`)
-      }
-    })
-
+/**
+ * Every rule that is a statement about the RECORDS rather than about the files
+ * they arrived in, so the suite can exercise it without an index on disk.
+ *
+ * The error/warning split is not severity, it is whether the set still MEASURES
+ * anything. A `gold_chunks` entry naming a renamed page scores a flat 0 that
+ * reads as a retrieval regression — nothing downstream can tell that apart from
+ * a real one, so it is an error. A gold answer twenty words short skews one
+ * metric and the report says by how much, so it is a warning.
+ *
+ * @param {Array<object>} records
+ * @param {{ids: Set<string>, pages: Set<string>, indexHash: string}} index
+ * @returns {{errors: string[], warnings: string[]}}
+ */
+export function lintRecords(records, { ids, pages, indexHash }) {
   const errors = []
   const warnings = []
   const seen = new Set()
@@ -81,7 +83,17 @@ function main() {
     // depends on what the model did, so the same record would flip between rows
     // of a matrix and the set would grade the model against itself.
     if (r.expect === 'refuse:not-answerable') {
-      err(id, 'refuse:not-answerable is observed-only and may not be authored')
+      err(id, 'expect "refuse:not-answerable" is observed-only — author refuse:no-evidence or refuse:out-of-scope')
+    }
+
+    // Absent is legal and stays legal. `high` is DEFINED as roughly the set that
+    // already exists, so a file written before tiers existed scores the same
+    // number under `--level=high` as under no flag at all — warning it into
+    // existence one record at a time is the whole migration.
+    if (r.level == null) {
+      warn(id, `no level — runs as "${DEFAULT_RECORD_LEVEL}"`)
+    } else if (levelRank(r.level) < 0) {
+      err(id, `level "${r.level}" is not one of ${LEVELS.join(' | ')}`)
     }
 
     const positive = r.expect === 'answer'
@@ -91,9 +103,9 @@ function main() {
       const isPage = pages.has(`/${g}`) || pages.has(g)
       const prefixes = [...ids].some((i) => underPath(i, g))
       if (!isId && !isPage && !prefixes) {
-        err(id, `gold_chunks entry "${g}" matches nothing in index ${manifest.hash}`)
+        err(id, `gold_chunks entry "${g}" matches nothing in index ${indexHash} — repoint it, or rebuild with npx docpilot index`)
       } else if (!isId && !isPage) {
-        warn(id, `gold_chunks entry "${g}" matches only by prefix — anchor it`)
+        warn(id, `gold_chunks entry "${g}" matches only by prefix — anchor it to a chunk id`)
       }
     }
 
@@ -115,7 +127,7 @@ function main() {
         err(id, 'refuse:no-evidence record carries gold_chunks')
       }
       if (String(r.gold_answer || '').trim()) {
-        warn(id, 'negative record carries a gold_answer; it is never scored')
+        warn(id, 'gold_answer on a negative record is never scored — drop it')
       }
     }
 
@@ -126,6 +138,62 @@ function main() {
       if (inScope) err(id, 'refuse:out-of-scope record has gold chunks INSIDE its scope')
     }
   }
+
+  return { errors, warnings }
+}
+
+/**
+ * `low 10 (+10) · medium 25 (+15) · high 60 (+35) · ultra 60`
+ *
+ * The bare number is the POOL — what `--level=medium` actually scores — because
+ * that is the number the run header prints and the only one two reports may be
+ * compared on. `(+n)` is what the tier itself contributed, which is the number
+ * an author needs when deciding where the next twenty questions belong.
+ *
+ * A tier that contributes nothing is dropped, or a set authored at three tiers
+ * prints six columns of which three repeat the number to their left. `ultra`
+ * survives that rule whatever it contributes: it is the size of a run with no
+ * `--level` at all, and leaving it out would hide the total.
+ */
+export function levelSummary(records) {
+  const { levels, unknown } = levelHistogram(records)
+  const parts = levels
+    .filter((row, i) => row.count > 0 || i === LEVELS.length - 1)
+    .map((row) => `${row.level} ${row.cumulative}${row.count ? ` (+${row.count})` : ''}`)
+  // Said apart because these sit in EVERY pool, the smallest one included, and
+  // are therefore already inside each cumulative above without belonging to any
+  // tier of their own. Each one is also an error a few lines up.
+  if (unknown) parts.push(`unknown ${unknown}`)
+  return parts.join(' · ')
+}
+
+function main() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(RAG, 'manifest.json'), 'utf8'))
+  const chunks = manifest.shards.flatMap((s) =>
+    JSON.parse(fs.readFileSync(path.join(RAG, s), 'utf8')),
+  )
+  const ids = new Set(chunks.map((c) => c.id))
+  const pages = new Set(manifest.pages.map((p) => p.path))
+
+  // A project that has not run `init` has no golden set, and the bare ENOENT
+  // this used to throw named a path the author never chose and no next step.
+  if (!fs.existsSync(FILE)) {
+    fail(`no golden set at ${path.relative(ROOT, FILE)} — run \`npx docpilot init\` to scaffold one`)
+  }
+
+  const records = fs
+    .readFileSync(FILE, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l, i) => {
+      try {
+        return JSON.parse(l)
+      } catch (e) {
+        fail(`line ${i + 1} is not JSON: ${e.message}`)
+      }
+    })
+
+  const { errors, warnings } = lintRecords(records, { ids, pages, indexHash: manifest.hash })
 
   const positives = records.filter((r) => r.expect === 'answer').length
   const negatives = records.length - positives
@@ -140,6 +208,7 @@ function main() {
   console.log(`  scoped           ${scoped}`)
   console.log(`  follow-up        ${followUps}`)
   console.log(`  by kind          ${JSON.stringify(byKind)}`)
+  console.log(`  by level         ${levelSummary(records)}`)
 
   if (warnings.length) {
     console.log(`\n  ${warnings.length} warning(s):`)
@@ -158,4 +227,9 @@ function fail(m) {
   process.exit(1)
 }
 
-main()
+// Guarded the way build-rag-index.js and calibrate.js are: `lintRecords` is a
+// pure function of the records and the suite imports it, and an unguarded
+// `main()` would read a manifest that is not there and exit(1) mid-test-run.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main()
+}

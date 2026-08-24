@@ -8,25 +8,98 @@
 /** A chunk may never exceed this many characters. RAG-SPEC 2.3 rule 7. */
 export const MAX_CHUNK_CHARS = 8000
 
+const FENCE = /^(\s*)(`{3,}|~{3,})(.*)$/
+
 /**
- * Split a document into fenced and unfenced runs.
+ * A fence opener, or null: the character, its run length, the indent it sits at
+ * and its info string.
  *
+ * Exported because `chunker.js` needs exactly this pair and currently keeps its
+ * own copy. It imports this module already, and this module imports nothing, so
+ * the shared home for the scan is here.
+ */
+export function openFence(line) {
+  const m = FENCE.exec(line)
+  return m ? { char: m[2][0], len: m[2].length, indent: m[1], info: m[3] } : null
+}
+
+/** CommonMark: same character, at least as long as the opener, nothing else on the line. */
+export function closesFence(line, open) {
+  const m = FENCE.exec(line)
+  return !!m && m[2][0] === open.char && m[2].length >= open.len && !m[3].trim()
+}
+
+/**
+ * THE fence scan. Every pass in this module reads fences through this one
+ * function, so no two of them can disagree about which lines are code.
+ *
+ * A disagreement here is not a formatting nit: `applyLlmTags` decides whether an
+ * author's `<llm-exclude>` is honoured, and `extractFaq` decides whether a Q&A
+ * shown in a sample is published as if the page had asserted it.
+ *
+ * CLOSED BY CommonMark's RULE, not by a toggle. The toggle this replaces flipped
+ * on any /^\s*(```|~~~)/ line, so one fence shown INSIDE another inverted it and
+ * every line after the sample read as code — or, worse, the other way round.
+ * Both directions lose content silently. Reading real prose as code makes
+ * `applyLlmTags` copy an `<llm-exclude>` block straight through, publishing what
+ * the author marked private; reading a sample as prose hands its body to
+ * `stripVue`, and one unterminated `<script>` in a documented snippet then
+ * deletes every line to end of file. A page that shows one fence style inside
+ * the other is not exotic — it is what every page documenting markdown does.
+ *
+ * The fence line itself is reported as code, so no transform ever rewrites an
+ * opener or a closer. An unclosed fence runs to end of file, which is the
+ * reading the toggle gave it too.
+ */
+function eachLine(src, fn) {
+  let open = null
+  for (const line of String(src).split('\n')) {
+    if (open) {
+      if (closesFence(line, open)) open = null
+      fn(line, true)
+      continue
+    }
+    const o = openFence(line)
+    if (o) {
+      open = o
+      fn(line, true)
+      continue
+    }
+    fn(line, false)
+  }
+}
+
+/**
  * Every text transform below runs on unfenced lines only. Collapsing runs of
  * spaces inside a code sample would silently reindent it, and the corpus is a
  * developer documentation site where indentation is the content.
  */
 function eachUnfencedLine(src, fn) {
   const out = []
-  let fenced = false
-  for (const line of src.split('\n')) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced
-      out.push(line)
-      continue
-    }
-    out.push(fenced ? line : fn(line))
-  }
+  eachLine(src, (line, fenced) => out.push(fenced ? line : fn(line)))
   return out.join('\n')
+}
+
+/**
+ * The unfenced text as the RUNS it falls into, not as one joined string.
+ *
+ * For the one pass that matches ACROSS lines. Concatenating the prose either
+ * side of a removed fence would let a pattern span the gap and pair two things
+ * the document never put next to each other — see `extractFaq`.
+ */
+function unfencedRuns(src) {
+  const runs = []
+  let cur = []
+  eachLine(src, (line, fenced) => {
+    if (!fenced) {
+      cur.push(line)
+      return
+    }
+    if (cur.length) runs.push(cur.join('\n'))
+    cur = []
+  })
+  if (cur.length) runs.push(cur.join('\n'))
+  return runs
 }
 
 /**
@@ -48,25 +121,53 @@ function eachUnfencedLine(src, fn) {
  *
  * An unclosed `<llm-exclude>` excludes to end of file: excluding too much is
  * recoverable, publishing something marked private is not.
+ *
+ * INLINE CODE IS MASKED before any of that, on the same terms the fence already
+ * had. A sentence that names the tag in backticks is prose ABOUT the feature, not
+ * a directive — and the page most likely to contain one is the page documenting
+ * it. This package's own `reference/cli` said "this pass may add `<llm-only>` and
+ * `<llm-exclude>`", which opened the machine on a page nobody had marked private
+ * and dropped every line after it from the index; `guide/imported-pages` did the
+ * same. The rule above is unchanged for a tag anyone actually wrote: an unclosed
+ * one still excludes to end of file, and only the backticks are read as quoting.
  */
+const SPAN = '\uE000'
+const CODE_SPAN = /(`+)(?:(?!\1)[\s\S])*?\1/g
+
+/** Backticked runs out, placeholders in — see `applyLlmTags`. */
+function maskCode(line) {
+  const spans = []
+  const masked = line.replace(CODE_SPAN, (m) => {
+    spans.push(m)
+    return `${SPAN}${spans.length - 1}${SPAN}`
+  })
+  return { masked, spans }
+}
+
+/**
+ * Placeholders back out. A line the machine TRUNCATED can end mid-placeholder —
+ * the truncated half is excluded text, so what is left of a broken marker is
+ * dropped rather than restored.
+ */
+function unmaskCode(line, spans) {
+  return line
+    .replace(new RegExp(`${SPAN}(\\d+)${SPAN}`, 'g'), (_, i) => spans[Number(i)] ?? '')
+    .replace(new RegExp(`${SPAN}\\d*`, 'g'), '')
+}
+
 export function applyLlmTags(src, warn) {
   const out = []
-  let fenced = false
   let excluding = false
   let sawExclude = false
 
-  for (const line of String(src).split('\n')) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced
-      if (!excluding) out.push(line)
-      continue
-    }
+  eachLine(src, (line, fenced) => {
     if (fenced) {
       if (!excluding) out.push(line)
-      continue
+      return
     }
 
-    let l = line
+    const { masked, spans } = maskCode(line)
+    let l = masked
 
     // Inline forms first, so a one-line pair never opens the state machine.
     l = l.replace(/<llm-exclude>[\s\S]*?<\/llm-exclude>/gi, '')
@@ -75,22 +176,22 @@ export function applyLlmTags(src, warn) {
     if (/<\/llm-exclude>/i.test(l)) {
       excluding = false
       l = l.replace(/^[\s\S]*?<\/llm-exclude>/i, '')
-      if (!l.trim()) continue
+      if (!unmaskCode(l, spans).trim()) return
     } else if (excluding) {
-      continue
+      return
     }
 
     if (/<llm-exclude>/i.test(l)) {
       sawExclude = true
       excluding = true
       l = l.replace(/<llm-exclude>[\s\S]*$/i, '')
-      if (!l.trim()) continue
+      if (!unmaskCode(l, spans).trim()) return
     }
 
     // Whatever is left of an <llm-only> wrapper is just a wrapper.
     l = l.replace(/<\/?llm-only>/gi, '')
-    out.push(l)
-  }
+    out.push(unmaskCode(l, spans))
+  })
 
   if (excluding && sawExclude) {
     warn?.('unclosed <llm-exclude> — excluded to end of file')
@@ -234,25 +335,19 @@ export function unwrapContainers(src) {
  */
 export function stripVue(src) {
   const out = []
-  let fenced = false
   /** The closing tag being waited on, or null when not inside an island. */
   let closing = null
 
-  for (const line of String(src).split('\n')) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced
-      out.push(line)
-      continue
-    }
+  eachLine(src, (line, fenced) => {
     if (fenced) {
       out.push(line)
-      continue
+      return
     }
 
     let l = line
     if (closing) {
       const end = closing.exec(l)
-      if (!end) continue
+      if (!end) return
       l = l.slice(end.index + end[0].length)
       closing = null
     }
@@ -270,31 +365,77 @@ export function stripVue(src) {
       l = l.slice(0, open.index)
     }
     out.push(l)
-  }
+  })
   return out.join('\n')
 }
 
 /**
  * Extract the question/answer pairs of a <FaqAccordion :items="[…]"> island so
  * they become chunks of their own instead of vanishing with the tag.
+ *
+ * A FENCED SAMPLE IS NOT AN ISLAND. This used to read the whole page, so a page
+ * DOCUMENTING the component — `<FaqAccordion :items="[{ question: 'Sample
+ * question?', answer: 'Sample answer.' }]" />` inside a ```vue fence — produced a
+ * `#faq-1` chunk asserting a question and an answer the page never gave. A
+ * fabricated chunk is worse than a missing one: nothing downstream can tell it
+ * apart from a real one, and it is retrieved, quoted and cited like any other.
+ *
+ * Each unfenced RUN is scanned on its own, never the runs joined back together:
+ * the pattern tolerates 40 characters between `question:` and `answer:`, so a
+ * join across a removed fence could pair one island's question with the answer
+ * of whatever came after the sample.
  */
 export function extractFaq(src) {
   const out = []
-  const re = /question:\s*(['"`])([\s\S]*?)\1[\s\S]{0,40}?answer:\s*(['"`])([\s\S]*?)\3/g
-  let m
-  while ((m = re.exec(src))) out.push({ question: m[2].trim(), answer: m[4].trim() })
+  for (const run of unfencedRuns(src)) {
+    // Fresh per run — a /g regex carries `lastIndex` between calls, and a shared
+    // one would start each run wherever the previous one stopped.
+    const re = /question:\s*(['"`])([\s\S]*?)\1[\s\S]{0,40}?answer:\s*(['"`])([\s\S]*?)\3/g
+    let m
+    while ((m = re.exec(run))) out.push({ question: m[2].trim(), answer: m[4].trim() })
+  }
   return out
 }
 
-/** Links keep their route: the model must see `/getting-started` to be able to cite it. */
+/**
+ * An ATX heading, on markdown-it's terms: up to three spaces of indent, one to
+ * six `#`, then whitespace or end of line. `#tag` is not a heading.
+ */
+const ATX_HEADING = /^ {0,3}#{1,6}(\s|$)/
+
+/**
+ * Links keep their route: the model must see `/getting-started` to be able to
+ * cite it.
+ *
+ * A HEADING KEEPS ITS TEXT AND NOTHING ELSE. The heading line is what the
+ * chunker slugs into the anchor a citation points at, and VitePress builds its
+ * anchor from the heading's rendered TEXT — markdown-it-anchor never sees a
+ * link's destination. Anything added here makes the two disagree:
+ * `### [Template Modifications](/extensions/tutorials/how-to/template-modifications)`
+ * became `### Template Modifications (/extensions/…/template-modifications)` and
+ * slugged to `template-modifications-extensionstutorialshow-totemplate-modifications`
+ * against a real anchor of `template-modifications`, so all four sections of
+ * stripo-docs' `extensions/tutorials.md` cited fragments that exist nowhere,
+ * under a citation label with the raw route printed inside it.
+ *
+ * The brackets go with the route rather than being left behind: `slug()` drops
+ * `[`, `]`, `(` and `)` but not the slashes between them, so leaving the link
+ * syntax in place would slug to `template-modificationsextensions…` — wrong the
+ * same way, and with the markup showing in the label.
+ *
+ * Dropping the destination costs nothing: a heading's link is navigation, the
+ * page it points at is indexed under its own route, and this is already exactly
+ * how a `#fragment` link is treated everywhere else on the page.
+ */
 export function flattenLinks(src) {
   // Unfenced only, like every other transform here: a fenced sample showing
   // markdown link syntax is documentation about links, not a link.
-  return eachUnfencedLine(src, (line) =>
-    line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, href) =>
-      href.startsWith('#') ? text : `${text} (${href})`,
-    ),
-  )
+  return eachUnfencedLine(src, (line) => {
+    const heading = ATX_HEADING.test(line)
+    return line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, href) =>
+      heading || href.startsWith('#') ? text : `${text} (${href})`,
+    )
+  })
 }
 
 /** Remaining HTML tags go; their text content stays. */
@@ -318,11 +459,21 @@ export function stripHtml(src) {
 export function normaliseMarkdown(src) {
   const { title, description, layout, source, body } = splitFrontmatter(src)
   const warnings = []
-  const faq = extractFaq(body)
-  let t = body
   // Before stripVue and, critically, before stripHtml: an unknown tag reaching
   // stripHtml loses its brackets and keeps its content.
-  t = applyLlmTags(t, (m) => warnings.push(m))
+  let t = applyLlmTags(body, (m) => warnings.push(m))
+  // THE FAQ COMES OFF applyLlmTags' OUTPUT, NEVER OFF `body`.
+  //
+  // It used to be extracted from the raw page, one line above this pass, which
+  // made `<llm-exclude>` a no-op over a FaqAccordion island: applyLlmTags never
+  // saw the island, stripVue deleted the tag from the prose stream a step later
+  // so the page looked correctly redacted, and the Q&A was already sitting in
+  // `faq[]` on its way to becoming an indexed, citable `#faq-n` chunk. Excluding
+  // too much is recoverable; publishing something an author marked private is
+  // not — and here the author had marked it, and it was published anyway.
+  //
+  // Still before stripVue, which is what deletes the island this reads.
+  const faq = extractFaq(t)
   t = stripVue(t)
   t = unwrapContainers(t)
   t = stripImages(t)

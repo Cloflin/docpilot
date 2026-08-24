@@ -1,12 +1,15 @@
 /**
- * Where the button lives, what shape the panel takes, and what the floating
- * button is made of.
+ * Where the button lives, what shape the panel takes, what the floating button
+ * is made of, and how the panel treats the page it opens over.
  *
  *   ui: {
- *     trigger:  'nav' | 'fab',
- *     panel:    'auto' | 'drawer' | 'popup',
- *     fabLabel: true | false | string,   // ui-specs/005
- *     fabIcon:  true | false,
+ *     trigger:      'nav' | 'fab',
+ *     panel:        'auto' | 'drawer' | 'popup',
+ *     fabLabel:     true | false | string,      // ui-specs/005
+ *     fabIcon:      true | false,
+ *     layout:       'overlay' | 'push',         // ui-specs/009
+ *     prefetch:     'hover' | 'idle' | false,   // ui-specs/009
+ *     firstRunHint: true | false,               // ui-specs/009
  *   }
  *
  * `panel: 'auto'` is the default and means "whatever the trigger implies": a
@@ -40,7 +43,41 @@
 export const UI_TRIGGERS = ['nav', 'fab']
 export const UI_PANELS = ['auto', 'drawer', 'popup']
 
-export const UI_DEFAULTS = { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true }
+/**
+ * `'overlay'` is today's behaviour and stays the default — ui-specs/009.
+ *
+ * The desktop drawer is `position: fixed` at the trailing edge, so it covers the
+ * host's aside and, on a narrow desktop, part of the prose column. The
+ * component's own header calls the panel non-modal so *docs stay readable beside
+ * the answer*, which `'push'` is what makes true: the host's content gets an
+ * inline-end padding while the panel is open. It reflows somebody else's layout,
+ * so it is a mode a project chooses rather than a fix that arrives.
+ */
+export const UI_LAYOUTS = ['overlay', 'push']
+
+/**
+ * When the retrieval index is fetched — ui-specs/009.
+ *
+ *   'hover'  on the trigger's first pointerenter or focus. Close to intent and
+ *            almost never wrong, which is why it is the default.
+ *   'idle'   once the page has settled, for a site that would rather pay up front
+ *   false    on open, which is where it happened before this setting existed
+ *
+ * Only the NETWORK half is prefetched. `ensureIndex` also restores the scope and
+ * the conversation, and the scope restore can announce — into a polite region,
+ * with the panel closed. session.js keeps those two apart for that reason.
+ */
+export const UI_PREFETCH = ['hover', 'idle', false]
+
+export const UI_DEFAULTS = {
+  trigger: 'nav',
+  panel: 'auto',
+  fabLabel: true,
+  fabIcon: true,
+  layout: 'overlay',
+  prefetch: 'hover',
+  firstRunHint: false,
+}
 
 function pick(value, allowed, fallback, key, err) {
   // Absent is not wrong — it is the default, and the overwhelmingly common case.
@@ -89,6 +126,8 @@ export function resolveUi(docPilot, err = console.error) {
   const ui = docPilot?.ui || {}
   const trigger = pick(ui.trigger, UI_TRIGGERS, UI_DEFAULTS.trigger, 'trigger', err)
   const panel = pick(ui.panel, UI_PANELS, UI_DEFAULTS.panel, 'panel', err)
+  const layout = pick(ui.layout, UI_LAYOUTS, UI_DEFAULTS.layout, 'layout', err)
+  const prefetch = pick(ui.prefetch, UI_PREFETCH, UI_DEFAULTS.prefetch, 'prefetch', err)
   const fabLabel = label(ui.fabLabel, err)
   // Only `false` switches it off. Anything else — absent, true, a typo — leaves
   // the glyph on, because this is the half that can stand alone.
@@ -114,5 +153,12 @@ export function resolveUi(docPilot, err = console.error) {
     // the nav-screen row has always been text; neither reads them.
     fabLabel,
     fabIcon,
+    // ── ui-specs/009 ────────────────────────────────────────────────────────
+    layout,
+    prefetch,
+    // Through `pick` like the rest, rather than `=== true`: a typo here would
+    // otherwise resolve silently to the default and the author would be looking
+    // for a hint that never renders and never complained.
+    firstRunHint: pick(ui.firstRunHint, [true, false], UI_DEFAULTS.firstRunHint, 'firstRunHint', err),
   }
 }

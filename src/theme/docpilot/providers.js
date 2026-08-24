@@ -47,6 +47,26 @@ function sseData(raw) {
   }
 }
 
+/**
+ * A stream that opened 200 and then failed — and the status it failed with.
+ *
+ * This matters to ROTATION, not to reporting. The transport decides whether to
+ * try the next model in a pool by reading `e.status`, and an error that arrives
+ * INSIDE the stream used to reach it as a bare `Error`: status undefined, not
+ * rotatable, pool abandoned on its first member. That is the shape a shared free
+ * tier fails in most often — HTTP 200, then `{"error":{"code":429,…}}` one frame
+ * later — so the one failure the pool exists to survive was the one it could not
+ * see. The code travels with the message now.
+ */
+export function streamError(err, fallback = 'stream error') {
+  const message = String(err?.message || err || fallback)
+  /** @type {Error & {status?: number}} */
+  const e = new Error(message)
+  const code = Number(err?.code ?? err?.status)
+  if (Number.isFinite(code)) e.status = code
+  return e
+}
+
 /** Arguments arrive as an object from Ollama and as a JSON string everywhere else. */
 function normaliseArgs(args) {
   if (typeof args !== 'string') return args || {}
@@ -112,6 +132,13 @@ const ollama = {
         ? { name: call.function.name, args: normaliseArgs(call.function.arguments) }
         : null,
       usage: usageOf(json.prompt_eval_count, json.eval_count),
+      // Null rather than `done_reason`, and that is a decision. A continuation
+      // request is a prefill — the truncated text goes back as the last
+      // assistant message and the model carries on from it — and that shape is
+      // only reliable on the OpenAI-compatible services this feature was
+      // measured against. Reporting a reason nobody acts on would be a
+      // capability the transport does not have.
+      finishReason: null,
     }
   },
 
@@ -131,7 +158,7 @@ const ollama = {
         // ones — so this is a server that is not speaking NDJSON. Skip it.
         return
       }
-      if (json.error) throw new Error(String(json.error))
+      if (json.error) throw streamError(json.error)
       // The counts ride on the final frame only.
       if (json.done) done = json
       const m = json.message || {}
@@ -194,8 +221,19 @@ const openai = {
     return h
   },
 
-  body({ model, messages, temperature, streaming, tools, schemaBody }) {
+  body({ model, messages, temperature, streaming, tools, schemaBody, maxTokens, extraBody, continuing }) {
     const body = {
+      // The brand-specific fragment, and it goes FIRST so that nothing
+      // configuration supplies can overwrite a field this adapter owns — a
+      // stray `stream: false` in an author's `extraBody` would otherwise turn
+      // off streaming for every reader on the site. What lives here is the one
+      // thing config.js knows and this file must not: which brand is behind an
+      // OpenAI-shaped endpoint. OpenRouter's `provider.require_parameters` is
+      // the case it exists for, and it is a correctness fix — without it the
+      // request is routed to upstreams that silently drop `response_format`,
+      // which is the measured cause of six of ten pool members answering the
+      // strict final call in prose.
+      ...(extraBody && typeof extraBody === 'object' && !Array.isArray(extraBody) ? extraBody : null),
       model,
       // A `tool` role here requires a `tool_call_id`, and the harness rebuilds
       // the message list from scratch on every step rather than replaying the
@@ -209,21 +247,36 @@ const openai = {
     // nothing was asking — so token accounting was blank in exactly the mode the
     // panel runs in, since streaming is on whenever there is an onDelta.
     if (streaming) body.stream_options = { include_usage: true }
-    if (schemaBody) {
+    // `chat.maxTokens` was documented, resolved, carried all the way down to
+    // this function — and then dropped, because only the anthropic adapter ever
+    // destructured it. Every OpenAI-compatible provider therefore ran on its own
+    // default ceiling whatever the site configured, which is also why an answer
+    // truncated at that ceiling looked like a model failure rather than a
+    // setting nobody was honouring.
+    if (maxTokens) body.max_tokens = maxTokens
+    // A CONTINUATION finishes a reply the provider cut off: the partial text is
+    // the last assistant message and the model is being asked to carry on from
+    // mid-sentence. Forcing a response shape is exactly what breaks that — under
+    // a strict `json_schema` (or even a bare `json_object`) the completion must
+    // be a whole valid object on its own, so the model re-emits the answer from
+    // the top and runs into the same ceiling at the same place. Tools stay:
+    // a continuation that decides to call one is still a legal next step.
+    if (schemaBody && !continuing) {
       body.response_format = {
         type: 'json_schema',
         json_schema: { name: 'answer', strict: true, schema: schemaBody },
       }
     } else if (tools) {
       body.tools = tools
-    } else {
+    } else if (!continuing) {
       body.response_format = { type: 'json_object' }
     }
     return body
   },
 
   parse(json) {
-    const msg = json.choices?.[0]?.message || {}
+    const choice = json.choices?.[0] || {}
+    const msg = choice.message || {}
     const call = msg.tool_calls?.[0]
     return {
       content: msg.content || '',
@@ -238,6 +291,12 @@ const openai = {
         ? { name: call.function.name, args: normaliseArgs(call.function.arguments) }
         : null,
       usage: usageOf(json.usage?.prompt_tokens, json.usage?.completion_tokens),
+      // `'length'` is the difference between a model that answered badly and one
+      // that was cut off mid-word, and the two used to be indistinguishable
+      // here: a truncated `{"text": "…` fails JSON.parse, lands as a parse
+      // error, and the turn ends on "I couldn't find this in the docs" about an
+      // answer that was most of the way written.
+      finishReason: choice.finish_reason ?? null,
     }
   },
 
@@ -245,15 +304,23 @@ const openai = {
     let content = ''
     let thinking = ''
     let usage = null
+    let finishReason = null
     const calls = []
 
     await readLines(res, (raw) => {
       const json = sseData(raw)
       if (!json) return
-      if (json.error) throw new Error(String(json.error.message || json.error))
+      if (json.error) throw streamError(json.error)
       // Present only when the caller asked for it; absent is not an error.
       if (json.usage) usage = usageOf(json.usage.prompt_tokens, json.usage.completion_tokens)
-      const d = json.choices?.[0]?.delta || {}
+      const choice = json.choices?.[0]
+      // The last non-null one wins. It rides on the same `choices[0]` as the
+      // deltas and is null on every content frame, arriving for real only on the
+      // terminal frame — and the usage frame that follows carries `choices: []`,
+      // so reading it unconditionally would erase the reason a frame after
+      // learning it.
+      if (choice?.finish_reason) finishReason = choice.finish_reason
+      const d = choice?.delta || {}
       // Same two spellings `parse` already accounts for: OpenRouter normalises
       // the field to `reasoning`, and reading only `reasoning_content` here lost
       // every delta from the models routed through it.
@@ -291,6 +358,7 @@ const openai = {
       thinking,
       toolCall: call ? { name: call.function.name, args: normaliseArgs(call.function.arguments) } : null,
       usage,
+      finishReason,
     }
   },
 
@@ -389,7 +457,16 @@ const anthropic = {
         toolCall = { name: block.name, args: block.input || {} }
       }
     }
-    return { content, thinking, toolCall, usage: usageOf(json.usage?.input_tokens, json.usage?.output_tokens) }
+    // `stop_reason: 'max_tokens'` is the equivalent signal and is deliberately
+    // not mapped — see ollama.parse for why the continuation path is confined to
+    // the OpenAI-shaped services.
+    return {
+      content,
+      thinking,
+      toolCall,
+      usage: usageOf(json.usage?.input_tokens, json.usage?.output_tokens),
+      finishReason: null,
+    }
   },
 
   async readStream(res, onDelta) {
@@ -403,7 +480,7 @@ const anthropic = {
     await readLines(res, (raw) => {
       const json = sseData(raw)
       if (!json) return
-      if (json.type === 'error') throw new Error(String(json.error?.message || 'stream error'))
+      if (json.type === 'error') throw streamError(json.error)
 
       // Input tokens arrive with message_start, output tokens with message_delta.
       if (json.type === 'message_start') promptTokens = json.message?.usage?.input_tokens ?? null
@@ -437,6 +514,7 @@ const anthropic = {
       thinking,
       toolCall: toolName ? { name: toolName, args: normaliseArgs(toolJson) } : null,
       usage: usageOf(promptTokens, outputTokens),
+      finishReason: null,
     }
   },
 

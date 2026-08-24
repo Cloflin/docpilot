@@ -36,7 +36,14 @@ export const COMMENT_MAX = 500
 const SENDS = {none: [], down: ['down'], up: ['up'], both: ['up', 'down']}
 
 export const FEEDBACK_SENDS = Object.keys(SENDS)
-export const FEEDBACK_DEFAULTS = {send: 'both', comment: true}
+/**
+ * `confirm` — ui-specs/009. Submitting used to write to the polite region and
+ * return focus to the thumb, and nothing else: a sighted reader saw the form
+ * vanish, which is indistinguishable from closing it unsent. The line that
+ * replaces it has to be true under all four `send` modes, which is the same
+ * discipline the three `disclaimer` variants keep.
+ */
+export const FEEDBACK_DEFAULTS = {send: 'both', comment: true, confirm: true}
 
 /**
  * `docPilot` is whatever object carries a `feedback` key — raw settings,
@@ -57,7 +64,7 @@ export function resolveFeedback(docPilot, err = console.error) {
     )
     send = FEEDBACK_DEFAULTS.send
   }
-  return {send, comment: cfg.comment !== false}
+  return {send, comment: cfg.comment !== false, confirm: cfg.confirm !== false}
 }
 
 /**

@@ -1,5 +1,71 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import markIcon from './assets/docpilot-mono.svg'
+
+/*
+ * Deep-imported, the way `Home.vue` already imports three of the theme's
+ * components: `@voidzero-dev/vitepress-theme` publishes no `exports` map, so
+ * nothing restricts which subpaths a consumer may reach, and the component's
+ * CSS (`vitepress-default/components/vp-code-group.css`) is already on every page
+ * through the theme's `styles/index.css`. Nothing here is a fork.
+ */
+import CodeGroup from '@voidzero-dev/vitepress-theme/src/components/shared/CodeGroup.vue'
+
+/*
+ * One decision, three surfaces — the README, `docs/install/` and this component
+ * print the same five pairs, and a variant invented on one of them is a command
+ * a reader runs and reports as broken.
+ *
+ * `pnpm exec`, never a bare `pnpm docpilot`: `pnpm run` executes package.json
+ * scripts, `pnpm exec` runs a bin. No line uses `dlx`/`npx` with the UNSCOPED
+ * name either — `docpilot` without the scope is not this package, it is an
+ * unowned name on the registry. Deno reaches npm only through the `npm:`
+ * specifier, so both of its lines carry it.
+ *
+ * Both lines of every tab carry a literal `$ `, and the component's `prefix`
+ * prop is deliberately unused: `prefix` is emitted once, before the first line
+ * only (CodeGroup.vue:41), which on a two-command block reads as a rendering
+ * fault rather than as a prompt. Writing the prompts into the code is safe
+ * because VitePress strips them on copy — its global handler runs
+ * `text.replace(/^ *(\$|>) /gm, '').trim()` for every language `isShell()`
+ * accepts, and `bash`, this component's default, is one of the five
+ * (`vitepress/dist/client/app/composables/copyCode.js:26`,
+ * `shared.js:12`). The clipboard gets the two commands and nothing else.
+ */
+const installTabs = [
+  { label: 'npm', code: '$ npm i @cloflin/docpilot\n$ npx docpilot init' },
+  { label: 'Yarn', code: '$ yarn add @cloflin/docpilot\n$ yarn docpilot init' },
+  { label: 'pnpm', code: '$ pnpm add @cloflin/docpilot\n$ pnpm exec docpilot init' },
+  { label: 'Bun', code: '$ bun add @cloflin/docpilot\n$ bunx docpilot init' },
+  {
+    label: 'Deno',
+    code: '$ deno add npm:@cloflin/docpilot\n$ deno run -A npm:@cloflin/docpilot init',
+  },
+]
+
+const installEl = ref(null)
+
+/*
+ * The theme's `CodeGroup` renders `<button class="copy"></button>` with no text
+ * and no name (CodeGroup.vue:39), so it reaches the accessibility tree as an
+ * unnamed button — the only one on this site, because every copy button in
+ * prose is emitted by VitePress's own `preWrapperPlugin`, which writes
+ * `title="${tooltipText}"` and defaults that to `Copy code`. Naming them from
+ * here rather than editing the vendored component keeps the component
+ * upgradeable; forking it would fork every future fix with it.
+ *
+ * Only the active tab's block is in the tree at all (the rest are
+ * `display: none`), so the five buttons can share the one label the rest of the
+ * site uses. `Copied` needs no attribute: this theme's copied pill takes its
+ * text from `--vp-code-copy-copied-text-content`, not from `data-copied`.
+ */
+onMounted(() => {
+  const label = 'Copy code'
+  for (const button of installEl.value?.querySelectorAll('button.copy') ?? []) {
+    button.title = label
+    button.setAttribute('aria-label', label)
+  }
+})
 </script>
 
 <template>
@@ -21,7 +87,7 @@ import markIcon from './assets/docpilot-mono.svg'
             <span>Get Started</span>
           </a>
           <a
-            href="https://github.com/cloflin/docpilot"
+            href="https://github.com/Cloflin/docpilot"
             target="_blank"
             rel="noopener noreferrer"
             class="button inline-flex items-center gap-2 w-fit"
@@ -42,6 +108,35 @@ import markIcon from './assets/docpilot-mono.svg'
               />
             </svg>
           </a>
+        </div>
+
+        <!--
+          Inside the `gap-5` column so it inherits the same left edge as the
+          heading and the buttons. Three deliberate departures from the way the
+          theme's own marketing pages use this component:
+
+          1. No `hidden md:block`. Hiding the install command below `md` hides
+             the most useful thing on this page from the reader most likely to
+             be skimming it, and `.tabs` is already `overflow-x: auto`, so five
+             labels that do not fit scroll rather than wrap.
+          2. `--vp-code-tab-divider: var(--color-nickel)`, not a hardcoded
+             `#000`. Nickel is the hairline this page already draws with —
+             `border-nickel` on the wrapper above, `divide-nickel` in
+             `FeatureGrid.vue` — and a black rule would be the only one on the
+             page.
+          3. `--vp-code-block-bg: var(--color-slate)`, the same fill as the
+             badge card below, so the two panels in this column read as one
+             family instead of two greys.
+        -->
+        <div ref="installEl" class="install-tabs w-full">
+          <CodeGroup
+            :tabs="installTabs"
+            style="
+              --vp-code-tab-bg: var(--color-slate);
+              --vp-code-block-bg: var(--color-slate);
+              --vp-code-tab-divider: var(--color-nickel);
+            "
+          />
         </div>
       </div>
       <div class="px-3 py-1.5 bg-slate rounded w-fit flex gap-2 items-center mt-10">
@@ -125,6 +220,43 @@ import markIcon from './assets/docpilot-mono.svg'
 </template>
 
 <style scoped>
+/*
+ * VitePress's prose rhythm puts 16px above the group (`vp-code-group.css:2`)
+ * and 16px below the code block (`vp-doc.css:293`). This column is spaced by
+ * `gap-5` instead, so both land on top of the gap and open a wider seam around
+ * the tabs than anywhere else in the stack.
+ */
+.install-tabs :deep(.vp-code-group) {
+  margin-top: 0;
+}
+
+.install-tabs :deep(div[class*='language-']) {
+  margin-bottom: 0;
+}
+
+/*
+ * Below 640px the theme pulls the group 24px past its container on both sides
+ * and squares its corners — a full bleed that assumes VitePress's 24px prose
+ * padding. This column pads by 40px (`p-10`), so the bleed stops 16px short of
+ * the viewport edge and reads as the block being misaligned with the heading
+ * above it rather than as a full bleed. Give it the theme's own >=640px
+ * treatment at every width. `!important` is not preference: the rule being
+ * corrected carries one (`vp-code-group.css:76`).
+ */
+@media (max-width: 639px) {
+  .install-tabs :deep(.tabs) {
+    margin-right: 0;
+    margin-left: 0;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .install-tabs :deep(div[class*='language-']) {
+    margin-right: 0;
+    margin-left: 0;
+    border-radius: 0 0 8px 8px !important;
+  }
+}
+
 .hero-background {
   background-color: #476be3;
   background-image:

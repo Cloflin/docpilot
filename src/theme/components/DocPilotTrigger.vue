@@ -9,6 +9,8 @@
     :aria-expanded="kind === 'fab' ? s.open : undefined"
     aria-keyshortcuts="control+i meta+i"
     @click="toggle"
+    @pointerenter="warm"
+    @focus="warm"
   >
     <!--
       Drawn in glyphs.js rather than pulled from the theme: `vpi-sparkles` and
@@ -49,8 +51,8 @@
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
-import { useData } from 'vitepress'
 import * as session from '../docpilot/session.js'
+import { useHost } from '../docpilot/host.js'
 import { bindHotkey, unbindHotkey } from '../docpilot/hotkey.js'
 import { GLYPHS } from '../docpilot/glyphs.js'
 import { resolveI18n, t as translate, normaliseLocale } from '../docpilot/i18n.js'
@@ -79,7 +81,7 @@ const kind = computed(() => {
 })
 
 const s = session.state
-const { theme, lang } = useData()
+const { theme, lang } = useHost()
 const enabled = computed(() => theme.value?.docPilot?.enabled !== false)
 
 // Read straight off themeConfig and resolved again here, for the same reason
@@ -159,6 +161,46 @@ onBeforeUnmount(() => {
 })
 
 const toggle = () => session.toggle()
+
+/**
+ * Fetch the index before it is asked for — ui-specs/009, `ui.prefetch`.
+ *
+ * `'hover'` is the default because a pointer arriving on this button, or focus
+ * landing on it, is about as close to intent as a signal gets and is almost
+ * never wrong. By the time the click lands the manifest is usually in, and the
+ * reader's first impression of the panel stops being *Loading the docs index*.
+ *
+ * Only the network half runs — `prefetchIndex` is deliberately not
+ * `ensureIndex`, which would restore the scope and announce into a live region
+ * while the panel is shut. The bandwidth guards live in the store beside it.
+ */
+const warm = () => {
+  if (ui.value.prefetch === 'hover') session.prefetchIndex()
+}
+
+/**
+ * `'idle'` — for a site that would rather pay up front than on the hover.
+ *
+ * Behind `requestIdleCallback` where it exists, which is everywhere that matters
+ * except Safari; there the timeout is the fallback the API's own polyfills use,
+ * and being a second late costs nothing that a prefetch was going to save.
+ */
+let idleHandle = null
+onMounted(() => {
+  // The FAB is mounted once and the nav trigger once, so gating on `visible`
+  // keeps the two instances from both scheduling the same fetch.
+  if (!visible.value || ui.value.prefetch !== 'idle') return
+  const run = () => session.prefetchIndex()
+  idleHandle = window.requestIdleCallback
+    ? window.requestIdleCallback(run, { timeout: 3000 })
+    : setTimeout(run, 1200)
+})
+
+onBeforeUnmount(() => {
+  if (idleHandle == null) return
+  window.cancelIdleCallback ? window.cancelIdleCallback(idleHandle) : clearTimeout(idleHandle)
+  idleHandle = null
+})
 </script>
 
 <!--

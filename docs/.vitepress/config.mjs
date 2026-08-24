@@ -15,7 +15,7 @@ const pkg = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
 )
 
-const repo = 'https://github.com/cloflin/docpilot'
+const repo = 'https://github.com/Cloflin/docpilot'
 
 /**
  * The panel, on the package's own documentation.
@@ -47,15 +47,27 @@ const ragIndex = new URL('../public/rag/manifest.json', import.meta.url)
  * `doctor` all read THIS named export, so there is no second place stating
  * which model embeds or where the docs live.
  *
- * The providers are the shipped defaults, written out rather than inherited:
- * this is the setup Getting started tells a reader to run, so the site that
- * documents it should be the one running it.
+ * The providers are OpenRouter, on BOTH halves, and the models are deliberately
+ * unnamed. An unnamed half on this one provider does not fall back to a default
+ * model — it resolves to the free pool in `openrouter.js`, which is the shape
+ * that matches what a shared free tier actually is: a 429 there is a statement
+ * about other people's traffic, not about the model, so a list tried in order
+ * beats any single id anyone could write here.
+ *
+ * `embed: 'auto'` follows the chat provider rather than restating it. It reads
+ * as one decision because it is one — OpenRouter serves `/v1/embeddings` too,
+ * so the second provider a docs site usually needs is not needed here.
+ *
+ * The key is `OPENROUTER_API_KEY`, read from `.env.local` by `loadEnv` below.
+ * It never reaches the page: in dev the plugin's `/ai/*` proxy attaches it
+ * server-side, and a production deploy needs the same proxy in front —
+ * `npx docpilot doctor --proxy` prints that contract.
  */
 export const docPilot = {
   enabled: existsSync(ragIndex),
   product: 'DocPilot for VitePress',
-  chat: { provider: 'ollama', model: 'qwen3:8b' },
-  embed: { provider: 'ollama', model: 'bge-m3' },
+  chat: { provider: 'openrouter' },
+  embed: 'auto',
   /**
    * The floating button, not the navbar one, and not by preference.
    *
@@ -98,14 +110,35 @@ const sidebarForGuide = [
     ],
   },
   {
+    /**
+     * Install is its own group, and it is ordered by BUNDLER rather than by
+     * framework — which is the order the decision actually has, however odd it
+     * looks in a list. VitePress and Docusaurus come first because they are one
+     * import and one plugin; the rest are ordered from most machinery to least.
+     */
+    text: 'Install',
+    base: '/install/',
+    items: [
+      { text: 'Which entry point', link: '' },
+      { text: 'VitePress', link: 'vitepress' },
+      { text: 'Docusaurus', link: 'docusaurus' },
+      { text: 'Vue', link: 'vue' },
+      { text: 'React', link: 'react' },
+      { text: 'JavaScript', link: 'javascript' },
+      { text: 'TypeScript', link: 'typescript' },
+      { text: 'Web', link: 'web' },
+    ],
+  },
+  {
     text: 'Guide',
     items: [
       { text: 'Choosing providers', link: '/guide/providers' },
+      { text: 'Living on the free tier', link: '/guide/free-tier' },
       { text: 'Building the index', link: '/guide/indexing' },
       { text: 'Imported pages', link: '/guide/imported-pages' },
       { text: 'Calibration and evaluation', link: '/guide/evaluation' },
       { text: 'Production', link: '/guide/production' },
-      { text: 'Sites that are not VitePress', link: '/guide/other-sites' },
+      { text: 'A host of your own', link: '/guide/other-sites' },
       { text: 'Appearance', link: '/guide/appearance' },
       { text: 'Translating the panel', link: '/guide/i18n' },
       { text: 'Conversation history', link: '/guide/history' },
@@ -131,6 +164,7 @@ const sidebarForReference = [
     base: '/reference/',
     items: [
       { text: 'Configuration', link: 'config' },
+      { text: 'Syntax highlighting', link: 'highlighting' },
       { text: 'CLI', link: 'cli' },
       { text: 'Skills', link: 'skills' },
     ],
@@ -182,7 +216,7 @@ const config = defineConfig({
     nav: [
       {
         text: 'Guide',
-        activeMatch: '/(guide|concepts)',
+        activeMatch: '/(guide|concepts|install)',
         link: '/guide/',
       },
       {
@@ -204,6 +238,7 @@ const config = defineConfig({
 
     sidebar: {
       '/guide/': sidebarForGuide,
+      '/install/': sidebarForGuide,
       '/concepts/': sidebarForGuide,
       '/reference/': sidebarForReference,
     },

@@ -8,7 +8,7 @@
  */
 
 import MarkdownIt from 'markdown-it'
-import { highlight, LANGS } from './highlight.js'
+import { highlight, resolveLang } from './highlight.js'
 import { ICON_ATTRS, symbolId } from './glyphs.js'
 
 const md = new MarkdownIt({
@@ -71,29 +71,57 @@ const COPY_BUTTON =
   `<use class="docpilot__glyph-done" href="#${symbolId('check')}"/>` +
   '</svg></button>'
 
-function langOf(info) {
-  const first = String(info || '')
-    .trim()
-    .split(/\s+/)[0]
-    .toLowerCase()
-  // `hasOwn`, not a plain lookup. The info string is model output, and a plain
-  // lookup reaches Object.prototype: ```constructor and ```__proto__ both return
-  // something truthy that is not a language name, and it is that value — not a
-  // value from this table — that gets written into the markup downstream. The
-  // table is a sanitiser, so it has to be the only thing that can answer.
-  return Object.hasOwn(LANGS, first) ? LANGS[first] : null
-}
-
 md.renderer.rules.fence = (tokens, idx) => {
   const token = tokens[idx]
   const code = token.content.replace(/\n$/, '')
-  const lang = langOf(md.utils.unescapeAll(token.info))
+  // `resolveLang`, not a lookup written here. The info string is model output
+  // and the value it resolves to reaches an attribute unescaped, so the table
+  // has to be the only thing that can answer — and it lives beside the
+  // highlighter registry, which is the only thing allowed to extend it.
+  const lang = resolveLang(md.utils.unescapeAll(token.info))
   // One branch for three cases: no language, a language we do not ship, and a
   // highlighter that has not finished loading. All three render the same block.
   const body =
     (lang && highlight(code, lang)) ||
     `<pre tabindex="0"><code>${md.utils.escapeHtml(code)}</code></pre>`
   return `<div class="docpilot__code"${lang ? ` data-lang="${lang}"` : ''}>${COPY_BUTTON}${body}</div>\n`
+}
+
+/**
+ * Tables — ui-specs/009.
+ *
+ * A comparison table is the genre norm for a documentation answer: *option ·
+ * default · what it does* is how half this package's own reference pages are
+ * written, so it is how the model writes back. Nothing styled one, and nothing
+ * contained one either — the panel is 360–460px wide and a three-column table
+ * simply ran out the side of it.
+ *
+ * The wrapper is the code card's device, one floor down: the scroller is a
+ * sibling problem and gets the sibling answer. Like `pre` it is a **tab stop**,
+ * because a scroller nobody can reach by keyboard is a scroller with content
+ * behind it that some readers cannot get to.
+ *
+ * It carries NO ROLE. `role="region"` is what a scrollable table container
+ * usually gets, and it needs a name to be worth having; a table that arrived
+ * from a model has no caption to take one from, and an unnamed region landmark
+ * is worse than no landmark. The same call `pre` already makes above.
+ *
+ * The class must not contain `language-`, for the reason the fence rule states.
+ */
+md.renderer.rules.table_open = () => '<div class="docpilot__table" tabindex="0">\n<table>\n'
+md.renderer.rules.table_close = () => '</table>\n</div>\n'
+
+/**
+ * `scope="col"` on every header cell.
+ *
+ * GFM tables have one header row and no row headers, so every `th` this renderer
+ * ever sees is a column header — which is what makes the attribute safe to set
+ * unconditionally. Through `renderToken` rather than a literal string, because
+ * markdown-it puts the alignment on `style` and a hand-written tag would drop it.
+ */
+md.renderer.rules.th_open = (tokens, idx, options, env, self) => {
+  tokens[idx].attrSet('scope', 'col')
+  return self.renderToken(tokens, idx, options)
 }
 
 /** markdown-it does not export Token from its package root; take it from a parse. */

@@ -65,8 +65,17 @@ export const LIMITS = { conversations: 20, bytes: 512 * 1024, title: 80, scopePa
  *  the retrieved chunks above all — is diagnostics that cost kilobytes a turn. */
 const GATE_KEYS = ['G', 'threshold', 'mode', 'n', 'channel', 'antecedent', 'wouldPassUnscoped']
 
-/** A turn worth restoring has settled. Anything else is coerced or dropped. */
-const TERMINAL = new Set(['complete', 'no-answer', 'aborted', 'error'])
+/**
+ * A turn worth restoring has settled. Anything else is coerced or dropped.
+ *
+ * `'rate-limited'` is on this list because leaving it off made the archive lie
+ * about who ended the turn. A daily 429 raised from a loop step AFTER text was
+ * painted settles the live turn as 'rate-limited'; that state was not here, so
+ * the coercion below stored it as 'aborted' and it came back under
+ * `T('turn.stopped')` — "Stopped." — telling the reader they pressed a button
+ * they never pressed. The service refused; the reader did nothing.
+ */
+const TERMINAL = new Set(['complete', 'no-answer', 'aborted', 'error', 'rate-limited'])
 
 const MINUTE = 60_000
 const HOUR = 3_600_000
@@ -95,6 +104,24 @@ export function slimTurn(turn, limits = LIMITS) {
   // A turn caught mid-flight settled the moment it was written down. It kept
   // what it had already streamed, which is exactly what `stop()` produces.
   const state = TERMINAL.has(turn.state) ? turn.state : 'aborted'
+
+  /**
+   * What a restored 'rate-limited' turn says, and what it deliberately cannot.
+   *
+   * `turn.rateLimit` — the ceiling and the instant the quota resets — is NOT
+   * persisted. The panel renders that instant as a clock time in the reader's
+   * locale, and a clock time that has already passed is worse than no line at
+   * all; `resetLine` follows the same rule when a 429 carried no reset header,
+   * dropping the sentence rather than filling it with a guess. Nothing here has
+   * a clock to tell the two apart, and giving one to a pure projection to save a
+   * line that expires within the day is the wrong trade.
+   *
+   * The durable half survives on the state: the day's limit, not the reader,
+   * ended this answer. That is the half a thread reopened tomorrow can still
+   * check. A rate-limited turn with no text at all never reaches here — it has
+   * neither `answerText` nor `refusal`, so the guard above drops it, which is
+   * what keeps "the limit is used up" out of an archive read a week later.
+   */
 
   const sources = (turn.sources || []).map((s) => ({
     n: s.n,

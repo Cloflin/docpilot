@@ -1,14 +1,22 @@
 # Appearance
 
-The panel ships as two stylesheets: one that knows nothing about VitePress, and one that translates it into VitePress's own tokens. Everything on this page follows from that split — which file to import, which custom properties to override, and what the two placements actually do.
+The panel ships as one stylesheet that knows nothing about any host, plus one
+small adapter per host that translates it into that host's own tokens. Everything
+on this page follows from that split — which file to import, which custom
+properties to override, and what the two placements actually do.
 
-## Three entry points
+## Five entry points
 
 | import | what it is | when |
 |---|---|---|
 | `@cloflin/docpilot/style.css` | core + VitePress adapter | the default, and what `…/theme` already imports |
-| `@cloflin/docpilot/style/core.css` | the panel, on real values | not VitePress, or your own mapping |
-| `@cloflin/docpilot/style/vitepress.css` | the mapping only | you replaced the core and kept the host |
+| `@cloflin/docpilot/style/core.css` | the panel, on real values | any other host, or your own mapping |
+| `@cloflin/docpilot/style/vitepress.css` | the VitePress mapping only | you replaced the core and kept the host |
+| `@cloflin/docpilot/style/docusaurus.css` | the Docusaurus mapping only | loaded for you by the Docusaurus plugin |
+| `@cloflin/docpilot/web.css` | the core, from the prebuilt bundle | a `<script>` tag, or the React adapter |
+
+An adapter is loaded **after** the core, always. The Docusaurus plugin lists them
+in that order itself; everywhere else it is the order of your two imports.
 
 `import { withDocPilot } from '@cloflin/docpilot/theme'` pulls in the bundle. To supply the CSS yourself:
 
@@ -38,25 +46,25 @@ A delete button inside a hovered history row therefore paints level 2 over level
 
 ## The tokens
 
-Everything the panel paints goes through one of these. The middle column is what the core declares with no host; the right is what the VitePress adapter re-declares it as.
+Everything the panel paints goes through one of these. The second column is what the core declares with no host; the two after it are what each adapter re-declares it as.
 
-| token | core (light / dark) | on VitePress |
-|---|---|---|
-| `--dp-surface` | `#ffffff` / `#1b1b1f` | `var(--vp-c-bg)` |
-| `--dp-surface-2` | `rgba(101,117,133,.12)` / `.16` | `var(--vp-c-default-soft)` |
-| `--dp-wash` | `color-mix(in srgb, var(--dp-text) 12%, transparent)` | derived — not re-declared |
-| `--dp-line` | `rgba(101,117,133,.24)` / `rgba(130,130,140,.32)` | `var(--vp-c-divider)` |
-| `--dp-text` | `#1f2328` / `#dfdfd6` | `var(--vp-c-text-1)` |
-| `--dp-text-dim` | `#5c6672` / `#98989f` | `var(--vp-c-text-2)` |
-| `--dp-on-text` | `#ffffff` / `#1b1b1f` | `var(--vp-c-neutral-inverse, var(--vp-c-bg))` |
-| `--dp-focus` | `#1f2328` / `#dfdfd6` | `var(--vp-c-brand-1)` |
-| `--dp-accent-soft` | `rgba(100,108,255,.18)` | `var(--vp-c-brand-soft)` |
-| `--dp-chip` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-c-bg-alt)` |
-| `--dp-code-bg` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-code-block-bg)` |
-| `--dp-shadow` | two-layer black alpha | `var(--vp-shadow-3)` |
-| `--dp-scrim` | `rgba(0,0,0,.6)` | `var(--vp-backdrop-bg-color)` |
-| `--dp-font`, `--dp-font-mono` | system stacks | the host's two families |
-| `--dp-top` | `0px` | `var(--vp-nav-height)` |
+| token | core (light / dark) | on VitePress | on Docusaurus |
+|---|---|---|---|
+| `--dp-surface` | `#ffffff` / `#1b1b1f` | `var(--vp-c-bg)` | `var(--ifm-background-color)` |
+| `--dp-surface-2` | `rgba(101,117,133,.12)` / `.16` | `var(--vp-c-default-soft)` | `var(--ifm-color-emphasis-100)` |
+| `--dp-wash` | `color-mix(in srgb, var(--dp-text) 12%, transparent)` | derived — not re-declared | derived |
+| `--dp-line` | `rgba(101,117,133,.24)` / `rgba(130,130,140,.32)` | `var(--vp-c-divider)` | `var(--ifm-color-emphasis-300)` |
+| `--dp-text` | `#1f2328` / `#dfdfd6` | `var(--vp-c-text-1)` | `var(--ifm-font-color-base)` |
+| `--dp-text-dim` | `#5c6672` / `#98989f` | `var(--vp-c-text-2)` | `var(--ifm-color-emphasis-700)` |
+| `--dp-on-text` | `#ffffff` / `#1b1b1f` | `var(--vp-c-neutral-inverse, var(--vp-c-bg))` | `var(--ifm-background-color)` |
+| `--dp-focus` | `#1f2328` / `#dfdfd6` | `var(--vp-c-brand-1)` | `var(--ifm-color-primary)` |
+| `--dp-accent-soft` | `rgba(100,108,255,.18)` | `var(--vp-c-brand-soft)` | the primary at 18%, via `color-mix` |
+| `--dp-chip` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-c-bg-alt)` | `var(--ifm-color-emphasis-100)` |
+| `--dp-code-bg` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-code-block-bg)` | `var(--ifm-code-background)` |
+| `--dp-shadow` | two-layer black alpha | `var(--vp-shadow-3)` | `var(--ifm-global-shadow-lw)` |
+| `--dp-scrim` | `rgba(0,0,0,.6)` | `var(--vp-backdrop-bg-color)` | the same literal — Infima has no token |
+| `--dp-font`, `--dp-font-mono` | system stacks | the host's two families | the host's two families |
+| `--dp-top` | `0px` | `var(--vp-nav-height)` | `var(--ifm-navbar-height)` |
 
 `--dp-wash` is **derived rather than mapped**, and deliberately: substitution resolves it against whatever `--dp-text` ends up being, so it follows the host's theme — and your override of it — without a second declaration. It has no dark variant and must not be given one; the suite requires every token that darkens to be re-declared unconditionally by an adapter, and no host token expresses "7% in light, 15% in dark" as one value.
 
@@ -91,7 +99,13 @@ Override any of them after the stylesheet:
 }
 ```
 
-The core's dark values come from `prefers-color-scheme`. An adapter has to re-declare **the whole colour set unconditionally**, not the tokens that differ: VitePress switches appearance by class and lets a reader pin a site to light, and a token left out would keep its OS-driven value and paint one dark element into an otherwise light panel. The suite checks this pairing.
+The core's dark values come from `prefers-color-scheme`. An adapter has to re-declare **the whole colour set unconditionally**, not the tokens that differ: every host switches appearance by a class or an attribute and lets a reader pin the site against their OS, so a token left out would keep its OS-driven value and paint one dark element into an otherwise light panel. The suite checks this pairing, for every adapter.
+
+Writing one for a host of your own is the same shape: a `:root` block that
+re-declares those fifteen names in your tokens' terms, loaded after the core. It
+must introduce no `--dp-*` of its own — a token that exists only in an adapter is
+a token the core cannot render without it, which is the failure the split exists
+to prevent.
 
 ## Two shapes, two placements
 
@@ -147,4 +161,24 @@ Two rules use `:has()` — hiding the floating button under an open panel, and s
 
 ## Syntax highlighting
 
-Shiki writes both themes onto every token as custom properties and applies neither, so a stylesheet has to pick one. The core picks off `prefers-color-scheme`; the adapter states both branches by class, including `html:not(.dark)` — without it, a dark-OS reader on a site pinned to light would get the panel's code painted for a dark background. This is the one thing in the package a token cannot cover: the `var()` has to sit on a rule targeting the spans, because that is the only place the variables exist.
+The highlighter is pluggable — Shiki, Prism, highlight.js, or your own — and
+[Syntax highlighting](/reference/highlighting) is the whole of that API. What
+belongs on this page is the part that is about colour.
+
+**Shiki** writes both themes onto every token as custom properties and applies
+neither, so a stylesheet has to pick one. The core picks off
+`prefers-color-scheme`; each adapter states both branches by the host's own dark
+signal — `html.dark` and `html:not(.dark)` on VitePress,
+`html[data-theme='dark']` and its negation on Docusaurus. The negative branch is
+not decoration: without it, a dark-OS reader on a site pinned to light gets the
+panel's code painted for a dark background. This is the one thing in the package a
+token cannot cover, because the `var()` has to sit on a rule targeting the spans,
+which is the only place those variables exist.
+
+**Prism and highlight.js** write classes, and the theme that colours them is the
+host's — the same stylesheet that already colours the host's own code blocks, and
+switched by whatever already switches those. The panel adds nothing and undoes
+exactly one thing: the background. Every highlight.js theme paints `.hljs`, and
+Prism's default theme gives `.token.operator` a translucent white that reads as a
+smear on a dark panel. The code card is one surface — `--dp-code-bg` — so both are
+neutralised inside it, and colour is left alone.

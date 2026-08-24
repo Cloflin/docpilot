@@ -12,6 +12,10 @@ Each was written before its change, states the problem it solved and the researc
 behind it, and is left alone afterwards. Where a value in one has since moved, it
 carries an admonition at the top pointing here — and 000 wins.
 
+**[IDEAS.ru.md](IDEAS.ru.md) is neither.** It is an unnumbered backlog: problems
+found in the code and directions proposed for them, none of it decided. An entry
+leaves it by acquiring a number, which is also when it acquires a research pass.
+
 The rule this directory exists to enforce: a change a reader can see gets a spec
 and a research pass first, and a change that moves a rule updates 000 and
 `scripts/check-docpilot.sh` in the same commit.
@@ -29,6 +33,7 @@ and a research pass first, and a change that moves a rule updates 000 and
 | [006](006-row-controls.md) | Delete is a bin, not an `×`; a row and the control inside it separate |
 | [007](007-quote-a-passage.md) | Selecting inside an answer offers **Ask AI**; the passage travels as its own field |
 | [008](008-edit-a-question.md) | A question can be copied, rewritten and asked again — both truncate the thread; a pill leads back down a long one |
+| [009](009-every-action-has-a-switch.md) | **rule 11** — every reader-visible action is removable and documented; sixteen switches, seventeen changes, four defects that get none |
 
 ## The rules
 

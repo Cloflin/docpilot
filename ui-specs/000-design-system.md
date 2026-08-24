@@ -258,9 +258,16 @@ One device, one value: `1px solid var(--dp-line)`.
 
 **Wears a ring:** the drawer's leading edge · the popup (all four sides) · the
 selection popover · the header's bottom, `transparent` until the thread is
-scrolled · the conversation dock · the scope picker and its actions row · the
-composer field · the feedback textarea · the question editor · the jump pill ·
-the code card · the floating button.
+scrolled · the conversation dock · the scope picker, its actions row and its
+filter field · the composer field · the feedback textarea · the question editor ·
+the jump pill · the code card · the answer's table scroller and its header rule ·
+the floating button.
+
+The last two arrived with [009](009-every-action-has-a-switch.md) and are the
+same argument as the code card's: a table in an answer is content wider than the
+column it is in, so it gets the column's device — a scroller with a ring — and
+the header row is separated from the body by the one hairline rather than by a
+fill. The picker's filter is the composer's arrangement one tier down.
 
 **Fill only:** the question bubble (the reference's has no border) · suggestion,
 source and pick rows · every button · the nav trigger, which has to match a search
@@ -521,6 +528,61 @@ The copy chip is 32px (44 where there is no hover), `--dp-r-sm`, painted
 hovered — by `opacity` and `pointer-events`, never `visibility`, so it stays
 reachable by Tab.
 
+### Source passage — `.docpilot__passage`
+
+[009](009-every-action-has-a-switch.md). The retrieved chunk behind a citation,
+opened from a disclosure on the source row. `--dp-surface-2`, `--dp-r-md`,
+13px/`--dp-text-dim`, `white-space: pre-wrap`, spanning all of the row's grid
+columns — the quote chip's treatment, because it is the same kind of object: text
+from somewhere else, shown as evidence rather than in the panel's own voice. No
+ring.
+
+A fixed-height scroller at `min(240px, 32dvh)`, not a clamp, and that is the
+honest choice rather than the tidy one: the whole chunk is what the model was
+given, and a truncated passage labelled *the passage this was drawn from* would
+be a smaller lie than an invented one but a lie all the same. The reasoning box
+one floor up is the same device for the same reason.
+
+The row grows a third grid track — `auto minmax(0, 1fr) 32px` — only on rows that
+carry the disclosure, which is the history row's arrangement and the same rule:
+only the rows with a control pay for the column. The chevron rotates 180° when
+open, and it is **the one rotation in the package**; `prefers-reduced-motion`
+cancels the turning and keeps the direction, because the direction is state.
+
+### The answer's table — `.docpilot__table`
+
+[009](009-every-action-has-a-switch.md). `overflow-x: auto` with
+`overscroll-behavior-inline: contain`, a ring, `--dp-r-md`, and the `table` inside
+at `min-inline-size: 100%` so the content keeps the width the scroller exists to
+give it. 13px, `white-space: nowrap` on the cells, and one hairline under the
+header row.
+
+A **tab stop**, like the `pre` it borrows from, and carrying **no role**: a
+`region` needs a name, a table that arrived from a model has no caption to give
+it one, and an unnamed landmark is worse than none.
+
+### Picker filter — `.docpilot__picker-filter`
+
+[009](009-every-action-has-a-switch.md). `--dp-surface` and a ring — the
+composer's arrangement, because a tinted field *and* a ring are two devices doing
+one job — at `--dp-r-sm` rather than `--dp-r-field`: that radius belongs to the
+panel's primary input, and a second pill-shaped field a few pixels away would
+flatten the difference between asking a question and narrowing a list. 13px,
+32px min block size (44 coarse), and **the second field in the package to carry
+the iOS zoom guard**, for the same reason `.docpilot__prompt-edit` does.
+
+Section headings inside the listbox — `.docpilot__pick-group` — are 13px/500
+`--dp-text-dim` with no fill and no hover: a label is not a row, and either would
+make it look pressable.
+
+### Feedback confirmation and the first-run line
+
+[009](009-every-action-has-a-switch.md). Both are `.docpilot__meta` and neither
+introduces anything: the confirmation is one dim line where the form was, and the
+hint is that line plus a ghost pill in a `.docpilot__row` whose `-12px` is
+cancelled — the row leads with text and ends with the pill, so the correction
+belongs at the other end.
+
 ### Dock and scope picker
 
 Full-bleed bands: the gutter is cancelled and restored as padding, because a line
@@ -571,6 +633,9 @@ Design direction that can be checked, is. `scripts/check-docpilot.sh`, run by
 | 8 | `core.scss` names no VitePress token or selector | grep |
 | 9 | the adapter is a mapping: only foreign selectors, only `--dp-*` on `:root`, and the bundle entry is nothing but `@use` | awk |
 | 10 | the published token table and `core.scss` agree | comm |
+| 11a | **every `config.<group>.<key>` the theme reads exists in the client half**, or is named in `THEME_ONLY` | vitest |
+| 11b | every leaf in `DEFAULTS` is named in `docs/reference/config.md` | vitest |
+| 11c | the switch inventory is printed | vitest |
 
 Three of these are worth stating in prose because their *shape* matters more than
 their text.
@@ -592,6 +657,25 @@ captures everything up to the semicolon.
 included.** Do not write that word in a comment in `core.scss` or
 `vitepress.scss`. Say "loop", or "repeats". This file is not counted, which is why
 it can say it.
+
+**Rule 11 is enforced in vitest, not in the shell**, and that is the second time
+this file has had to say so. It imports `DEFAULTS` and walks a tree, and portable
+`grep` cannot — the same reason the two original rules that live in the suite
+moved there. `check-docpilot.sh` stays the place for rules a `grep` can express.
+
+Its shape is rule 10's, pointed at behaviour instead of at tokens: **a knob the
+panel reads that nothing can set, and a knob nothing reads that the docs promise,
+are the same defect from two sides, and neither is visible in a diff.** The
+package has shipped one already — `docPilot.suggestions` was read by the client
+and never emitted by the build, so the fallback was the only branch that could
+ever run, for the whole life of the setting.
+
+`THEME_ONLY` in `src/config.js` is 11a's list of allowed exceptions, and it is
+the mirror of `SERVER_ONLY`: the eval runner's seam into the shared harness, and
+the two credentials the client half must never carry. It stayed at four entries
+because the first run turned up a fifth — `llm.think`, read in `harness.js` with
+no writer in any code path — which was deleted rather than exempted. That is what
+the rule is for.
 
 **Rule 10 is why this file and the published guide can both exist.** 000 is
 repo-internal and carries the reasoning; `docs/guide/appearance.md` is published
@@ -616,4 +700,6 @@ not declared — fails the build rather than drifting quietly.
 | [004](004-button-system.md) | **substance stands.** Its §Research concluded that OpenAI's system "is built on fills, not outlines" and that the two design languages "agree by accident" — true of the reference's *buttons*, false of its *composer*, which carries a 1px border. That agreement is no longer needed. Also superseded: `--dp-fill` is now two tokens; the radius tiers are gone; the 6px on `.docpilot__scope` is `--dp-r-sm`; the pill is 13px not 14px. |
 | [005](005-fab-label.md) | **stands.** `padding-inline` 18px → 16px, and the button gained a ring and moved to `--dp-surface`. |
 | [006](006-row-controls.md) | **half superseded.** §"The row yields to the control inside it" is **withdrawn** — the two-level surface makes the separation structural, so the `:has()` rule and the hover underline it suppressed are both gone. Its problem statement was right; the fix moved a layer down. §The trash glyph stands. |
-| [007](007-quote-a-passage.md) | **stands.** Written against this file rather than before it: the elevation, forced-colors and component-recipe entries above are its edits. |
+| [007](007-quote-a-passage.md) | **mechanism stands, and moved.** The selection watcher is now `selection.js` and runs twice — over an answer, and over the host's article when `quote.fromDocs` is on. Every value it records is unchanged; what 009 added is a switch on the behaviour it introduced, which is rule 11 applied backwards. |
+| [008](008-edit-a-question.md) | **stands.** `↑` in an empty composer now opens the editor it added, which is a second way into the same control rather than a change to it. |
+| [009](009-every-action-has-a-switch.md) | **stands** — it is this file's newest source, and rule 11 above is its. |

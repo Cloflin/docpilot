@@ -27,12 +27,52 @@
 import { h } from 'vue'
 import DefaultTheme from 'vitepress/theme'
 
+import { installVitePressHost } from './docpilot/host-vitepress.js'
+import { setHighlighter } from './docpilot/highlight.js'
+import { createShikiHighlighter } from './docpilot/highlighters/shiki.js'
 import DocPilot from './components/DocPilot.vue'
 import DocPilotTrigger from './components/DocPilotTrigger.vue'
 import DocPilotCta from './components/DocPilotCta.vue'
 import DocPilotIcons from './components/DocPilotIcons.vue'
+import DocPilotQuote from './components/DocPilotQuote.vue'
 
-export { DocPilot, DocPilotTrigger, DocPilotCta, DocPilotIcons }
+export { DocPilot, DocPilotTrigger, DocPilotCta, DocPilotIcons, DocPilotQuote }
+
+/**
+ * The components ask `host.js` who the host is; this file is where VitePress
+ * answers. Installed at import time, and again inside each of the two entry
+ * points below.
+ *
+ * Once would be enough for the documented paths — importing either function
+ * evaluates this module body. The repeat covers the one that is not: a project
+ * that imports `DocPilot.vue` from `@cloflin/docpilot/theme/components/…`
+ * directly, and reaches for `docPilotSlots()` afterwards. `installVitePressHost`
+ * is a latch, so the extra calls cost a boolean test.
+ *
+ * IT IS NOT DECLARED AS A SIDE EFFECT in package.json, deliberately: the
+ * `sideEffects` array is `['*.css','*.scss']`, and that exact value is what
+ * lets a consumer's bundler drop the components they do not use. Widening it to
+ * cover this call would trade a real guarantee for something a function call
+ * already achieves.
+ */
+installVitePressHost()
+
+/**
+ * Shiki, because this is the VitePress entry point and VitePress highlights its
+ * own pages with Shiki — an answer in the panel is then the same code in the
+ * same colours as the page behind it.
+ *
+ * CHOSEN HERE RATHER THAN DEFAULTED IN THE REGISTRY. A default inside
+ * `highlight.js` would put `import('@shikijs/…')` into every consumer's module
+ * graph, and a bundler that cannot resolve those fails the BUILD — so a
+ * Docusaurus site that chose Prism would still have to install Shiki in order to
+ * compile. Choosing at the entry point is what makes the four `@shikijs`
+ * packages genuinely optional peers.
+ *
+ * Nothing is loaded by this call. The grammars are fetched by
+ * `ensureHighlighter()`, which the panel calls when it is first opened.
+ */
+setHighlighter(createShikiHighlighter())
 
 /**
  * The four slots, and why each is the one it is.
@@ -50,21 +90,28 @@ export { DocPilot, DocPilotTrigger, DocPilotCta, DocPilotIcons }
  * box, which is where VitePress 2 puts its own DocPilot button. The stylesheet
  * reorders search ahead of it; there is no DOM order that gets both.
  *
- * `layout-bottom` carries THREE components: the icon sprite, the panel, and the
- * floating button, which belongs at the end of the document and not inside the
- * navbar. All three are always mounted; which of the two triggers actually
- * renders is decided inside the component from `docPilot.ui`, for the same
- * reason `enabled` is — this function runs at import time, when `themeConfig`
- * cannot be read yet.
+ * `layout-bottom` carries FOUR components: the icon sprite, the panel, the
+ * floating button — which belongs at the end of the document and not inside the
+ * navbar — and the article's selection popover. All four are always mounted;
+ * which of the two triggers actually renders is decided inside the component
+ * from `docPilot.ui`, and whether the popover renders at all from
+ * `docPilot.quote.fromDocs`, for the same reason `enabled` is — this function
+ * runs at import time, when `themeConfig` cannot be read yet.
  *
  * The sprite is FIRST and is mounted exactly once — see ui-specs/001. It
  * teleports to `<body>`, so its position in this array is not where it lands;
  * what the array guarantees is that there is one of it.
  */
 export function docPilotSlots(slots = {}) {
+  installVitePressHost()
   return {
     ...slots,
-    'layout-bottom': () => [h(DocPilotIcons), h(DocPilot), h(DocPilotTrigger, { variant: 'fab' })],
+    'layout-bottom': () => [
+      h(DocPilotIcons),
+      h(DocPilot),
+      h(DocPilotTrigger, { variant: 'fab' }),
+      h(DocPilotQuote),
+    ],
     'nav-bar-content-before': () => h(DocPilotTrigger),
     'nav-screen-content-after': () => h(DocPilotTrigger, { variant: 'screen' }),
     'doc-footer-before': () => h(DocPilotCta),
@@ -93,6 +140,7 @@ export function docPilotSlots(slots = {}) {
  * only visible symptom is a site that suddenly looks like stock VitePress.
  */
 export function withDocPilot(theme = DefaultTheme) {
+  installVitePressHost()
   const Parent = theme.Layout || theme.extends?.Layout || DefaultTheme.Layout
   return {
     ...theme,

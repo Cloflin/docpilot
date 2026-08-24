@@ -3,15 +3,18 @@ name: docs-rag
 description: >-
   Build, measure and tune the DocPilot RAG pipeline, and edit the documentation
   corpus so the assistant can answer from it. Use when running or reading
-  `npx docpilot eval`, `calibrate`, `index` or `bench`; when editing the golden or
-  calibration set; when tuning retrieval (RRF weights, MMR lambda, topK,
-  chunking); when cutting tokens or latency per answer; when diagnosing why a
+  `npx docpilot eval`, `calibrate`, `index`, `bench` or `tune`; when editing the
+  golden or calibration set, or choosing the level a new record enters at; when
+  tuning retrieval (RRF weights, MMR lambda, `topK`/GATE_K, chunking); when
+  cutting tokens or latency per answer; when diagnosing why a
   golden record failed or why the gate refused a real question; when proposing
   documentation edits (`<llm-only>` hints, frontmatter `description`) that make a
   page answerable; or when making the docs consumable by other people's agents
   (llms.txt, robots, per-route markdown). Triggers: "run the eval", "why did q-08
-  fail", "tune retrieval", "calibrate the gate", "fewer tokens per answer", "the
-  assistant can't answer X", "improve the docs for the AI", "llms.txt".
+  fail", "tune retrieval", "docpilot tune", "tune retrieval levers", "run the
+  smoke level", "grow the golden set", "calibrate the gate", "fewer tokens per
+  answer", "the assistant can't answer X", "improve the docs for the AI",
+  "llms.txt".
 ---
 
 # docs-rag
@@ -31,9 +34,12 @@ tried, here is what happened", not as predictions for your corpus.
 ## The pipeline in one paragraph
 
 `docpilot index` chunks `<docsDir>/**/*.md` — plus `<importDir>` and any OpenAPI
-YAML — into the index directory (manifest, shards, int8 vectors, df). In the
-browser, `retriever.js` fuses BM25 and dense retrieval, and its gate decides —
-before any model call — whether there is evidence to answer at all. `harness.js`
+YAML — into the index directory (manifest, shards, int8 vectors, df; no vectors
+when the site declared `embed: false`). In the
+browser, `retriever.js` fuses BM25 and dense retrieval — on the thresholds
+`calibrate` measured and the levers `tune` measured, both of which ride in the
+manifest — and its gate decides, before any model call, whether there is evidence
+to answer at all. `harness.js`
 then runs a short tool loop over the retriever and nothing else. `docpilot eval`
 drives exactly those production modules; nothing is stubbed.
 
@@ -45,6 +51,7 @@ drives exactly those production modules; nothing is stubbed.
 npx docpilot eval --gate-only                          # retrieval + gate, seconds
 npx docpilot eval --models=qwen3:8b,phi4:14b           # the matrix
 npx docpilot eval --limit=3                            # short loop
+npx docpilot eval --level=low                          # the smoke pool, a declared subset
 npx docpilot eval --resume                             # skip models already reported
 ```
 
@@ -53,12 +60,48 @@ markdown sibling carries the hard gates, the metric table, the change since the
 previous run and the over-refusal backlog. State a verdict and stop: this mode
 edits nothing.
 
-Two things to check before believing a delta:
+**`--level=low|medium|high|xhigh|max|ultra` scores one tier of the golden set**,
+and it is not `--limit`. The six are **cumulative** — `--level=medium` runs low +
+medium — so every larger pool contains every smaller one and a `--level=low`
+regression is a regression in the full set too. `--limit=N` is a head-slice of
+whatever the author happened to write first and explains nothing. A record
+carries the tier at which it **enters** the pool (`levels.js`); **a record with no
+`level` reads as `high`**, because `high` is defined as roughly the set that
+already existed, so a golden file that predates levels scores identically under
+`--level=high` and under no flag at all. **A run with no `--level` is `ultra`**,
+i.e. everything, which is what every run did before the flag existed. `--level`
+is applied first and `--limit` second, so `--level=low --limit=5` is five records
+of the smoke pool and not five records of the file.
+
+**Write the `=`.** Every value-taking flag on `eval`, `bench` and `tune` now dies
+with `--level takes a value: --level=low` rather than reading a bare `--level low`
+as absent — which meant `ultra`, so the run scored the whole set, stamped
+`meta.level: 'ultra'` and overwrote the unfiltered baseline it then diffed itself
+against, in silence. The boolean flags (`--gate-only`, `--lexical`, `--resume`,
+`--dry`) are unaffected: for them the bare form is the form.
+
+Three things to check before believing a delta:
 
 - **`incomparable`** in the report. A prompt, lever, golden-set or `num_ctx`
   change makes the comparison meaningless, and the report says which.
 - **the hard gates**: `hallucinated == 0` and `scopeContainment == 1.0`. Either
   one failing fails the whole run regardless of every other number.
+- **a delta exists only WITHIN one level.** A level-filtered run scores a
+  different population, not a smaller sample of the same one — `--level=low` is
+  ten smoke lookups and its answerF1 is not commensurable with the full set's.
+  `report.js` refuses to pair a report with a previous report or a sibling at
+  another level, so **the first run at a new tier has no baseline, and that is
+  correct rather than a bug**: run it twice. A historical report with no
+  `meta.level` reads as `ultra`, so pre-level history keeps pairing with today's
+  unflagged runs. `run.js` stamps `meta.level` on every report and puts
+  `-lvl-<level>` in the report filename for every level except `ultra`, whose
+  name stays byte-identical to the one it has always had.
+
+`<evalDir>/reports/latest.json` **means the last UNFILTERED run.** A narrowed run
+writes `latest.<level>.json` instead. Quote a number from `latest.json` only as
+the project's number, and read `meta.level` before quoting anything: an
+unpartitioned `latest.json` used to end up holding a ten-question smoke score
+where the full-set number was half of it, with nothing at the fixed path saying so.
 
 ### `generate` — the golden set
 
@@ -97,6 +140,46 @@ Two things measured about the *grain* of a gold:
 
 A record with `promptStock: false` never becomes a golden record.
 
+**Which tier a new record enters at.** `level` is a claim about what the record is
+FOR, not about how hard it is. The counts below are the shape of a healthy set,
+not a quota — the pool a tier yields is cumulative, so each line adds to the one
+above it. `npx docpilot lint` prints the histogram and the cumulative pool size
+per tier, errors on a `level` that is not one of the six, and warns on a record
+that has none.
+
+- **`low` ~10 — the smoke pool.** The handful of questions whose failure means the
+  system is broken: the flagship how-to, the flagship identifier, one page pin.
+  **Plus at least one negative** — a pool that can only pass is not a smoke test,
+  it is a liveness check, and a gate wired to `pass` unconditionally would score
+  100%.
+- **`medium` +15 — the common how-tos.** The questions a reader actually asks in
+  the first week. **The first scoped record and the first follow-up belong here**,
+  so the two harder channels — scope filtering and `composeQuery` — are exercised
+  before anyone calls the pool healthy.
+- **`high` +35 — full breadth.** Identifiers, both languages the site serves, a
+  negative per section. Roughly the set this package was developed against, which
+  is why an absent `level` reads as `high`.
+- **`xhigh` +60 — paraphrase and depth.** The same answers asked in the *reader's*
+  words rather than the doc's headings, and harder scoped records and longer
+  follow-up chains. This is the tier that catches a corpus answering its own
+  table of contents.
+- **`max` +130 — the long tail.** Sections nobody thought to ask about, and
+  multi-hop questions whose answer spans two pages.
+- **`ultra` +250 — scale.** Paraphrase sweeps, adversarial negatives, follow-ups
+  at volume. This is what a run with no `--level` scores.
+
+**A record is never re-tiered downward.** The field is written once, at authoring
+time. Moving a question from `high` to `low` changes what every smoke run
+measures without changing a single answer, and the two sides of that commit stop
+being comparable — as does every historical report at both tiers. The set grows
+at the top.
+
+A `level` that is none of the six is not dropped. It ranks below `low` and so
+falls into **every** pool, the smoke one included: `ultra` has to mean everything,
+so a typo may never delete a record from a run, and surfacing the stray in the
+fastest pool is what gets it noticed. Turning it into an error is `lint`'s job,
+not the filter's.
+
 ### `bench` — A/B two retrieval configs with no API key
 
 `docpilot eval` needs an HTTP endpoint. `docpilot bench` does not: it runs the
@@ -106,6 +189,7 @@ local model worth waiting three hours for.
 
 ```bash
 npx docpilot bench emit  --config=base
+npx docpilot bench emit  --config=base --level=low     # one tier, same six as eval
 DOCPILOT_RRF_K=5 … npx docpilot bench emit --config=swept
 npx docpilot bench shard --tasks=<file> --stage=2 --shards=5
 npx docpilot bench score --tasks=a,b --answers=a,b
@@ -142,7 +226,7 @@ Two rules the modes enforce rather than request:
 
 The judge is **advisory and never gates** — see the binding rules below.
 
-### `tune` — propose edits
+### `tune` — sweep the levers, then propose edits
 
 Input: the latest report plus recorded reader feedback. Output: a list of edits,
 each naming **the file, the concrete change, and the expected effect on a named
@@ -151,21 +235,128 @@ metric**. An edit with no metric attached does not reach the output.
 Levers, in increasing order of risk:
 
 1. RRF weights and MMR λ — `retriever.js`
-2. `topK`, chunk size, the merge rule, `MAX_CHUNK_CHARS`
+2. `topK` (= `GATE_K`), chunk size, the merge rule, `MAX_CHUNK_CHARS`
 3. the system prompt blocks — `prompt.js`
 4. the tool descriptions
 5. `maxIterations` and the degradation rules
 
-Every constant in lever 1 is sweepable from the environment without editing a
-file, which is what makes `--gate-only` the loop:
+**Two of those constants are no longer proposed by eye — `npx docpilot tune`
+measures them.** `MMR_LAMBDA` and `GATE_K`, the latter being the config key `topK`
+under its internal name, are swept against the golden set as a grid:
 
 ```bash
-DOCPILOT_MMR_LAMBDA=1.0 DOCPILOT_FUSED=8 npx docpilot eval --gate-only
+npx docpilot tune                          # λ 0.5:1.0:0.05 × k 4:12, the default grid
+npx docpilot tune --level=medium           # a smaller pool — REPORT ONLY
+npx docpilot tune --lambda=0.2:0.8:0.02    # a corpus whose plateau sits elsewhere
+npx docpilot tune --k=5                    # a bare lo pins the axis to one value
+npx docpilot tune --dry                    # write the report, leave tuning.json alone
+npx docpilot tune --limit=20               # head-slice the pool — REPORT ONLY too
+```
+
+**`--level` and `--limit` both narrow the pool, and a narrowed sweep writes NO
+`tuning.json`.** It writes its report under a name of its own —
+`tuning-lvl-medium.report.md`, `tuning-n20.report.md`, `tuning-lvl-low-n5.report.md`
+— and leaves the levers in force untouched. The asymmetry against `eval` and
+`bench emit`, which merely suffix their outputs, is deliberate: a report is
+reading material, so a suffix is enough, while `tuning.json` exists **only** to be
+read back by `docpilot index` from one fixed path and inlined into every reader's
+bundle. A suffixed copy is either never read or ships a smoke-pool answer anyway.
+**So: to change the levers, sweep the whole pool.** Read a narrowed grid as a
+shape, never as a decision.
+
+The loop, and every step of it is required:
+
+1. **sweep** — `npx docpilot tune`.
+2. **read `<evalDir>/tuning.report.md`** — written on every run, `--dry` included,
+   under the narrowed name above when the pool was narrowed.
+   The grid table, the chosen-vs-baseline deltas, the gate-invariance sanity row
+   and the ten records that moved most in each direction. **Read the movers before
+   the headline**: +0.02 mean F1 over 60 records is one record going 0 → 1 as often
+   as it is a broad shift, and those two have opposite readings — the first is a
+   gold-chunk authoring artefact, the second is a lever.
+3. **`<evalDir>/tuning.json`** — written unless `--dry`, and unless the pool was
+   narrowed by `--level` or `--limit`. It is written even when the sweep chose the
+   levers already in force, and that is deliberate: an unwritten winner survives
+   only as a literal in `retriever.js`, and the next release that moves that
+   literal would move this corpus without anyone deciding to. It carries
+   `MMR_LAMBDA` and `GATE_K` and nothing else — see the binding rules.
+4. **`npx docpilot index`** — the step that actually delivers it. `tuningFor()`
+   validates the file against this build (version, index hash, embed model) and
+   inlines the levers into `manifest.tuning`. **Until index runs, a swept lever is
+   a file on disk and nothing more.**
+5. **`npx docpilot eval`** to confirm, at the same level as the baseline.
+
+**It costs embeddings and nothing else.** Stage A embeds once per record (plus one
+per follow-up, for the composed channel); stage B sweeps the whole grid in process
+with nothing re-embedded. No chat model is contacted, there is no LLM judge, and
+the selection is argmax mean retrieval F1 → recall@8 → MRR → proximity to the
+levers already in force.
+
+**The gate is invariant under this grid, so a sweep cannot change a refusal
+decision.** `evaluate()` takes `D` from `dense.scopedMax` (the best cosine over the
+whole scope) and `L` from `lexIds.slice(0, 3)`; λ and `GATE_K` reach only `mmr()`
+and `rank({k})`, i.e. which excerpts are handed over once the turn is already
+admitted. That is why pure retrieval metrics are sufficient here and why no cell
+can buy F1 by refusing the questions it is bad at. It is a property of today's
+code rather than a law, so every cell measures the over-refusal count anyway and
+the report prints it as a sanity row — **if that row says MOVED, do not inline the
+result; find what made `evaluate()` depend on λ or `GATE_K` first.**
+
+Two bounds the command enforces. `--k`'s ceiling is the resolved `FUSED` (12),
+because a k above the fused pool selects the whole pool and every larger k
+measures the identical cell. And a `GATE_K` above 8 is legal but partial: it
+widens the excerpts that PRIME the turn, which is what retrieval F1 is measured
+on, while a `search_docs` call the model makes for itself stays clamped 1..8 by
+`search()`.
+
+**The six levers `tune` does NOT own are still swept by hand**, and `--gate-only`
+is that loop — it measures a candidate in seconds:
+
+```bash
+DOCPILOT_RRF_K=3 DOCPILOT_FUSED=8 npx docpilot eval --gate-only
 ```
 
 Available: `DOCPILOT_RRF_K`, `DOCPILOT_W_LEXICAL_RRF`, `DOCPILOT_W_DENSE_RRF`,
-`DOCPILOT_MMR_LAMBDA`, `DOCPILOT_CANDIDATES`, `DOCPILOT_FUSED`,
-`DOCPILOT_EXPAND_BELOW_TOKENS`, `DOCPILOT_GATE_K`.
+`DOCPILOT_CANDIDATES`, `DOCPILOT_FUSED`, `DOCPILOT_EXPAND_BELOW_TOKENS` — plus
+`DOCPILOT_MMR_LAMBDA` and `DOCPILOT_GATE_K`, which override the swept values for
+an exploratory run and are the reason the precedence has to be stated:
+
+**env > `tuning.json` (via `manifest.tuning`) > the shipped defaults, and env
+never ships.** `resolveLevers()` in `retriever.js` is the only implementation of
+that rule; `run.js`, `calibrate.js` and `tune.js` all call it rather than
+re-deriving it, so a report cannot name a value the retrieval did not use. "Set"
+means parses as a finite number: `DOCPILOT_MMR_LAMBDA=high` is not a value, and it
+leaves the env layer out of the precedence rather than pinning the corpus to our
+default. A `DOCPILOT_*` variable is a sweep running on somebody's shell and cannot
+ship: `globalThis.process` is undefined in the browser, where the rule collapses
+to `tuning ?? constant`, and `session.js` deliberately does not read the
+environment at all.
+
+**The env layer is read AT CALL TIME and resolves to the value it read, which is
+what makes `.env.local` work.** Every CLI entry point loads `.env.local` into
+`process.env` AFTER the module graph is imported — `tune.js` at its own top level,
+`run.js` and `calibrate.js` through `cli-context` — and `.env.local` is where every
+DocPilot doc tells a consumer to put these keys. A layer answering out of the
+module constants was therefore reading a fold taken before the file was loaded:
+`DOCPILOT_GATE_K=9` in `.env.local` counted as set, resolved to the package
+literal 5, and discarded its own value AND `manifest.tuning` on the way past. All
+eight variables now take effect from `.env.local`; six of them never did on that
+path. Put them in `.env.local` or export them in the shell — both work now, and
+they are the same layer.
+
+**`npx docpilot tune` REFUSES to run when `DOCPILOT_MMR_LAMBDA` or
+`DOCPILOT_GATE_K` is set** — from the shell or from `.env.local`, which it loads
+before it checks. This is not a restatement of the bug above; it survives the fix
+and follows from it. Env correctly outranks the per-cell tuning object the sweep
+varies, so a pinned axis makes every one of the ~99 cells measure the identical
+retrieval, all three metrics tie everywhere, `chooseCell` falls through to its
+proximity tie-break, and the winner is a value **nothing on the grid scored** — then
+written to `tuning.json` and inlined into every reader's bundle, which is a shell
+variable shipping. The command names the variable and stops rather than unsetting
+it for you. Remedy: `unset` it, or pin the axis where a pin is legible —
+`--lambda=0.3`, `--k=5`. The other six are reported, not refused: `DOCPILOT_FUSED=20`
+is a real thing to measure, and the note exists because `tuning.json` will record
+only λ and `GATE_K`, so the answer was measured under a pool the file never mentions.
 
 ### `corpus` — edit the documentation, not the code
 
@@ -188,8 +379,89 @@ LLM-facing rendering of a page and therefore what an edit here actually changes.
      The record becomes `refuse:no-evidence`, or a human writes a real page.
      Never invent product behaviour.
 4. Loop: `npx docpilot index` → `npx docpilot eval --gate-only` → a full model run →
-   compare → **revert anything that regresses a metric by more than 2 percentage
-   points.**
+   compare against the same level's baseline → **revert anything that regresses a
+   metric by more than 2 percentage points.**
+
+**The build's chunker warnings are corpus diagnoses, which is this mode's whole
+job.** Read them off `npx docpilot index`, not off a report.
+
+What the chunker guarantees, and no more than this. A section over
+`MAX_CHUNK_CHARS` (8000, `normalise.js`) is split at the coarsest boundary that
+fits: between whole blocks first — a block being a paragraph, a fenced code block
+or a GFM table — then inside the one block that is over the ceiling on its own,
+between rows in a table and between lines in a fence or a paragraph, and at a
+code-point boundary only when a single line or row is over the limit by itself.
+**Every part of a split fence is closed and the next reopened with the same fence
+character, run length, indent and info string**, so the language survives the cut
+and no chunk holds code outside a fence. **Every part of a split table re-emits
+the header and delimiter rows**, because a continuation without them is a grid of
+values whose columns are unnamed — to the embedder and to the model that later
+reads the chunk as context.
+
+Which tables that applies to — `scanBlocks` in `src/build/lib/chunker.js`, and
+read it rather than this paragraph if the two disagree. A table is a line whose
+**next** line is a delimiter row of the same cell count. The delimiter is the
+discriminator, never the header: it must hold at least one unescaped pipe,
+contain nothing but pipes, colons, dashes and whitespace, and every cell must
+match `:?-+:?`. Outer pipes are optional on both rows, so `a | b` and `| a | b |`
+are two spellings of the same two cells, and a one-column `| a |` is a legal
+header. `\|` is an escaped pipe and not a separator — `html-to-md.js` writes it
+for a pipe inside a cell. The table then runs to the first blank line or the
+first line with no live pipe. Consequences worth knowing before diagnosing: a
+pipe line with no delimiter under it is **prose**, so a shell pipeline or a
+grammar alternation is never given a header; a setext heading (`Introduction` over
+`---`) is not a table, because the delimiter must contain a pipe; and a fence is
+consumed first, so a table drawn inside a code sample is code. **Anything that
+fails these tests is ordinary text**: it packs by line, a cut through it re-emits
+no header, and no warning fires — which is the failure to suspect when a chunk
+turns out to carry columns nobody named.
+
+Three warning strings, three different diagnoses:
+
+- **`code block split by MAX_CHUNK_CHARS in <path>`** — a single code sample is
+  bigger than a chunk. The repair fired, so the index is sound; the page is not.
+  A sample that long is usually a whole file pasted in, and the edit is to show
+  the part the reader needs. Fires **if and only if** a fence's interior was
+  actually cut.
+- **`table split at row boundaries by MAX_CHUNK_CHARS in <path>`** — a table is
+  bigger than a chunk. The rows were kept whole and every part got its header, so
+  again nothing is broken, but **a table that big is usually a table that should
+  be a section**: a reader's question is about one row, and one row's worth of
+  prose under a heading of its own retrieves far better than being row 340 of a
+  grid.
+- **`table row longer than MAX_CHUNK_CHARS cut mid-row in <path>`** — one single
+  row is over the ceiling, or the header and delimiter alone fill a chunk and
+  leave no room for a row. This is the only one of the three where structure was
+  genuinely lost: the row was cut at a code-point boundary like any other text.
+  **That row should be prose** — a cell holding a base64 payload or three
+  paragraphs of explanation is not a cell.
+
+**The upgrade consequence.** The block-aware repack changes where boundaries fall.
+Measured over the 205 markdown pages of the two corpora this package develops
+against: 45 pages chunk to different text and 24 of those to a different set of
+chunk ids (23 to a different number of parts). **Chunk ids are what `gold_chunks`
+pins**, and a page that repacks into a different number of parts moves its
+`#anchor~2`, `#anchor~3` continuation ids. So **`npx docpilot index` then
+`npx docpilot lint` is required after upgrading**: lint is the step that says
+which `gold_chunks` entry now matches nothing in the index, and an unrepointed
+pin scores a flat 0 that reads as a retrieval regression.
+
+**And this release renames every one of them, on every corpus.** A continuation
+part is now `#anchor~2`, not `#anchor-2`. `-N` is what VitePress — and
+`chunker.js`, matching it — uses to disambiguate a REPEATED HEADING: the second
+`### Parameters` on a page is `#parameters-1`. One namespace with two meanings
+collided outright (a page with three `## Parameters`, the first packing into five
+parts, emitted `parameters-2` twice and killed the build on `duplicate chunk id`,
+an id appearing nowhere in the source) and, quietly, inflated every retrieval
+number: `underPath` reads a trailing suffix on anchored gold as "a continuation of
+this section", so gold pinned at `api/users#parameters` scored a perfect hit for
+retrieving `api/users#parameters-1` — a DIFFERENT endpoint's section, which could
+not have carried the answer. recall@8, MRR, retrieval F1 and citation precision
+were all credited for it, and `docpilot tune` optimises against exactly that
+objective. `~` is used because `slug()` strips it, so the two namespaces are
+disjoint by construction; the citation href is built from the `anchor` field,
+which every part of a section shares, so no URL changes. **Every `gold_chunks`
+entry pinned at a continuation part must be repointed** — `lint` names each one.
 
 **The hard content rule.** `<llm-only>` text is indexed, can be cited, and can be
 shown to a reader. It must be true, publishable documentation. **It must never
@@ -201,6 +473,19 @@ ignore anyway.
 `<llm-exclude>` is the opposite tool: wrap navigational or marketing prose that
 dilutes a chunk's embedding. `normalise.js` honours both tags, so one edit moves
 the published artefacts and the index together.
+
+**Both tags cover the FAQ path too, which is where the promise used to be false.**
+`normaliseMarkdown` runs `applyLlmTags` FIRST and extracts `<FaqAccordion>` Q&A
+pairs from its OUTPUT, so an island wrapped in `<llm-exclude>` is excluded for
+real. It used to be lifted off the raw page one line earlier: the tag pass never
+saw the island, `stripVue` then deleted the tag from the prose stream so the page
+looked correctly redacted, and the Q&A was already in `faq[]` on its way to an
+indexed, citable `#faq-n` chunk. And `extractFaq` now scans only the UNFENCED runs
+of a page, so a page documenting the component no longer turns its own fenced
+`vue` sample into a real FAQ chunk — a fabricated Q&A that nothing downstream can
+tell from an authored one. **If either ordering is disturbed, an
+author's redaction silently stops working; keep the FAQ extraction after
+`applyLlmTags` and before `stripVue`.**
 
 ### `llms` — make the docs consumable by other people's agents
 
@@ -273,9 +558,40 @@ metric in any report.
 
 ## Binding rules
 
-- **`tau`, `tauLexical`, `wDense` and `wLexical` are not levers.** The only legal
-  way to change any of them is `npx docpilot calibrate`. A hand-set `docPilot.guard.*`
-  is honoured but stamps `gate.source: "config"` on every record of the session.
+- **Thresholds are `calibrate`'s, levers are `tune`'s, and the two do not cross.**
+  - **`tau`, `tauLexical`, `wDense` and `wLexical` are not levers.** The only legal
+    way to change any of them is `npx docpilot calibrate`. A hand-set
+    `docPilot.guard.*` is honoured but stamps `gate.source: "config"` on every
+    record of the session.
+  - **`MMR_LAMBDA` and `GATE_K` — the config key `topK` — are not thresholds.** The
+    measured way to change either is `npx docpilot tune`. A hand-set
+    `docPilot.topK` is honoured, clamped to 1..12 and stamps `source: "config"` on
+    the resolved tuning, exactly as a hand-set `tau` does.
+  - The wall is built twice on purpose, and the first course is **narrower than
+    "a lever"**. `tuningFor()` in `build-rag-index.js` allowlists `tuning.json` to
+    `MEASURED_LEVER_NAMES` — `MMR_LAMBDA` and `GATE_K`, the two the sweep measures
+    — and drops everything else **loudly**, naming it, in one of three sentences: a
+    guard threshold (`tau`, `tauLexical`, `wDense`, `wLexical`) is `calibrate`'s;
+    one of the other six lever names was never measured on this corpus; anything
+    else is unknown. `resolveLevers()` then reads only the eight `LEVER_NAMES` out
+    of whatever reaches the browser, which is the second course.
+  - **Why the six are walled off, given they resolve fine at runtime.**
+    `tuning.json` is a file a consumer commits and may hand-edit, and it rides
+    into the manifest the guard rides in. `evaluate()` builds the gate's lexical
+    evidence from `lexIds.slice(0, 3)`, and `lexIds` is `lexical(query,
+    CANDIDATES)` — so a hand-written `CANDIDATES: 1` starves that evidence and
+    flips an answerable question from answer to refusal without naming a
+    threshold, calling a model, or printing anything. A refusal verdict is
+    `calibrate`'s to move. **Keep `MEASURED_LEVER_NAMES` in step with
+    `buildTuningDoc` in `eval/tune.js`: what the sweep cannot measure must not be
+    inlinable.** Sweep the other six in the environment, where they cannot ship.
+- **`topK` was dead until this release and is now live.** It was documented from
+  the first release and read by nothing — the gate's k was the `GATE_K` literal —
+  so the two defaults that existed for it (12 in `config.js`, 5 in `session.js`)
+  were never in force and never agreed with each other. Both are now `null`,
+  meaning "use what this corpus measured". **A site that already sets `topK` will
+  see its retrieval change for the first time on upgrade**; that is the intended
+  behaviour, and the number to check it against is a same-level eval.
 - **Scope has no threshold to tune** — it is an allowlist.
 - Records with `promptStock: false` are discarded before any analysis, and the
   exclusion count is printed.
@@ -288,7 +604,10 @@ metric in any report.
   `PROMPT_HASH` and invalidates every cross-report comparison. Apply it **alone**,
   then run the full matrix.
 - After applying any edit, re-running `eval` is mandatory. **A regression of more
-  than 2 percentage points on any metric is reverted.**
+  than 2 percentage points on any metric is reverted — against the same level's
+  baseline.** A cross-level delta is not a comparison at all: the two runs scored
+  different populations, and `report.js` refuses to pair them for that reason. If
+  the tier has no baseline yet, establish one before reading the edit.
 
 ## Invariants an edit must not break
 
@@ -299,11 +618,40 @@ metric in any report.
 - `systemText()` takes no addendum parameter, and the test suite asserts the
   system message is byte-identical with and without a reader instruction.
 - `assertWeights` throws unless `wLexical < tau`.
+- **A chunk never contains code outside an open fence, and never contains table
+  rows without their header.** The ceiling wins over both, but it wins by
+  repairing: `splitFence` closes and reopens, `splitTable` re-emits the header and
+  delimiter. A change to `chunker.js` that cuts a fence or a table without the
+  repair breaks this even when every test that counts chunks still passes.
+- `chunkMarkdown` throws rather than emitting a chunk over `MAX_CHUNK_CHARS` or
+  over the embed context. A splitter whose output is not exact — its repair
+  counted, not just its payload — turns into a thrown build.
 - No LLM judge may become a gate — `metrics.js` is pure and deterministic by
   contract. An advisory judge beside a deterministic metric is allowed; a judge
-  that decides pass/fail is not.
+  that decides pass/fail is not. **`docpilot tune` obeys this**: it optimises
+  `retrievalF1Loose`, `recallAtK` and `mrr` from `metrics.js`, contacts no chat
+  model, and its report is reproducible from the same index and golden set.
 - Every reader-facing string goes through the i18n table. A new literal in a
   component fails `i18n — the components go through the table`.
+- **Only a full-pool sweep may write `tuning.json`.** `--level` or `--limit` makes
+  the run report-only, checked by `isNarrowed()` in `eval/tune.js` before stage A
+  embeds anything. The artefact is written from the whole golden set or not at
+  all, because one fixed path is what `docpilot index` reads and inlines.
+- **Only what `docpilot tune` measured may be inlined.** `MEASURED_LEVER_NAMES` in
+  `build-rag-index.js` and `buildTuningDoc`'s `levers` in `eval/tune.js` are the
+  same pair of names, and a change to one without the other opens the hole again:
+  a lever the sweep never measured reaching a bundle through a committed file, and
+  `CANDIDATES` alone can flip a gate verdict from answer to refusal.
+- **A swept axis may not be env-pinned.** `assertNoPinnedAxis()` refuses the run
+  when `DOCPILOT_MMR_LAMBDA` or `DOCPILOT_GATE_K` is set, because env outranks the
+  per-cell tuning object and every cell would measure the same retrieval. It uses
+  the exported `envPin()` rather than re-parsing the variable, so there is one
+  opinion about which runs are degenerate.
+- **The env layer resolves to the value it read, at call time.** `resolveLevers()`
+  must never answer out of the module constants for a name the environment set:
+  those constants folded `process.env` at import, `.env.local` lands after it, and
+  answering from them turns a set variable into the package literal and drops
+  `manifest.tuning` on the way past.
 - New tests go in `test/docpilot.test.js`. One file is the repo convention.
 
 ## Things already measured — do not re-derive them
@@ -321,7 +669,10 @@ metric in any report.
   with the rest of lever 1: `RRF_K` 60 → 5, `W_DENSE_RRF` 1.2 → 1.0,
   `MMR_LAMBDA` 0.9 → 1.0, `CANDIDATES` 20 → 30. At λ 1.0 `mmr()` is a
   dense-cosine re-rank of the fused pool, not a diversity filter — which is why
-  the RRF weights had to come level. **Do not re-derive this sweep.**
+  the RRF weights had to come level. **Do not re-derive this sweep by hand.** It
+  is the shipped default, measured on OUR corpus; `npx docpilot tune` is how you
+  measure λ on yours, and the answer belongs in `tuning.json`, not in this
+  constant.
 - **Retrieval F1 is a precision-capped instrument.** It can sit near 0.5 while
   recall@8 is 0.96: the gold pages are being found. Read recall and MRR first.
 - **The answer bench needs three runs, not one.** Every answer-side metric sat
@@ -360,9 +711,117 @@ metric in any report.
   paraphrasing it between runs adds a confound the three-run rule cannot absorb.
 - **The embedder is not the chat model.** `--gate-only`, `calibrate`, `index` and
   `bench` are embed-only and never contact a chat model. Anthropic has no
-  embeddings API, so an Anthropic key covers the answer side only and the embed
-  half must point somewhere else — `embed: 'auto'` will refuse the build and say
-  so.
+  embeddings API, so an Anthropic key covers the answer side only: `embed: 'auto'`
+  borrows OpenRouter's free embedding pool for the retrieval half, and `embed:
+  {provider: 'anthropic'}` — naming it explicitly — is the build-stopping error.
+  The third answer is `embed: false`, which retrieves lexically and asks nobody;
+  read the recall numbers above before choosing it.
+- **`underPath` had no page pin, and every retrieval number this package printed
+  was about seven points low.** The rule above — pin a class-overview question to
+  `path#` and it prefix-matches every anchor of that page — was documented and not
+  implemented. `underPath` tested `id === p || startsWith(p + '#') ||
+  startsWith(p + '/')`, and for `ExtensionBuilder#` the middle arm builds
+  `ExtensionBuilder##`, which nothing begins with. So a page pin matched the lead
+  chunk alone, and retrieving the right page and the right section of it scored a
+  miss. Fourteen of the 33 distinct gold entries in the development set are page
+  pins or split sections (`#anchor~2`, which `chunker.js` emits for the second
+  part of one heading and which gold pinned to `#anchor` must accept — spelled
+  `#anchor-2` when this was measured, which is the collision described under the
+  upgrade consequence above). Measured over the 44 answerable records:
+  **recall@8 0.761 → 0.830.**
+
+  Two consequences worth carrying. First, every absolute retrieval figure recorded
+  before this fix is understated — deltas measured with one matcher are still
+  valid, absolutes are not. Second, the ancestor project's reports use a
+  boundary-free `id.startsWith(g)`: right about page pins, wrong about siblings
+  (`guide/scope` swallowing `guide/scoped-page`). Its higher numbers were read as
+  generosity when they were half correctness, and **a cross-report comparison
+  against that project is not a baseline** — two investigations in this repo have
+  already drawn a wrong conclusion from one. Pinned by `matches the three gold
+  shapes and nothing between them`.
+- **THE DENSE CHANNEL CARRIES THE SYSTEM; BM25 IS THE ACCESSORY.** Measured
+  `--gate-only` on the 60-record set over 1216 chunks, three configurations:
+
+  | configuration | recall@8 | MRR | retrieval F1 | gate over-refusal |
+  |---|---|---|---|---|
+  | hybrid (shipped) | 0.784 | 0.473 | 0.298 | 0/44 |
+  | dense only (`DOCPILOT_W_LEXICAL_RRF=0`) | 0.739 | 0.467 | 0.296 | 0/44 |
+  | lexical only (`--lexical`, no embedder) | 0.534 | 0.338 | 0.208 | **11/44** |
+
+  Turning BM25 off costs about four points of recall and refuses nothing extra.
+  Turning the EMBEDDER off costs twenty-five points and **refuses a quarter of the
+  answerable questions before a model is ever called** — and every one of those 11
+  refusals is a Russian question against an English corpus, each with lexical
+  coverage `L = 0.000`, i.e. 11 of the 12 Russian positives in the set. BM25 shares
+  no term across languages, and no threshold fixes a zero: `tauLexical` is 0.21
+  here and the scores were 0.000.
+
+  **So the embedder is not a ranking refinement, it is the entire cross-language
+  capability.** Split the same two runs by the language of the question and the
+  whole effect separates:
+
+  | questions | n | recall@8 hybrid → lexical | refused by the gate |
+  |---|---|---|---|
+  | English (corpus language) | 32 | 0.828 → 0.703 | 0/32 |
+  | Russian (not the corpus language) | 12 | 0.667 → **0.083** | **11/12** |
+
+  Which gives the decision rule. **If the corpus and the readers share a language,
+  dropping the embedder costs about twelve points of recall and refuses nothing** —
+  worse, and survivable. **If they do not, it ends the feature for everyone who
+  does not speak the corpus.** This corpus is 99.975% non-Cyrillic — 268 Cyrillic
+  characters in 1216 chunks, all of them sample strings — so a Russian question has
+  nothing to match on at all.
+
+  Quote this before anyone proposes dropping the embedder to save a provider, and
+  ask which of the two rows their site is in. It is a supported configuration —
+  `embed: false`, or `docpilot index --no-embed` for a look at it — with its own
+  calibration path, its own doctor line and its own gate mode, so the answer to
+  "can we" is yes. The question worth asking is the one above: whether every
+  reader of this corpus types in the language it is written in.
+
+  **And weigh it against what the embedder actually costs, which is almost
+  nothing.** Corpus embedding is a BUILD cost paid once. The only runtime cost is
+  one query embedding per turn: measured against `text-embedding-3-small`,
+  **212 ms mean** (156–359 ms over four queries, the high one being connection
+  setup) for a payload of about ten tokens — on the order of a dollar a year at
+  ten thousand questions a day. Every alternative that replaces it with a chat
+  model trades that for a request out of a 50-per-day free tier and seconds of
+  latency, and — because `evaluate()` runs before any model call — makes an
+  off-topic question cost a request where today it costs zero.
+- **The lexical channel's tokenizer is now `terms()`, and it must stay
+  asymmetric.** MiniSearch's default splitter breaks at every non-alphanumeric,
+  so `window.initEditor` was two ordinary words. Indexing with `terms()` — which
+  keeps `.`, `/`, `#`, `-` inside a token — lifts the LEXICAL CHANNEL ALONE from
+  about recall@8 0.32 to 0.42 and MRR 0.16 to 0.27, and builds ~7× faster because
+  the stop words leave the index. **The shipped pipeline gains part of that**: on
+  the 60-record set, recall@8 0.7386 → 0.7841 (+4.5pp, per-record 2 wins and 0
+  losses, both extension-API questions whose gold page is named by a dotted
+  identifier), MRR 0.4857 → 0.4734 (−1.2pp), retrieval F1 0.3012 → 0.2975. The
+  dense channel was already finding much of the rest.
+
+  Used symmetrically it breaks the common case — a bare `initEditor` cannot reach
+  the compound term, and hits fell 14 → 1 — so the index emits the compound AND
+  its parts while the query side stays plain `terms()`. Pinned by `finds a
+  compound identifier by either half or whole`. **Do not re-derive this, and do
+  not "simplify" it to one tokenizer.**
+
+  Two cautions. MRR pays a point, and `evaluate()` builds L's evidence out of the
+  TOP 3 of this list, so rank feeds the gate as well as the answer. And an earlier
+  version of this entry reported +2.3pp with "2 wins, 1 loss" and blamed a
+  stop-word regression on q-26 — that loss was the broken `underPath` scoring a
+  split section as a miss. There was no stop-word regression.
+
+- **An exact-identifier RRF channel is not supported by this corpus — measured
+  and reverted.** The idea: a third fused list of chunks containing the question's
+  identifiers verbatim, fuzzy and prefix off. It measured a wash (recall@8
+  unchanged, 1 win 1 loss; retrieval F1 −0.008) and the reason is in the golden
+  set, not the weight: **only 7 of 44 positives contain anything the RAG-SPEC 5.3
+  grammar calls an identifier, and six of those seven are English acronyms** —
+  `API`, `HTML`, `CSS`, `SVG` — caught by the `constant` rule. Searching those
+  alone promotes whatever page says "HTML" most, which is how the one loss
+  happened. The grammar is right for its own job, scoring an ANSWER's identifiers
+  against cited chunks; it is not a query-side selector. Sweeping the weight would
+  not have found this.
 - **A cosine threshold does not survive an embedder swap.** The chunk hash covers
   the corpus, not the vector space, so `calibrate` records `embedModel` and
   `index` refuses a calibration measured with a different one. The cosine WINDOW

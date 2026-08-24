@@ -37,10 +37,33 @@ describe('packaging', () => {
     }
   })
 
+  /**
+   * Every leaf of the exports map, as `[subpath, target]`.
+   *
+   * A subpath's value is either a string or a CONDITION OBJECT —
+   * `{ types: './types/x.d.ts', default: './src/x.js' }` — and the string form
+   * is what this test was written against. Left unrecursed, a condition object
+   * stringifies to `[object Object]`, `fs.existsSync` says no, and the failure
+   * reads as a missing file rather than as a test that cannot see one. Every
+   * condition is a real path npm will resolve, so every condition is checked:
+   * a `.d.ts` that does not exist is a package that type-errors on import.
+   */
+  const exportTargets = (map) => {
+    const out = []
+    const walk = (node, name) => {
+      if (typeof node === 'string') out.push([name, node])
+      else if (node && typeof node === 'object') {
+        for (const [key, value] of Object.entries(node)) walk(value, `${name} (${key})`)
+      }
+    }
+    for (const [subpath, node] of Object.entries(map)) walk(node, subpath)
+    return out
+  }
+
   it('resolves every export target', () => {
-    for (const [name, target] of Object.entries(pkg.exports)) {
+    for (const [name, target] of exportTargets(pkg.exports)) {
       // npm ships the manifest itself whatever `files` says.
-      if (name === './package.json') continue
+      if (name.startsWith('./package.json')) continue
       const rel = target.replace('./', '')
       if (built(rel)) {
         expect(shipped(rel), `${name} points into an unshipped directory`).toBe(true)
@@ -53,6 +76,38 @@ describe('packaging', () => {
       }
       expect(fs.existsSync(abs(rel)), `${name} points at ${rel}, which does not exist`).toBe(true)
       expect(shipped(rel), `${name} points at ${rel}, which files[] does not ship`).toBe(true)
+    }
+  })
+
+  /**
+   * Every JavaScript entry point is typed.
+   *
+   * The declarations under `types/` are hand-written and are the package's
+   * documented public surface — `Highlighter` in particular is the API this
+   * package asks people to implement. An entry point added without one is an
+   * entry point nobody can use from TypeScript without `any`, and nothing else
+   * would say so.
+   */
+  it('ships types for every JavaScript entry point', () => {
+    for (const [name, target] of Object.entries(pkg.exports)) {
+      if (name === './package.json' || name.includes('*')) continue
+      const isJs =
+        typeof target === 'string'
+          ? target.endsWith('.js')
+          : Object.values(target).some((t) => typeof t === 'string' && t.endsWith('.js'))
+      if (!isJs) continue
+      expect(typeof target, `${name} has no types condition`).toBe('object')
+      expect(target.types, `${name} has no types condition`).toMatch(/\.d\.ts$/)
+    }
+  })
+
+  // A `types` condition must come FIRST in the object: Node and TypeScript both
+  // resolve conditions in declaration order, so one placed after `default` is
+  // one that never wins.
+  it('puts the types condition first', () => {
+    for (const target of Object.values(pkg.exports)) {
+      if (typeof target === 'string' || !target.types) continue
+      expect(Object.keys(target)[0]).toBe('types')
     }
   })
 
@@ -69,7 +124,11 @@ describe('packaging', () => {
   // consumer's bundler drop what they do not use.
   it('declares its side effects', () => {
     expect(pkg.sideEffects).toEqual(['*.css', '*.scss'])
-    for (const f of ['src/theme/components/DocPilotTrigger.vue', 'src/theme/components/DocPilotCta.vue']) {
+    for (const f of [
+      'src/theme/components/DocPilotTrigger.vue',
+      'src/theme/components/DocPilotCta.vue',
+      'src/theme/components/DocPilotQuote.vue',
+    ]) {
       // Anchored: both components mention `<style>` in the comment that says
       // why they no longer have one.
       expect(/^<style/m.test(fs.readFileSync(abs(f), 'utf8')), f).toBe(false)
@@ -94,5 +153,125 @@ describe('packaging', () => {
     expect(line).toContain('theme.extends?.Layout')
     // Order matters: a theme's own Layout still wins over the one it extends.
     expect(line.indexOf('theme.Layout')).toBeLessThan(line.indexOf('theme.extends'))
+  })
+})
+
+
+/**
+ * ── APPEND TO test/packaging.test.js ─────────────────────────────────────────
+ *
+ * Self-contained: paste this `describe` block at the end of the file, after the
+ * existing `describe('packaging', ...)`. It re-declares `root`, `abs` and `pkg`
+ * under its own names so it can be dropped in without touching what is above it;
+ * merge them into the file-level ones if you prefer. No imports are added —
+ * `describe`/`it`/`expect`, `fs` and `path` are already imported at the top.
+ */
+
+/**
+ * The manifest fields that only matter on the day of a release.
+ *
+ * Every check here is for a defect with no local symptom whatsoever: the package
+ * builds, the tests pass, the panel works from a clone, and the failure appears
+ * for the first time in the terminal of whoever runs `npm publish` — or, worse,
+ * in the terminal of whoever installs the result. The suite above asserts what
+ * the tarball CONTAINS; this one asserts what npm is TOLD about it.
+ */
+describe('publish metadata', () => {
+  const pubRoot = new URL('../', import.meta.url)
+  const pubAbs = (rel) => path.join(pubRoot.pathname, rel)
+  const pubPkg = JSON.parse(fs.readFileSync(pubAbs('package.json'), 'utf8'))
+
+  /**
+   * A scoped package with no `access` publishes RESTRICTED, and a restricted
+   * publish from a free npm account is rejected with `E402 Payment Required` —
+   * after the whole tarball has been uploaded, and with an error that names
+   * payment rather than configuration. One line in the manifest is the entire
+   * difference between a first publish that works and an afternoon spent
+   * reading npm's billing pages.
+   */
+  it('publishes the scoped package publicly', () => {
+    expect(pubPkg.name.startsWith('@'), 'this test is about scoped packages').toBe(true)
+    expect(pubPkg.publishConfig?.access, 'a scoped package without this publishes restricted (E402)').toBe('public')
+  })
+
+  /**
+   * The four fields npm renders on the package page and nothing in a clone
+   * needs. Absent, they cost nothing locally and produce a registry listing
+   * with no author, no link to the documentation and no way to report a bug —
+   * which is a package a stranger has no reason to trust.
+   */
+  it('names its author, its home, its issues and its repository', () => {
+    const nonEmpty = (v) => (typeof v === 'string' ? v.trim().length > 0 : !!v)
+    expect(nonEmpty(pubPkg.author), 'author').toBe(true)
+    expect(nonEmpty(pubPkg.homepage), 'homepage').toBe(true)
+    expect(nonEmpty(pubPkg.bugs?.url || pubPkg.bugs), 'bugs').toBe(true)
+    expect(nonEmpty(pubPkg.repository?.url || pubPkg.repository), 'repository').toBe(true)
+    // `engines.node` is the one of the five with teeth. Without it an install
+    // on an unsupported runtime is silent until something fails at import —
+    // `bin/build-css.js` opens with a top-level `await import`, and the CLI is
+    // ESM with `node:` specifiers throughout. With it, npm says EBADENGINE and
+    // names the version.
+    expect(nonEmpty(pubPkg.engines?.node), 'engines.node').toBe(true)
+  })
+
+  /**
+   * The release gate has to be REACHED, not merely present. `scripts/` is not in
+   * `files[]` — deliberately, it is repository-internal — so nothing a consumer
+   * runs would notice this script disappearing from the script that calls it.
+   */
+  it('runs the publish check before publishing', () => {
+    expect(pubPkg.scripts?.prepublishOnly, 'no prepublishOnly script').toBeTruthy()
+    expect(pubPkg.scripts.prepublishOnly).toContain('check-publish')
+    expect(fs.existsSync(pubAbs('scripts/check-publish.js')), 'scripts/check-publish.js is missing').toBe(true)
+    // npm's order is prepublishOnly → prepack → prepare → pack, so the check
+    // would otherwise grade the PREVIOUS build. The build in the middle of this
+    // command is what makes it grade the one being packed.
+    expect(pubPkg.scripts.prepublishOnly.indexOf('build')).toBeLessThan(
+      pubPkg.scripts.prepublishOnly.indexOf('check-publish'),
+    )
+  })
+
+  /**
+   * The changelog ships and agrees with the version.
+   *
+   * npm will publish a version no entry describes, and the changelog is the only
+   * record of what a version contains — the git history is not in the tarball.
+   * `scripts/check-publish.js` makes the same comparison at publish time; this
+   * makes it on every test run, which is where a forgotten heading is cheap to
+   * fix.
+   */
+  it('ships a changelog whose first release is this version', () => {
+    expect(fs.existsSync(pubAbs('CHANGELOG.md')), 'CHANGELOG.md does not exist').toBe(true)
+    expect(
+      pubPkg.files.some((entry) => entry.replace(/\/$/, '') === 'CHANGELOG.md'),
+      'CHANGELOG.md is not in files[]',
+    ).toBe(true)
+    const top = fs.readFileSync(pubAbs('CHANGELOG.md'), 'utf8').match(/^##\s+(\d+\.\d+\.\d+)/m)?.[1]
+    expect(top, 'CHANGELOG.md has no `## x.y.z` heading').toBeTruthy()
+    expect(top, 'CHANGELOG.md leads with a different version than package.json').toBe(pubPkg.version)
+  })
+
+  /**
+   * `vitepress` and `vue` are OPTIONAL peers.
+   *
+   * Eight of the ten peers already were; these two were not, and they are the
+   * two that told every non-VitePress consumer it needed VitePress. `/web`,
+   * `/react` and `/docusaurus` all resolve `dist/docpilot.web.mjs`, which has
+   * Vue compiled into it — so a Docusaurus site installing this package was
+   * warned about, and on strict installers blocked by, two dependencies it must
+   * not have. The widened `vitepress` range is asserted for the other half of
+   * the same defect: the package pinned a peer its own devDependencies did not
+   * satisfy, which is ERESOLVE on any host that runs `npm install`.
+   */
+  it('marks vitepress and vue optional', () => {
+    for (const name of ['vitepress', 'vue']) {
+      expect(pubPkg.peerDependencies?.[name], `${name} is not a peer at all`).toBeTruthy()
+      expect(pubPkg.peerDependenciesMeta?.[name]?.optional, `${name} is not optional`).toBe(true)
+    }
+    const dev = pubPkg.devDependencies?.vitepress || ''
+    const peer = pubPkg.peerDependencies?.vitepress || ''
+    // Not a semver solve — just the assertion that the alpha line this repo
+    // develops against appears in the range it publishes.
+    if (/^\^?2\.0\.0-alpha/.test(dev)) expect(peer, 'the peer range excludes the devDependency').toMatch(/2\.0\.0-alpha/)
   })
 })

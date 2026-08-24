@@ -42,9 +42,70 @@ export function matchesGold(id, gold) {
  * `<page>/<child>`, and anything else that merely shares leading characters —
  * `guide/scoped-page` under `guide/scope` — is a different page.
  */
+/**
+ * Does a chunk id fall under a gold entry — RAG-SPEC 5.1.
+ *
+ * THREE SHAPES OF GOLD, and the middle one was silently broken.
+ *
+ *   `guide/auth`            a bare page path. Matches that page's chunks and the
+ *                           chunks of pages nested under it, and NOT a sibling
+ *                           whose route merely extends the string: `guide/scope`
+ *                           must not swallow `guide/scoped-page`. That boundary
+ *                           is why this function exists at all.
+ *   `guide/auth#`           a PAGE-LEVEL PIN. The authoring rule is stated in
+ *                           `skills/docs-rag/SKILL.md`: "pin it to the lead chunk
+ *                           `path#`, which prefix-matches every anchor of that
+ *                           page and nothing else" — the shape a class-overview
+ *                           question is supposed to use.
+ *   `guide/auth#request`    one section.
+ *
+ * The bug: `id === p || startsWith(p + '#') || startsWith(p + '/')` gave the page
+ * pin no meaning at all. For `ExtensionBuilder#` it matched the lead chunk and
+ * nothing else, because `p + '#'` is `ExtensionBuilder##`, which no id begins
+ * with. Fourteen of the 33 distinct gold entries in the development golden set
+ * are page pins or split sections, and the 14 covering the reference pages point
+ * at pages of 3 to 14 chunks each — so retrieving the right page and the right
+ * section scored a miss unless the retriever happened to return the lead chunk.
+ * Measured over the 44 answerable records: **recall@8 0.761 → 0.830**, English
+ * 0.797 → 0.859, Russian 0.667 → 0.750. Every retrieval metric this package
+ * reported was understated by about seven points, and the gap against the
+ * ancestor project's own reports — which use a boundary-free `startsWith` and
+ * were therefore right about page pins and wrong about siblings — was read as
+ * the ancestor being generous rather than as this being broken.
+ *
+ * A SPLIT SECTION IS THE SAME SECTION — AND `-N` IS NOT HOW IT IS SPELLED.
+ * `chunker.js` gives the second and later parts of one heading the ids
+ * `#anchor~2`, `#anchor~3`, so gold pinned to `#anchor` must accept those.
+ *
+ * The TILDE is the whole point. Continuations used to be `-N`, which is also how
+ * VitePress — and `chunker.js`, matching it — disambiguates a REPEATED HEADING:
+ * the second `### Parameters` on a page is `#parameters-1`, the third
+ * `#parameters-2`. One namespace, two meanings, so this rule credited gold
+ * pinned at `api/users#parameters` for a retrieval of `api/users#parameters-1`,
+ * which is a DIFFERENT endpoint's Parameters section and could not have carried
+ * the answer. That scored `recallAtK` 1 and `retrievalF1Loose` {p:1,r:1,f1:1} on
+ * a miss, inflating recall@8, MRR, retrieval F1 and citation precision together
+ * — and since `docpilot tune` sweeps against exactly that objective, it steered
+ * the levers toward the wrong section. It was also the precise over-generosity
+ * the paragraph at the top of this block says this function exists to prevent.
+ * `~` cannot come out of `slug()` (it sits in the character class `slug()`
+ * strips), so nothing but a continuation part ever wears one.
+ *
+ * The suffix rule stays restricted to gold that already names an anchor: a bare
+ * path must never match a sibling page via a numeric suffix.
+ *
+ * Gold pinned at a continuation part changes spelling with the ids — an entry
+ * reading `#actions-api-3` now matches nothing, which is what `docpilot lint`
+ * reports and how such entries are found and repointed.
+ */
 export function underPath(id, prefix) {
   const p = String(prefix).replace(/\/+$/, '')
-  return id === p || id.startsWith(`${p}#`) || id.startsWith(`${p}/`)
+  if (p.endsWith('#')) return id.startsWith(p)
+  if (id === p) return true
+  if (!id.startsWith(p)) return false
+  const rest = id.slice(p.length)
+  if (rest.startsWith('#') || rest.startsWith('/')) return true
+  return p.includes('#') && /^~\d+$/.test(rest)
 }
 
 export function retrievalF1Loose(retrievedIds, gold) {
@@ -190,4 +251,30 @@ export function percentile(values, q) {
   const v = values.filter(Number.isFinite).sort((a, b) => a - b)
   if (!v.length) return null
   return v[Math.min(v.length - 1, Math.floor(v.length * q))]
+}
+
+/**
+ * The two hard gates, as a VERDICT rather than as two printed lines.
+ *
+ * RAG-SPEC 5.5 says a hallucinated citation "fails the whole run regardless of
+ * every other metric", and 5.4 says the same of scope containment below 1.0.
+ * `run.js` printed both sentences and then exited 0, so nothing downstream could
+ * act on either: `lint`, `calibrate` and `doctor` all exit 1 on their own
+ * failures, and this was the one command whose failure a script could not see. A
+ * gate that cannot fail a build is a comment.
+ *
+ * It lives here, beside the metrics it reads, because this module is the one
+ * that is pure by contract — and the thing that decides pass/fail is exactly what
+ * must not be reachable only by running the whole eval.
+ *
+ * NULL IS NOT A FAILURE, and the distinction is the whole of the logic. A
+ * `--gate-only` pass runs no model, so no citation exists to be checked and
+ * `hallucinated` is null; a run with nothing retrieved leaves `scopeContainment`
+ * null the same way. Only a measured breach fails.
+ */
+export function hardGatesFailed(summary) {
+  const s = summary || {}
+  const hallucinated = typeof s.hallucinated === 'number' && s.hallucinated > 0
+  const escaped = typeof s.scopeContainment === 'number' && s.scopeContainment < 1
+  return hallucinated || escaped
 }

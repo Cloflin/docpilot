@@ -15,15 +15,27 @@ import { resolveUi, UI_PANELS, UI_TRIGGERS, UI_DEFAULTS } from './theme/docpilot
 export { UI_PANELS, UI_TRIGGERS, UI_DEFAULTS }
 
 /**
- * The four places a VitePress config can be. This list is also the CLI's
- * definition of "is this a VitePress project at all", which is why `init` uses
- * it rather than a check of its own.
+ * Where the settings live, in the order they are looked for.
+ *
+ * The first four are VitePress's own config, and they come first because that is
+ * where an existing project already keeps the `docPilot` export — the CLI reads
+ * the SAME object the site is built with, which is what stops the index and the
+ * runtime from drifting onto different embedders.
+ *
+ * The last two are for a project that has no VitePress and never will. Every
+ * command except `init` needs this file, so without them `npx docpilot index`
+ * simply exited on a Docusaurus or React site — and the documented workaround
+ * was to create a `.vitepress/` directory for a generator the project does not
+ * use. APPENDED rather than inserted: the four paths above are a tested contract
+ * and a project that has one must keep resolving to it.
  */
 export const CONFIG_CANDIDATES = [
   'docs/.vitepress/config.mjs',
   'docs/.vitepress/config.js',
   '.vitepress/config.mjs',
   '.vitepress/config.js',
+  'docpilot.config.mjs',
+  'docpilot.config.js',
 ]
 
 /**

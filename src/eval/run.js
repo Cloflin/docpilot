@@ -6,6 +6,7 @@
  *   npx docpilot eval --models=qwen3.5:9b,phi4:14b,qwen3:8b
  *   npx docpilot eval --gate-only            retrieval + gate only, seconds
  *   npx docpilot eval --lexical              no embedder at all: BM25 only
+ *   npx docpilot eval --level=medium         the low + medium pool, not a head-slice
  *   npx docpilot eval --limit=3              short loop while tuning
  *   npx docpilot eval --resume               reuse rows already on disk
  *
@@ -18,6 +19,11 @@
  * rather than an opinion. Run it against the same records as a normal
  * `--gate-only` pass and compare retrieval F1 and recall@8.
  *
+ * An index built by `npx docpilot index --no-embed` carries no vectors at all,
+ * and a run against one takes that same path whether or not the flag is given.
+ * There is no hybrid measurement to be had on it, and asking an embedder for one
+ * would score this corpus in a vector space it was never built in.
+ *
  * Retrieval and the gate are MODEL-INDEPENDENT and are computed once per record,
  * then shared by every model in the matrix: a three-model run makes one set of
  * embed calls, not three, and every model is scored against byte-identical
@@ -26,11 +32,11 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { pathToFileURL } from 'node:url'
 
 import { assembleIndex } from '../theme/docpilot/store.js'
 import { embedQuery } from '../theme/docpilot/embed.js'
-import { createRetrieval } from '../theme/docpilot/retriever.js'
+import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { composeQuery } from '../theme/docpilot/gate.js'
 import { detectTools, detectCapabilities } from '../theme/docpilot/llm.js'
 import { runTurn } from '../theme/docpilot/harness.js'
@@ -49,8 +55,10 @@ import {
   wilsonUpper95,
   mean,
   percentile,
+  hardGatesFailed,
 } from './metrics.js'
 import { writeReport } from './report.js'
+import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
 
 import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot, fileEnv } from '../cli-context.js'
@@ -85,15 +93,103 @@ const arg = (name, dflt) => {
 }
 const has = (name) => process.argv.includes(`--${name}`)
 
+/**
+ * Declared here, above the flags, and not in the `main` section below with the
+ * rest of the output helpers: `--level=` is validated at module scope, and a
+ * `const` declared further down is in its temporal dead zone there — a mistyped
+ * tier would print a ReferenceError instead of the six legal ones.
+ */
+const die = (m) => {
+  console.error(`\n  FAIL  ${m}\n`)
+  process.exit(1)
+}
+
+/**
+ * Every flag `arg()` reads, with an example of the form it wants. The booleans
+ * `has()` reads — `--gate-only`, `--lexical`, `--resume` — are deliberately not
+ * here: for them the bare form IS the form.
+ *
+ * `arg()` matches `--name=` and nothing else, so a bare `--name value` leaves the
+ * value as a stray positional and the flag reads as absent. On `--level` that is
+ * silent and destructive: `parseLevelArg(undefined)` returns `ultra`, so
+ * `docpilot eval --level low` scores all sixty records, stamps `meta.level:
+ * 'ultra'`, and — because `reportName` adds no segment for ultra — OVERWRITES the
+ * full-set baseline report and diffs itself against it. The header line that
+ * names the pool is suppressed for ultra, so nothing on screen contradicts the
+ * tier the author thought they asked for. `--limit 5` and `--num-ctx 4096` have
+ * the same shape: the run silently uses the default and reports it as fact.
+ *
+ * cli.md promises that "an unknown tier is refused rather than defaulted, by
+ * every command that takes the flag"; a bare flag is the same promise, and
+ * `parseLevelArg` cannot keep it — by the time it is called the flag is gone.
+ *
+ * Exported for the unit test, which cannot exercise the module-scope check
+ * without ending the worker in `process.exit`.
+ */
+export const VALUE_FLAGS = {
+  level: 'low',
+  limit: '5',
+  model: 'qwen3:8b',
+  models: 'qwen3:8b,phi4:14b',
+  provider: 'ollama',
+  fallback: 'auto',
+  'max-iterations': '2',
+  'num-ctx': '8192',
+}
+
+/** The first value-taking flag in `argv` written without its `=`, or null. */
+export function bareValueFlag(argv, flags = VALUE_FLAGS) {
+  // Exact match: `--level` alone. `--level=low` and `--levels` both start with
+  // the name and neither is the mistake being caught here.
+  return Object.keys(flags).find((name) => argv.includes(`--${name}`)) ?? null
+}
+
+const BARE = bareValueFlag(process.argv)
+if (BARE) die(`--${BARE} takes a value: --${BARE}=${VALUE_FLAGS[BARE]}`)
+
 // --models is the matrix; --model stays as the one-model alias it always was.
 const MODELS = String(arg('models', arg('model', 'qwen3:8b')))
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
 const LIMIT = Number(arg('limit', '0'))
+/**
+ * The POPULATION this run scores, where `--limit` is only how much of it gets
+ * measured.
+ *
+ * The two are not interchangeable and the difference shows up in the report:
+ * `--limit=10` is the head of the file, so the "quick" run and the full run
+ * disagree about which questions matter and neither number explains the other. A
+ * level is a declared pool — every larger pool contains every smaller one — so a
+ * `--level=low` regression is a regression in the full set too, and two reports
+ * at the same tier are comparable by construction (report.js refuses to diff
+ * across tiers for exactly that reason).
+ *
+ * `parseLevelArg` throws rather than defaulting: a typo that fell through to
+ * `ultra` would print a pool nobody asked for and be read as the tier the author
+ * thought they ran. The `[docpilot] ` prefix comes off because `die` frames the
+ * line itself.
+ */
+let RUN_LEVEL = DEFAULT_RUN_LEVEL
+try {
+  RUN_LEVEL = parseLevelArg(arg('level'))
+} catch (e) {
+  die(e.message.replace(/^\[docpilot\] /, ''))
+}
 const BASE = process.env.DOCPILOT_BASE_URL || 'http://localhost:11434'
 const GATE_ONLY = has('gate-only')
-const LEXICAL = has('lexical')
+/**
+ * The flag is one of two routes into the same measurement; a vectorless index is
+ * the other, and `main()` raises this once the manifest has been read.
+ *
+ * It cannot be a `const` for that reason, and it cannot be derived from the index
+ * either — `reportName` and `probeRecords` both read it, and the flag has to be
+ * known before anything is loaded. Left false against an index built with
+ * `--no-embed`, the run would ask an embedder for vectors this corpus never had
+ * and file the answer under the hybrid report name, beside numbers produced by a
+ * channel it does not have.
+ */
+let LEXICAL = has('lexical')
 const RESUME = has('resume')
 // Defaults to what the product ships (config.mjs / session.js), so an eval with
 // no flags measures the configuration a reader actually gets.
@@ -150,11 +246,18 @@ const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 function loadIndex() {
   const manifest = JSON.parse(fs.readFileSync(path.join(RAG, 'manifest.json'), 'utf8'))
   const shards = manifest.shards.map((s) => JSON.parse(fs.readFileSync(path.join(RAG, s), 'utf8')))
-  // `.buffer` on a Buffer is NOT the file: Node pools small allocations, so for
-  // any vector blob under ~8 KB it is the whole pool and `assembleIndex`'s
-  // length check refuses the index. Slice to the view's own bytes.
-  const vecBuf = fs.readFileSync(path.join(RAG, manifest.vectors))
-  const vectorBuffer = vecBuf.buffer.slice(vecBuf.byteOffset, vecBuf.byteOffset + vecBuf.byteLength)
+  // A `--no-embed` index writes `vectors: null` and no blob beside it. Reading it
+  // unconditionally is what made `eval --lexical` demand the one file it then
+  // never touches — the flag turns the dense channel off, and the read happened
+  // anyway, three lines before anything could ask whether it was wanted.
+  let vectorBuffer = null
+  if (manifest.vectors !== null) {
+    // `.buffer` on a Buffer is NOT the file: Node pools small allocations, so for
+    // any vector blob under ~8 KB it is the whole pool and `assembleIndex`'s
+    // length check refuses the index. Slice to the view's own bytes.
+    const vecBuf = fs.readFileSync(path.join(RAG, manifest.vectors))
+    vectorBuffer = vecBuf.buffer.slice(vecBuf.byteOffset, vecBuf.byteOffset + vecBuf.byteLength)
+  }
   const dfDoc = JSON.parse(fs.readFileSync(path.join(RAG, manifest.df), 'utf8'))
   return assembleIndex({ manifest, shards, vectorBuffer, dfDoc })
 }
@@ -216,7 +319,12 @@ async function probeRecords(index, guard, records) {
   const probes = []
   for (const rec of records) {
     const scope = rec.scope || ALL_SCOPE
-    const retrieval = createRetrieval({ index, scope, guard })
+    // `tuning` is not optional here even though the parameter is. The manifest
+    // carries what `docpilot tune` measured on THIS corpus, and it is what the
+    // browser bundle resolves its levers from — omitting it would score the
+    // package defaults and file the result as this deployment's retrieval
+    // quality, which is the one thing a report may never be wrong about.
+    const retrieval = createRetrieval({ index, scope, guard, tuning: index.manifest.tuning })
 
     let vec
     if (!LEXICAL) {
@@ -397,6 +505,12 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
 
     row.latencyMs = Date.now() - t0
     row.iterations = res.iterations
+    // Not `cost.steps`, which counts the chat() calls the harness made. This is
+    // what the transport actually posted — rotation, retries and continuations
+    // included — and on a metered free tier it is the whole bill: OpenRouter
+    // caps the day at 50 REQUESTS and does not look at tokens at all. Without it
+    // "a turn costs three or four requests" is a claim nobody can check here.
+    row.requests = res.requests
     row.rejectedFetches = res.rejectedFetches
     row.support = res.support
     row.cost = res.cost
@@ -524,6 +638,7 @@ export function summarise(rows) {
     scopeContainment: containment.length ? Math.min(...containment) : null,
     rejectedFetches: rows.reduce((a, r) => a + (r.rejectedFetches || 0), 0),
     iterationsPerAnswer: mean(answered.map((r) => r.iterations)),
+    requestsPerTurn: mean(rows.map((r) => r.requests)),
     promptTokens: mean(rows.map((r) => r.cost?.promptTokens)),
     outputTokens: mean(rows.map((r) => r.cost?.outputTokens)),
     // The headline economy number: everything the machine had to think about,
@@ -583,15 +698,20 @@ function printSummary(s) {
   line('observation chars', kchars(s.observationChars))
   line('answer chars', kchars(s.answerChars))
   line('iterations per answer', num(s.iterationsPerAnswer))
+  line('requests / turn', num(s.requestsPerTurn))
   line(
     'latency p50 / p95',
     `${((s.latencyP50 || 0) / 1000).toFixed(0)}s / ${((s.latencyP95 || 0) / 1000).toFixed(0)}s`,
   )
 
   console.log('')
-  if (s.hallucinated) console.log(`  HARD GATE FAILED: hallucinated citation rate ${num(s.hallucinated)} > 0`)
+  // Each gate says the threshold it broke, because "0.02 > 0" is a fact and
+  // "hallucinated citations" alone is a mood. The ids follow on the misses line.
+  if (s.hallucinated) {
+    console.log(`  HARD GATE FAILED: hallucinated citations ${num(s.hallucinated)} > 0 — a cited id was not in the evidence`)
+  }
   if (s.scopeContainment != null && s.scopeContainment < 1) {
-    console.log(`  HARD GATE FAILED: scope containment ${num(s.scopeContainment)} < 1.0`)
+    console.log(`  HARD GATE FAILED: scope containment ${num(s.scopeContainment)} < 1.0 — a chunk outside the record's scope was used`)
   }
   if (s.languageFailures.length) console.log(`  LANGUAGE FAILURES: ${s.languageFailures.join(', ')}`)
   if (s.misses.length) console.log(`  misses: ${s.misses.join(', ')}`)
@@ -600,70 +720,121 @@ function printSummary(s) {
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
-const die = (m) => {
-  console.error(`\n  FAIL  ${m}\n`)
-  process.exit(1)
-}
-
 /**
  * `--lexical` earns its own filename. Two runs that differ in whether a whole
  * retrieval channel was used are different measurements, and writing them to one
  * path means the diagnostic silently replaces the baseline it was run to be
  * compared against — which is exactly what happened the first time.
+ *
+ * `-novec` is the second half of that rule, and it is needed because `indexHash`
+ * cannot carry it: the hash is sha256 over chunk id and text, so a corpus indexed
+ * with vectors and the same corpus indexed `--no-embed` share it exactly. Both
+ * runs are `LEXICAL`, so both wanted the same path — and the documented order of
+ * operations walks straight into it: measure `--gate-only --lexical` first to see
+ * what the embedder is worth, then switch to `embed: false` and measure again. The
+ * second run was overwriting the baseline the first one existed to be.
+ *
+ * `-lvl-<level>` is the same rule for the same reason, with one asymmetry: a run
+ * with no `--level` must keep BYTE-IDENTICAL to the name it has always had, or
+ * every report on disk stops pairing with its successor and the whole history
+ * goes dark on the day levels landed. So `ultra` — which is what "no flag" means
+ * — adds no segment, and only a narrowed run is filed apart.
  */
-const reportName = ({ indexHash, model }) =>
+export const reportName = ({ indexHash, model, vectorlessIndex, level }) =>
   `report-${indexHash}-${String(model).replace(/[^\w.-]+/g, '_')}` +
-  `${LEXICAL ? '-lexical' : ''}-${PROMPT_HASH}.json`
+  `${LEXICAL ? '-lexical' : ''}${vectorlessIndex ? '-novec' : ''}` +
+  `${!level || level === DEFAULT_RUN_LEVEL ? '' : `-lvl-${level}`}` +
+  `-${PROMPT_HASH}.json`
 
 /**
  * The tunables actually in force. Two reports built from the same index, prompt
  * and golden set but different constants are different measurements, and without
  * this they would be indistinguishable on disk.
+ *
+ * It used to REGEX the `tune('NAME', <default>)` literals out of retriever.js's
+ * own source and prefer an environment override. That was a hack while the
+ * literals were the only layer; now that a lever can also arrive through
+ * `manifest.tuning`, the scrape reports a value this run did not use — the report
+ * would name the package default while the retriever ranked on the tuned one.
+ * `resolveLevers` is the single implementation of the precedence, so the
+ * fingerprint is by construction the values the probes were computed with.
+ *
+ * The keys are SORTED. report.js raises `Levers changed` on a JSON string
+ * mismatch, which makes key ORDER load-bearing in a way nothing else here is:
+ * reordering `LEVER_NAMES` — a refactor that changes no value anywhere — would
+ * otherwise declare every run after it incomparable to every run before it.
+ * (Sorting is itself one such reordering, so the first report written after this
+ * change flags once against its predecessor. That is the last time.)
+ *
+ * @param {object|null} tuning  index.manifest.tuning — the corpus's own levers
  */
-function leverFingerprint() {
-  const src = fs.readFileSync(
-    fileURLToPath(new URL('../theme/docpilot/retriever.js', import.meta.url)),
-    'utf8',
-  )
-  // The constants are declared as `tune('NAME', <default>)`, and an environment
-  // override beats the default — so read the override first, exactly as the
-  // module does, or the fingerprint records a sweep it did not run.
-  const read = (name) => {
-    const env = process.env[`DOCPILOT_${name}`]
-    if (env !== undefined && env !== '' && Number.isFinite(Number(env))) return Number(env)
-    const m = new RegExp(`tune\\('${name}',\\s*([\\d.]+)\\)`).exec(src)
-    return m ? Number(m[1]) : null
-  }
-  return {
+export function leverFingerprint(tuning = null) {
+  const fields = {
+    ...resolveLevers(tuning),
     maxIterations: MAX_ITERATIONS ?? 4,
     numCtx: PROVIDER === 'ollama' ? NUM_CTX : null,
-    RRF_K: read('RRF_K'),
-    W_LEXICAL_RRF: read('W_LEXICAL_RRF'),
-    W_DENSE_RRF: read('W_DENSE_RRF'),
-    MMR_LAMBDA: read('MMR_LAMBDA'),
-    CANDIDATES: read('CANDIDATES'),
-    FUSED: read('FUSED'),
-    EXPAND_BELOW_TOKENS: read('EXPAND_BELOW_TOKENS'),
-    GATE_K: read('GATE_K'),
   }
+  const out = {}
+  for (const k of Object.keys(fields).sort()) out[k] = fields[k]
+  return out
 }
 
 async function main() {
   const index = loadIndex()
   const guard = index.manifest.guard
   EXPECTED_DIMS = index.manifest.dims
-  const records = fs
+  // `manifest.vectors === null` is what a `--no-embed` build writes, and it is the
+  // whole of the signal. Converging on `--lexical` here — rather than failing at
+  // the first embed call, or worse succeeding and reporting a dense channel that
+  // scored nothing — keeps one code path for both routes into this measurement.
+  const vectorless = index.manifest.vectors === null
+  if (vectorless) LEXICAL = true
+  // A project that has not run `init` has no golden set, and the bare ENOENT
+  // this used to throw named a path the author never chose and no next step.
+  if (!fs.existsSync(GOLDEN)) {
+    die(`no golden set at ${path.relative(ROOT, GOLDEN)} — run \`npx docpilot init\` to scaffold one`)
+  }
+  const golden = fs
     .readFileSync(GOLDEN, 'utf8')
     .split('\n')
     .filter(Boolean)
     .map((l) => JSON.parse(l))
-    .slice(0, LIMIT || undefined)
+  // Level first, limit second, and the order is the whole point. The level
+  // chooses WHICH records this run is about; `--limit` then truncates that
+  // choice. Slicing first would take the head of the entire file and keep
+  // whichever of those N happened to sit in the tier, so `--level=low --limit=5`
+  // would score a handful of records nobody selected and print a pool size that
+  // was never the pool.
+  const inLevel = filterByLevel(golden, RUN_LEVEL)
+  if (!inLevel.length) {
+    // The likely cause is named because the filter has no way to distinguish it
+    // from an honest empty pool: a set authored before levels existed carries no
+    // `level` at all, every record of it reads as `high`, and so `--level=low`
+    // on a perfectly good 60-record file selects nothing.
+    die(
+      golden.length === 0
+        ? `no records in ${GOLDEN}.\n` + `        scaffold a golden set:  npx docpilot init`
+        : `no records at level ${RUN_LEVEL} — ${GOLDEN} holds ${golden.length}.\n` +
+            `        a record with no "level" field runs as "high", so a set that predates\n` +
+            `        levels is empty below it and whole at high and above.\n` +
+            `        see the tiers:      npx docpilot lint\n` +
+            `        run the whole set:  npx docpilot eval`,
+    )
+  }
+  const records = inLevel.slice(0, LIMIT || undefined)
 
   console.log(
     `\nDocPilot eval — ${records.length} records, ` +
       `${GATE_ONLY ? 'gate only' : `models ${MODELS.join(', ')}`}` +
-      `${LEXICAL ? ', LEXICAL ONLY (no embedder)' : ''}`,
+      `${LEXICAL ? `, LEXICAL ONLY (${vectorless ? 'index has no vectors' : 'no embedder'})` : ''}`,
   )
+  // Only for a narrowed run: at `ultra` the pool IS the file and the line would
+  // say `60 of 60` on every run anybody has ever done. The counts are the pool
+  // against the file, not against `--limit` — the line above already reports how
+  // many of them are actually scored.
+  if (RUN_LEVEL !== DEFAULT_RUN_LEVEL) {
+    console.log(`level ${RUN_LEVEL} — ${inLevel.length} of ${golden.length} records`)
+  }
   console.log(
     `guard: mode=${guard.denseMode} tau=${guard.tau} source=${guard.source} ` +
       `cos=[${guard.cosFloor}, ${guard.cosCeil}] index=${index.manifest.hash} ` +
@@ -694,7 +865,15 @@ async function main() {
       if (FALLBACK_MODE === 'on') fallback = true
       if (FALLBACK_MODE === 'off') fallback = false
 
-      const reportPath = path.join(REPORTS, reportName({ indexHash: index.manifest.hash, model }))
+      const reportPath = path.join(
+        REPORTS,
+        reportName({
+          indexHash: index.manifest.hash,
+          model,
+          vectorlessIndex: vectorless,
+          level: RUN_LEVEL,
+        }),
+      )
       if (RESUME && fs.existsSync(reportPath)) {
         console.log(`\n── ${model} — resumed from ${path.basename(reportPath)}, not re-run`)
         runs.push(JSON.parse(fs.readFileSync(reportPath, 'utf8')))
@@ -724,6 +903,13 @@ async function main() {
       // paths — but nothing downstream could TELL them apart, because the flag
       // existed only as a substring of the name.
       lexical: LEXICAL,
+      // `lexical` is now true for two different reasons and this is the one that
+      // separates them. A diagnostic run has a hybrid twin to be read against;
+      // a `--no-embed` index has none and never will, so "what does the embedder
+      // buy" is not a question this report is an answer to — it is the report of
+      // a deployment that made the choice. Without the key the two are one
+      // filename apart and identical inside.
+      vectorlessIndex: vectorless,
       provider: PROVIDER,
       indexHash: index.manifest.hash,
       promptHash: PROMPT_HASH,
@@ -731,9 +917,15 @@ async function main() {
       embedModel: index.manifest.embedModel,
       guard,
       records: records.length,
+      // Always written, `'ultra'` and all — never omitted for the unfiltered
+      // case. report.js partitions the history on `meta.level ?? 'ultra'`, so an
+      // absent key is read as the whole set: correct for the reports that
+      // predate levels, and a lie the moment a narrowed run leaves it out and
+      // gets diffed against a full one.
+      level: RUN_LEVEL,
       maxIterations: MAX_ITERATIONS ?? 4,
       numCtx: PROVIDER === 'ollama' ? NUM_CTX : null,
-      levers: leverFingerprint(),
+      levers: leverFingerprint(index.manifest.tuning),
     }
     writeReport({ dir: REPORTS, name: reportName(meta), meta, summary: s, rows })
     runs.push({ meta, summary: s })
@@ -742,4 +934,33 @@ async function main() {
   return runs
 }
 
-main().catch((e) => die(e.stack || e.message))
+/**
+ * A breached hard gate exits 1 AFTER every model has run and every report has
+ * been written.
+ *
+ * Not `process.exit` at the point of detection: a matrix is several models and
+ * the reports are what the failure has to be diagnosed from, so stopping at the
+ * first bad row would destroy the evidence for the sake of a faster exit. Every
+ * row is measured, every report lands, and the exit code is the last thing that
+ * happens.
+ */
+// `pathToFileURL`, not a template literal, and the same guard build-rag-index.js
+// and calibrate.js carry: `bin/docpilot.js` repoints `argv[1]` at this module
+// before importing it, so the comparison holds under the launcher, and the unit
+// tests can read `reportName` and `leverFingerprint` out of here without a run
+// starting underneath them — which, with no index on disk, would exit(1) out of
+// the test process.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main()
+    .then((runs) => {
+      const failed = runs.filter((r) => hardGatesFailed(r.summary)).map((r) => r.meta.model)
+      if (!failed.length) return
+      console.error(
+        `  FAIL  hard gate breached: ${failed.join(', ')}\n` +
+          `        every report was written first — the offending rows are in ` +
+          `${path.relative(ROOT, REPORTS)}/\n`,
+      )
+      process.exitCode = 1
+    })
+    .catch((e) => die(e.stack || e.message))
+}

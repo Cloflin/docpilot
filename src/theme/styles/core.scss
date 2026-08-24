@@ -531,6 +531,30 @@
   padding-block: 24px;
 }
 
+/**
+ * The first-visit line — ui-specs/009, `ui.firstRunHint`.
+ *
+ * `.docpilot__row`'s `-12px` exists to pull a LEADING ghost pill's own padding
+ * back onto the paragraph's alignment. This row leads with text and ends with
+ * the pill, so the pull is cancelled and the pill keeps its padding where it is:
+ * the same correction, applied at the other end of the row.
+ */
+.docpilot__hint {
+  align-items: center;
+  margin-inline-start: 0;
+
+  .docpilot__meta {
+    margin: 0;
+  }
+}
+
+// The scoped-pages list sits under the greeting, where the suggestion rows do,
+// so it takes their spacing rather than the 20px a source list carries under an
+// answer. — ui-specs/009
+.docpilot__empty .docpilot__sources {
+  margin-block-start: 4px;
+}
+
 // THE ONE DISPLAY STRING IN THE PACKAGE. The empty state is the only moment the
 // panel has a canvas rather than a conversation, and this is the reference
 // product's own measurement for it: large and thin, not small and bold. It wraps
@@ -890,6 +914,30 @@
     color: var(--shiki-light, inherit);
   }
 
+  // The other two highlighters are the host's, and so are their stylesheets:
+  // this panel colours nothing they colour and defines no palette of its own.
+  // What it does undo is the two places their themes paint a BACKGROUND, which
+  // is the panel's to decide — the code card is one surface, `--dp-code-bg`.
+  //
+  //   · every highlight.js theme paints `.hljs` with a background and a colour,
+  //     because in its own markup that element IS the code block;
+  //   · Prism's default theme gives `.token.operator` and two siblings a
+  //     translucent white, which on a dark panel reads as a smear across every
+  //     `=` in the answer.
+  //
+  // Colour is inherited rather than reset on `.hljs` for the same reason the
+  // `inherit` fallback exists above: the card's text colour is the panel's.
+  .hljs {
+    background: none;
+    color: inherit;
+  }
+
+  .token.operator,
+  .token.entity,
+  .token.url {
+    background: none;
+  }
+
   .docpilot__code-copy {
     position: absolute;
     inset-block-start: 8px;
@@ -963,6 +1011,56 @@
     font-size: 16px;
     font-weight: 600;
     margin-block-start: 20px;
+  }
+
+  // ── tables — ui-specs/009 ─────────────────────────────────────────────────
+  //
+  // The code card's arrangement, one floor down and for the same reason: the
+  // panel is one column, the content is wider than it, so the SCROLLER is the
+  // wrapper and the thing inside it is left alone. Without this a three-column
+  // table ran out the side of a 360px drawer with nothing to catch it.
+  //
+  // A ring, not a fill. The table is structure and the ring is how this package
+  // draws structure; a tinted table on a tinted row would be the second device
+  // doing the first one's job. `overflow: hidden` is deliberately absent for the
+  // reason the code card states — it would clip the focus ring at its corners.
+  .docpilot__table {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    margin-block-start: 12px;
+    border: 1px solid var(--dp-line);
+    border-radius: var(--dp-r-md);
+
+    // It is a scroller, so it is a tab stop; without a ring the focus is
+    // invisible for exactly the reader who needs it. `pre` above, verbatim.
+    &:focus-visible {
+      outline: 2px solid var(--dp-focus);
+      outline-offset: 2px;
+    }
+  }
+
+  table {
+    // `collapse`, so the one hairline under the header row is one hairline and
+    // not two adjacent cell edges pretending to be it.
+    border-collapse: collapse;
+    // Not 100%: the width the CONTENT needs is the point of the scroller above,
+    // and a table forced to the box would wrap every cell to two words instead.
+    min-inline-size: 100%;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  th,
+  td {
+    padding: 6px 12px;
+    text-align: start;
+    white-space: nowrap;
+  }
+
+  th {
+    font-weight: 500;
+    color: var(--dp-text-dim);
+    border-block-end: 1px solid var(--dp-line);
   }
 }
 
@@ -1078,9 +1176,17 @@
   }
 
   // The same inverted pair the armed send button already uses, so "on" is one
-  // colour relationship in this component rather than two. Declared last, so a
-  // pressed toggle keeps it under hover as well.
-  &[aria-pressed='true'] {
+  // colour relationship in this component rather than two.
+  //
+  // The contact states are SPELLED OUT rather than left to source order, because
+  // source order does not decide this: `[aria-pressed]:hover` carries one more
+  // pseudo-class than `[aria-pressed='true']` and wins on specificity wherever
+  // both apply. Left implicit, a selected reason took `--dp-text` on a
+  // `--dp-text` fill under the pointer — the label vanishing into its own track
+  // at the exact moment the reader is pointing at it.
+  &[aria-pressed='true'],
+  &[aria-pressed='true']:hover,
+  &[aria-pressed='true']:focus-visible {
     background: var(--dp-text);
     color: var(--dp-on-text);
   }
@@ -1231,6 +1337,56 @@
   font-size: 13px;
   color: inherit;
   overflow-wrap: anywhere;
+}
+
+// ── the passage behind a citation — ui-specs/009 ────────────────────────────
+//
+// A third track for the disclosure, on the rows that have one — the history
+// row's own arrangement, and for the same reason: only the rows that carry a
+// control pay for the column.
+.docpilot__source.has-passage {
+  grid-template-columns: auto minmax(0, 1fr) 32px;
+  align-items: start;
+}
+
+// The chevron points down at rest and up when the passage is open. It is the
+// only rotation in the package and it is a state, not an entrance, so it runs
+// on the fast tier with everything else that answers a press.
+.docpilot__source .is-open {
+  transform: rotate(180deg);
+  transition: transform var(--dp-dur-fast) var(--dp-ease);
+}
+
+// Level 1 and one tier quieter than the row above it — the quote chip's
+// treatment, because it is the same kind of object: text from somewhere else,
+// shown as evidence rather than as the panel's own voice. No ring; a quotation
+// is signalled here by dimmed text, which is what the answer's `blockquote`
+// does too.
+//
+// A fixed-height SCROLLER rather than a clamp. The whole retrieved chunk is
+// what the model was given, and a truncated passage shown as "the passage this
+// was drawn from" would be a smaller lie than an invented one but a lie all the
+// same. The reasoning box one floor up is the same device for the same reason.
+.docpilot__passage {
+  grid-column: 1 / -1;
+  margin-block-start: 8px;
+  padding: 8px 12px;
+  background: var(--dp-surface-2);
+  border-radius: var(--dp-r-md);
+  color: var(--dp-text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-block-size: min(240px, 32dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  // It is a scroller, so it is a tab stop.
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
 }
 
 // ── actions: hover- and focus-revealed, resident where hover does not exist ──
@@ -1560,6 +1716,21 @@
   margin: 8px 0 0;
 }
 
+// What is left of the day's free answers. A SENTENCE, so it starts where the
+// text does — the counter above it is a number and ends where the field does —
+// and it takes the dim text and nothing else: no fill, no border, no accent. A
+// badge here would read as a warning on every question the reader ever asks,
+// and the thing being reported is a budget, not a fault. Tabular figures for the
+// same reason the counter has them: the count drops with every answer, and
+// proportional digits reflow the words after it each time.
+.docpilot__budget {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dp-text-dim);
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0 0;
+}
+
 .docpilot__footnote {
   font-size: 13px;
   line-height: 1.5;
@@ -1670,6 +1841,58 @@
   scroll-padding-block: 8px;
   margin-inline: -8px;
   padding: 8px 8px 0;
+}
+
+/**
+ * The filter — ui-specs/009.
+ *
+ * The composer's arrangement one tier down: `--dp-surface` and a ring, because a
+ * tinted field AND a ring are two devices doing one job. `--dp-r-sm`, not the
+ * composer's `--dp-r-field` — that radius belongs to the panel's primary input,
+ * and a second pill-shaped field a few pixels away would flatten the difference
+ * between "ask a question" and "narrow a list".
+ */
+.docpilot__picker-filter {
+  inline-size: 100%;
+  margin-block-start: 8px;
+  min-block-size: 32px;
+  padding: 6px 12px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-line);
+  border-radius: var(--dp-r-sm);
+  color: var(--dp-text);
+  font-family: inherit;
+  font-size: 13px;
+
+  &::placeholder {
+    color: var(--dp-text-dim);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  // The SECOND field in this package that needs the iOS zoom guard, and it needs
+  // it for the same reason `.docpilot__prompt-edit` does: Safari zooms the
+  // viewport when a focused control computes below 16px.
+  @media (max-width: #{bp.$sheet - 1px}) {
+    font-size: 16px;
+  }
+
+  @media (pointer: coarse) {
+    min-block-size: 44px;
+  }
+}
+
+// A section heading inside the listbox. A label, not a row — so no fill and no
+// hover, because either would make it look pressable.
+.docpilot__pick-group {
+  margin: 8px 0 2px;
+  padding-inline: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dp-text-dim);
 }
 
 .docpilot__pick {
@@ -2078,6 +2301,12 @@ body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
   .docpilot__suggestion:active,
   .docpilot__jump:active {
     transform: none;
+  }
+  // The one rotation in the package — ui-specs/009. The chevron still has to
+  // POINT the other way when the passage is open, because that is state and not
+  // decoration; what goes is the turning.
+  .docpilot__source .is-open {
+    transition: none;
   }
 }
 

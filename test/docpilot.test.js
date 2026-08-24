@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 
 import {
   stripImages,
@@ -48,7 +48,15 @@ import {
   CREDENTIAL_LANGUAGES,
   MASK,
 } from '../src/theme/docpilot/credentials.js'
-import { tokenF1, wilsonUpper95, languageMatch, retrievalF1Loose } from '../src/eval/metrics.js'
+import {
+  tokenF1,
+  wilsonUpper95,
+  languageMatch,
+  retrievalF1Loose,
+  hardGatesFailed,
+  underPath,
+  recallAtK,
+} from '../src/eval/metrics.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -62,15 +70,34 @@ import {
   chooseWindow,
   WINDOWS,
 } from '../src/eval/calibrate.js'
-import { guardFor } from '../src/build/build-rag-index.js'
+import { guardFor, tuningFor } from '../src/build/build-rag-index.js'
+import {
+  LEVELS,
+  DEFAULT_RECORD_LEVEL,
+  DEFAULT_RUN_LEVEL,
+  levelRank,
+  recordLevel,
+  filterByLevel,
+  parseLevelArg,
+  levelHistogram,
+} from '../src/eval/levels.js'
+import { previousReport, writeReport } from '../src/eval/report.js'
+import { lintRecords, levelSummary } from '../src/eval/lint-golden.js'
+import { mmr, resolveLevers, LEVER_NAMES } from '../src/theme/docpilot/retriever.js'
+import { parseRange, chooseCell, buildTuningDoc } from '../src/eval/tune.js'
+import { TUNING_OUT, CALIBRATION_OUT } from '../src/cli-context.js'
 import {
   resolveSuggestions,
   themeDocPilot,
   resolveDocPilot,
   readiness,
   proxyContract,
-  DEFAULTS,
   SERVER_ONLY,
+  // ui-specs/009 rule 11 walks it: every leaf here either reaches the panel or
+  // is named in SERVER_ONLY, and every one of them is written down in the
+  // configuration reference.
+  DEFAULTS,
+  THEME_ONLY,
 } from '../src/config.js'
 import { resolveUi, UI_DEFAULTS } from '../src/theme/docpilot/ui.js'
 import {
@@ -98,6 +125,7 @@ import { parseAllowlist, checkSource } from '../src/build/lib/sources.js'
 import { absoluteSidebar } from '../src/sidebar.js'
 import { detectSocial, socialCopy, SOCIAL_LANGUAGES } from '../src/theme/docpilot/social.js'
 import { createRetrieval, ScopeEscape } from '../src/theme/docpilot/retriever.js'
+import { excerptWindow } from '../src/theme/docpilot/excerpt.js'
 import { runTurn } from '../src/theme/docpilot/harness.js'
 import { assembleIndex } from '../src/theme/docpilot/store.js'
 import {
@@ -150,6 +178,38 @@ describe('normalise — llm content tags', () => {
     expect(warnings[0]).toMatch(/unclosed/)
   })
 
+  /**
+   * The page most likely to name these tags is the page documenting them, and
+   * naming one in backticks used to open the state machine: `reference/cli` said
+   * "this pass may add `<llm-only>` and `<llm-exclude>`" and lost every line after
+   * that sentence from the index, silently, on a page nobody had marked private.
+   */
+  it('reads a tag named in backticks as prose, not as a directive', () => {
+    const warnings = []
+    const src = ['may add `<llm-only>` and `<llm-exclude>` and nothing else', 'still indexed'].join(
+      '\n',
+    )
+    const out = applyLlmTags(src, (m) => warnings.push(m))
+    expect(out).toBe(src)
+    expect(warnings).toEqual([])
+  })
+
+  // The safety rule is unchanged for a tag somebody actually wrote — quoting one
+  // earlier on the page must not disarm the next real one.
+  it('still excludes to end of file when a real tag follows a quoted one', () => {
+    const warnings = []
+    const out = applyLlmTags(
+      ['doc `<llm-exclude>` here', '<llm-exclude>', 'secret'].join('\n'),
+      (m) => warnings.push(m),
+    )
+    expect(out.trim()).toBe('doc `<llm-exclude>` here')
+    expect(warnings[0]).toMatch(/unclosed/)
+  })
+
+  it('keeps a line that is nothing but a code span', () => {
+    expect(applyLlmTags('`<llm-exclude>`')).toBe('`<llm-exclude>`')
+  })
+
   it('runs before stripHtml, so exclude never survives the full pipeline', () => {
     const { text } = normaliseMarkdown('---\ntitle: T\n---\n\n<llm-exclude>\nsecret\n</llm-exclude>\n\nvisible')
     expect(text).toContain('visible')
@@ -159,6 +219,33 @@ describe('normalise — llm content tags', () => {
   it('reads the frontmatter description', () => {
     const { description } = normaliseMarkdown('---\ntitle: T\ndescription: How to wire the editor.\n---\n\nbody')
     expect(description).toBe('How to wire the editor.')
+  })
+})
+
+/**
+ * The markdown pass used to skip the whole `/reference/` PREFIX, with the comment
+ * "generated stubs; the YAML is indexed instead". True of the stub an OpenAPI spec
+ * generates, and of nothing else: every hand-written reference page a project keeps
+ * under that path was dropped from its own index in silence — this package lost
+ * `config`, `cli`, `highlighting` and `skills`, printed `sidebar link has no
+ * indexed content: /reference/config` on every build, and answered questions about
+ * its own documented settings with "not in the docs". A spec claims one route.
+ */
+describe('the index — which /reference/ routes a spec claims', () => {
+  const src = fs.readFileSync(new URL('../src/build/build-rag-index.js', import.meta.url), 'utf8')
+
+  it('skips no route on a project that publishes no spec', () => {
+    // The blanket prefix skip and the comment that justified it. `kindFor` still
+    // tests the same prefix one line apart, and legitimately — it classifies a
+    // page, it does not drop one.
+    expect(src).not.toMatch(/startsWith\('\/reference\/'\)\) continue/)
+    expect(src).toMatch(/specRoutes\.has\(route\)\) continue/)
+  })
+
+  it('derives the claimed routes from the spec filenames', () => {
+    expect(src).toMatch(/specRoutes = new Set\(specs\.map\(/)
+    // Resolved above the markdown loop, which needs the answer before it decides.
+    expect(src.indexOf('const specRoutes')).toBeLessThan(src.indexOf('for (const file of files)'))
   })
 })
 
@@ -1152,6 +1239,739 @@ describe('code fences', () => {
   })
 })
 
+/**
+ * The four defects of ui-specs/009 — the ones that ship with NO switch, because
+ * a bug has no user who would want to keep it. Three of the four have no DOM to
+ * test against here, so they are asserted the way 008's row placement is: by
+ * reading the source and stating the contract it has to keep.
+ */
+describe('009 — tables in an answer', () => {
+  const known = new Set(['/introduction'])
+  const html = (src) => renderAnswer(src, known).html
+  const TABLE = ['| opt | default |', '| --- | --- |', '| `a` | `1` |'].join('\n')
+
+  // The panel is 360–460px wide. Before this, a three-column table ran out the
+  // side of it with nothing to catch it, because `overflow-x` existed on `pre`
+  // and on nothing else.
+  it('wraps a table in a scroller that is a tab stop', () => {
+    const out = html(TABLE)
+    expect(out).toContain('<div class="docpilot__table" tabindex="0">')
+    expect(out).toContain('</table>\n</div>')
+  })
+
+  // A region needs a name to be worth having and a model-written table has no
+  // caption to take one from — so the wrapper carries no role at all, which is
+  // the same call `pre` already makes.
+  it('gives the wrapper no role, so there is no unnamed landmark', () => {
+    expect(html(TABLE)).not.toMatch(/class="docpilot__table"[^>]*role=/)
+  })
+
+  it('marks every header cell as a column header', () => {
+    const out = html(TABLE)
+    expect(out).toContain('<th scope="col">')
+    // The lookahead is load-bearing: `<th[^>]*>` also matches `<thead>`.
+    const heads = out.match(/<th(?=[\s>])[^>]*>/g)
+    expect(heads).toHaveLength(2)
+    expect(heads.every((t) => t.includes('scope="col"'))).toBe(true)
+  })
+
+  // markdown-it keeps alignment on `style`, and a hand-written `<th>` would have
+  // dropped it. This is why the rule goes through `renderToken`.
+  it('keeps the alignment markdown-it computed', () => {
+    const out = html(['| a | b |', '| :-- | --: |', '| 1 | 2 |'].join('\n'))
+    expect(out).toMatch(/<th style="text-align:right" scope="col"|<th scope="col" style="text-align:right"/)
+  })
+
+  // Not a table rule, but the reason there is no `img` rule beside it: an
+  // enabled image would fire a request from the docs origin carrying the
+  // reader's question, so `image` is disabled and there is no `<img>` to style.
+  it('still renders no image at all', () => {
+    expect(html('![alt](https://example.com/x.png?q=secret)')).not.toContain('<img')
+  })
+})
+
+describe('009 — the three defects with no DOM', () => {
+  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+  const panel = read('src/theme/components/DocPilot.vue')
+
+  /**
+   * Safari drops list semantics from a list styled `list-style: none` outside a
+   * `<nav>`, which takes the item count with it and leaves the `aria-label`
+   * naming an element with no role. All three lists in the panel wear that
+   * class, so all three need the restoration.
+   */
+  it('restores list semantics on every .docpilot__sources list', () => {
+    const opens = panel.match(/<ol\b[\s\S]*?>/g) || []
+    // Every list, not a fixed count: the contract is "each one carries it", and
+    // a count would have to be edited every time a list is added — which is
+    // exactly the moment the loop below has to be the thing that fails.
+    expect(opens.length).toBeGreaterThanOrEqual(3)
+    for (const tag of opens) expect(tag).toContain('role="list"')
+    // The premise, so this test fails loudly if the styling ever changes and
+    // the roles become the redundant markup they would otherwise be.
+    expect(read('src/theme/styles/core.scss')).toMatch(/\.docpilot__sources \{[^}]*list-style: none/)
+  })
+
+  /**
+   * The polite region was a slot: `clearTimeout` then overwrite, so a message
+   * arriving inside the 500ms window replaced one that had never been spoken.
+   */
+  it('queues announcements instead of overwriting them', () => {
+    expect(panel).toContain('const announceQueue = []')
+    expect(panel).toContain('announceQueue.push(msg)')
+    // The specific line that caused it. Its absence is the fix.
+    expect(panel).not.toMatch(/clearTimeout\(announceTimer\)\s*\n\s*announceTimer = setTimeout\(\(\) =>/)
+    // Still throttled — the delay was never the bug.
+    expect(panel).toContain('const ANNOUNCE_MS = 500')
+  })
+
+  /**
+   * A listbox is one tab stop. Every option used to carry `tabindex="0"`, so a
+   * three-hundred page corpus put three hundred stops before the composer.
+   */
+  it('gives the scope picker a roving tabindex and arrow keys', () => {
+    expect(panel).toContain(':tabindex="p.path === rovingPath ? 0 : -1"')
+    expect(panel).not.toMatch(/class="docpilot__pick"[\s\S]{0,200}?\btabindex="0"/)
+    for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End']) {
+      expect(panel).toContain(`case '${key}'`)
+    }
+    // Space must be prevented or it scrolls the picker out from under the row
+    // it just toggled.
+    expect(panel).toMatch(/case ' ':[\s\S]{0,400}?e\.preventDefault\(\)/)
+  })
+
+  // The tab stop must exist even when `activePick` names nothing in the list —
+  // a filter that removed it, or a picker nobody has arrowed through yet.
+  // Without this a listbox can end up with no way in at all.
+  it('always leaves exactly one option in the tab order', () => {
+    expect(panel).toContain('pages.some((p) => p.path === activePick.value) ? activePick.value : pages[0].path')
+  })
+})
+
+/**
+ * ui-specs/009, wave 3 — a citation you can check without leaving.
+ *
+ * The whole point is that the text is ALREADY in the browser: the chunk the host
+ * put in front of the model this turn, or the same chunk in the index by id.
+ */
+describe('009 — the passage behind a citation', () => {
+  const SRC = { n: 1, id: '/guide#auth', href: '/guide#auth', title: 'Auth', tail: 'Guide' }
+  const chunk = (text) => ({ id: SRC.id, text })
+
+  beforeEach(() => {
+    configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
+    sessionState.index = null
+  })
+
+  it('prefers the chunk THIS turn put in front of the model', () => {
+    sessionState.index = { byId: new Map([[SRC.id, chunk('what the index has now')]]) }
+    const turn = { gate: { chunks: [chunk('  what the model saw  ')] } }
+    expect(session.passageFor(turn, SRC)).toBe('what the model saw')
+  })
+
+  // A restored conversation: history.js drops `gate.chunks` deliberately rather
+  // than spend kilobytes a turn on them, and `sources[].id` is what survives.
+  it('falls back to the index by id when the gate did not survive', () => {
+    sessionState.index = { byId: new Map([[SRC.id, chunk('from the index')]]) }
+    expect(session.passageFor({}, SRC)).toBe('from the index')
+  })
+
+  // The third real case: the docs were rebuilt and the chunk is gone. Empty, so
+  // the component renders no disclosure — a control that opens onto nothing is
+  // worse than no control.
+  it('returns nothing when the corpus has moved on', () => {
+    sessionState.index = { byId: new Map() }
+    expect(session.passageFor({}, SRC)).toBe('')
+    expect(session.passageFor({}, { n: 1 })).toBe('')
+  })
+
+  it('is off entirely when the project switched it off', () => {
+    configure({ docPilot: themeDocPilot(resolveDocPilot({ citations: { passage: false } })) })
+    sessionState.index = { byId: new Map([[SRC.id, chunk('still here')]]) }
+    expect(session.passageFor({ gate: { chunks: [chunk('still here')] } }, SRC)).toBe('')
+  })
+})
+
+describe('009 — a copied answer carries its sources', () => {
+  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+
+  // `[1]` pasted into a ticket with nothing behind it is worse than no citation
+  // at all, because it looks like provenance.
+  it('copies through withSources, not answerText', () => {
+    expect(panel).toContain('await navigator.clipboard.writeText(withSources(turn))')
+    expect(panel).not.toContain('await navigator.clipboard.writeText(turn.answerText)')
+  })
+
+  // Absolute, because the paste lands outside the site that could resolve a route.
+  it('builds absolute URLs and honours the switch', () => {
+    expect(panel).toContain('if (!s.config.citations.inCopy || !turn.sources?.length) return text')
+    expect(panel).toContain('const href = src.origin || `${origin}${src.href}`')
+  })
+
+  // From the list the reader is looking at — not by parsing markers back out of
+  // prose the model wrote.
+  it('builds the list from turn.sources', () => {
+    expect(panel).toContain('turn.sources.map((src)')
+  })
+})
+
+/**
+ * ui-specs/009, wave 4 — the ways in.
+ *
+ * `applyDeepLink` is exercised for real; the prefetch split is asserted on the
+ * source, because what matters about it is which half runs and there is no
+ * network in a node run to watch it not happen.
+ */
+describe('009 — ?dp-ask= fills the composer and does not send it', () => {
+  beforeEach(() => {
+    configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
+    sessionState.pendingQuestion = ''
+    sessionState.pendingScope = null
+    sessionState.open = false
+  })
+
+  it('opens the panel with the question waiting, unsent', () => {
+    expect(session.applyDeepLink('?dp-ask=How%20do%20I%20rotate%20a%20key')).toBe(true)
+    expect(sessionState.pendingQuestion).toBe('How do I rotate a key')
+    expect(sessionState.open).toBe(true)
+    // The one thing that must NOT have happened.
+    expect(sessionState.turns).toHaveLength(0)
+    expect(sessionState.busy).toBe(false)
+  })
+
+  it('takes a page scope as an intention, to be applied when there is a manifest', () => {
+    session.applyDeepLink('?dp-ask=hello&dp-scope=page')
+    expect(sessionState.pendingScope).toBe('page')
+    // Anything else is ignored rather than guessed at.
+    sessionState.pendingScope = null
+    session.applyDeepLink('?dp-ask=hello&dp-scope=everything')
+    expect(sessionState.pendingScope).toBe(null)
+  })
+
+  // A link is somebody else's input and the field it lands in caps at a thousand.
+  it('clamps to the composer’s own ceiling', () => {
+    session.applyDeepLink(`?dp-ask=${'x'.repeat(2000)}`)
+    expect(sessionState.pendingQuestion).toHaveLength(1000)
+  })
+
+  it('strips both parameters and leaves the rest of the query alone', () => {
+    let seen = null
+    session.applyDeepLink('?utm=1&dp-ask=hi&dp-scope=page', (params) => (seen = params.toString()))
+    expect(seen).toBe('utm=1')
+  })
+
+  it('does nothing at all when the project switched it off', () => {
+    configure({ docPilot: themeDocPilot(resolveDocPilot({ composer: { deepLink: false } })) })
+    expect(session.applyDeepLink('?dp-ask=hello')).toBe(false)
+    expect(sessionState.pendingQuestion).toBe('')
+    expect(sessionState.open).toBe(false)
+  })
+
+  it('ignores an empty or absent parameter', () => {
+    expect(session.applyDeepLink('?dp-ask=%20%20')).toBe(false)
+    expect(session.applyDeepLink('?other=1')).toBe(false)
+    expect(session.applyDeepLink('')).toBe(false)
+  })
+})
+
+describe('009 — the prefetch split', () => {
+  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+  const store = read('src/theme/docpilot/session.js')
+
+  /**
+   * The whole reason `ensureIndex` was split. It restores the scope, and that
+   * can `say()` into a polite live region — with the panel closed and the
+   * reader reading something else entirely.
+   */
+  it('prefetches the network half and nothing that announces', () => {
+    const fn = store.match(/export function prefetchIndex\(\) \{[\s\S]*?\n\}/)[0]
+    expect(fn).toContain('loadIndex(')
+    expect(fn).not.toContain('scopeApi.restore')
+    expect(fn).not.toContain('say(')
+    expect(fn).not.toContain('restoreConversation')
+  })
+
+  // A prefetch is speculative and must not be able to degrade the panel before
+  // the reader has asked for anything.
+  it('swallows its own failure', () => {
+    expect(store).toContain('loadIndex(hostConfig(state.config).ragBase).catch(() => {})')
+  })
+
+  /**
+   * Both callers name the base, and neither invents one.
+   *
+   * `loadIndex` used to default to the literal `/rag`, which was wrong for every
+   * site not served from the root of its origin — and because the prefetch
+   * memoises, a base that differed between the two calls would have poisoned the
+   * real load with the speculative one's answer.
+   */
+  it('asks the host where the index is, in both callers', () => {
+    const all = store.match(/loadIndex\(/g) || []
+    const resolved = store.match(/loadIndex\(hostConfig\(state\.config\)\.ragBase\)/g) || []
+    expect(all.length).toBe(2)
+    expect(resolved.length).toBe(2)
+    // And nothing anywhere still names the literal the default used to be.
+    expect(store).not.toContain("'/rag'")
+  })
+
+  // The index of a large corpus is real traffic, spent on readers who may never
+  // open the panel.
+  it('respects saveData and a 2G connection', () => {
+    const guard = store.match(/function mayPrefetch\(\) \{[\s\S]*?\n\}/)[0]
+    expect(guard).toContain('c.saveData')
+    expect(guard).toContain('effectiveType')
+  })
+
+  /**
+   * `loadIndex` memoises, and used to memoise its REJECTION too — so one dropped
+   * connection meant a panel that could never load its index again. Harmless
+   * while the only caller was `open()`; load-bearing now that a hover can fire
+   * it seconds after page load.
+   */
+  it('releases the index memo when the fetch fails', () => {
+    expect(read('src/theme/docpilot/store.js')).toMatch(/\.catch\(\(e\) => \{[\s\S]*?loading = null[\s\S]*?throw e/)
+  })
+
+  it('is wired to intent, not to page load, by default', () => {
+    const trigger = read('src/theme/components/DocPilotTrigger.vue')
+    expect(trigger).toContain('@pointerenter="warm"')
+    expect(trigger).toContain('@focus="warm"')
+    expect(trigger).toContain("ui.value.prefetch === 'hover'")
+    expect(trigger).toContain('requestIdleCallback')
+  })
+})
+
+describe('009 — quoting the documentation itself', () => {
+  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+  const quote = read('src/theme/components/DocPilotQuote.vue')
+
+  /**
+   * The two mounts cannot both claim one selection: the panel teleports to
+   * `<body>`, so an answer is never inside the host's article, and an article
+   * paragraph is never inside `.docpilot__answer`.
+   *
+   * The article's selector is the HOST's to name — `.vp-doc` on VitePress,
+   * `.theme-doc-markdown` on Docusaurus, `article` on a blog — so what is pinned
+   * here is that the component asks rather than that it knows. The literal now
+   * lives in `host-vitepress.js`, asserted directly below.
+   */
+  it('watches the host article and nothing else on the page', () => {
+    expect(quote).toContain('.closest?.(hostConfig(theme.value?.docPilot).article)')
+    expect(read('src/theme/components/DocPilot.vue')).toContain(".closest?.('.docpilot__answer')")
+  })
+
+  it('takes the article selector from the binding, not from the store', () => {
+    // `configure()` has not run when the first selection on a page is made, so
+    // reading `session.state.config` here would use the pre-config default and
+    // silently miss the host's real article on every first visit.
+    expect(quote).toContain('hostConfig(theme.value?.docPilot)')
+    expect(read('src/theme/docpilot/host-vitepress.js')).toContain("article: '.vp-doc, main'")
+  })
+
+  // The reader picked a paragraph, not a question. Submitting one on their
+  // behalf would spend a turn on words nobody wrote.
+  it('attaches the passage and opens the panel without asking anything', () => {
+    const take = quote.match(/function take\(\) \{[\s\S]*?\n\}/)[0]
+    expect(take).toContain('session.state.pendingQuote = text')
+    expect(take).toContain('session.open()')
+    expect(take).not.toContain('submit')
+  })
+
+  it('is off unless the project turned it on', () => {
+    expect(quote).toContain('resolveQuote(theme.value?.docPilot).fromDocs')
+    expect(themeDocPilot(resolveDocPilot({})).quote.fromDocs).toBe(false)
+    expect(themeDocPilot(resolveDocPilot({ quote: { fromDocs: true } })).quote.fromDocs).toBe(true)
+  })
+
+  // ui-specs/001: a component a consumer may compose on its own must not depend
+  // on the sprite being mounted.
+  it('inlines its one glyph rather than referencing the sprite', () => {
+    expect(quote).toContain('GLYPHS.quote')
+    // By what addresses the sprite, not by the substring: the comment above the
+    // glyph explains the rule by naming the element it is not using, and a
+    // literal search finds the explanation as readily as a violation.
+    expect(quote).not.toContain('symbolId')
+    expect(quote).not.toMatch(/<use\s/)
+  })
+})
+
+/**
+ * ui-specs/009, wave 5 — what to do next.
+ *
+ * The asymmetry between these two is the defaults policy working, and it is
+ * asserted rather than described: copy that ships ON has to be good for every
+ * corpus, so A5 generates nothing; copy that is opted INTO only has to be good
+ * enough for the project that opted in.
+ */
+describe('009 — an empty panel under a narrow scope', () => {
+  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+
+  // The reason the blank state existed, and the reason it was right: the
+  // built-in three fall outside a narrow scope and the gate refuses all of them.
+  it('still suppresses the built-in openers outside `all`', () => {
+    expect(panel).toContain("if (s.scope.kind !== 'all') return []")
+  })
+
+  // Rows built from the manifest, not questions built from headings. Nothing in
+  // this path can name a page the corpus does not have.
+  it('offers the pages in the scope, and generates nothing', () => {
+    const fn = panel.match(/const scopedPages = computed\(\(\) => \{[\s\S]*?\n\}\)/)[0]
+    expect(fn).toContain('s.index.manifest.pages')
+    expect(fn).toContain('s.scope.paths.map')
+    expect(fn).toContain("s.scope.kind === 'all'")
+    expect(fn).toContain('s.config.suggestions.scoped')
+  })
+
+  it('is on by default and removable', () => {
+    expect(themeDocPilot(resolveDocPilot({})).suggestions.scoped).toBe(true)
+    expect(themeDocPilot(resolveDocPilot({ suggestions: { scoped: false } })).suggestions.scoped).toBe(false)
+    // The array form still means what it always meant.
+    const legacy = themeDocPilot(resolveDocPilot({ suggestions: ['One?'] }))
+    expect(legacy.suggestions.questions).toEqual(['One?'])
+    expect(legacy.suggestions.scoped).toBe(true)
+  })
+})
+
+describe('009 — follow-up questions', () => {
+  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const fn = panel.match(/function followUps\(turn\) \{[\s\S]*?\n\}/)[0]
+
+  // ChatGPT ships these and its readers write custom instructions to suppress
+  // them. That is the measurement behind the default, not a preference.
+  it('is off until a project asks for it', () => {
+    expect(themeDocPilot(resolveDocPilot({})).suggestions.followUps).toBe(false)
+    expect(
+      themeDocPilot(resolveDocPilot({ suggestions: { followUps: true } })).suggestions.followUps,
+    ).toBe(true)
+    expect(fn).toContain('s.config.suggestions.followUps')
+  })
+
+  // Three rows after EVERY answer turns a thread into a feed.
+  it('appears under the newest settled turn only', () => {
+    expect(fn).toContain('turn !== s.turns[s.turns.length - 1]')
+    expect(fn).toContain("turn.state !== 'complete'")
+    expect(fn).toContain('s.busy')
+  })
+
+  // Every string comes out of the index; the template does the grammar. A
+  // generated question can name a section the corpus does not have — this
+  // cannot, which is the whole difference from the openers A5 refused.
+  it('takes headings from the cited pages and invents nothing', () => {
+    expect(fn).toContain('s.index.chunks')
+    expect(fn).toContain('pages.has(chunk.path)')
+    expect(fn).toContain("T('empty.followUp', { heading: chunk.title })")
+    expect(fn).toContain('FOLLOW_UPS_MAX')
+  })
+})
+
+describe('009 — the first-visit hint', () => {
+  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+
+  it('is off by default — it paints something nobody asked for', () => {
+    expect(themeDocPilot(resolveDocPilot({})).ui.firstRunHint).toBe(false)
+    expect(themeDocPilot(resolveDocPilot({ ui: { firstRunHint: true } })).ui.firstRunHint).toBe(true)
+  })
+
+  /**
+   * The hint names one gesture. A panel with both quoting switches off does not
+   * answer that gesture, and advertising it there would be the same kind of
+   * overstatement the three `disclaimer` variants exist to avoid.
+   */
+  it('is withheld when neither quoting switch is on', () => {
+    const fn = panel.match(/const showHint = computed\(\s*\([\s\S]*?\n\)/)[0]
+    expect(fn).toContain('s.config.quote.fromAnswer || s.config.quote.fromDocs')
+    expect(fn).toContain('s.config.ui.firstRunHint')
+  })
+
+  // Default `true`, so a server render and the first client frame agree on
+  // showing nothing — and a private-mode throw costs the hint and nothing else.
+  it('defaults to seen and reads storage on mount', () => {
+    expect(panel).toContain('const hintSeen = ref(true)')
+    expect(panel).toContain("localStorage.getItem(HINT_KEY) === '1'")
+  })
+})
+
+/** ui-specs/009, wave 6 — working the thread, and the panel beside the docs. */
+describe('009 — working the thread', () => {
+  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+
+  /**
+   * ChatGPT's own behaviour, and readline's before it. The EMPTY condition is
+   * the part that matters: without it the key stops moving the caret inside a
+   * multi-line draft, which is the behaviour it is borrowing from.
+   */
+  it('gives ↑ the last question, only in an empty composer', () => {
+    const fn = panel.match(/function editLastQuestion\(e\) \{[\s\S]*?\n\}/)[0]
+    expect(fn).toContain('s.config.composer.editLastOnArrowUp')
+    expect(fn).toContain('input.value.length')
+    expect(fn).toContain('s.busy')
+    expect(fn).toContain('editingId.value')
+    expect(fn).toContain('startTurnEdit(last)')
+    expect(themeDocPilot(resolveDocPilot({})).composer.editLastOnArrowUp).toBe(true)
+  })
+
+  /**
+   * Submitting used to remove the form and say nothing a sighted reader could
+   * see. The line has to be true under all four `send` modes, which is why
+   * there are two of them.
+   */
+  it('leaves a confirmation the eye can see, in two truthful forms', () => {
+    expect(panel).toContain("T(feedbackLive ? 'feedback.thanksSent' : 'feedback.thanks')")
+    expect(panel).toContain('turn.feedbackDone')
+    const session = fs.readFileSync(new URL('../src/theme/docpilot/session.js', import.meta.url), 'utf8')
+    // Set BEFORE the "nothing to amend" early return: the reader pressed Send
+    // either way, and the verdict was recorded when they pressed the thumb.
+    const fn = session.match(/export function submitFeedback\(turn\) \{[\s\S]*?\n\}/)[0]
+    expect(fn.indexOf('turn.feedbackDone')).toBeLessThan(fn.indexOf('if (!turn.reasons.length'))
+    expect(fn).toContain('state.config.feedback.confirm')
+  })
+
+  // Not persisted: a restored conversation showing "thanks" for a report sent
+  // two days ago would describe an interaction that is not on screen.
+  it('does not carry the confirmation into the archive', () => {
+    const slim = slimTurn({
+      id: 't1',
+      question: 'q',
+      state: 'complete',
+      answerText: 'a',
+      sources: [],
+      feedbackDone: true,
+    })
+    expect(Object.hasOwn(slim, 'feedbackDone')).toBe(false)
+  })
+
+  // What a support engineer pastes into a ticket is the thread, not one answer.
+  it('exports the conversation through the same source rule as one answer', () => {
+    const fn = panel.match(/async function copyThread\(\) \{[\s\S]*?\n\}/)[0]
+    expect(fn).toContain('withSources(turn)')
+    expect(fn).toContain('s.turns')
+    expect(panel).toContain("s.turns.length && s.config.history.exportThread")
+    expect(themeDocPilot(resolveDocPilot({})).history.exportThread).toBe(true)
+  })
+})
+
+describe('009 — the picker at corpus scale', () => {
+  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+
+  // A text input is not an option, so it cannot live inside the listbox.
+  it('puts the filter outside the listbox and binds it with aria-controls', () => {
+    const filterAt = panel.indexOf('docpilot__picker-filter')
+    const listAt = panel.indexOf('id="dp-picker-list"')
+    expect(filterAt).toBeGreaterThan(-1)
+    expect(filterAt).toBeLessThan(listAt)
+    expect(panel).toContain('aria-controls="dp-picker-list"')
+  })
+
+  it('shows the filter on a corpus too long to scan, and obeys an explicit value', () => {
+    const fn = panel.match(/const showFilter = computed\(\(\) => \{[\s\S]*?\n\}\)/)[0]
+    expect(fn).toContain("typeof mode === 'boolean'")
+    expect(fn).toContain('FILTER_AUTO_ABOVE')
+    expect(themeDocPilot(resolveDocPilot({})).scope.filter).toBe('auto')
+    expect(themeDocPilot(resolveDocPilot({ scope: { filter: true } })).scope.filter).toBe(true)
+  })
+
+  /**
+   * `focusPickAt` reaches a row by POSITION among the rendered nodes, so the
+   * groups' concatenation is the keyboard's list. Deriving one from the other is
+   * what stops them drifting the day the grouping changes the order.
+   */
+  it('derives the keyboard’s list from the rendered groups', () => {
+    expect(panel).toContain('const pickFlat = computed(() => pickGroups.value.flatMap((g) => g.pages))')
+    expect(panel).toContain('const pages = pickFlat.value')
+    expect(panel).toContain('const page = pickFlat.value[i]')
+    // The offsets are what make `g.offset + j` the flat index.
+    expect(panel).toContain('group.offset = offset')
+  })
+
+  // Grouping a filtered list fragments it into headings with one row under each.
+  it('goes flat while a filter is on', () => {
+    const fn = panel.match(/const pickGroups = computed\(\(\) => \{[\s\S]*?\n\}\)/)[0]
+    expect(fn).toContain("pickFilter.value.trim()")
+    expect(fn).toContain('s.config.scope.groupBySection')
+  })
+})
+
+describe('009 — the panel beside the docs', () => {
+  const adapter = fs.readFileSync(new URL('../src/theme/styles/vitepress.scss', import.meta.url), 'utf8')
+  const core = fs.readFileSync(new URL('../src/theme/styles/core.scss', import.meta.url), 'utf8')
+  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+
+  // The SUBJECT is the host's element; our class only says when. That is rule
+  // 2 of the adapter, and the reason the core may not carry this rule at all.
+  it('lives in the adapter, on a foreign subject', () => {
+    expect(adapter).toContain('html.docpilot-push .VPContent')
+    expect(core).not.toContain('VPContent')
+  })
+
+  // `overlay` is what shipped, and an upgrade must not rearrange a docs site.
+  it('is off by default', () => {
+    expect(themeDocPilot(resolveDocPilot({})).ui.layout).toBe('overlay')
+    expect(themeDocPilot(resolveDocPilot({ ui: { layout: 'push' } })).ui.layout).toBe('push')
+  })
+
+  // Below the sheet breakpoint the panel is edge to edge; there is nothing to
+  // push. And the class must not outlive the component that wrote it.
+  it('is desktop-only and is cleaned up on unmount', () => {
+    expect(panel).toContain("layout === 'push' && !narrow")
+    expect(panel).toContain('document.documentElement.classList.remove(LAYOUT_CLASS)')
+  })
+})
+
+/**
+ * ── RULE 11 — every reader-visible action is removable, and its switch is
+ * documented. ui-specs/009.
+ *
+ * The defect this exists to make unrepeatable already shipped once, and
+ * `themeDocPilot`'s own comment records it: `docPilot.suggestions` was read by
+ * the client and never emitted by the build, so for the whole life of the
+ * setting the fallback was the only branch that could run. Nothing failed;
+ * nothing was visible in a diff.
+ *
+ * IT LIVES HERE RATHER THAN IN `check-docpilot.sh` because it has to import
+ * `DEFAULTS` and walk a tree, and portable `grep` cannot. That is the same call
+ * the check script's own header records for the two original rules that moved
+ * into this suite.
+ */
+describe('rule 11 — every action has a switch', () => {
+  const root = new URL('../', import.meta.url)
+  const read = (f) => fs.readFileSync(new URL(f, root), 'utf8')
+
+  const leavesOf = (node, prefix = '') => {
+    const out = []
+    for (const [key, value] of Object.entries(node)) {
+      const path = prefix ? `${prefix}.${key}` : key
+      if (value && typeof value === 'object' && !Array.isArray(value)) out.push(...leavesOf(value, path))
+      else out.push(path)
+    }
+    return out
+  }
+
+  /**
+   * Comments out, and this is not fussiness.
+   *
+   * The rule scans for `config.<group>.<key>`, and the prose EXPLAINING a
+   * setting names it in exactly that form — including the comment recording
+   * that `config.llm.think` was deleted. `check-docpilot.sh` strips comments
+   * before every one of its greps for the same reason.
+   */
+  const stripComments = (src) =>
+    src
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, '$1')
+
+  /** Every `.js` and `.vue` under src/theme — the whole reader-facing surface. */
+  const themeFiles = () => {
+    const out = []
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(new URL(dir, root), { withFileTypes: true })) {
+        if (entry.isDirectory()) walk(`${dir}${entry.name}/`)
+        else if (/\.(js|vue)$/.test(entry.name)) out.push(`${dir}${entry.name}`)
+      }
+    }
+    walk('src/theme/')
+    return out
+  }
+
+  /**
+   * 11a — the panel reads no setting the config cannot set.
+   *
+   * Against the CLIENT half, not against `DEFAULTS`: the emitted object is what
+   * the panel actually receives, and the two are deliberately different shapes —
+   * `chat` in the settings becomes `llm` in the browser.
+   */
+  it('11a — every config read resolves to a key the client half carries', () => {
+    const emitted = themeDocPilot(resolveDocPilot({}))
+    const known = new Set(leavesOf(emitted).map((l) => l.split('.').slice(0, 2).join('.')))
+    for (const group of Object.keys(emitted)) known.add(group)
+    // The named exceptions — the eval runner's seam into the shared harness, and
+    // the two credentials the client half must never carry.
+    for (const path of THEME_ONLY) known.add(path)
+
+    const unknown = new Map()
+    for (const file of themeFiles()) {
+      const src = stripComments(read(file))
+      for (const m of src.matchAll(/\bconfig\.([a-z][A-Za-z0-9]*)\.([a-zA-Z][A-Za-z0-9]*)/g)) {
+        const path = `${m[1]}.${m[2]}`
+        if (!known.has(path)) unknown.set(path, file)
+      }
+    }
+    expect(
+      [...unknown].map(([path, file]) => `${path} (${file})`),
+      'a setting the panel reads that nothing can set',
+    ).toEqual([])
+  })
+
+  /**
+   * 11b — every knob is written down. A setting added and not documented is a
+   * setting nobody will find, which is rule 10's argument applied to behaviour
+   * instead of to tokens.
+   */
+  it('11b — every leaf in DEFAULTS is named in the config reference', () => {
+    const doc = read('docs/reference/config.md')
+    const named = (leaf) => {
+      const key = leaf.split('.').pop()
+      const dotted = leaf.replace(/\./g, '\\.')
+      return (
+        new RegExp(`\`${dotted}\``).test(doc) ||
+        new RegExp(`\`${key}\``).test(doc) ||
+        new RegExp(`^#+\\s+.*\\b${dotted}\\b`, 'm').test(doc) ||
+        new RegExp(`^#+\\s+${key}\\s*$`, 'm').test(doc)
+      )
+    }
+    expect(leavesOf(DEFAULTS).filter((l) => !named(l)), 'undocumented settings').toEqual([])
+  })
+
+  /**
+   * 11c — the inventory, printed, the way rule 1b prints the rings. A reviewer
+   * should be able to see every switch by name without reading the config.
+   */
+  it('11c — prints the switch inventory', () => {
+    const switches = leavesOf(DEFAULTS).filter((l) => l.includes('.'))
+    // eslint-disable-next-line no-console
+    console.log(`  rule 11 — ${switches.length} switches: ${switches.join(' ')}`)
+    expect(switches.length).toBeGreaterThan(0)
+  })
+
+  /**
+   * The clause 009 is actually for, and the only one a reader would notice: with
+   * every new switch off, the panel is the panel that shipped before it.
+   */
+  it('every 009 switch can be turned off, and off means what it says', () => {
+    const off = themeDocPilot(
+      resolveDocPilot({
+        quote: { fromAnswer: false, fromDocs: false },
+        citations: { passage: false, inCopy: false, pagesRead: false },
+        composer: { editLastOnArrowUp: false, deepLink: false },
+        suggestions: { scoped: false, followUps: false },
+        scope: { filter: false, groupBySection: false },
+        history: { exportThread: false },
+        feedback: { confirm: false },
+        ui: { layout: 'overlay', prefetch: false, firstRunHint: false },
+      }),
+    )
+    expect(off.quote).toEqual({ fromAnswer: false, fromDocs: false })
+    expect(off.citations).toEqual({ passage: false, inCopy: false, pagesRead: false })
+    expect(off.composer).toEqual({ editLastOnArrowUp: false, deepLink: false })
+    expect(off.suggestions.scoped).toBe(false)
+    expect(off.suggestions.followUps).toBe(false)
+    expect(off.scope.filter).toBe(false)
+    expect(off.scope.groupBySection).toBe(false)
+    expect(off.history.exportThread).toBe(false)
+    expect(off.feedback.confirm).toBe(false)
+    expect(off.ui.prefetch).toBe(false)
+  })
+
+  // A defect is not a feature: the four fixes of 009 ship with no key, and this
+  // says so rather than leaving it to be noticed.
+  it('gives the four defects no switch', () => {
+    const leaves = leavesOf(DEFAULTS).join(' ')
+    for (const notAKnob of ['tableScroll', 'rovingTabindex', 'listRole', 'announceQueue']) {
+      expect(leaves).not.toContain(notAKnob)
+    }
+  })
+})
+
 describe('support', () => {
   it('extracts identifiers and ignores ones echoed from the question', () => {
     const ids = identifiers('Call `initEditor` with Plugin.init and BLOCKS_SETTINGS', 'what does initEditor do')
@@ -1166,6 +1986,54 @@ describe('support', () => {
 })
 
 describe('metrics', () => {
+  /**
+   * The gate that could not fail a build.
+   *
+   * `run.js` printed "HARD GATE FAILED" and exited 0, so a breach was invisible
+   * to CI, to `npm run verify` and to any script. The null cases are the reason
+   * this is a function and not an `if`: a `--gate-only` pass runs no model, so
+   * `hallucinated` is null there on every healthy run, and reading null as a
+   * breach would fail every gate-only run ever made.
+   */
+  it('hard gates fail on a measured breach and only on one', () => {
+    expect(hardGatesFailed({ hallucinated: 0, scopeContainment: 1 })).toBe(false)
+    expect(hardGatesFailed({ hallucinated: 0.02, scopeContainment: 1 })).toBe(true)
+    expect(hardGatesFailed({ hallucinated: 0, scopeContainment: 0.99 })).toBe(true)
+    // --gate-only: no model ran, so there is no citation to have hallucinated.
+    expect(hardGatesFailed({ hallucinated: null, scopeContainment: 1 })).toBe(false)
+    expect(hardGatesFailed({ hallucinated: null, scopeContainment: null })).toBe(false)
+    expect(hardGatesFailed({})).toBe(false)
+    expect(hardGatesFailed(null)).toBe(false)
+  })
+
+  /**
+   * The three shapes of a gold entry. The page pin is the one that was broken:
+   * `path#` scored a miss on every anchor of its own page, understating recall@8
+   * by about seven points across the development golden set.
+   */
+  it('matches the three gold shapes and nothing between them', () => {
+    // bare page path — the page, and pages nested under it
+    expect(underPath('guide/auth#request', 'guide/auth')).toBe(true)
+    expect(underPath('guide/auth/oauth#step', 'guide/auth')).toBe(true)
+    expect(underPath('guide/auth', 'guide/auth')).toBe(true)
+    // ...and not a sibling whose route merely extends the string
+    expect(underPath('guide/authorisation#x', 'guide/auth')).toBe(false)
+    expect(underPath('guide/auth-2#x', 'guide/auth')).toBe(false)
+
+    // page pin — every anchor of that page, and nothing else
+    expect(underPath('ref/ExtensionBuilder#', 'ref/ExtensionBuilder#')).toBe(true)
+    expect(underPath('ref/ExtensionBuilder#addstyles', 'ref/ExtensionBuilder#')).toBe(true)
+    expect(underPath('ref/ExtensionBuilderX#api', 'ref/ExtensionBuilder#')).toBe(false)
+
+    // one section, plus the continuation parts chunker.js splits it into.
+    // `~N` is a continuation; `-N` is VitePress disambiguating a repeated
+    // heading, which is a DIFFERENT section and must not score as a hit.
+    expect(underPath('guide/auth#request', 'guide/auth#request')).toBe(true)
+    expect(underPath('guide/auth#request~2', 'guide/auth#request')).toBe(true)
+    expect(underPath('guide/auth#request-1', 'guide/auth#request')).toBe(false)
+    expect(underPath('guide/auth#request-manually', 'guide/auth#request')).toBe(false)
+  })
+
   it('token-F1 normalises SQuAD-style', () => {
     expect(tokenF1('The Editor, initialised!', 'editor initialised')).toBe(1)
     expect(tokenF1('', 'x')).toBe(0)
@@ -1407,6 +2275,55 @@ describe('calibration — what the build inlines (RAG-SPEC 5.6)', () => {
     expect(guard('abc12345', calibrated(), { embedModel: 'anything' }).source).toBe(
       'calibrated-reduced',
     )
+  })
+
+  /**
+   * A `--no-embed` index is calibrated on ONE threshold. `docpilot calibrate`
+   * measures `tauLexical` there and writes `tau: null` rather than a number
+   * nothing measured — and demanding two numbers threw the document away whole,
+   * so the provisional 0.3 replaced the measured `tauLexical` on every rebuild,
+   * over the only threshold that gate ever consults, while the warning told the
+   * operator to run the command they had just run.
+   */
+  const lexicalDoc = (over = {}) => ({
+    ...calibrated({ tau: null, source: 'calibrated-reduced-lexical', ...over }),
+    embedModel: null,
+    lexicalOnly: true,
+  })
+
+  it('keeps the tauLexical a vectorless calibration measured', () => {
+    const g = guard('abc12345', lexicalDoc(), { embedModel: null })
+    expect(g.tauLexical).toBe(0.21)
+    expect(g.source).toBe('calibrated-reduced-lexical')
+    expect(g.calibratedAt).toBe('abc12345')
+    // The slot `assertWeights` reads at every retriever init, and that no
+    // lexical-only turn ever reads: provisional, because nothing measured it.
+    expect(g.tau).toBe(0.3)
+    expect(() => assertWeights(g)).not.toThrow()
+  })
+
+  // `tau: null` on its own is ambiguous in the one way that matters: a HYBRID
+  // run writes the same null when no threshold in its grid is feasible, and that
+  // is a broken score function to fix rather than a measurement that is
+  // finished. `lexicalOnly` is what separates them.
+  it('still refuses a hybrid run that found no feasible tau', () => {
+    const doc = { ...calibrated({ tau: null }), embedModel: 'bge-m3' }
+    expect(guard('abc12345', doc, { embedModel: 'bge-m3' }).source).toBe('provisional')
+  })
+
+  // The other half of the pairing: `cosFloor`, `cosCeil` and `zexp` come back
+  // untouched from a run that never scored a cosine, so half a guard measured
+  // with no dense channel describes nothing this build's dense channel does.
+  it('refuses to pair a vectorless calibration with a build that embeds', () => {
+    const warnings = []
+    const g = guardFor('abc12345', {
+      file: write('c.json', lexicalDoc()),
+      embedModel: 'bge-m3',
+      warn: (m) => warnings.push(m),
+      note: () => {},
+    })
+    expect(g.source).toBe('provisional')
+    expect(warnings.join(' ')).toContain('no vectors')
   })
 })
 
@@ -1661,18 +2578,18 @@ describe('empty-state suggestions — configured, with the built-in three as fal
   // UI-SPEC §13 and read by DocPilot.vue, but never put in the client object, so
   // the built-in fallback was the only branch that could run.
   it('reaches the client config at all', () => {
-    expect(themeDocPilot(docPilot(['One?', 'Two?'])).suggestions).toEqual(['One?', 'Two?'])
+    expect(themeDocPilot(docPilot(['One?', 'Two?'])).suggestions.questions).toEqual(['One?', 'Two?'])
   })
 
   it('falls back to the built-in three by returning empty, for [] and for absent', () => {
-    expect(resolveSuggestions(docPilot([]), quiet)).toEqual([])
-    expect(resolveSuggestions(docPilot(undefined), quiet)).toEqual([])
-    expect(resolveSuggestions(docPilot(null), quiet)).toEqual([])
+    expect(resolveSuggestions(docPilot([]), quiet).questions).toEqual([])
+    expect(resolveSuggestions(docPilot(undefined), quiet).questions).toEqual([])
+    expect(resolveSuggestions(docPilot(null), quiet).questions).toEqual([])
   })
 
   it('trims, collapses inner whitespace and drops empties and repeats', () => {
     const w = collect()
-    expect(resolveSuggestions(docPilot(['  How   do I auth? ', 'How do I auth?', '   ', 'Real?']), w)).toEqual([
+    expect(resolveSuggestions(docPilot(['  How   do I auth? ', 'How do I auth?', '   ', 'Real?']), w).questions).toEqual([
       'How do I auth?',
       'Real?',
     ])
@@ -1682,13 +2599,13 @@ describe('empty-state suggestions — configured, with the built-in three as fal
 
   it('drops a non-string entry instead of rendering [object Object]', () => {
     const w = collect()
-    expect(resolveSuggestions(docPilot(['ok?', { label: 'x', question: 'y' }, 42]), w)).toEqual(['ok?'])
+    expect(resolveSuggestions(docPilot(['ok?', { label: 'x', question: 'y' }, 42]), w).questions).toEqual(['ok?'])
     expect(w.messages).toHaveLength(2)
   })
 
   it('falls back when the key is not an array at all', () => {
     const w = collect()
-    expect(resolveSuggestions(docPilot('How do I auth?'), w)).toEqual([])
+    expect(resolveSuggestions(docPilot('How do I auth?'), w).questions).toEqual([])
     expect(w.messages[0]).toMatch(/must be an array/)
   })
 
@@ -1697,7 +2614,7 @@ describe('empty-state suggestions — configured, with the built-in three as fal
   it('caps at three and names what it dropped', () => {
     const w = collect()
     const five = ['a?', 'b?', 'c?', 'd?', 'e?']
-    expect(resolveSuggestions(docPilot(five), w)).toEqual(['a?', 'b?', 'c?'])
+    expect(resolveSuggestions(docPilot(five), w).questions).toEqual(['a?', 'b?', 'c?'])
     expect(w.messages[0]).toContain('"d?"')
     expect(w.messages[0]).toContain('"e?"')
   })
@@ -1727,6 +2644,9 @@ describe('resolveUi — trigger placement and panel shape', () => {
       showFab: false,
       fabLabel: true,
       fabIcon: true,
+      layout: 'overlay',
+      prefetch: 'hover',
+      firstRunHint: false,
     }
     // Every shape a caller can hand it: absent settings, absent `ui`, an
     // explicit null. `session.configure` sees all three, because the
@@ -1754,6 +2674,9 @@ describe('resolveUi — trigger placement and panel shape', () => {
       showFab: false,
       fabLabel: true,
       fabIcon: true,
+      layout: 'overlay',
+      prefetch: 'hover',
+      firstRunHint: false,
     })
     expect(resolveUi({ ui: { trigger: 'fab', panel: 'drawer' } }, err)).toEqual({
       trigger: 'fab',
@@ -1762,6 +2685,9 @@ describe('resolveUi — trigger placement and panel shape', () => {
       showFab: true,
       fabLabel: true,
       fabIcon: true,
+      layout: 'overlay',
+      prefetch: 'hover',
+      firstRunHint: false,
     })
     expect(err.messages).toEqual([])
   })
@@ -1938,6 +2864,9 @@ describe('ui — from settings to the browser', () => {
       panel: 'auto',
       fabLabel: true,
       fabIcon: true,
+      layout: 'overlay',
+      prefetch: 'hover',
+      firstRunHint: false,
     })
   })
 
@@ -1949,6 +2878,9 @@ describe('ui — from settings to the browser', () => {
       showFab: false,
       fabLabel: true,
       fabIcon: true,
+      layout: 'overlay',
+      prefetch: 'hover',
+      firstRunHint: false,
     })
     expect(themeDocPilot(resolveDocPilot({ ui: { trigger: 'fab', fabLabel: 'Ask AI' } })).ui).toEqual({
       trigger: 'fab',
@@ -1957,6 +2889,9 @@ describe('ui — from settings to the browser', () => {
       showFab: true,
       fabLabel: 'Ask AI',
       fabIcon: true,
+      layout: 'overlay',
+      prefetch: 'hover',
+      firstRunHint: false,
     })
   })
 
@@ -1969,6 +2904,9 @@ describe('ui — from settings to the browser', () => {
       showFab: true,
       fabLabel: true,
       fabIcon: true,
+      layout: 'overlay',
+      prefetch: 'hover',
+      firstRunHint: false,
     })
   })
 
@@ -2500,8 +3438,20 @@ describe('i18n — the components go through the table', () => {
     expect(src).toContain("'manual'")
     expect(src).not.toContain('popover="auto"')
 
-    // A capability probe, never a user-agent test.
-    expect(src).toContain("'popover' in HTMLElement.prototype")
+    // A capability probe, never a user-agent test. It MOVED to selection.js
+    // with the rest of the mechanism — ui-specs/009 — and moved as one copy: a
+    // second probe in the component is how the markup and the behaviour come to
+    // disagree about which branch is live.
+    const mechanism = read('src/theme/docpilot/selection.js')
+    expect(mechanism).toContain("'popover' in HTMLElement.prototype")
+    expect(src).not.toContain("'popover' in HTMLElement.prototype")
+
+    // The whole list of platform failures 007 had to find lives in one place, so
+    // the second mount cannot regress one of them on its own.
+    for (const listener of ['selectionchange', 'pointercancel', 'blur']) {
+      expect(mechanism).toContain(listener)
+      expect(src).not.toContain(`addEventListener('${listener}'`)
+    }
 
     // The turn a selection landed in is named on the node, not inferred from a
     // v-for index that reorders when a conversation is restored.
@@ -2953,6 +3903,38 @@ describe('history — a durable, tab-safe archive', () => {
     // A refusal, though, is the product's answer and is kept.
     const refused = slimTurn(turn({ state: 'no-answer', answerText: '', refusal: { cause: 'no-evidence' } }))
     expect(refused.refusal.cause).toBe('no-evidence')
+  })
+
+  /**
+   * A daily limit that lands after text has been painted is a TERMINAL state of
+   * its own, and the archive has to keep it as one. Coerced to 'aborted' — which
+   * is what the missing entry in `TERMINAL` did — it restored under "Stopped.",
+   * telling the reader they had ended a turn the service refused.
+   *
+   * `rateLimit` deliberately does not travel with it. The panel renders that
+   * instant as a clock time, `slimTurn` is pure and has no clock to tell a live
+   * reset from an expired one, and a reset that has already passed is worse than
+   * the line being dropped — which is what `resetLine` already does when a 429
+   * carried no reset at all.
+   */
+  it('keeps a spent daily limit as itself, without the hour it named', () => {
+    const limited = turn({
+      state: 'rate-limited',
+      rateLimit: { resetAt: T0 + 3_600_000, limit: 50 },
+    })
+    const slim = slimTurn(limited)
+    expect(slim.state).toBe('rate-limited')
+    expect(slim).not.toHaveProperty('rateLimit')
+    // And it still has to survive the archive it was written to.
+    const h = tab(fakeStore())
+    const id = h.save({ id: null, hash: 'h', turns: [limited] })
+    expect(h.open(id).turns[0].state).toBe('rate-limited')
+  })
+
+  /** With nothing painted it is dropped, exactly as a transport error is: "the
+   *  limit is used up" must not come back a week later on its own. */
+  it('drops a spent daily limit that had nothing to show', () => {
+    expect(slimTurn(turn({ state: 'rate-limited', answerText: '', refusal: null }))).toBe(null)
   })
 
   it('caps scope.paths at the same 20 the feedback record already caps at', () => {
@@ -3856,6 +4838,7 @@ describe('feedback — the send mode is resolved, never trusted', () => {
     expect(resolveFeedback({ feedback: { send: 'sometimes' } }, (m) => said.push(m))).toEqual({
       send: 'both',
       comment: true,
+      confirm: true,
     })
     expect(said.join(' ')).toContain('feedback.send')
   })
@@ -3864,6 +4847,7 @@ describe('feedback — the send mode is resolved, never trusted', () => {
     expect(resolveDocPilot({ feedback: { send: 'down' } }).feedback).toEqual({
       send: 'down',
       comment: true,
+      confirm: true,
     })
     // …and a site that only ever set the endpoint keeps working unchanged.
     expect(resolveDocPilot({ feedbackEndpoint: '/f' }).feedback).toEqual(DEFAULTS.feedback)
@@ -4481,6 +5465,50 @@ describe('feedback — a key in the comment never reaches the archive either', (
  * guarantee rests on, so it is tested here against a synthetic index small
  * enough to reason about by hand.
  */
+
+/**
+ * The shared excerpt cut.
+ *
+ * Small on purpose. A query-focused window was built here and measured off:
+ * against the golden positives it recovered one gold identifier and lost one,
+ * because a chunk starts at its heading and the definition lives under it.
+ * excerpt.js carries the numbers. What survived is the part that earns its
+ * bytes — one implementation for the harness and the bench, and a truncation
+ * signal the model can act on.
+ */
+describe('excerptWindow', () => {
+  it('leaves a chunk that fits alone, and says so', () => {
+    const text = 'Guide — Auth\nShort enough to send whole.'
+    expect(excerptWindow(text, { max: 1200 })).toEqual({ text, truncated: false })
+  })
+
+  it('cuts at the head and reports it', () => {
+    const text = 'Guide — Auth\n' + 'x'.repeat(2000)
+    const w = excerptWindow(text, { max: 100 })
+    expect(w.text).toBe(text.slice(0, 100))
+    expect(w.truncated).toBe(true)
+  })
+
+  it('survives the degenerate inputs a chunk can actually have', () => {
+    expect(excerptWindow('', { max: 10 })).toEqual({ text: '', truncated: false })
+    expect(excerptWindow(null, { max: 10 })).toEqual({ text: '', truncated: false })
+    expect(excerptWindow('abc', { max: 0 }).truncated).toBe(true)
+  })
+
+  /**
+   * The bench must build the observation the product builds. It used to hold a
+   * hand-copy, and the two had already drifted on the budget constant.
+   */
+  it('is the only place either caller cuts an excerpt', () => {
+    const harness = fs.readFileSync('src/theme/docpilot/harness.js', 'utf8')
+    const bench = fs.readFileSync('src/eval/answer-bench.js', 'utf8')
+    for (const src of [harness, bench]) {
+      expect(src).toContain('excerptWindow')
+      expect(src).not.toMatch(/\.slice\(0,\s*(SEARCH_CHARS|FETCH_CHARS)\)/)
+    }
+  })
+})
+
 describe('createRetrieval', () => {
   const DIMS = 4
   const GUARD = {
@@ -4506,6 +5534,12 @@ describe('createRetrieval', () => {
    * `hash` must differ per fixture: `miniSearchFor` memoises its MiniSearch
    * instance on `manifest.hash`, so two fixtures sharing one would have the
    * second search the first's chunks.
+   *
+   * `vectors` names the blob, and naming it is what makes this a vector-bearing
+   * index: a null there is how a lexical-only build declares itself, so a
+   * fixture that omits the key hands `createRetrieval` an index with no dense
+   * channel at all. Most retrieval assertions still pass on BM25 alone, which is
+   * exactly why the omission has to be spelled out rather than noticed.
    */
   let fixtureCount = 0
   const makeIndex = (rows, guard = GUARD) => {
@@ -4521,6 +5555,7 @@ describe('createRetrieval', () => {
         embedModel: 'test',
         dims: DIMS,
         chunkCount: chunks.length,
+        vectors: `vectors.${hash}.bin`,
         pages: paths.map((p) => ({ path: p, title: `Page ${p}`, tail: 'Docs' })),
         guard,
       },
@@ -4582,6 +5617,53 @@ describe('createRetrieval', () => {
     const hits = r.search({ query: 'invoices refunds', queryVec: null })
     expect(hits.length).toBeGreaterThan(0)
     expect(hits[0].id).toBe('c#one')
+  })
+
+  /**
+   * The asymmetric tokenizer, pinned from the outside.
+   *
+   * `terms()` keeps `.` inside a token, so a page that writes `window.initEditor`
+   * indexes that compound as ONE term — and a reader who searches the bare
+   * `initEditor` cannot reach it, because a prefix match walks from the start of
+   * a term. Measured on the development corpus before the index side was split:
+   * `initEditor` fell from 14 hits to 1. A `search_docs` argument is very often
+   * exactly one bare identifier, so this is the common path.
+   *
+   * Both halves are asserted because either alone is a plausible-looking fix that
+   * loses the other: index the parts only and the compound stops matching.
+   */
+  it('finds a compound identifier by either half or whole', () => {
+    const rows = [
+      {
+        id: 'api#init',
+        path: '/api',
+        anchor: 'init',
+        title: 'API',
+        breadcrumb: 'Docs',
+        kind: 'reference',
+        text: 'Call window.initEditor once the container exists.',
+        prev: null,
+        next: null,
+        vec: axis(0),
+      },
+      {
+        id: 'other#one',
+        path: '/other',
+        anchor: 'one',
+        title: 'Other',
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: 'Unrelated prose about billing plans and refunds.',
+        prev: null,
+        next: null,
+        vec: axis(1),
+      },
+    ]
+    const r = createRetrieval({ index: makeIndex(rows), scope: ALL, guard: GUARD })
+    const ids = (q) => r.search({ query: q, queryVec: null }).map((c) => c.id)
+    expect(ids('initEditor')).toContain('api#init')
+    expect(ids('window')).toContain('api#init')
+    expect(ids('window.initEditor')).toContain('api#init')
   })
 
   it('a scope is a hard filter, not a ranking preference', () => {
@@ -4722,6 +5804,7 @@ describe('runTurn — the free-step ceiling', () => {
         embedModel: 'test',
         dims: DIMS,
         chunkCount: 1,
+        vectors: 'vectors.harness.bin',
         pages: [{ path: '/a', title: 'Alpha', tail: 'Docs' }],
         guard: GUARD,
       },
@@ -4778,5 +5861,3118 @@ describe('runTurn — the free-step ceiling', () => {
   it('the same cached search cannot buy free steps forever', async () => {
     const r = await run({ function: { name: 'search_docs', arguments: '{"query":"alpha"}' } })
     expect(r.calls).toBeLessThanOrEqual(10)
+  })
+})
+
+
+// ─── merged from tests-chunker.js ───
+/**
+ * Paste this block into test/docpilot.test.js, next to `describe('chunker')`.
+ * It adds no imports: `chunkMarkdown` is already imported at the top of that file.
+ */
+
+/**
+ * The chunker used to be blind to markdown blocks, and each of the three
+ * consequences was silent. A table over the ceiling was cut between rows and the
+ * continuation carried no header and no delimiter — columns unlabelled in the
+ * text that reaches the embedder. A fence over the ceiling was cut with no
+ * repair: one part ended on an unterminated opener, the next opened on bare code.
+ * And the fence warning was wrong in BOTH directions — it fired when the break
+ * landed on the opener line (where the split is clean) and stayed quiet when it
+ * landed on the closer (where the fence is genuinely broken), because the toggle
+ * flipped before the overflow test rather than after it.
+ *
+ * The last two are pinned as biconditionals: a `code block split` warning fires
+ * if and only if a fence actually spans more than one chunk.
+ */
+describe('chunker — block-aware splitting', () => {
+  // The ceiling applies to the context line plus the body, so a fixture that
+  // wants to overflow on a chosen line has to know what the body's budget is.
+  const budget = (heading) => 8000 - `P — ${heading}`.length - 1
+  const bodyOf = (c) => c.text.split('\n').slice(1).join('\n')
+  const fenceLines = (c) => bodyOf(c).match(/^```.*$/gm) || []
+  const chunk = (src) => chunkMarkdown({ src, path: '/p', kind: 'guide' })
+
+  const tableRows = Array.from({ length: 60 }, (_, i) => `| r${i}-mark | ${'d'.repeat(200)} |`)
+  const bigTable = ['| col a | col b |', '| --- | --- |', ...tableRows].join('\n')
+
+  it('repeats the header and delimiter on every part of a split table', () => {
+    const { chunks, warnings } = chunk(`# P\n\n## T\n\n${bigTable}`)
+    expect(chunks.length).toBeGreaterThan(1)
+    for (const c of chunks) {
+      expect(c.text.length).toBeLessThanOrEqual(8000)
+      if (!/\| r\d+-mark \|/.test(c.text)) continue
+      expect(c.text).toContain('| col a | col b |')
+      expect(c.text.indexOf('| --- | --- |')).toBeLessThan(c.text.search(/\| r\d+-mark \|/))
+    }
+    expect(warnings).toContain('table split at row boundaries by MAX_CHUNK_CHARS in /p')
+  })
+
+  it('never cuts a table row in half', () => {
+    const { chunks } = chunk(`# P\n\n## T\n\n${bigTable}`)
+    for (const row of tableRows) {
+      expect(chunks.filter((c) => c.text.includes(row)).length, row.slice(0, 12)).toBe(1)
+    }
+  })
+
+  it('closes and reopens a fence it had to split, keeping the language', () => {
+    const code = Array.from({ length: 60 }, (_, i) => `const a${i} = "${'x'.repeat(190)}"`)
+    const { chunks, warnings } = chunk(`# P\n\n## Code\n\n\`\`\`js\n${code.join('\n')}\n\`\`\``)
+    expect(chunks.length).toBeGreaterThan(1)
+    chunks.forEach((c, i) => {
+      expect(c.text.length).toBeLessThanOrEqual(8000)
+      expect(fenceLines(c).length % 2, `part ${i}`).toBe(0)
+      if (i < chunks.length - 1) expect(bodyOf(c).endsWith('\n```')).toBe(true)
+      if (i > 0) expect(bodyOf(c).startsWith('```js\n')).toBe(true)
+    })
+    expect(warnings).toContain('code block split by MAX_CHUNK_CHARS in /p')
+    // the repair must not eat content: the last line of the sample is still there
+    expect(chunks.map((c) => c.text).join('\n')).toContain('const a59 =')
+  })
+
+  /**
+   * Regression: the break lands on the fence OPENER. The fence itself fits the
+   * next chunk whole, so nothing about it is split — and the old toggle, which
+   * flipped to `true` before the overflow test, warned anyway.
+   */
+  it('does not warn when the break lands on the opener line', () => {
+    const fence = ['```js', 'const a = 1', '```'].join('\n')
+    const prose = 'x'.repeat(budget('Code') - 2)
+    const { chunks, warnings } = chunk(`# P\n\n## Code\n\n${prose}\n\n${fence}`)
+    expect(warnings.some((w) => w.includes('code block split'))).toBe(false)
+    expect(chunks.filter((c) => c.text.includes(fence)).length).toBe(1)
+    for (const c of chunks) expect(c.text.length).toBeLessThanOrEqual(8000)
+  })
+
+  /**
+   * Regression: the break lands on the fence CLOSER. The old toggle had already
+   * flipped back to `false` by then, so the one case that really did leave an
+   * unterminated fence in one chunk and a bare closer in the next was the one
+   * case that never warned.
+   */
+  it('never leaves a fence open across a seam, and warns exactly when it splits one', () => {
+    const fence = ['```js', 'z'.repeat(budget('Code') - 108), '```'].join('\n')
+    const { chunks, warnings } = chunk(`# P\n\n## Code\n\n${'y'.repeat(100)}\n\n${fence}`)
+    for (const c of chunks) {
+      expect(c.text.length).toBeLessThanOrEqual(8000)
+      expect(fenceLines(c).length % 2).toBe(0)
+    }
+    const spans = chunks.filter((c) => fenceLines(c).length).length
+    expect(warnings.some((w) => w.includes('code block split'))).toBe(spans > 1)
+  })
+
+  it('treats a fence as one unit when packing paragraphs, blank lines and all', () => {
+    const fence = [
+      '```js',
+      `const a = "${'a'.repeat(400)}"`,
+      '',
+      `const b = "${'b'.repeat(400)}"`,
+      '```',
+    ].join('\n')
+    const src = `# P\n\n## Mixed\n\n${'p'.repeat(1000)}\n\n${fence}\n\n${'q'.repeat(1000)}`
+    const { chunks } = chunk(src)
+    // over TARGET_MAX_TOKENS, so paragraphSplit ran — and the blank line inside
+    // the sample used to make it two paragraphs it was free to separate.
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.filter((c) => c.text.includes(fence)).length).toBe(1)
+  })
+
+  it('keeps a table that is the section’s only paragraph intact', () => {
+    const rows = Array.from({ length: 40 }, (_, i) => `| row${i} | ${'v'.repeat(50)} |`)
+    const table = ['| k | v |', '| --- | --- |', ...rows].join('\n')
+    const { chunks } = chunk(`# P\n\n## T\n\n${table}`)
+    expect(chunks.length).toBe(1)
+    for (const row of rows) expect(chunks[0].text).toContain(row)
+  })
+
+  /**
+   * Overlap is prose only. A near-ceiling fence or table carried into the next
+   * chunk doubles its embedding cost to say the same thing twice.
+   */
+  it('never duplicates a fence or a table as overlap', () => {
+    const fence = ['```js', `// MARKER_FENCE ${'f'.repeat(800)}`, '```'].join('\n')
+    const table = ['| k | v |', '| --- | --- |', `| MARKER_TABLE | ${'t'.repeat(800)} |`].join('\n')
+    const src = `# P\n\n## Mixed\n\n${'p'.repeat(1500)}\n\n${fence}\n\n${'q'.repeat(1500)}\n\n${table}\n\n${'r'.repeat(1500)}`
+    const all = chunk(src).chunks.map((c) => c.text).join('\n')
+    expect(all.match(/MARKER_FENCE/g).length).toBe(1)
+    expect(all.match(/MARKER_TABLE/g).length).toBe(1)
+  })
+
+  it('holds the ceiling on a single line, a single row and an unclosed fence', () => {
+    const unclosed = Array.from({ length: 200 }, (_, i) => `line${i} = "${'c'.repeat(60)}"`)
+    const cases = {
+      'one 50k line': `# P\n\n## Big\n\n${'z'.repeat(50000)}`,
+      'one 50k row': `# P\n\n## Big\n\n| a | b |\n| --- | --- |\n| ${'x'.repeat(50000)} | y |`,
+      'unclosed fence': `# P\n\n## Big\n\n\`\`\`js\n${unclosed.join('\n')}`,
+    }
+    for (const [name, src] of Object.entries(cases)) {
+      expect(() => chunk(src), name).not.toThrow()
+      const { chunks } = chunk(src)
+      expect(chunks.length, name).toBeGreaterThan(0)
+      for (const c of chunks) expect(c.text.length, `${name} ${c.id}`).toBeLessThanOrEqual(8000)
+    }
+    // A row nothing can be done with is reported as its own kind of loss.
+    expect(chunk(cases['one 50k row']).warnings).toContain(
+      'table row longer than MAX_CHUNK_CHARS cut mid-row in /p',
+    )
+  })
+
+  /**
+   * normalise.js flips one boolean on /^\s*(```|~~~)/. The chunker cannot: a page
+   * documenting markdown shows one fence style inside the other, and under the
+   * loose toggle everything after the inner `~~~` read as unfenced — so a heading
+   * quoted inside the sample opened a section that does not exist.
+   */
+  it('reads a ~~~ inside a ``` block as content, not as a fence', () => {
+    const inner = ['```md', '~~~', '## Not a heading', '~~~', '```'].join('\n')
+    const src = `# P\n\n## One\n\n${'o'.repeat(600)}\n\n${inner}\n\n## Two\n\n${'t'.repeat(600)}`
+    const { chunks } = chunk(src)
+    expect(chunks.map((c) => c.title)).toEqual(['One', 'Two'])
+    expect(chunks.find((c) => c.title === 'One').text).toContain('## Not a heading')
+  })
+})
+
+
+// ─── merged from tests-levels.js ───
+describe('golden-set levels — cumulative tiers', () => {
+  // One record per tier plus a legacy record with no `level` at all, which is
+  // the shape every golden file has before anyone edits it.
+  const mixed = [
+    { id: 'l-1', level: 'low' },
+    { id: 'l-2', level: 'low' },
+    { id: 'm-1', level: 'medium' },
+    { id: 'h-1', level: 'high' },
+    { id: 'legacy-1' },
+    { id: 'legacy-2' },
+    { id: 'x-1', level: 'xhigh' },
+    { id: 'mx-1', level: 'max' },
+    { id: 'u-1', level: 'ultra' },
+  ]
+
+  it('orders the six tiers smallest first', () => {
+    expect(LEVELS).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+    for (let i = 1; i < LEVELS.length; i++) {
+      expect(levelRank(LEVELS[i])).toBeGreaterThan(levelRank(LEVELS[i - 1]))
+    }
+  })
+
+  it('ranks anything that is not one of the six at -1', () => {
+    for (const bad of ['LOW', 'huge', '', undefined, null, 3]) {
+      expect(levelRank(bad), String(bad)).toBe(-1)
+    }
+  })
+
+  it('reads a record with no level as high, and never rewrites an authored one', () => {
+    expect(DEFAULT_RECORD_LEVEL).toBe('high')
+    expect(recordLevel({ id: 'x' })).toBe('high')
+    expect(recordLevel({ id: 'x', level: undefined })).toBe('high')
+    // A typo survives so lint can name it; this file does not launder it.
+    expect(recordLevel({ id: 'x', level: 'Medium' })).toBe('Medium')
+    expect(recordLevel({ id: 'x', level: 'low' })).toBe('low')
+  })
+
+  it('nests the pools: every level contains every level below it', () => {
+    const ids = (lvl) => filterByLevel(mixed, lvl).map((r) => r.id)
+    expect(ids('low')).toEqual(['l-1', 'l-2'])
+    expect(ids('medium')).toEqual(['l-1', 'l-2', 'm-1'])
+    expect(ids('high')).toEqual(['l-1', 'l-2', 'm-1', 'h-1', 'legacy-1', 'legacy-2'])
+    expect(ids('xhigh')).toEqual([...ids('high'), 'x-1'])
+    expect(ids('max')).toEqual([...ids('xhigh'), 'mx-1'])
+    expect(ids('ultra')).toEqual(mixed.map((r) => r.id))
+    for (let i = 1; i < LEVELS.length; i++) {
+      const below = new Set(ids(LEVELS[i - 1]))
+      for (const id of below) expect(ids(LEVELS[i]), LEVELS[i]).toContain(id)
+    }
+  })
+
+  it('runs the whole set when no level is given — today’s behaviour', () => {
+    expect(DEFAULT_RUN_LEVEL).toBe('ultra')
+    expect(filterByLevel(mixed, undefined)).toHaveLength(mixed.length)
+    expect(filterByLevel(mixed, '')).toHaveLength(mixed.length)
+  })
+
+  it('scores a legacy file identically with --level=high and with no flag', () => {
+    // The whole point of DEFAULT_RECORD_LEVEL: 60 records, none carrying a
+    // level, must not move when the flag arrives.
+    const legacy = Array.from({ length: 60 }, (_, i) => ({ id: `q-${i}`, question: '?' }))
+    expect(filterByLevel(legacy, 'high')).toEqual(legacy)
+    expect(filterByLevel(legacy, undefined)).toEqual(legacy)
+    // …and the same records are OUT of the smoke pool, because high is not low.
+    expect(filterByLevel(legacy, 'low')).toEqual([])
+    expect(filterByLevel(legacy, 'medium')).toEqual([])
+  })
+
+  it('keeps a record with an unrecognised level in every pool, smoke included', () => {
+    // Dropping it would make `ultra` mean "everything except the typos", which
+    // is the one thing ultra may not mean. lint is what errors on it.
+    const strays = [{ id: 'ok', level: 'high' }, { id: 'typo', level: 'hgih' }]
+    expect(filterByLevel(strays, 'low').map((r) => r.id)).toEqual(['typo'])
+    expect(filterByLevel(strays, 'ultra').map((r) => r.id)).toEqual(['ok', 'typo'])
+  })
+
+  it('rejects an unknown --level and names all six', () => {
+    for (const bad of ['huge', 'lo', 'HIGHER', 'ultra2']) {
+      let msg = ''
+      try {
+        parseLevelArg(bad)
+      } catch (e) {
+        msg = e.message
+      }
+      expect(msg, bad).toContain(`unknown level "${bad}"`)
+      for (const l of LEVELS) expect(msg, `${bad} names ${l}`).toContain(l)
+    }
+  })
+
+  it('accepts the six, trimming and case-folding what a shell hands over', () => {
+    for (const l of LEVELS) expect(parseLevelArg(l)).toBe(l)
+    expect(parseLevelArg(' medium ')).toBe('medium')
+    expect(parseLevelArg('MAX')).toBe('max')
+    expect(parseLevelArg(undefined)).toBe('ultra')
+    expect(parseLevelArg('')).toBe('ultra')
+    expect(parseLevelArg('   ')).toBe('ultra')
+  })
+
+  it('refuses to filter against a level it cannot parse', () => {
+    // A silently empty pool reads as "the golden set is empty", which sends the
+    // author to the wrong file.
+    expect(() => filterByLevel(mixed, 'hgih')).toThrow(/unknown level/)
+  })
+
+  it('reports own counts and pool sizes that agree with the filter', () => {
+    const h = levelHistogram(mixed)
+    expect(h.total).toBe(9)
+    expect(h.unknown).toBe(0)
+    expect(h.levels.map((r) => [r.level, r.count, r.cumulative])).toEqual([
+      ['low', 2, 2],
+      ['medium', 1, 3],
+      ['high', 3, 6], // one authored `high` plus the two legacy records
+      ['xhigh', 1, 7],
+      ['max', 1, 8],
+      ['ultra', 1, 9],
+    ])
+    for (const row of h.levels) {
+      expect(row.cumulative, row.level).toBe(filterByLevel(mixed, row.level).length)
+    }
+  })
+
+  it('counts an unrecognised level under unknown and still balances the total', () => {
+    const h = levelHistogram([...mixed, { id: 'typo', level: 'hgih' }])
+    expect(h.unknown).toBe(1)
+    expect(h.total).toBe(10)
+    // The stray is in every pool, so every cumulative carries it and the last
+    // one still equals the total.
+    expect(h.levels[0].cumulative).toBe(3)
+    expect(h.levels.at(-1).cumulative).toBe(h.total)
+    expect(h.levels.reduce((n, r) => n + r.count, 0) + h.unknown).toBe(h.total)
+  })
+
+  it('survives an empty set', () => {
+    const h = levelHistogram([])
+    expect(h.total).toBe(0)
+    expect(h.unknown).toBe(0)
+    expect(h.levels).toHaveLength(6)
+    expect(h.levels.every((r) => r.count === 0 && r.cumulative === 0)).toBe(true)
+    expect(filterByLevel([], 'low')).toEqual([])
+  })
+
+  it('renders the summary line lint and run both print', () => {
+    const h = levelHistogram(mixed)
+    const line = h.levels
+      .filter((r) => r.count)
+      .map((r) => `${r.level} ${r.cumulative} (+${r.count})`)
+      .join(' · ')
+    expect(line).toBe(
+      'low 2 (+2) · medium 3 (+1) · high 6 (+3) · xhigh 7 (+1) · max 8 (+1) · ultra 9 (+1)',
+    )
+  })
+})
+
+
+// ─── merged from tests-retriever-levers.js ───
+// MERGE NOTE: this import adds only names the host file does not already bind.
+// `createRetrieval` and `assembleIndex` are already imported at the top of
+// test/docpilot.test.js; fold these three into that same import line if preferred.
+
+/**
+ * The delivery channel for a measured lever.
+ *
+ * Until this existed every lever was a module constant folded from `process.env`
+ * at import time, and `globalThis.process` is undefined in the browser — so the
+ * shipped bundle always got the literals and a value measured against a
+ * consumer's own corpus had no way to reach the running retriever at all.
+ */
+describe('retrieval levers — the three-layer precedence', () => {
+  /**
+   * The literals as documented in retriever.js. Pinned from outside on purpose:
+   * these are the numbers a browser bundle gets, and a sweep that quietly moves
+   * one is a change to what every consumer ships, not a local edit.
+   */
+  const LITERALS = {
+    RRF_K: 5,
+    W_LEXICAL_RRF: 1.0,
+    W_DENSE_RRF: 1.0,
+    MMR_LAMBDA: 1.0,
+    CANDIDATES: 30,
+    FUSED: 12,
+    EXPAND_BELOW_TOKENS: 150,
+    GATE_K: 5,
+  }
+
+  /**
+   * The suite is one process, so an env var set here outlives the test that set
+   * it unless it is removed on the way out — including when the assertion throws.
+   */
+  const withEnv = (name, value, fn) => {
+    const key = `DOCPILOT_${name}`
+    const had = Object.prototype.hasOwnProperty.call(process.env, key)
+    const before = process.env[key]
+    process.env[key] = value
+    try {
+      fn()
+    } finally {
+      if (had) process.env[key] = before
+      else delete process.env[key]
+    }
+  }
+
+  it('is the browser shape with no tuning and no env: every lever is its literal', () => {
+    expect(resolveLevers()).toEqual(LITERALS)
+    expect(resolveLevers(null)).toEqual(LITERALS)
+    expect(new Set(LEVER_NAMES)).toEqual(new Set(Object.keys(LITERALS)))
+  })
+
+  it('takes a lever from the tuning object when the env is silent', () => {
+    const t = resolveLevers({ MMR_LAMBDA: 0.85, GATE_K: 8 })
+    expect(t.MMR_LAMBDA).toBe(0.85)
+    expect(t.GATE_K).toBe(8)
+    // Levers the tuning file does not mention keep the literal — a tuning object
+    // is a patch over the defaults, never a replacement for the whole set.
+    expect(t.CANDIDATES).toBe(LITERALS.CANDIDATES)
+    expect(t.RRF_K).toBe(LITERALS.RRF_K)
+  })
+
+  /**
+   * The env layer beats the tuning object, and it resolves to the value read
+   * HERE — at call time, not at import.
+   *
+   * The distinction is the whole defect: every CLI entry point loads
+   * `.env.local` into `process.env` after the module graph is already imported,
+   * so a lever resolved from the import-time fold saw a clean environment and
+   * pinned itself to the package literal — discarding the operator's variable
+   * AND the committed tuning.json at once.
+   */
+  it('lets an explicitly-set env var win over the tuning object', () => {
+    withEnv('MMR_LAMBDA', '0.7', () => {
+      expect(resolveLevers({ MMR_LAMBDA: 0.5 }).MMR_LAMBDA).not.toBe(0.5)
+      expect(resolveLevers({ MMR_LAMBDA: 0.5 }).MMR_LAMBDA).toBe(0.7)
+      // One env var suspends one lever, not the whole tuning file.
+      expect(resolveLevers({ MMR_LAMBDA: 0.5, GATE_K: 9 }).GATE_K).toBe(9)
+    })
+    expect(resolveLevers({ MMR_LAMBDA: 0.5 }).MMR_LAMBDA).toBe(0.5)
+  })
+
+  /**
+   * A typo in a sweep script must not pin the corpus to our defaults while
+   * looking exactly like a tuning file that did nothing — and it must never
+   * resolve to NaN, which would take every downstream comparison with it.
+   */
+  it('falls through an unparseable env value to the tuning object, not to NaN', () => {
+    for (const junk of ['high', '', 'null']) {
+      withEnv('GATE_K', junk, () => {
+        expect(resolveLevers({ GATE_K: 7 }).GATE_K).toBe(7)
+        expect(resolveLevers().GATE_K).toBe(LITERALS.GATE_K)
+      })
+    }
+  })
+
+  it('reads only the eight lever names — a smuggled threshold resolves to nothing', () => {
+    const t = resolveLevers({ tau: 0.01, tauLexical: 0.01, wDense: 1, GATE_K: 6 })
+    expect(t.GATE_K).toBe(6)
+    expect(t.tau).toBeUndefined()
+    expect(Object.keys(t).sort()).toEqual([...LEVER_NAMES].sort())
+  })
+})
+
+describe('mmr — what the two ends of lambda mean', () => {
+  // Three candidates; `a` and `b` are two sections of one page, so they are
+  // maximally redundant with each other and not at all with `c`.
+  const simTo = {
+    query: (id) => ({ a: 0.9, b: 0.8, c: 0.1 })[id],
+    pair: (x, y) => (x !== y && [x, y].every((i) => i === 'a' || i === 'b') ? 1 : 0),
+  }
+
+  it('at lambda 1.0 orders by relevance alone and keeps the redundant pair', () => {
+    expect(mmr(['a', 'b', 'c'], simTo, 2, 1.0)).toEqual(['a', 'b'])
+    expect(mmr(['c', 'b', 'a'], simTo, 3, 1.0)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('at lambda 0 the redundancy penalty evicts the same-page candidate', () => {
+    // Relevance is out of the score entirely, so the second slot goes to the
+    // only candidate that is not a second section of the page already picked —
+    // even though it is the least relevant of the three.
+    expect(mmr(['a', 'b', 'c'], simTo, 2, 0)).toEqual(['a', 'c'])
+  })
+
+  it('defaults to the module lambda when none is passed', () => {
+    expect(mmr(['a', 'b', 'c'], simTo, 2)).toEqual(mmr(['a', 'b', 'c'], simTo, 2, 1.0))
+  })
+})
+
+describe('createRetrieval — the gate k arrives per instance', () => {
+  const DIMS = 8
+  const GUARD = {
+    tau: 0.3,
+    tauLexical: 0.3,
+    wDense: 0.75,
+    wLexical: 0.25,
+    denseMode: 'cosine',
+    cosFloor: 0.44,
+    cosCeil: 0.64,
+    zexp: null,
+  }
+
+  const axis = (i) => {
+    const v = new Array(DIMS).fill(0)
+    v[i] = 127
+    return v
+  }
+
+  let leverFixtures = 0
+  const makeIndex = (rows) => {
+    const hash = `levers-${++leverFixtures}`
+    const vectors = new Int8Array(rows.length * DIMS)
+    rows.forEach((r, i) => vectors.set(r.vec, i * DIMS))
+    const chunks = rows.map(({ vec, ...c }) => ({ ...c }))
+    const paths = [...new Set(chunks.map((c) => c.path))]
+    return assembleIndex({
+      manifest: {
+        version: 3,
+        hash,
+        embedModel: 'test',
+        dims: DIMS,
+        chunkCount: chunks.length,
+        vectors: `vectors.${hash}.bin`,
+        pages: paths.map((p) => ({ path: p, title: `Page ${p}`, tail: 'Docs' })),
+        guard: GUARD,
+      },
+      shards: [chunks],
+      vectorBuffer: vectors.buffer,
+      dfDoc: { df: {} },
+    })
+  }
+
+  // Six pages, every one of them lexically and densely reachable from the same
+  // question, so the fused pool is always six and the only thing deciding how
+  // many excerpts come back is k.
+  const CORPUS = () =>
+    ['a', 'b', 'c', 'd', 'e', 'f'].map((letter, i) => ({
+      id: `${letter}#one`,
+      path: `/${letter}`,
+      anchor: 'one',
+      title: `Page ${letter.toUpperCase()}`,
+      breadcrumb: 'Docs',
+      kind: 'guide',
+      text: `The ${letter} widget is configured with a manifest and a token. `.repeat(12),
+      prev: null,
+      next: null,
+      vec: axis(i),
+    }))
+
+  const ALL = { kind: 'all', paths: [], label: 'All docs' }
+  const ASK = { question: 'how is the widget configured with a token?', queryVec: axis(0) }
+
+  const primed = (tuning) =>
+    createRetrieval({ index: makeIndex(CORPUS()), scope: ALL, guard: GUARD, tuning }).evaluate(ASK)
+      .chunks.length
+
+  it('primes the gate with GATE_K excerpts, and with the literal when untuned', () => {
+    expect(primed(null)).toBe(5)
+    expect(primed(undefined)).toBe(5)
+  })
+
+  it('primes more or fewer excerpts when the manifest carries a tuned GATE_K', () => {
+    expect(primed({ GATE_K: 2 })).toBe(2)
+    expect(primed({ GATE_K: 3 })).toBe(3)
+    expect(primed({ GATE_K: 6 })).toBe(6)
+  })
+
+  /**
+   * The model's own k is NOT this lever. It is a tool argument clamped 1..8 —
+   * a model-facing contract, not something a corpus sweep gets to move.
+   */
+  it('leaves the model-facing tool clamp alone', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS()),
+      scope: ALL,
+      guard: GUARD,
+      tuning: { GATE_K: 2 },
+    })
+    expect(r.search({ query: 'widget token', queryVec: axis(0), k: 4 }).length).toBe(4)
+    expect(r.search({ query: 'widget token', queryVec: axis(0), k: 99 }).length).toBe(6)
+    expect(r.search({ query: 'widget token', queryVec: axis(0), k: 0 }).length).toBe(1)
+  })
+
+  it('a tuned FUSED narrows the pool the gate can draw from', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS()),
+      scope: ALL,
+      guard: GUARD,
+      tuning: { FUSED: 2, GATE_K: 6 },
+    })
+    expect(r.evaluate(ASK).chunks.length).toBe(2)
+  })
+})
+
+
+// ─── merged from tests-levels-consumers.js ───
+// ── imports: these two lines belong in the header of test/docpilot.test.js.
+// `fs`, `os`, `path` and `vi` are already imported there — do not add them again.
+
+
+/**
+ * The level field only pays for itself if the things that READ reports refuse to
+ * compare across pools — a `--level=low` run and a full one measure different
+ * question lists, so every delta between them is attributed to whatever was
+ * changed in between and none of it is real.
+ */
+describe('golden-set levels — report comparability and lint (W3 consumers)', () => {
+  const fresh = () => fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-levels-'))
+
+  const meta = (over = {}) => ({
+    indexHash: 'abc12345',
+    model: 'm1',
+    provider: 'ollama',
+    promptHash: 'p1',
+    records: 60,
+    maxIterations: 4,
+    chunkCount: 100,
+    embedModel: 'e5',
+    numCtx: 8192,
+    fallback: false,
+    thinkSupported: true,
+    levers: { MMR_LAMBDA: 0.7 },
+    guard: {
+      denseMode: 'cosine',
+      tau: 0.42,
+      tauLexical: 0.21,
+      source: 'calibrated',
+      calibratedAt: 'abc12345',
+    },
+    ...over,
+  })
+  const summary = (over = {}) => ({ retrievalF1: 0.5, hallucinated: 0, misses: [], ...over })
+
+  /** A report already on disk. `mtime` is explicit so "newest" is not a race. */
+  const put = (dir, name, m, mtime = 1e9) => {
+    const p = path.join(dir, name)
+    fs.writeFileSync(p, JSON.stringify({ meta: m, summary: summary() }))
+    fs.utimesSync(p, mtime, mtime)
+    return p
+  }
+
+  /** writeReport prints; the suite does not need to read it. */
+  const quietly = (fn) => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      return fn()
+    } finally {
+      spy.mockRestore()
+    }
+  }
+
+  it('never pairs two reports that measured different pools', () => {
+    const dir = fresh()
+    put(dir, 'report-abc12345-m1-smoke.json', meta({ level: 'low', records: 10 }))
+
+    expect(previousReport(dir, meta({ level: 'ultra' }))).toBeNull()
+    expect(previousReport(dir, meta({ level: 'max' }))).toBeNull()
+    expect(previousReport(dir, meta({ level: 'low', records: 10 })).meta.level).toBe('low')
+  })
+
+  // The single highest-risk line in the feature: every report ever written
+  // predates `meta.level` and every one of them measured the whole set. Read the
+  // absence as anything but `ultra` and the comparison history of every existing
+  // consumer goes dark on the upgrade — silently, because a report with no
+  // "changes since the previous run" section looks like the first run of a new
+  // index.
+  it('reads a report with no meta.level as the full set, so history survives', () => {
+    const dir = fresh()
+    const legacy = meta()
+    delete legacy.level
+    put(dir, 'report-abc12345-m1-legacy.json', legacy)
+
+    expect(previousReport(dir, meta({ level: 'ultra' }))).not.toBeNull()
+    // and the same file is invisible to a filtered run, which is the point
+    expect(previousReport(dir, meta({ level: 'high' }))).toBeNull()
+  })
+
+  it('still calls a golden set that grew inside one level incomparable', () => {
+    const dir = fresh()
+    put(dir, 'report-abc12345-m1-old.json', meta({ level: 'low', records: 10 }), 1e9)
+
+    const name = 'report-abc12345-m1-new.json'
+    quietly(() =>
+      writeReport({
+        dir,
+        name,
+        meta: meta({ level: 'low', records: 12 }),
+        summary: summary(),
+        rows: [],
+      }),
+    )
+    const doc = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+    expect(doc.incomparable).toContain('Golden changed: 10 → 12 records')
+  })
+
+  it('does not report a cross-level run as a mismatched sibling', () => {
+    const dir = fresh()
+    // Same index, same prompt, same record COUNT — different pool. Without the
+    // level skip this reads as three comparable models measured on two different
+    // question lists.
+    put(dir, 'report-abc12345-m2-other.json', meta({ model: 'm2', level: 'medium', numCtx: 2048 }))
+
+    const run = (name, m) => {
+      quietly(() => writeReport({ dir, name, meta: m, summary: summary(), rows: [] }))
+      return JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')).incomparable
+    }
+
+    const across = run('report-abc12345-m1-a.json', meta({ level: 'ultra' }))
+    expect(across.some((l) => l.startsWith('Not comparable with'))).toBe(false)
+
+    // …while inside the same pool the num_ctx mismatch is still reported, so the
+    // skip above is a partition and not a silencer.
+    const within = run('report-abc12345-m1-b.json', meta({ level: 'medium' }))
+    expect(within.some((l) => l.includes('Not comparable with m2') && l.includes('num_ctx'))).toBe(true)
+  })
+
+  describe('lint', () => {
+    const index = { ids: new Set(['guide/a#x']), pages: new Set(['/guide/a']), indexHash: 'abc12345' }
+    const negative = (over = {}) => ({ id: 'n-01', question: 'who?', expect: 'refuse:no-evidence', ...over })
+    const lint = (rec) => lintRecords([rec], index)
+
+    it('errors on a level that is not one of the six, and names all six', () => {
+      const { errors, warnings } = lint(negative({ level: 'smoke' }))
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toContain('n-01')
+      expect(errors[0]).toContain('level "smoke"')
+      expect(errors[0]).toContain('low | medium | high | xhigh | max | ultra')
+      expect(warnings).toEqual([])
+    })
+
+    // Every golden file in the wild lacks the field. If this were an error the
+    // upgrade would fail lint for every consumer before it fixed anything.
+    it('warns on an absent level and lints green', () => {
+      const { errors, warnings } = lint(negative())
+      expect(errors).toEqual([])
+      expect(warnings).toEqual(['n-01: no level — runs as "high"'])
+    })
+
+    it('says nothing about a level that is one of the six', () => {
+      const { errors, warnings } = lint(negative({ level: 'low' }))
+      expect(errors).toEqual([])
+      expect(warnings).toEqual([])
+    })
+
+    it('summarises the tiers as pool sizes, not as counts', () => {
+      const at = (level, n) => Array.from({ length: n }, () => ({ level }))
+      expect(levelSummary([...at('low', 10), ...at('medium', 15), ...at('high', 35)]))
+        .toBe('low 10 (+10) · medium 25 (+15) · high 60 (+35) · ultra 60')
+      // a legacy file: 60 unlabelled records are the `high` pool, and `ultra`
+      // still prints, because it is what a run with no --level scores
+      expect(levelSummary([{}, {}, {}])).toBe('high 3 (+3) · ultra 3')
+      expect(levelSummary([])).toBe('ultra 0')
+      // a stray tier sits in EVERY pool, so it is inside both numbers below and
+      // named once more on its own
+      expect(levelSummary([{ level: 'low' }, { level: 'nope' }])).toBe('low 2 (+1) · ultra 2 · unknown 1')
+    })
+  })
+})
+
+
+// ─── merged from tests-tuning-channel.js ───
+/**
+ * W4b — the tuning artifact channel. Paste into test/docpilot.test.js.
+ *
+ * `fs`, `os` and `path` come from the host file's own imports (top of
+ * docpilot.test.js); everything under src/ is imported dynamically inside the
+ * tests so this block carries no import statements of its own.
+ */
+
+describe('tuning — what the build inlines from tuning.json (RAG-SPEC 7)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-tuning-'))
+  const write = (doc) => {
+    const p = path.join(dir, 't.json')
+    fs.writeFileSync(p, JSON.stringify(doc))
+    return p
+  }
+  const tuned = (over = {}) => ({
+    version: 1,
+    tunedAt: 'abc12345',
+    embedModel: 'bge-m3',
+    level: 'high',
+    records: 60,
+    levers: { MMR_LAMBDA: 0.9, GATE_K: 8 },
+    ...over,
+  })
+  // Every call collects its own warnings, because "said nothing at all" is a
+  // behaviour this channel is specified on: a site that never ran `docpilot
+  // tune` is not misconfigured and must not be warned at it on every build.
+  const run = async (hash, doc, opts = {}) => {
+    const { tuningFor } = await import('../src/build/build-rag-index.js')
+    const warnings = []
+    const notes = []
+    const out = tuningFor(hash, {
+      file: doc === null ? path.join(dir, 'nothing-here.json') : write(doc),
+      embedModel: 'bge-m3',
+      warn: (m) => warnings.push(m),
+      note: (m) => notes.push(m),
+      ...opts,
+    })
+    return { out, warnings: warnings.join(' '), notes: notes.join(' '), count: warnings.length }
+  }
+
+  it('inlines the allowlisted levers when tunedAt matches the hash being built', async () => {
+    const { out, notes } = await run('abc12345', tuned())
+    expect(out).toEqual({ MMR_LAMBDA: 0.9, GATE_K: 8, source: 'tuned', tunedAt: 'abc12345' })
+    // The note is where an operator reads which numbers this build is shipping.
+    expect(notes).toContain('GATE_K 8')
+  })
+
+  it('says nothing at all when there is no tuning.json — it is optional, the guard is not', async () => {
+    const { out, count } = await run('abc12345', null)
+    expect(out).toBeNull()
+    expect(count).toBe(0)
+  })
+
+  it('refuses a tuning measured on another index, and names both hashes', async () => {
+    const { out, warnings } = await run('deadbeef', tuned())
+    expect(out).toBeNull()
+    expect(warnings).toContain('abc12345')
+    expect(warnings).toContain('deadbeef')
+  })
+
+  /**
+   * The chunk hash covers the CORPUS — sha256 over chunk text — so an embedder
+   * swap leaves it identical while every cosine underneath it moves. MMR_LAMBDA
+   * weighs relevance against similarity in that vector space, so a lambda swept
+   * on bge-m3 describes nothing about text-embedding-3-small.
+   */
+  it('refuses a tuning swept with a different embedding model', async () => {
+    const swapped = await run('abc12345', tuned(), { embedModel: 'text-embedding-3-small' })
+    expect(swapped.out).toBeNull()
+    expect(swapped.warnings).toContain('bge-m3')
+    expect(swapped.warnings).toContain('text-embedding-3-small')
+    // …and the same file is still accepted by the embedder that swept it.
+    expect((await run('abc12345', tuned())).out.GATE_K).toBe(8)
+  })
+
+  /**
+   * `docpilot tune` on a vectorless index writes `embedModel: null`, which must
+   * pair with the vectorless build that produced it and with nothing else — a
+   * lexical-only sweep never scored a cosine, so it has no opinion about lambda.
+   */
+  it('pairs a vectorless tuning with a vectorless build and no other', async () => {
+    const doc = tuned({ embedModel: null })
+    expect((await run('abc12345', doc, { embedModel: null })).out.GATE_K).toBe(8)
+    expect((await run('abc12345', doc, { embedModel: 'bge-m3' })).out).toBeNull()
+  })
+
+  /**
+   * The structural half of "thresholds are calibrate's, levers are tune's".
+   * A hand-edited tuning.json rides into the same manifest the guard rides in,
+   * so a `tau` in there must not be able to move a refusal threshold — and the
+   * levers beside it are still good measurements, so the file is not thrown away
+   * over one smuggled key.
+   */
+  it('drops a smuggled guard threshold loudly and keeps the real levers', async () => {
+    const { out, warnings } = await run(
+      'abc12345',
+      tuned({ levers: { MMR_LAMBDA: 0.9, GATE_K: 8, tau: 0.05, wLexical: 0.9 } }),
+    )
+    expect(out.tau).toBeUndefined()
+    expect(out.wLexical).toBeUndefined()
+    expect(out).toEqual({ MMR_LAMBDA: 0.9, GATE_K: 8, source: 'tuned', tunedAt: 'abc12345' })
+    expect(warnings).toContain('tau')
+    expect(warnings).toContain('calibrate')
+  })
+
+  it('lets nothing through that resolveLevers would not read', async () => {
+    const { LEVER_NAMES } = await import('../src/theme/docpilot/retriever.js')
+    const { out } = await run(
+      'abc12345',
+      tuned({ levers: { MMR_LAMBDA: 0.9, GATE_K: 8, tauLexical: 0.9, denseMode: 'zscore' } }),
+    )
+    for (const key of Object.keys(out)) {
+      if (key === 'source' || key === 'tunedAt') continue
+      expect(LEVER_NAMES, key).toContain(key)
+    }
+  })
+
+  // `resolveLevers` reads `tuning?.[name] ?? FALLBACK[name]`, which only rejects
+  // null and undefined: a string would ride through and turn every comparison it
+  // touches into NaN, in the browser, where there is nobody to tell.
+  it('drops a lever that is not a number', async () => {
+    const { out, warnings } = await run('abc12345', tuned({ levers: { MMR_LAMBDA: '0.9', GATE_K: 8 } }))
+    expect(out).toEqual({ GATE_K: 8, source: 'tuned', tunedAt: 'abc12345' })
+    expect(warnings).toContain('MMR_LAMBDA')
+  })
+
+  it('refuses a document whose version it does not read', async () => {
+    expect((await run('abc12345', tuned({ version: 2 }))).out).toBeNull()
+  })
+
+  it('survives a corrupt tuning file', async () => {
+    const { tuningFor } = await import('../src/build/build-rag-index.js')
+    const p = path.join(dir, 'bad.json')
+    fs.writeFileSync(p, '{ not json')
+    const warnings = []
+    expect(tuningFor('abc12345', { file: p, embedModel: 'bge-m3', warn: (m) => warnings.push(m), note: () => {} })).toBeNull()
+    expect(warnings.length).toBeGreaterThan(0)
+  })
+
+  // `source: 'tuned'` on an empty object would be a claim that this corpus was
+  // measured while every value resolved to the module literal anyway.
+  it('returns null rather than an empty tuning when nothing survives the allowlist', async () => {
+    expect((await run('abc12345', tuned({ levers: { tau: 0.1 } }))).out).toBeNull()
+    expect((await run('abc12345', tuned({ levers: {} }))).out).toBeNull()
+  })
+})
+
+describe('tuning — config topK over the manifest levers', () => {
+  const levers = async (topK, manifestTuning) => {
+    const s = await import('../src/theme/docpilot/session.js')
+    s.configure({ docPilot: topK === undefined ? {} : { topK } })
+    s.state.index = manifestTuning === undefined ? null : { manifest: { tuning: manifestTuning } }
+    return s.tuning.value
+  }
+  const TUNED = { MMR_LAMBDA: 0.9, GATE_K: 8, source: 'tuned', tunedAt: 'abc12345' }
+
+  afterEach(async () => {
+    const s = await import('../src/theme/docpilot/session.js')
+    s.state.index = null
+    s.configure({ docPilot: {} })
+  })
+
+  it('passes the manifest levers through untouched when topK is unset', async () => {
+    expect(await levers(undefined, TUNED)).toEqual(TUNED)
+    // The documented default is null, so an author who wrote it out by hand gets
+    // the same answer as one who left the key alone.
+    expect(await levers(null, TUNED)).toEqual(TUNED)
+  })
+
+  it('lets a hand-set topK override the measured GATE_K and stamps source config', async () => {
+    const t = await levers(7, TUNED)
+    expect(t.GATE_K).toBe(7)
+    // Only the k is the author's; a lambda they never measured stays measured.
+    expect(t.MMR_LAMBDA).toBe(0.9)
+    expect(t.source).toBe('config')
+    expect(t.tunedAt).toBe('abc12345')
+  })
+
+  it('clamps topK to the swept band at both ends', async () => {
+    expect((await levers(99, TUNED)).GATE_K).toBe(12)
+    expect((await levers(0, TUNED)).GATE_K).toBe(1)
+    expect((await levers(-4, TUNED)).GATE_K).toBe(1)
+    // A fractional k slices to an integer anyway; it must not be reported as one
+    // thing and applied as another.
+    expect((await levers(3.6, TUNED)).GATE_K).toBe(4)
+  })
+
+  it('is null with no manifest tuning and no topK, so the retriever keeps its literals', async () => {
+    expect(await levers(undefined, undefined)).toBeNull()
+    expect(await levers(undefined, null)).toBeNull()
+  })
+
+  it('is a config-only tuning when the author sets topK on an untuned index', async () => {
+    expect(await levers(4, null)).toEqual({ GATE_K: 4, source: 'config' })
+  })
+
+  it('resolves to a GATE_K the retriever actually reads', async () => {
+    const { resolveLevers } = await import('../src/theme/docpilot/retriever.js')
+    expect(resolveLevers(await levers(4, TUNED)).GATE_K).toBe(4)
+    expect(resolveLevers(await levers(undefined, TUNED)).MMR_LAMBDA).toBe(0.9)
+    expect(resolveLevers(await levers(undefined, null)).GATE_K).toBe(5)
+  })
+})
+
+
+// ─── merged from tests-run-level.js ───
+describe('eval run.js — --level and the lever fingerprint', () => {
+  /**
+   * A fresh module graph per case, and the env has to still be set when the
+   * assertion runs.
+   *
+   * `resolveLevers` reads its env layer out of `process.env` at CALL time, so a
+   * variable set after the module graph is imported still wins — which is the
+   * whole point, since every entry point loads `.env.local` after its imports.
+   * The reset is here because run.js itself reads argv and env at module scope:
+   * the fingerprint under test is built during import, not during the call.
+   */
+  const withRun = async (env, fn) => {
+    const before = {}
+    for (const [k, v] of Object.entries(env)) {
+      before[k] = process.env[k]
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+    vi.resetModules()
+    try {
+      return await fn(await import('../src/eval/run.js'))
+    } finally {
+      for (const [k, v] of Object.entries(before)) {
+        if (v === undefined) delete process.env[k]
+        else process.env[k] = v
+      }
+      // So the next dynamic importer folds the real environment rather than
+      // whatever this case pinned.
+      vi.resetModules()
+    }
+  }
+
+  /** The hash run.js names every report with — computed the way run.js does. */
+  const promptHashOfThisProject = async () => {
+    const { promptHash } = await import('../src/theme/docpilot/prompt.js')
+    const { settings } = await import('../src/cli-context.js')
+    return promptHash(settings.prompt, settings.product)
+  }
+
+  const NAMED = { indexHash: 'abc123', model: 'qwen3:8b', vectorlessIndex: false }
+
+  it('leaves an unfiltered run under exactly the name it has always had', async () => {
+    // The reason `ultra` adds no segment: every report already on disk was
+    // written under this name, and `previousReport` pairs a run with its
+    // predecessor by filename. A segment here would end every history on the day
+    // levels landed.
+    await withRun({}, async ({ reportName }) => {
+      const hash = await promptHashOfThisProject()
+      expect(reportName({ ...NAMED, level: 'ultra' })).toBe(`report-abc123-qwen3_8b-${hash}.json`)
+      // Same for a caller that passes no level at all.
+      expect(reportName(NAMED)).toBe(`report-abc123-qwen3_8b-${hash}.json`)
+    })
+  })
+
+  it('files a narrowed run apart, with the prompt hash still last', async () => {
+    await withRun({}, async ({ reportName }) => {
+      const hash = await promptHashOfThisProject()
+      expect(reportName({ ...NAMED, level: 'medium' })).toBe(
+        `report-abc123-qwen3_8b-lvl-medium-${hash}.json`,
+      )
+      // The level joins the other run-shape segments rather than displacing one.
+      expect(reportName({ indexHash: 'h', model: 'm', vectorlessIndex: true, level: 'low' })).toBe(
+        `report-h-m-novec-lvl-low-${hash}.json`,
+      )
+    })
+  })
+
+  it('reports the levers the manifest actually tuned, not the package defaults', async () => {
+    await withRun({ DOCPILOT_GATE_K: undefined, DOCPILOT_MMR_LAMBDA: undefined }, ({ leverFingerprint }) => {
+      const base = leverFingerprint(null)
+      const tuned = leverFingerprint({ GATE_K: base.GATE_K + 3, MMR_LAMBDA: 0.42 })
+      expect(tuned.GATE_K).toBe(base.GATE_K + 3)
+      expect(tuned.MMR_LAMBDA).toBe(0.42)
+      // A lever the tuning file says nothing about keeps the shipped value.
+      expect(tuned.CANDIDATES).toBe(base.CANDIDATES)
+      expect(tuned.RRF_K).toBe(base.RRF_K)
+    })
+  })
+
+  it('refuses a guard threshold that reached the tuning object', async () => {
+    // Only calibrate may set tau. A report that fingerprinted one would say a
+    // threshold was in force that the guard never agreed to.
+    await withRun({}, ({ leverFingerprint }) => {
+      const fp = leverFingerprint({ tau: 0.9, tauLexical: 0.4, GATE_K: 6 })
+      expect(fp).not.toHaveProperty('tau')
+      expect(fp).not.toHaveProperty('tauLexical')
+      expect(fp.GATE_K).toBe(6)
+    })
+  })
+
+  it('lets an env override outrank the manifest, the way the retriever does', async () => {
+    // A sweep running on this shell is the newest statement about a lever, and
+    // the run really does use it — so the report has to say so.
+    await withRun({ DOCPILOT_GATE_K: '9' }, ({ leverFingerprint }) => {
+      expect(leverFingerprint({ GATE_K: 6 }).GATE_K).toBe(9)
+      expect(leverFingerprint(null).GATE_K).toBe(9)
+    })
+  })
+
+  it('serialises to one string whatever order the tuning keys arrive in', async () => {
+    // report.js raises `Levers changed` on a JSON string mismatch, so key order
+    // is load-bearing: two runs on identical levers must not read as different
+    // measurements because a hand-edited tuning.json listed them differently.
+    await withRun({}, ({ leverFingerprint }) => {
+      const a = leverFingerprint({ GATE_K: 7, MMR_LAMBDA: 0.8 })
+      const b = leverFingerprint({ MMR_LAMBDA: 0.8, GATE_K: 7 })
+      expect(JSON.stringify(a)).toBe(JSON.stringify(b))
+
+      const keys = Object.keys(a)
+      expect(keys).toEqual([...keys].sort())
+      // The key SET does not depend on the tuning object either — an absent
+      // lever is still fingerprinted, at the value that was used.
+      expect(Object.keys(leverFingerprint(null))).toEqual(keys)
+      expect(keys).toContain('maxIterations')
+      expect(keys).toContain('numCtx')
+    })
+  })
+
+  it('selects the pool before --limit truncates it', async () => {
+    // The composition run.js performs, in the order it performs it. Reversed,
+    // `--level=low --limit=2` would take the first two records OF THE FILE and
+    // keep whichever of those happen to be `low` — here, none of them — and
+    // report a pool that was never the pool.
+    const { filterByLevel } = await import('../src/eval/levels.js')
+    const golden = [
+      { id: 'a' },
+      { id: 'b', level: 'high' },
+      { id: 'c', level: 'low' },
+      { id: 'd', level: 'low' },
+    ]
+    expect(filterByLevel(golden, 'low').slice(0, 2).map((r) => r.id)).toEqual(['c', 'd'])
+    expect(golden.slice(0, 2).filter((r) => r.level === 'low')).toHaveLength(0)
+    // A set authored before levels existed is whole at `high` and empty below
+    // it — which is what run.js's empty-pool message names as the likely cause.
+    expect(filterByLevel([{ id: 'a' }, { id: 'b' }], 'medium')).toHaveLength(0)
+    expect(filterByLevel([{ id: 'a' }, { id: 'b' }], 'high')).toHaveLength(2)
+  })
+})
+
+
+// ─── merged from tests-tune.js ───
+// MERGE NOTE — the host file needs two import lines this block does not carry:
+//   import { parseRange, chooseCell, buildTuningDoc } from '../src/eval/tune.js'
+//   and `tuningFor` added to the existing `../src/build/build-rag-index.js` import
+//   (which already brings in `guardFor`).
+// `fs`, `os` and `path` are already imported by test/docpilot.test.js.
+describe('docpilot tune — the pure half of the lever sweep', () => {
+  /**
+   * The grid parser. Every one of these is a flag a person types, and the
+   * failure mode of a lenient parser here is not an exception — it is a two
+   * minute sweep over a grid nobody asked for, whose winner then gets committed
+   * and inlined into a bundle.
+   */
+  describe('parseRange', () => {
+    it('reads lo:hi:step, and its own documented default lands on hi', () => {
+      const l = parseRange('0.5:1.0:0.05', { name: 'lambda', step: 0.05, min: 0, max: 1 })
+      expect(l.length).toBe(11)
+      expect(l[0]).toBe(0.5)
+      // 0.5 + 10 × 0.05 is 0.9999999999999999 in binary floating point, so an
+      // exact `<= hi` on an unrounded accumulator drops the top row of the
+      // default grid — the value the whole command exists to be able to choose.
+      expect(l[l.length - 1]).toBe(1)
+      expect(l).toContain(0.85)
+    })
+
+    it('reads lo:hi with the axis default step', () => {
+      expect(parseRange('4:12', { name: 'k', step: 1, min: 1, max: 12, integer: true })).toEqual([
+        4, 5, 6, 7, 8, 9, 10, 11, 12,
+      ])
+      expect(parseRange('4:12:2', { name: 'k', step: 1, min: 1, max: 12, integer: true })).toEqual([
+        4, 6, 8, 10, 12,
+      ])
+    })
+
+    it('reads a bare lo as a one-point axis — the way one lever is pinned', () => {
+      expect(parseRange('0.9', { name: 'lambda', step: 0.05, min: 0, max: 1 })).toEqual([0.9])
+    })
+
+    it('never yields a point outside lo..hi, even when the step overshoots', () => {
+      const v = parseRange('4:11:2', { name: 'k', step: 1, min: 1, max: 12, integer: true })
+      expect(v).toEqual([4, 6, 8, 10])
+    })
+
+    it('throws on every malformed spelling instead of falling back to a default', () => {
+      const bad = (raw, opts = {}) =>
+        expect(() => parseRange(raw, { name: 'lambda', step: 0.05, min: 0, max: 1, ...opts })).toThrow()
+      bad('a:b')
+      bad('')
+      bad(undefined)
+      bad('0.5:')
+      bad('0.5:1.0:0.05:2')
+      bad('0.5:1.0:0') // a zero step is an infinite grid
+      bad('0.5:1.0:-0.05')
+      bad('1.0:0.5') // hi below lo
+      bad('0.5:1.5') // above max
+      bad('-0.5:1.0') // below min
+      bad('4:12:0.5', { name: 'k', step: 1, min: 1, max: 12, integer: true })
+    })
+
+    it('names the flag and the fix in the message, not just the fault', () => {
+      let msg = ''
+      try {
+        parseRange('4:13', { name: 'k', step: 1, min: 1, max: 12, integer: true, example: '4:12' })
+      } catch (e) {
+        msg = e.message
+      }
+      expect(msg).toContain('[docpilot] --k=')
+      expect(msg).toContain('1..12')
+      expect(msg).toContain('--k=4:12')
+    })
+
+    it('refuses a grid so fine it is a sweep, rather than running it', () => {
+      expect(() => parseRange('0:1:0.001', { name: 'lambda', min: 0, max: 1 })).toThrow(/1001|sweep/)
+    })
+  })
+
+  /**
+   * The chooser. Four rules in order, and the fourth one exists to stop a tie
+   * churning a committed file, a rebuilt index and a redeployed bundle.
+   */
+  describe('chooseCell', () => {
+    const cell = (MMR_LAMBDA, GATE_K, retrievalF1, recall8 = 0.5, mrr = 0.5) => ({
+      MMR_LAMBDA,
+      GATE_K,
+      retrievalF1,
+      recall8,
+      mrr,
+    })
+    const base = { MMR_LAMBDA: 1, GATE_K: 5 }
+
+    it('takes the argmax of mean retrieval F1', () => {
+      const c = chooseCell([cell(0.5, 4, 0.31), cell(0.9, 8, 0.44), cell(1, 5, 0.4)], base)
+      expect([c.MMR_LAMBDA, c.GATE_K]).toEqual([0.9, 8])
+    })
+
+    it('breaks an F1 tie on recall@8', () => {
+      const c = chooseCell([cell(0.5, 4, 0.4, 0.8), cell(0.9, 8, 0.4, 0.9)], base)
+      expect(c.MMR_LAMBDA).toBe(0.9)
+    })
+
+    it('breaks an F1 + recall tie on MRR', () => {
+      const c = chooseCell([cell(0.5, 4, 0.4, 0.8, 0.6), cell(0.9, 8, 0.4, 0.8, 0.7)], base)
+      expect(c.MMR_LAMBDA).toBe(0.9)
+    })
+
+    it('breaks a total tie towards the levers already in force', () => {
+      const cells = [cell(0.5, 4, 0.4), cell(0.95, 5, 0.4), cell(0.7, 12, 0.4)]
+      const c = chooseCell(cells, base)
+      expect([c.MMR_LAMBDA, c.GATE_K]).toEqual([0.95, 5])
+    })
+
+    it('normalises the two axes, or k (span 8) drowns lambda (span 0.5)', () => {
+      // Over the documented grid λ spans 0.5 and k spans 8, so a raw
+      // `|Δλ| + |Δk|` is sixteen times more sensitive to k. Against the baseline
+      // (0.5, 4) below, the whole λ axis end to end scores 0.5 while THREE steps
+      // of k score 6 — so unnormalised, "nearest" degenerates into "same k, any
+      // lambda", and it would keep λ 1.0 over a cell one third of the k axis
+      // away. Per-axis, the k move is the smaller one and wins.
+      const cells = [cell(1, 4, 0.4), cell(0.5, 10, 0.4), cell(1, 12, 0.3)]
+      const c = chooseCell(cells, { MMR_LAMBDA: 0.5, GATE_K: 4 })
+      expect([c.MMR_LAMBDA, c.GATE_K]).toEqual([0.5, 10])
+    })
+
+    it('treats float noise as a tie, so nothing moves for a difference of zero', () => {
+      const cells = [cell(1, 5, 0.4), cell(0.5, 12, 0.4 + 1e-13)]
+      const c = chooseCell(cells, base)
+      expect([c.MMR_LAMBDA, c.GATE_K]).toEqual([1, 5])
+    })
+
+    it('lets a real difference beat the stability preference', () => {
+      const cells = [cell(1, 5, 0.4), cell(0.5, 12, 0.41)]
+      expect(chooseCell(cells, base).MMR_LAMBDA).toBe(0.5)
+    })
+
+    it('ranks an unmeasurable cell below every measured one', () => {
+      const cells = [cell(0.5, 4, null, null, null), cell(0.9, 8, 0.01)]
+      expect(chooseCell(cells, base).MMR_LAMBDA).toBe(0.9)
+      // and it still answers when NOTHING was measurable, rather than throwing
+      expect(chooseCell([cell(0.5, 4, null, null, null)], base).MMR_LAMBDA).toBe(0.5)
+    })
+
+    it('keeps grid order on a full tie, so two runs of one sweep agree', () => {
+      const cells = [cell(0.5, 4, 0.4), cell(0.6, 6, 0.4)]
+      const off = { MMR_LAMBDA: 0.55, GATE_K: 5 } // equidistant from both
+      expect(chooseCell(cells, off)).toBe(chooseCell(cells, off))
+      expect(chooseCell(cells, off).MMR_LAMBDA).toBe(0.5)
+    })
+
+    it('returns null for an empty grid rather than a cell of undefineds', () => {
+      expect(chooseCell([], base)).toBe(null)
+    })
+  })
+
+  /**
+   * The document, and the contract it has with `tuningFor()` on the other side
+   * of `docpilot index`. A schema that only this file understands is a schema
+   * that gets dropped at build time with a warning nobody reads.
+   */
+  describe('buildTuningDoc', () => {
+    const chosen = {
+      MMR_LAMBDA: 0.9,
+      GATE_K: 8,
+      retrievalF1: 0.4444444,
+      recall8: 0.85,
+      mrr: 0.7123456,
+      n: 44,
+    }
+    const baseline = { MMR_LAMBDA: 1, GATE_K: 5, retrievalF1: 0.33, recall8: 0.8, mrr: 0.7 }
+    const cells = [
+      { MMR_LAMBDA: 0.9, GATE_K: 8, retrievalF1: 0.4444444, recall8: 0.85, mrr: 0.7123456 },
+      { MMR_LAMBDA: 1, GATE_K: 5, retrievalF1: 0.33, recall8: 0.8, mrr: 0.7 },
+    ]
+    const doc = (over = {}) =>
+      buildTuningDoc({
+        indexHash: 'abc12345',
+        embedModel: 'bge-m3',
+        level: 'high',
+        records: 60,
+        chosen,
+        baseline,
+        cells,
+        sweptAt: '2026-08-24T00:00:00.000Z',
+        ...over,
+      })
+
+    it('writes the schema build-rag-index reads back', () => {
+      const d = doc()
+      expect(d.version).toBe(1)
+      expect(d.tunedAt).toBe('abc12345')
+      expect(d.embedModel).toBe('bge-m3')
+      expect(d.level).toBe('high')
+      expect(d.records).toBe(60)
+      expect(d.levers).toEqual({ MMR_LAMBDA: 0.9, GATE_K: 8 })
+      expect(d.sweptAt).toBe('2026-08-24T00:00:00.000Z')
+    })
+
+    it('carries only the two levers it measured, never the six it did not', () => {
+      // The absent six are not an omission: a key here CLAIMS the number was
+      // measured on this corpus, and writing `RRF_K` at its current value would
+      // freeze an unmeasured constant into a consumer's manifest and make a
+      // later change to the shipped default invisible.
+      expect(Object.keys(doc().levers).sort()).toEqual(['GATE_K', 'MMR_LAMBDA'])
+    })
+
+    it('reports the chosen cell against the baseline it was measured beside', () => {
+      const m = doc().metrics
+      expect(m.retrievalF1).toBe(0.4444)
+      expect(m.recall8).toBe(0.85)
+      expect(m.mrr).toBe(0.7123)
+      expect(m.n).toBe(44)
+      expect(m.baseline).toEqual({
+        MMR_LAMBDA: 1,
+        GATE_K: 5,
+        retrievalF1: 0.33,
+        recall8: 0.8,
+        mrr: 0.7,
+      })
+    })
+
+    it('writes embedModel null on a vectorless sweep, so it can never cross', () => {
+      // MMR_LAMBDA is cosine geometry. `tuningFor` compares embedModel strictly,
+      // and null matches only the vectorless build this was measured on — which
+      // is the point: a lambda measured over BM25 order describes nothing about
+      // where an embedder puts its cosines.
+      expect(doc({ embedModel: null }).embedModel).toBe(null)
+      expect(doc({ embedModel: undefined }).embedModel).toBe(null)
+    })
+
+    it('rounds the grid, so a re-run that measured the same thing diffs empty', () => {
+      const g = doc().grid
+      expect(g).toHaveLength(2)
+      expect(g[0]).toEqual({ MMR_LAMBDA: 0.9, GATE_K: 8, retrievalF1: 0.4444, recall8: 0.85, mrr: 0.7123 })
+      // the grid is the shape of the surface; the levers are not re-rounded
+      expect(g.some((c) => c.MMR_LAMBDA === 1 && c.GATE_K === 5)).toBe(true)
+    })
+
+    it('keeps a null metric null rather than rounding it to 0', () => {
+      const d = doc({ chosen: { ...chosen, retrievalF1: null, recall8: null, mrr: null } })
+      expect(d.metrics.retrievalF1).toBe(null)
+      expect(d.metrics.recall8).toBe(null)
+    })
+
+    /**
+     * The round trip. `tune` writes this file and `index` inlines it, and the
+     * two are in different halves of the package — the only thing that keeps
+     * them agreeing is a test that runs both.
+     */
+    it('is accepted by tuningFor and reaches the manifest as source "tuned"', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-tuning-'))
+      const file = path.join(dir, 'tuning.json')
+      fs.writeFileSync(file, JSON.stringify(doc()))
+      const t = tuningFor('abc12345', {
+        file,
+        embedModel: 'bge-m3',
+        warn: () => {},
+        note: () => {},
+      })
+      expect(t).toEqual({ MMR_LAMBDA: 0.9, GATE_K: 8, source: 'tuned', tunedAt: 'abc12345' })
+
+      // and the two rejections that matter, from the same document
+      expect(tuningFor('deadbeef', { file, embedModel: 'bge-m3', warn: () => {}, note: () => {} })).toBe(null)
+      expect(
+        tuningFor('abc12345', { file, embedModel: 'text-embedding-3-small', warn: () => {}, note: () => {} }),
+      ).toBe(null)
+      fs.rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('round-trips a vectorless sweep into a vectorless build and nothing else', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-tuning-'))
+      const file = path.join(dir, 'tuning.json')
+      fs.writeFileSync(file, JSON.stringify(doc({ embedModel: null })))
+      const silent = { warn: () => {}, note: () => {} }
+      expect(tuningFor('abc12345', { file, embedModel: null, ...silent })?.GATE_K).toBe(8)
+      expect(tuningFor('abc12345', { file, embedModel: 'bge-m3', ...silent })).toBe(null)
+      fs.rmSync(dir, { recursive: true, force: true })
+    })
+  })
+})
+
+
+// ─── merged from tests-fixes.js ───
+/**
+ * Paste this block into test/docpilot.test.js, next to
+ * `describe('chunker — block-aware splitting')`. The two imports above collapse
+ * to nothing there: `chunkMarkdown` is already imported at the top of that file,
+ * and `TUNING_OUT`/`CALIBRATION_OUT` come from `../src/cli-context.js`.
+ */
+
+/**
+ * The block scanner asked the HEADER line to prove it was a table: leading pipe,
+ * two or more columns. GFM asks neither. `a | b` over `--|--` is a table and so
+ * is a one-column `| a |`, and both were read as prose — which means both could
+ * be cut with no header re-emitted on the continuation, the exact defect the
+ * block-aware splitter exists to remove. The proof is now the DELIMITER row
+ * alone, and these tests pin both halves of that: the two forms it must now
+ * accept, and the prose it must still refuse.
+ */
+describe('chunker — GFM table forms the block scanner has to recognise', () => {
+  const chunk = (src) => chunkMarkdown({ src, path: '/p', kind: 'guide' })
+  const cell = 'd'.repeat(200)
+
+  /**
+   * The outer pipes are optional in GFM, and a hand-written table is where they
+   * go missing. Read as prose this splits at line boundaries like any paragraph,
+   * and every part after the first is a grid of values with unnamed columns.
+   */
+  it('re-emits the header of a leading-pipe-less table split by the ceiling', () => {
+    const rows = Array.from({ length: 60 }, (_, i) => `r${i}-mark | ${cell}`)
+    const { chunks, warnings } = chunk(`# P\n\n## T\n\ncol a | col b\n--|--\n${rows.join('\n')}`)
+
+    expect(chunks.length).toBeGreaterThan(1)
+    for (const c of chunks) {
+      expect(c.text.length).toBeLessThanOrEqual(8000)
+      if (!/r\d+-mark \|/.test(c.text)) continue
+      expect(c.text).toContain('col a | col b')
+      expect(c.text.indexOf('--|--')).toBeLessThan(c.text.search(/r\d+-mark \|/))
+    }
+    expect(warnings).toContain('table split at row boundaries by MAX_CHUNK_CHARS in /p')
+    // and the rows themselves survive whole, exactly once each
+    for (const r of rows) expect(chunks.filter((c) => c.text.includes(r)).length).toBe(1)
+  })
+
+  /** A single-column table is a table. `width < 2` was a rule about layout HTML. */
+  it('re-emits the header of a single-column table split by the ceiling', () => {
+    const rows = Array.from({ length: 60 }, (_, i) => `| r${i}-mark ${cell} |`)
+    const { chunks, warnings } = chunk(`# P\n\n## T\n\n| col a |\n| --- |\n${rows.join('\n')}`)
+
+    expect(chunks.length).toBeGreaterThan(1)
+    for (const c of chunks) {
+      expect(c.text.length).toBeLessThanOrEqual(8000)
+      if (!/\| r\d+-mark /.test(c.text)) continue
+      expect(c.text).toContain('| col a |')
+      expect(c.text.indexOf('| --- |')).toBeLessThan(c.text.search(/\| r\d+-mark /))
+    }
+    expect(warnings).toContain('table split at row boundaries by MAX_CHUNK_CHARS in /p')
+    for (const r of rows) expect(chunks.filter((c) => c.text.includes(r)).length).toBe(1)
+  })
+
+  /**
+   * `html-to-md.js` writes `\|` for a pipe inside a cell. If the scanner counted
+   * that as a separator, the header of a table this project imported itself would
+   * be two cells wide against a two-cell delimiter and the pair would not match.
+   */
+  it('does not count an escaped pipe as a column boundary', () => {
+    const rows = Array.from({ length: 60 }, (_, i) => `| r${i}-mark | ${cell} |`)
+    const { chunks, warnings } = chunk(
+      `# P\n\n## T\n\n| a \\| b | c |\n| --- | --- |\n${rows.join('\n')}`,
+    )
+    expect(warnings).toContain('table split at row boundaries by MAX_CHUNK_CHARS in /p')
+    for (const c of chunks) {
+      if (!/\| r\d+-mark \|/.test(c.text)) continue
+      expect(c.text).toContain('| a \\| b | c |')
+    }
+  })
+
+  /**
+   * The false-positive that the widening had to not become. Both lines are prose;
+   * the run of pipe-bearing lines under them is prose too. Were the pair read as
+   * a header and a delimiter, that run would be swallowed as rows, the block
+   * would go over the ceiling, and the first line would be stamped onto every
+   * part as a column header — text the page never contained.
+   *
+   * Measured on the two real corpora (205 pages): dropping the pipe requirement
+   * and the cell-count match from the delimiter turns 39 prose lines into table
+   * headers. With both in place, block-for-block output is byte-identical.
+   */
+  it('does not read a pipe-bearing prose line over a dash-bearing one as a table', () => {
+    const head = 'Run docpilot index | tee build.log before you ask anything'
+    const dash = 'Then read the summary - it names every shard it wrote'
+    const tail = Array.from({ length: 60 }, (_, i) => `Line ${i} mentions a | pipe and ${cell}`)
+    const { chunks, warnings } = chunk(`# P\n\n## S\n\n${[head, dash, ...tail].join('\n')}`)
+
+    expect(warnings.some((w) => w.includes('table'))).toBe(false)
+    expect(chunks.filter((c) => c.text.includes(head)).length).toBe(1)
+    for (const c of chunks) expect(c.text.length).toBeLessThanOrEqual(8000)
+  })
+
+  /**
+   * A setext heading is the commonest form of the same trap: one cell over one
+   * all-dashes cell agrees on shape AND on count. The pipe requirement is the
+   * only thing standing between `## Heading` written the underline way and a
+   * table header.
+   */
+  it('leaves a setext heading a heading', () => {
+    const tail = Array.from({ length: 60 }, (_, i) => `Line ${i} mentions a | pipe and ${cell}`)
+    const { chunks, warnings } = chunk(`# P\n\n## S\n\nOverview\n---\n${tail.join('\n')}`)
+    expect(warnings.some((w) => w.includes('table'))).toBe(false)
+    expect(chunks.filter((c) => c.text.includes('Overview')).length).toBe(1)
+  })
+
+  /** Three columns over two delimiter cells is not a table in GFM and is not one here. */
+  it('refuses a delimiter row whose cell count disagrees with the header', () => {
+    const tail = Array.from({ length: 60 }, (_, i) => `| r${i}-mark | ${cell} |`)
+    const { chunks, warnings } = chunk(
+      `# P\n\n## S\n\n| a | b | c |\n| --- | --- |\n${tail.join('\n')}`,
+    )
+    expect(warnings.some((w) => w.includes('table'))).toBe(false)
+    expect(chunks.filter((c) => c.text.includes('| a | b | c |')).length).toBe(1)
+  })
+})
+
+/**
+ * One path, one home. `docpilot tune` writes tuning.json and `docpilot index`
+ * reads it back, and each end had derived the path for itself — the drift that
+ * once made `index` report "no calibration" after every successful `calibrate`.
+ */
+describe('cli-context — the tuning path is stated once', () => {
+  it('puts tuning.json beside calibration.json under the eval directory', () => {
+    expect(TUNING_OUT.endsWith('/tuning.json')).toBe(true)
+    expect(TUNING_OUT.replace(/tuning\.json$/, 'calibration.json')).toBe(CALIBRATION_OUT)
+  })
+})
+
+
+// ─── merged from tests-fix-levers.js ───
+// ─── merged from tests-fix-levers.js ───
+// MERGE NOTE — this block needs NO new import lines. It uses `fs`, `os`, `path`,
+// `vi`, `assembleIndex` and `LEVER_NAMES`, all of which test/docpilot.test.js
+// already imports, and reaches everything else through `await import(...)`.
+//
+// MERGE NOTE 2 — the existing case `retrieval levers — the three-layer
+// precedence › lets an explicitly-set env var win over the tuning object` PINS
+// THE DEFECT these tests fix. Its second assertion,
+//     expect(resolveLevers({ MMR_LAMBDA: 0.5 }).MMR_LAMBDA).toBe(LITERALS.MMR_LAMBDA)
+// asserts that a set env var resolves to the MODULE LITERAL. That was the bug.
+// It has to become `.toBe(0.7)` — the value the variable actually holds — and
+// its docblock ("It resolves to the MODULE CONSTANT rather than to the string
+// read here") has to go with it.
+
+describe('resolveLevers — the env layer is read at CALL time', () => {
+  const LITERALS = {
+    RRF_K: 5,
+    W_LEXICAL_RRF: 1.0,
+    W_DENSE_RRF: 1.0,
+    MMR_LAMBDA: 1.0,
+    CANDIDATES: 30,
+    FUSED: 12,
+    EXPAND_BELOW_TOKENS: 150,
+    GATE_K: 5,
+  }
+
+  /**
+   * The `.env.local` ordering, reproduced exactly — and the reproduction IS the
+   * test, because the defect was invisible under any other ordering.
+   *
+   * Every CLI entry point imports the module graph first and only then loads
+   * `.env.local` into `process.env`. So: clear the variables, reset the module
+   * registry, import (the constants fold a CLEAN environment, the way a real run
+   * folds it), and only THEN set the variables. A test that sets them before the
+   * import folds them into the constants too, and the two layers agree by
+   * accident — which is precisely why the bug shipped.
+   *
+   * The suite is one process, so everything is restored on the way out including
+   * when the assertion throws, and the registry is reset again so the next
+   * dynamic importer folds the real environment rather than this case's.
+   */
+  const afterImport = async (env, fn) => {
+    const names = Object.keys(env).map((n) => `DOCPILOT_${n}`)
+    const before = {}
+    for (const key of names) {
+      before[key] = process.env[key]
+      delete process.env[key]
+    }
+    vi.resetModules()
+    try {
+      const mod = await import('../src/theme/docpilot/retriever.js')
+      // The fold has happened against a clean environment. NOW the file lands.
+      for (const [n, v] of Object.entries(env)) process.env[`DOCPILOT_${n}`] = v
+      return await fn(mod)
+    } finally {
+      for (const key of names) {
+        if (before[key] === undefined) delete process.env[key]
+        else process.env[key] = before[key]
+      }
+      vi.resetModules()
+    }
+  }
+
+  it('lets a variable set after import win, and carries the value it actually read', async () => {
+    // The defect: `envIsSet(name) ? FALLBACK[name] : …` checked `process.env` at
+    // call time but ANSWERED out of constants folded at import time. With
+    // `DOCPILOT_GATE_K=9` in `.env.local` — where every DocPilot doc says to put
+    // it — the env layer went true the moment the file landed and resolved to 5,
+    // discarding the env value AND the tuning object, and pinning the lever to
+    // the package literal on the one path the documentation recommends.
+    await afterImport({ MMR_LAMBDA: '0.7', GATE_K: '9' }, ({ resolveLevers }) => {
+      const t = resolveLevers({ MMR_LAMBDA: 0.5, GATE_K: 3 })
+      expect(t.MMR_LAMBDA).toBe(0.7)
+      expect(t.GATE_K).toBe(9)
+      // Not the literal, which is what it used to be — stated separately so a
+      // regression names itself rather than reading as "0.7 !== 0.5".
+      expect(t.MMR_LAMBDA).not.toBe(LITERALS.MMR_LAMBDA)
+      expect(t.GATE_K).not.toBe(LITERALS.GATE_K)
+
+      // With no tuning object at all it is still the env value, not the literal.
+      expect(resolveLevers().GATE_K).toBe(9)
+      expect(resolveLevers(null).MMR_LAMBDA).toBe(0.7)
+
+      // One variable suspends one lever. The rest of the tuning file survives.
+      expect(resolveLevers({ MMR_LAMBDA: 0.5, CANDIDATES: 40 }).CANDIDATES).toBe(40)
+      expect(resolveLevers({ GATE_K: 3 }).RRF_K).toBe(LITERALS.RRF_K)
+    })
+  })
+
+  it('reaches the running retrieval: the primed excerpt count follows the env', async () => {
+    // `resolveLevers` returning the wrong number is only a defect because
+    // something ranks on it. This is that something — the executed proof, at the
+    // level a reader would notice: five excerpts primed the turn instead of ten.
+    await afterImport({ GATE_K: '10' }, async ({ createRetrieval }) => {
+      const { assembleIndex } = await import('../src/theme/docpilot/store.js')
+      const GUARD = {
+        tau: 0.3,
+        tauLexical: 0.3,
+        wDense: 0.75,
+        wLexical: 0.25,
+        denseMode: 'cosine',
+        cosFloor: 0.44,
+        cosCeil: 0.64,
+        zexp: null,
+      }
+      const letters = 'abcdefghijkl'.split('')
+      const chunks = letters.map((letter) => ({
+        id: `${letter}#one`,
+        path: `/${letter}`,
+        anchor: 'one',
+        title: `Page ${letter.toUpperCase()}`,
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        // Long enough that `sectionExpand` never fires, so the count below is
+        // exactly GATE_K and not GATE_K plus whatever expansion added.
+        text: `The ${letter} widget is configured with a manifest and a token. `.repeat(12),
+        prev: null,
+        next: null,
+      }))
+      const index = assembleIndex({
+        manifest: {
+          version: 3,
+          hash: 'env-gate-k',
+          embedModel: null,
+          dims: null,
+          chunkCount: chunks.length,
+          vectors: null,
+          pages: letters.map((l) => ({ path: `/${l}`, title: `Page ${l}`, tail: 'Docs' })),
+          guard: GUARD,
+        },
+        shards: [chunks],
+        vectorBuffer: null,
+        dfDoc: { df: {} },
+      })
+      const primed = (tuning) =>
+        createRetrieval({
+          index,
+          scope: { kind: 'all', paths: [], label: 'All docs' },
+          guard: GUARD,
+          tuning,
+        }).evaluate({ question: 'how is the widget configured with a token?' }).chunks.length
+
+      // Before the fix this was 5 — GATE_K's module literal — for both calls.
+      expect(primed({ GATE_K: 3 })).toBe(10)
+      expect(primed(null)).toBe(10)
+    })
+  })
+
+  it('is the browser shape when there is no `process` at all', async () => {
+    // `globalThis.process?.env?.[…]` is the whole browser story, and moving the
+    // read from import time to call time must not have changed it: no bundler
+    // defines anything, and the rule collapses to `tuning ?? literal`.
+    const { resolveLevers } = await import('../src/theme/docpilot/retriever.js')
+    let noProcess
+    let noProcessTuned
+    vi.stubGlobal('process', undefined)
+    try {
+      // Computed under the stub, asserted after it — `expect` itself is allowed
+      // to want a `process`.
+      noProcess = resolveLevers()
+      noProcessTuned = resolveLevers({ MMR_LAMBDA: 0.85, GATE_K: 8 })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(noProcess).toEqual(LITERALS)
+    expect(noProcessTuned.MMR_LAMBDA).toBe(0.85)
+    expect(noProcessTuned.GATE_K).toBe(8)
+    expect(noProcessTuned.CANDIDATES).toBe(LITERALS.CANDIDATES)
+    expect(Object.keys(noProcess).sort()).toEqual([...LEVER_NAMES].sort())
+  })
+
+  it('falls through an unparseable env value to the tuning object, never to NaN', async () => {
+    // The call-time read must keep the same idea of "set" the fold had, or a
+    // typo in a sweep script resolves to NaN and takes every comparison
+    // downstream with it — silently, in the browser, where nobody is watching.
+    for (const junk of ['high', '', 'null', '0.9x', 'NaN']) {
+      await afterImport({ GATE_K: junk, MMR_LAMBDA: junk }, ({ resolveLevers }) => {
+        expect(resolveLevers({ GATE_K: 7 }).GATE_K).toBe(7)
+        expect(resolveLevers().GATE_K).toBe(LITERALS.GATE_K)
+        expect(resolveLevers().MMR_LAMBDA).toBe(LITERALS.MMR_LAMBDA)
+        expect(Number.isNaN(resolveLevers().GATE_K)).toBe(false)
+        expect(Number.isNaN(resolveLevers({ MMR_LAMBDA: 0.5 }).MMR_LAMBDA)).toBe(false)
+      })
+    }
+  })
+
+  it('exposes the pin as one question with one answer, for tune.js to ask', async () => {
+    // Exported so `docpilot tune` does not re-derive the parse. Two copies of a
+    // precedence rule are two answers to "which runs are degenerate".
+    await afterImport({ GATE_K: '9', MMR_LAMBDA: 'high' }, ({ envPin, resolveLevers }) => {
+      expect(envPin('GATE_K')).toEqual({ env: 'DOCPILOT_GATE_K', value: 9 })
+      // Garbage is not a pin — the same rule `resolveLevers` applies, from the
+      // same read, so the guard and the retrieval can never disagree.
+      expect(envPin('MMR_LAMBDA')).toBeNull()
+      expect(envPin('CANDIDATES')).toBeNull()
+      expect(resolveLevers({ GATE_K: 3 }).GATE_K).toBe(envPin('GATE_K').value)
+    })
+  })
+})
+
+describe('docpilot tune — the sweep refuses what it cannot honestly measure', () => {
+  const TUNE = path.resolve('src/eval/tune.js')
+
+  /**
+   * A child process, because every one of these is a property of the COMMAND —
+   * argv parsing, an exit code, and which files exist afterwards — and none of
+   * them is reachable by importing a module whose flags were fixed at import.
+   *
+   * The environment is scrubbed of every `DOCPILOT_*` key: the suite is one
+   * process, other cases set them, and a stray one would pin the very axis these
+   * tests are about.
+   */
+  const cleanEnv = (extra = {}) => {
+    const env = {}
+    for (const [k, v] of Object.entries(process.env)) {
+      if (!k.startsWith('DOCPILOT_')) env[k] = v
+    }
+    return { ...env, ...extra }
+  }
+  const runTune = async (args, { cwd, env = {} } = {}) => {
+    const { spawnSync } = await import('node:child_process')
+    const r = spawnSync(process.execPath, [TUNE, ...args], {
+      cwd,
+      env: cleanEnv(env),
+      encoding: 'utf8',
+    })
+    return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` }
+  }
+
+  /** Somewhere with no index and no golden set — enough for the argv guards. */
+  let bare
+  beforeEach(() => {
+    bare = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-tune-bare-'))
+  })
+  afterEach(() => {
+    fs.rmSync(bare, { recursive: true, force: true })
+  })
+
+  it('is reachable — the command file this block shells out to exists', () => {
+    expect(fs.existsSync(TUNE)).toBe(true)
+  })
+
+  /**
+   * DEFECT 2. `env > tuning object` is the right rule for a running retriever
+   * and exactly the wrong one for the command that VARIES that object: a set
+   * `DOCPILOT_MMR_LAMBDA` outranks all ~99 per-cell tuning objects, every cell
+   * measures the identical retrieval, all three metrics tie, `chooseCell` falls
+   * through to its proximity tie-break, and the winner it writes to
+   * `tuning.json` — which `docpilot index` inlines into every reader's bundle —
+   * is a value nothing on the grid ever scored. This survives the fix above; it
+   * is a second defect, not a symptom of the first.
+   */
+  it('dies on a swept axis pinned by the environment, naming the variable', async () => {
+    for (const [name, value] of [
+      ['DOCPILOT_MMR_LAMBDA', '0.3'],
+      ['DOCPILOT_GATE_K', '9'],
+    ]) {
+      const r = await runTune([], { cwd: bare, env: { [name]: value } })
+      expect(r.status, `${name} must abort the sweep`).toBe(1)
+      expect(r.out).toContain(name)
+      expect(r.out).toContain('pins the axis this command sweeps')
+      // It names the way OUT, and the way out is never "we unset it for you":
+      // the environment belongs to whatever launched this process.
+      expect(r.out).toContain(`unset ${name}`)
+      expect(r.out).toContain('.env.local')
+    }
+  })
+
+  it('offers the grid as the legitimate way to pin an axis', async () => {
+    // Nothing is lost by refusing: a bare `lo` is a one-point axis, which is the
+    // command's own first-class way of holding a lever still.
+    const lam = await runTune([], { cwd: bare, env: { DOCPILOT_MMR_LAMBDA: '0.3' } })
+    expect(lam.out).toContain('--lambda=0.3')
+    const k = await runTune([], { cwd: bare, env: { DOCPILOT_GATE_K: '9' } })
+    expect(k.out).toContain('--k=9')
+  })
+
+  it('refuses before it loads an index, let alone embeds anything', async () => {
+    // A run that is going to be refused must be refused while it is still free.
+    // The control proves the guard is what fired: with the variable absent, the
+    // same empty directory gets the ordinary "no index" message instead.
+    const pinned = await runTune([], { cwd: bare, env: { DOCPILOT_GATE_K: '9' } })
+    expect(pinned.out).not.toContain('no index')
+    const clean = await runTune([], { cwd: bare })
+    expect(clean.status).toBe(1)
+    expect(clean.out).toContain('no index')
+    expect(clean.out).not.toContain('pins the axis')
+  })
+
+  it('does not refuse a lever it is not sweeping — it reports it', async () => {
+    // `DOCPILOT_FUSED=20` widens the pool the sweep selects from, which is a real
+    // thing to want to measure. It gets a line, not a refusal — `tuning.json`
+    // records only λ and k, so the answer was measured under a pool the file
+    // does not mention.
+    const r = await runTune([], { cwd: bare, env: { DOCPILOT_FUSED: '20' } })
+    expect(r.out).not.toContain('pins the axis')
+    expect(r.out).toContain('no index') // it got past the guard to the real work
+  })
+
+  it('does not treat an unparseable value as a pin', async () => {
+    // Same rule as `resolveLevers`: garbage is not "set". Refusing here would
+    // block a sweep over a lever that is in fact falling through to the literal.
+    const r = await runTune([], { cwd: bare, env: { DOCPILOT_MMR_LAMBDA: 'high' } })
+    expect(r.out).not.toContain('pins the axis')
+    expect(r.out).toContain('no index')
+  })
+
+  /**
+   * DEFECT 4. `arg('level')` only ever matched `--level=`, so `--level low` left
+   * `low` as a stray positional, handed `parseLevelArg` the `undefined` that
+   * means "no preference", and swept the WHOLE pool while the author read the
+   * report as the smoke tier they had asked for.
+   */
+  it('rejects a bare --level instead of silently meaning ultra', async () => {
+    const r = await runTune(['--level', 'low'], { cwd: bare })
+    expect(r.status).toBe(1)
+    expect(r.out).toContain('--level takes a value: --level=low')
+    // And it never reached the work, so no report was written under a pool
+    // nobody asked for.
+    expect(r.out).not.toContain('no index')
+  })
+
+  it('rejects every value flag given bare, and shows the = form of each', async () => {
+    for (const [flag, shown] of [
+      ['--lambda', '--lambda=0.5:1.0:0.05'],
+      ['--k', '--k=4:12'],
+      ['--limit', '--limit=10'],
+    ]) {
+      const r = await runTune([flag, '5'], { cwd: bare })
+      expect(r.status, flag).toBe(1)
+      expect(r.out).toContain(`${flag} takes a value: ${shown}`)
+    }
+  })
+
+  it('rejects a flag it does not recognise, and lists the ones it does', async () => {
+    for (const bad of ['--levl=low', '--gate-only', '--verbose']) {
+      const r = await runTune([bad], { cwd: bare })
+      expect(r.status, bad).toBe(1)
+      expect(r.out).toContain('unknown flag')
+      expect(r.out).toContain(bad)
+      expect(r.out).toContain('--level=low')
+    }
+  })
+
+  it('will not let --limit fail open, because --limit decides whether it may write', async () => {
+    // `Number('abc')` is NaN, NaN is falsy, and both `slice(0, NaN)` and the
+    // narrowing test read that as "no limit" — so a typo swept the whole pool AND
+    // wrote the shipped artefact, which is both surprises at once.
+    for (const bad of ['abc', '0', '2.5', '-3']) {
+      const r = await runTune([`--limit=${bad}`], { cwd: bare })
+      expect(r.status, bad).toBe(1)
+      expect(r.out).toContain('must be a positive whole number')
+    }
+  })
+
+  it('does not mistake an inherited object key for a flag it knows', async () => {
+    // `'constructor' in {}` is true. `Object.hasOwn` is what keeps the allowlist
+    // an allowlist.
+    for (const bad of ['--constructor=x', '--toString']) {
+      const r = await runTune([bad], { cwd: bare })
+      expect(r.status, bad).toBe(1)
+      expect(r.out).toContain('unknown flag')
+    }
+  })
+
+  it('still accepts every flag it documents', async () => {
+    // The guard must not have narrowed the command. Each of these gets past argv
+    // parsing and dies on the missing index instead.
+    const r = await runTune(
+      ['--level=low', '--lambda=0.9', '--k=4:6', '--limit=3', '--dry'],
+      { cwd: bare },
+    )
+    expect(r.out).toContain('no index')
+    expect(r.out).not.toContain('unknown flag')
+    expect(r.out).not.toContain('takes a value')
+  })
+})
+
+describe('docpilot tune — a narrowed sweep may not overwrite the shipped artefact', () => {
+  const TUNE = path.resolve('src/eval/tune.js')
+  const GUARD = {
+    tau: 0.3,
+    tauLexical: 0.3,
+    wDense: 0.75,
+    wLexical: 0.25,
+    denseMode: 'cosine',
+    cosFloor: 0.44,
+    cosCeil: 0.64,
+    zexp: null,
+  }
+
+  /**
+   * A whole project on disk, because the property under test is "which files
+   * exist afterwards, and what is in them" — and `tuning.json` is written by
+   * `main()` at a path `cli-context.js` derives from `process.cwd()`.
+   *
+   * `--no-embed` shape (`vectors: null`): stage A then contacts no endpoint at
+   * all, so this runs offline and deterministically.
+   */
+  let proj
+  const RAG = () => path.join(proj, 'docs', 'public', 'rag')
+  const EVAL = () => path.join(proj, 'docpilot')
+  const read = (f) => fs.readFileSync(path.join(EVAL(), f), 'utf8')
+  const exists = (f) => fs.existsSync(path.join(EVAL(), f))
+
+  beforeEach(() => {
+    proj = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-tune-proj-'))
+    fs.mkdirSync(RAG(), { recursive: true })
+    fs.mkdirSync(EVAL(), { recursive: true })
+
+    const letters = 'abcdefgh'.split('')
+    const chunks = letters.map((letter) => ({
+      id: `${letter}#one`,
+      path: `/${letter}`,
+      anchor: 'one',
+      title: `Page ${letter.toUpperCase()}`,
+      breadcrumb: 'Docs',
+      kind: 'guide',
+      text: `The ${letter} widget is configured with a manifest and a token. `.repeat(12),
+      prev: null,
+      next: null,
+    }))
+    fs.writeFileSync(path.join(RAG(), 'chunks-00.json'), JSON.stringify(chunks))
+    fs.writeFileSync(path.join(RAG(), 'df.json'), JSON.stringify({ df: {} }))
+    fs.writeFileSync(
+      path.join(RAG(), 'manifest.json'),
+      JSON.stringify({
+        version: 3,
+        hash: 'narrowfix',
+        embedModel: null,
+        dims: null,
+        chunkCount: chunks.length,
+        shards: ['chunks-00.json'],
+        vectors: null,
+        df: 'df.json',
+        pages: letters.map((l) => ({ path: `/${l}`, title: `Page ${l}`, tail: 'Docs' })),
+        guard: GUARD,
+      }),
+    )
+
+    // Two records in the smoke tier, four above it, so `low` is a strict subset
+    // — the whole reason a narrowed answer is not the corpus's answer.
+    const rec = (id, letter, level) => ({
+      id,
+      question: `how is the ${letter} widget configured with a token?`,
+      expect: 'answer',
+      level,
+      gold_answer: 'x',
+      gold_chunks: [`${letter}#one`],
+      identifiers: [],
+      lang: 'en',
+    })
+    fs.writeFileSync(
+      path.join(EVAL(), 'golden.jsonl'),
+      [
+        rec('q-1', 'a', 'low'),
+        rec('q-2', 'b', 'low'),
+        rec('q-3', 'c', 'high'),
+        rec('q-4', 'd', 'high'),
+        rec('q-5', 'e', 'high'),
+        rec('q-6', 'f', 'high'),
+      ]
+        .map((r) => JSON.stringify(r))
+        .join('\n') + '\n',
+    )
+  })
+  afterEach(() => {
+    fs.rmSync(proj, { recursive: true, force: true })
+  })
+
+  const runTune = async (args) => {
+    const { spawnSync } = await import('node:child_process')
+    const env = {}
+    for (const [k, v] of Object.entries(process.env)) {
+      if (!k.startsWith('DOCPILOT_')) env[k] = v
+    }
+    const r = spawnSync(process.execPath, [TUNE, ...args, '--lambda=0.9:1.0:0.1', '--k=4:5'], {
+      cwd: proj,
+      env,
+      encoding: 'utf8',
+    })
+    return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` }
+  }
+
+  it('writes tuning.json for a full-pool run — the refusal below is narrow', async () => {
+    const r = await runTune([])
+    expect(r.status).toBe(0)
+    expect(exists('tuning.json')).toBe(true)
+    expect(exists('tuning.report.md')).toBe(true)
+    const doc = JSON.parse(read('tuning.json'))
+    expect(doc.level).toBe('ultra')
+    expect(doc.records).toBe(6)
+    expect(typeof doc.levers.GATE_K).toBe('number')
+    expect(r.out).toContain('run npx docpilot index to inline the tuned levers')
+  })
+
+  /**
+   * DEFECT 3. `--level` and `--limit` both wrote to the fixed `tuning.json` /
+   * `tuning.report.md`, so a ten-record smoke sweep silently replaced levers
+   * that took the whole golden file to earn — and `tuningFor` waved the result
+   * through, because the version, the index hash and the embed model all still
+   * matched. `eval` and `bench emit` were both given level-suffixed outputs to
+   * prevent exactly this; tune was not.
+   *
+   * The sentinel is deliberately not the full run's own answer: this asserts
+   * BYTE-IDENTITY of a file the narrowed run has no business touching, which
+   * holds whether or not the two pools happen to choose the same cell.
+   */
+  it('leaves tuning.json byte-identical under --level, and files its report apart', async () => {
+    const SENTINEL = JSON.stringify({ version: 1, levers: { MMR_LAMBDA: 0.11, GATE_K: 11 } }) + '\n'
+    fs.writeFileSync(path.join(EVAL(), 'tuning.json'), SENTINEL)
+    fs.writeFileSync(path.join(EVAL(), 'tuning.report.md'), '# the full-pool report\n')
+
+    const r = await runTune(['--level=low'])
+    expect(r.status).toBe(0)
+    expect(read('tuning.json')).toBe(SENTINEL)
+    // The full-set report is an artefact of the same run and just as clobberable.
+    expect(read('tuning.report.md')).toBe('# the full-pool report\n')
+    // Filed apart, the way run.js files `-lvl-<level>`.
+    expect(exists('tuning-lvl-low.report.md')).toBe(true)
+    expect(read('tuning-lvl-low.report.md')).toContain('Narrowed pool')
+    expect(read('tuning-lvl-low.report.md')).toContain('no `tuning.json` was written')
+  })
+
+  it('treats --limit as the same hazard by a different flag', async () => {
+    const SENTINEL = JSON.stringify({ version: 1, levers: { MMR_LAMBDA: 0.11, GATE_K: 11 } }) + '\n'
+    fs.writeFileSync(path.join(EVAL(), 'tuning.json'), SENTINEL)
+
+    const r = await runTune(['--limit=3'])
+    expect(r.status).toBe(0)
+    expect(read('tuning.json')).toBe(SENTINEL)
+    expect(exists('tuning-n3.report.md')).toBe(true)
+    // A head-slice of the default tier is not the tier, and the header keyed its
+    // reassurance off `--level` alone — so it called three of six records "the
+    // whole pool, which is what tuning wants". Matched on that exact clause: the
+    // report-only notice legitimately says "written from the whole pool or not
+    // at all", and a looser assertion catches its own fix.
+    expect(r.out).not.toContain('the whole pool, which is what tuning wants')
+    expect(r.out).toContain('3 of 6 records (--limit=3)')
+  })
+
+  it('stops the completion line from implying an unqualified result', async () => {
+    const r = await runTune(['--level=low'])
+    // The line a full run prints — the one that reads as "this is the answer".
+    expect(r.out).not.toContain('run npx docpilot index to inline the tuned levers')
+    expect(r.out).toContain('report only')
+    expect(r.out).toContain('narrowed pool')
+    // And it says how to get a real one.
+    expect(r.out).toContain('re-run `npx docpilot tune`')
+  })
+
+  it('names the withheld artefact before the sweep runs, not only after', async () => {
+    // Two minutes of grid is a long time to find out the run produces nothing
+    // shippable.
+    const r = await runTune(['--level=low'])
+    const banner = r.out.indexOf('REPORT ONLY')
+    const stageB = r.out.indexOf('stage B')
+    expect(banner).toBeGreaterThan(-1)
+    expect(banner).toBeLessThan(stageB)
+  })
+})
+
+
+// ─── merged from tests-fix-eval.js ───
+// ─── merged from tests-fix-eval.js ───
+// MERGE NOTE — every import this block needs is already in the header of
+// test/docpilot.test.js: `fs`, `os`, `path`, `vi`, `writeReport` (from
+// ../src/eval/report.js), `assembleIndex` (../src/theme/docpilot/store.js) and
+// `createRetrieval` (../src/theme/docpilot/retriever.js). `run.js` is reached by
+// dynamic import inside the case that needs it, for the reason the neighbouring
+// `eval run.js — --level and the lever fingerprint` block states: importing it
+// statically is safe, but the flags it reads are folded at import time and a
+// case that pins one wants its own module graph.
+//
+// The four defects below were found by adversarial review of the change that let
+// corpus-measured levers travel `tune` → `tuning.json` → `manifest.tuning` →
+// `createRetrieval({tuning})` → the browser. Three of them are the same mistake:
+// a consumer of the manifest that reads everything in it except the levers.
+
+/**
+ * `latest.json` is the ONE artefact the level partition missed.
+ *
+ * Everything else this change touched was filed apart the moment a run narrowed
+ * its pool — `-lvl-<level>` in run.js's `reportName`, `.<level>` in `bench emit`'s
+ * task path — because a `--level=low` run scores a different POPULATION and its
+ * numbers sit wherever ten easy questions put them. `latest.json` was rewritten
+ * unconditionally, which is the worst place for that rule to be missing: it is
+ * the path report.js documents as the stable entry point, so it is the one an
+ * external consumer reads without ever looking at `meta.level`.
+ */
+describe('eval reports — latest.json means the last UNFILTERED run', () => {
+  const fresh = () => fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-latest-'))
+
+  const meta = (over = {}) => ({
+    indexHash: 'abc12345',
+    model: 'm1',
+    provider: 'ollama',
+    promptHash: 'p1',
+    records: 60,
+    maxIterations: 4,
+    chunkCount: 100,
+    embedModel: 'e5',
+    numCtx: 8192,
+    fallback: false,
+    thinkSupported: true,
+    level: 'ultra',
+    levers: { GATE_K: 5 },
+    guard: { denseMode: 'cosine', tau: 0.42, tauLexical: 0.21, source: 'calibrated', calibratedAt: 'abc12345' },
+    ...over,
+  })
+  const summary = (over = {}) => ({ answerF1: 0.5, hallucinated: 0, misses: [], ...over })
+
+  /** writeReport prints; the suite does not need to read it. */
+  const quietly = (fn) => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      return fn()
+    } finally {
+      spy.mockRestore()
+    }
+  }
+
+  const run = (dir, name, m, s) =>
+    quietly(() => writeReport({ dir, name, meta: m, summary: s, rows: [] }))
+
+  const read = (dir, f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))
+
+  it('leaves the full-set score in latest.json when a smoke run follows it', () => {
+    const dir = fresh()
+    // The documented order of operations, and the one that broke it:
+    //   npx docpilot eval            → 60 records, the project's actual number
+    //   npx docpilot eval --level=low → 10 smoke lookups, minutes later
+    // The second used to overwrite the first, leaving the stable path holding
+    // 0.95 over ten questions where the project's number was 0.50 over sixty.
+    run(dir, 'report-abc12345-m1-p1.json', meta(), summary({ answerF1: 0.5 }))
+    run(dir, 'report-abc12345-m1-lvl-low-p1.json', meta({ level: 'low', records: 10 }), summary({ answerF1: 0.95 }))
+
+    const latest = read(dir, 'latest.json')
+    expect(latest.meta.level).toBe('ultra')
+    expect(latest.meta.records).toBe(60)
+    expect(latest.summary.answerF1).toBe(0.5)
+  })
+
+  it('files the narrowed run beside it, under its own tier', () => {
+    const dir = fresh()
+    run(dir, 'report-abc12345-m1-lvl-low-p1.json', meta({ level: 'low', records: 10 }), summary({ answerF1: 0.95 }))
+    run(dir, 'report-abc12345-m1-lvl-medium-p1.json', meta({ level: 'medium', records: 22 }), summary({ answerF1: 0.7 }))
+
+    // Not lost — findable, by the same `.<level>` rule the task files use.
+    expect(read(dir, 'latest.low.json').summary.answerF1).toBe(0.95)
+    expect(read(dir, 'latest.medium.json').meta.records).toBe(22)
+    // …and each tier keeps its own, rather than the tiers overwriting each other.
+    expect(fs.existsSync(path.join(dir, 'latest.json'))).toBe(false)
+  })
+
+  /**
+   * The asymmetry that keeps every existing consumer working: `ultra` is what
+   * "no flag" means, so it adds no segment anywhere — not to `reportName`, not to
+   * the bench task path, and not here.
+   */
+  it('keeps the unfiltered path byte-for-byte the one consumers already hard-code', () => {
+    const dir = fresh()
+    run(dir, 'report-abc12345-m1-p1.json', meta(), summary())
+    expect(fs.readdirSync(dir).filter((f) => f.startsWith('latest'))).toEqual(['latest.json'])
+  })
+
+  // Same `??` rule `levelOf` exists for. A report written before levels existed
+  // carries no `meta.level` and measured the whole set; reading the absence as
+  // anything else would file it under `latest.undefined.json` and leave the path
+  // every existing consumer reads empty on the upgrade.
+  it('reads a run with no meta.level as the full set', () => {
+    const dir = fresh()
+    const legacy = meta()
+    delete legacy.level
+    run(dir, 'report-abc12345-m1-legacy.json', legacy, summary({ answerF1: 0.44 }))
+    expect(read(dir, 'latest.json').summary.answerF1).toBe(0.44)
+  })
+})
+
+/**
+ * A value-taking flag written without its `=`.
+ *
+ * `arg()` matches `--name=` and nothing else, so `--level low` leaves `low` as a
+ * stray positional and the flag reads as ABSENT — and absent means `ultra`. So
+ * `docpilot eval --level low` scored all sixty records, stamped
+ * `meta.level: 'ultra'`, overwrote the full-set baseline (ultra adds no segment)
+ * and diffed itself against it, with the header line that names the pool
+ * suppressed for exactly that tier. `docpilot bench emit --config=base --level low`
+ * wrote its sixty tasks over `base.tasks.jsonl` the same way.
+ *
+ * cli.md: "An unknown tier is refused rather than defaulted, by every command
+ * that takes the flag." A bare flag is that promise; `parseLevelArg` cannot keep
+ * it, because by the time it is called the flag is already gone.
+ */
+describe('the eval commands — a value-taking flag written without its =', () => {
+  it('run.js names the flag and shows the = form', async () => {
+    const { VALUE_FLAGS, bareValueFlag } = await import('../src/eval/run.js')
+
+    expect(bareValueFlag(['node', 'run.js', '--level', 'low'])).toBe('level')
+    expect(bareValueFlag(['node', 'run.js', '--limit', '5'])).toBe('limit')
+    expect(bareValueFlag(['node', 'run.js', '--num-ctx', '4096'])).toBe('num-ctx')
+    expect(bareValueFlag(['node', 'run.js', '--models', 'a,b'])).toBe('models')
+    expect(bareValueFlag(['node', 'run.js', '--model', 'qwen3:8b'])).toBe('model')
+
+    // The example in the message is the wording the sibling commands use, so a
+    // reader who hits this in `eval` and again in `tune` reads one sentence.
+    expect(`--level takes a value: --level=${VALUE_FLAGS.level}`).toBe(
+      '--level takes a value: --level=low',
+    )
+  })
+
+  it('lets the = form, the boolean flags and a longer name through', async () => {
+    const { bareValueFlag } = await import('../src/eval/run.js')
+
+    // The whole point: `--level=low` must still reach `parseLevelArg`, which is
+    // what refuses `--level=hgih`.
+    expect(bareValueFlag(['node', 'run.js', '--level=low'])).toBeNull()
+    expect(bareValueFlag(['node', 'run.js', '--limit=5', '--num-ctx=8192'])).toBeNull()
+    // `has()` reads these, and for them the bare form IS the form.
+    expect(bareValueFlag(['node', 'run.js', '--gate-only', '--lexical', '--resume'])).toBeNull()
+    // Exact match, not a prefix: `--levels` is a different (unknown) flag and
+    // this check is not the place that has an opinion about it.
+    expect(bareValueFlag(['node', 'run.js', '--levels'])).toBeNull()
+    expect(bareValueFlag([])).toBeNull()
+  })
+
+  // `bareValueFlag` being right is half of it; the module has to CALL it, before
+  // `parseLevelArg` runs at module scope and defaults the tier away.
+  it('run.js refuses at module scope, above the flags it guards', () => {
+    const src = fs.readFileSync('src/eval/run.js', 'utf8')
+    const check = src.indexOf('const BARE = bareValueFlag(process.argv)')
+    expect(check).toBeGreaterThan(-1)
+    expect(src).toContain('die(`--${BARE} takes a value: --${BARE}=${VALUE_FLAGS[BARE]}`)')
+    // Above `RUN_LEVEL`, or the default has already been chosen by then.
+    expect(check).toBeLessThan(src.indexOf('RUN_LEVEL = parseLevelArg('))
+  })
+
+  /**
+   * The bench is checked by RUNNING it. Importing answer-bench.js starts a CLI —
+   * it dispatches on `process.argv[2]` at the top level and `die`s into
+   * `process.exit` — which is why the rest of this suite reads it as source.
+   */
+  describe('bench emit, as a process', () => {
+    const bench = async (...args) => {
+      const { spawnSync } = await import('node:child_process')
+      const r = spawnSync(process.execPath, ['src/eval/answer-bench.js', ...args], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+      })
+      return { status: r.status, out: `${r.stdout}${r.stderr}` }
+    }
+
+    it('refuses a bare --level with the = form, and exits 1', async () => {
+      const r = await bench('emit', '--config=base', '--level', 'low')
+      expect(r.out).toContain('--level takes a value: --level=low')
+      expect(r.status).toBe(1)
+      // It never got as far as emitting anything.
+      expect(r.out).not.toContain('task(s) →')
+    })
+
+    it('refuses every other flag that takes a value, not just --level', async () => {
+      // `--out` is the one with the same silent shape: bare, it falls through to
+      // the default task path and overwrites the file the last comparison was
+      // scored on.
+      expect((await bench('emit', '--config=base', '--out')).out).toContain('--out takes a value: --out=')
+      expect((await bench('score', '--tasks', 'a.jsonl')).out).toContain('--tasks takes a value: --tasks=')
+    })
+
+    it('still lets the = form reach parseLevelArg, which refuses a typo', async () => {
+      const r = await bench('emit', '--config=base', '--level=hgih')
+      expect(r.out).toContain('unknown level "hgih"')
+      expect(r.out).toContain('low, medium, high, xhigh, max, ultra')
+      expect(r.status).toBe(1)
+    })
+
+    it('still prints its usage when no mode is given', async () => {
+      expect((await bench()).out).toContain('usage: answer-bench.js emit|shard|score|runs')
+    })
+  })
+})
+
+/**
+ * Every command that MEASURES this deployment builds its retrieval from this
+ * deployment's levers.
+ *
+ * `run.js` was given `tuning: index.manifest.tuning` when the levers learned to
+ * travel; its two siblings were not. Read from the source because all three
+ * start a CLI on import — and asserted over EVERY `createRetrieval` call in each
+ * file rather than a known line, since the defect was one call site of two in
+ * calibrate.js and the next one added would be the same bug again.
+ */
+describe('the eval commands — retrieval is built from the manifest levers', () => {
+  const FILES = ['run.js', 'calibrate.js', 'answer-bench.js']
+
+  it.each(FILES)('%s passes manifest.tuning at every createRetrieval', (file) => {
+    const src = fs.readFileSync(`src/eval/${file}`, 'utf8')
+    const calls = src.match(/createRetrieval\(\{[^}]*\}/g) || []
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) expect(call).toContain('tuning: index.manifest.tuning')
+  })
+
+  /**
+   * WHAT THE OMISSION COST, on the fixture the neighbouring lever suite uses:
+   * six pages, all of them reachable, so the only thing deciding how many
+   * excerpts are primed is `GATE_K`.
+   *
+   * Those excerpts are not a detail of the bench — they become the `search_docs`
+   * observation, the `citable` set and `sources` in `<config>.tasks.jsonl`. So
+   * every answer-quality, support and citation number scored off that file was
+   * measured against a context the shipped page never sends, and filed under the
+   * tuned index's hash: the two indexes agree on it, because the hash is sha256
+   * over chunk id and text and says nothing about levers.
+   */
+  it('the package literal and a tuned manifest prime different evidence', () => {
+    const DIMS = 8
+    const GUARD = {
+      tau: 0.3,
+      tauLexical: 0.3,
+      wDense: 0.75,
+      wLexical: 0.25,
+      denseMode: 'cosine',
+      cosFloor: 0.44,
+      cosCeil: 0.64,
+      zexp: null,
+    }
+    const chunks = ['a', 'b', 'c', 'd', 'e', 'f'].map((letter) => ({
+      id: `${letter}#one`,
+      path: `/${letter}`,
+      anchor: 'one',
+      title: `Page ${letter.toUpperCase()}`,
+      breadcrumb: 'Docs',
+      kind: 'guide',
+      text: `The ${letter} widget is configured with a manifest and a token. `.repeat(12),
+      prev: null,
+      next: null,
+    }))
+    const index = assembleIndex({
+      manifest: {
+        version: 3,
+        hash: 'same-hash-either-way',
+        embedModel: null,
+        dims: null,
+        chunkCount: chunks.length,
+        // A vectorless fixture: the gate runs lexical-only, so this case needs no
+        // embedder and no network to make the point.
+        vectors: null,
+        pages: chunks.map((c) => ({ path: c.path, title: c.title, tail: 'Docs' })),
+        guard: GUARD,
+        tuning: { GATE_K: 6 },
+      },
+      shards: [chunks],
+      vectorBuffer: null,
+      dfDoc: { df: {} },
+    })
+
+    const scope = { kind: 'all', paths: [], label: 'All docs' }
+    const ask = { question: 'how is the widget configured with a token?', queryVec: null }
+    const primed = (over) =>
+      createRetrieval({ index, scope, guard: index.manifest.guard, ...over }).evaluate(ask).chunks
+        .length
+
+    // What the bench did: the manifest says 6, the module literal says 5.
+    expect(primed({})).toBe(5)
+    // What it does now.
+    expect(primed({ tuning: index.manifest.tuning })).toBe(6)
+  })
+})
+
+/**
+ * A bench result has to carry the configuration it measured — run.js's
+ * `leverFingerprint`, in the one place a `.jsonl` has to put it.
+ *
+ * Run end to end against a throwaway project: a vectorless index needs no
+ * embedder, so this is the whole `emit` path — loader, level filter, gate,
+ * observation, `buildMessages` — with nothing stubbed and nothing on the wire.
+ */
+describe('bench emit — the emitted tasks carry the levers they were primed under', () => {
+  const CHUNKS = ['a', 'b', 'c', 'd', 'e', 'f'].map((letter) => ({
+    id: `${letter}#one`,
+    path: `/${letter}`,
+    anchor: 'one',
+    title: `Page ${letter.toUpperCase()}`,
+    breadcrumb: 'Docs',
+    kind: 'guide',
+    text: `The ${letter} widget is configured with a manifest and a token. `.repeat(12),
+    prev: null,
+    next: null,
+  }))
+
+  /**
+   * A project on disk, laid out where the CLI's own defaults look: `docs/public/rag`
+   * for the index, `docpilot/` for the eval artefacts. Run directly rather than
+   * through `bin/docpilot.js`, so `cli-context` falls back to those defaults and
+   * no config file has to exist.
+   */
+  const project = (tuning) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-bench-'))
+    const rag = path.join(dir, 'docs', 'public', 'rag')
+    fs.mkdirSync(rag, { recursive: true })
+    fs.mkdirSync(path.join(dir, 'docpilot'), { recursive: true })
+    fs.writeFileSync(path.join(rag, 'chunks-00.json'), JSON.stringify(CHUNKS))
+    fs.writeFileSync(path.join(rag, 'df.json'), JSON.stringify({ df: {} }))
+    fs.writeFileSync(
+      path.join(rag, 'manifest.json'),
+      JSON.stringify({
+        version: 3,
+        hash: 'same-hash-either-way',
+        embedModel: null,
+        dims: null,
+        chunkCount: CHUNKS.length,
+        vectors: null,
+        shards: ['chunks-00.json'],
+        df: 'df.json',
+        pages: CHUNKS.map((c) => ({ path: c.path, title: c.title, tail: 'Docs' })),
+        guard: {
+          tau: 0.3,
+          tauLexical: 0.3,
+          wDense: 0.75,
+          wLexical: 0.25,
+          denseMode: 'cosine',
+          cosFloor: 0.44,
+          cosCeil: 0.64,
+          zexp: null,
+          source: 'provisional',
+          calibratedAt: null,
+        },
+        ...(tuning ? { tuning } : {}),
+      }),
+    )
+    fs.writeFileSync(
+      path.join(dir, 'docpilot', 'golden.jsonl'),
+      `${JSON.stringify({
+        id: 'q-1',
+        question: 'how is the widget configured with a token?',
+        expect: 'answer',
+        gold_answer: 'With a manifest and a token.',
+        gold_chunks: ['a#one'],
+        identifiers: [],
+        lang: 'en',
+      })}\n`,
+    )
+    return dir
+  }
+
+  const emit = async (dir, config) => {
+    const { spawnSync } = await import('node:child_process')
+    const entry = path.resolve(process.cwd(), 'src/eval/answer-bench.js')
+    const r = spawnSync(process.execPath, [entry, 'emit', `--config=${config}`], {
+      cwd: dir,
+      encoding: 'utf8',
+    })
+    if (r.status !== 0) throw new Error(`bench emit exited ${r.status}: ${r.stdout}${r.stderr}`)
+    const tasks = fs
+      .readFileSync(path.join(dir, 'docpilot', 'bench', `${config}.tasks.jsonl`), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l))
+    return { tasks, out: `${r.stdout}${r.stderr}` }
+  }
+
+  it('primes the tuned number of excerpts, and says which number it was', async () => {
+    const tuned = await emit(project({ GATE_K: 6, MMR_LAMBDA: 0.85 }), 'tuned')
+    const untuned = await emit(project(null), 'untuned')
+
+    // The observation, the citable set and `sources` are all this list.
+    expect(tuned.tasks[0].citable).toHaveLength(6)
+    expect(tuned.tasks[0].sources).toHaveLength(6)
+    expect(untuned.tasks[0].citable).toHaveLength(5)
+
+    // Same corpus, same hash, same prompt — the levers are the only thing that
+    // separates the two files, so they are the thing the file has to say.
+    expect(tuned.tasks[0].levers.GATE_K).toBe(6)
+    expect(tuned.tasks[0].levers.MMR_LAMBDA).toBe(0.85)
+    expect(untuned.tasks[0].levers.GATE_K).toBe(5)
+    expect(tuned.out).toContain('levers  k=6 lambda=0.85')
+  })
+
+  it('stamps a complete, stably ordered fingerprint on every task', async () => {
+    const { tasks } = await emit(project({ GATE_K: 6 }), 'stamped')
+    const levers = tasks[0].levers
+    // Every lever, not only the tuned ones: a file that names the two that moved
+    // and stays silent on the other six is not a record of a configuration.
+    for (const name of LEVER_NAMES) expect(levers).toHaveProperty(name)
+    // The excerpt ceiling belongs with them — it is what cuts each primed
+    // excerpt, so it moves the evidence the answerer is scored on.
+    expect(levers.searchChars).toBe(1200)
+    // Sorted, for the reason run.js sorts `leverFingerprint`: a consumer that
+    // compares two of these on a JSON string must not read a key reordering as a
+    // lever move.
+    expect(Object.keys(levers)).toEqual([...Object.keys(levers)].sort())
+    // On every line, because a `.jsonl` has no header and `cell()` and `shard()`
+    // both read it strictly one task per line. A file whose first task alone
+    // carried the levers would lose them to `--stage=2` filtering.
+    for (const t of tasks) expect(t.levers).toEqual(levers)
+  })
+})
+
+
+// ─── merged from tests-fix-allowlist.js ───
+// ── merged from tests-fix-allowlist.js ───────────────────────────────────────
+// `fs`, `os`, `path` are already imported in the header of test/docpilot.test.js
+// — do not add them again.
+
+/**
+ * The manifest-inlinable set is NOT the lever set (RAG-SPEC 7).
+ *
+ * `tuning.json` is a file a consumer commits and may hand-edit, and it rides into
+ * the same manifest the guard rides in. `tuningFor` used to allowlist all eight
+ * `LEVER_NAMES`, which left a hole the size of `CANDIDATES`: it sizes the lexical
+ * candidate list, `evaluate()` derives the gate's lexical evidence from
+ * `lexIds.slice(0, 3)`, so a hand-edited `CANDIDATES: 1` flipped a documented,
+ * answerable question from pass to refuse — no threshold named, no model called,
+ * and no warning printed. `docpilot tune` writes MMR_LAMBDA and GATE_K and nothing
+ * else, so those two are the only claims the file can honestly make.
+ */
+describe('tuning — only what `docpilot tune` measures may cross into the manifest', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-allowlist-'))
+  const doc = (levers) => ({
+    version: 1,
+    tunedAt: 'abc12345',
+    embedModel: 'bge-m3',
+    level: 'high',
+    records: 60,
+    levers,
+  })
+  const run = async (levers) => {
+    const { tuningFor } = await import('../src/build/build-rag-index.js')
+    const p = path.join(dir, 't.json')
+    fs.writeFileSync(p, JSON.stringify(doc(levers)))
+    const warnings = []
+    const out = tuningFor('abc12345', {
+      file: p,
+      embedModel: 'bge-m3',
+      warn: (m) => warnings.push(m),
+      note: () => {},
+    })
+    return { out, warnings: warnings.join(' '), count: warnings.length }
+  }
+
+  // The whole defect in one assertion: the levers beside it are good, so the file
+  // is not thrown away — but the value that could move a verdict does not ship.
+  it('drops a hand-edited CANDIDATES loudly and keeps the measured levers', async () => {
+    const { out, warnings, count } = await run({ MMR_LAMBDA: 0.6, GATE_K: 9, CANDIDATES: 1 })
+    expect(out).toEqual({ MMR_LAMBDA: 0.6, GATE_K: 9, source: 'tuned', tunedAt: 'abc12345' })
+    expect(out.CANDIDATES).toBeUndefined()
+    expect(count).toBe(1)
+    expect(warnings).toContain('CANDIDATES')
+  })
+
+  // The warning has to say WHY, or the operator reads it as a typo and re-adds the
+  // key: the point is that the number in this file was never measured on this corpus.
+  it('says the dropped lever is not something `docpilot tune` measures', async () => {
+    const { warnings } = await run({ MMR_LAMBDA: 0.6, GATE_K: 9, CANDIDATES: 1 })
+    expect(warnings).toContain('docpilot tune')
+    expect(warnings).toMatch(/not measured|never measured/i)
+    // …and it does not misfile it as a spelling mistake.
+    expect(warnings).not.toContain('unknown lever')
+  })
+
+  /**
+   * `CANDIDATES` is the one with a proven path to a flipped verdict, but the rule
+   * is the set, not the one key: every `LEVER_NAMES` name the sweep does not write
+   * is an unmeasured claim, and a later reader must not have to re-derive which of
+   * the six happens to be dangerous today.
+   */
+  it('drops every lever the sweep does not write, one warning each', async () => {
+    const { LEVER_NAMES } = await import('../src/theme/docpilot/retriever.js')
+    const unmeasured = LEVER_NAMES.filter((n) => n !== 'MMR_LAMBDA' && n !== 'GATE_K')
+    expect(unmeasured).toContain('CANDIDATES')
+    expect(unmeasured.length).toBe(6)
+    for (const name of unmeasured) {
+      const { out, warnings, count } = await run({ MMR_LAMBDA: 0.6, GATE_K: 9, [name]: 3 })
+      expect(out, name).toEqual({ MMR_LAMBDA: 0.6, GATE_K: 9, source: 'tuned', tunedAt: 'abc12345' })
+      expect(count, name).toBe(1)
+      expect(warnings, name).toContain(name)
+    }
+  })
+
+  // The file `docpilot tune` actually writes is the one case that must be silent:
+  // warning at a correct file on every build is how the warn column stops being read.
+  it('passes a legitimate {MMR_LAMBDA, GATE_K} file through untouched and unwarned', async () => {
+    const { out, count } = await run({ MMR_LAMBDA: 0.9, GATE_K: 8 })
+    expect(out).toEqual({ MMR_LAMBDA: 0.9, GATE_K: 8, source: 'tuned', tunedAt: 'abc12345' })
+    expect(count).toBe(0)
+  })
+
+  // What `buildTuningDoc` writes must be exactly what `tuningFor` accepts: if the
+  // sweep grows a third lever and this allowlist does not, `tune` starts writing a
+  // measured value that `index` silently drops.
+  it('accepts precisely the keys buildTuningDoc writes', async () => {
+    const { buildTuningDoc } = await import('../src/eval/tune.js')
+    const cell = { MMR_LAMBDA: 0.7, GATE_K: 6, retrievalF1: 0.5, recall8: 0.5, mrr: 0.5, n: 10 }
+    const written = buildTuningDoc({
+      indexHash: 'abc12345',
+      embedModel: 'bge-m3',
+      level: 'high',
+      records: 60,
+      chosen: cell,
+      baseline: cell,
+      cells: [cell],
+      sweptAt: '2026-01-01',
+    })
+    const { out, count } = await run(written.levers)
+    expect(count).toBe(0)
+    expect(Object.keys(written.levers).sort()).toEqual(['GATE_K', 'MMR_LAMBDA'])
+    expect(out).toEqual({ MMR_LAMBDA: 0.7, GATE_K: 6, source: 'tuned', tunedAt: 'abc12345' })
+  })
+
+  // The wall the narrower allowlist was modelled on, unchanged: thresholds are
+  // `calibrate`'s and the message still says so by name.
+  it('still drops the guard thresholds with the calibrate warning', async () => {
+    const { out, warnings, count } = await run({
+      MMR_LAMBDA: 0.9,
+      GATE_K: 8,
+      tau: 0.05,
+      tauLexical: 0.9,
+      wDense: 0.7,
+      wLexical: 0.9,
+    })
+    expect(out).toEqual({ MMR_LAMBDA: 0.9, GATE_K: 8, source: 'tuned', tunedAt: 'abc12345' })
+    expect(count).toBe(4)
+    expect(warnings).toContain('guard threshold')
+    expect(warnings).toContain('calibrate')
+    // A threshold is not merely unmeasured — it is forbidden, and keeps its own line.
+    expect(warnings).not.toContain('unmeasured lever')
+  })
+
+  // A typo is still a typo and still reads as one.
+  it('still names an unrecognised key an unknown lever', async () => {
+    const { out, warnings } = await run({ MMR_LAMBDA: 0.9, GATE_K: 8, denseMode: 3 })
+    expect(out).toEqual({ MMR_LAMBDA: 0.9, GATE_K: 8, source: 'tuned', tunedAt: 'abc12345' })
+    expect(warnings).toContain('unknown lever')
+    expect(warnings).toContain('denseMode')
+  })
+
+  // `source: 'tuned'` on an empty object claims the corpus was measured while every
+  // value resolves to the module literal anyway — so an all-unmeasured file is null.
+  it('returns null when only unmeasured levers were offered', async () => {
+    const { out } = await run({ CANDIDATES: 1, FUSED: 2 })
+    expect(out).toBeNull()
+  })
+})
+
+
+// ─── merged from tests-fix-ids.js ───
+// ─── merged from tests-fix-ids.js ───
+
+/**
+ * Paste this block into test/docpilot.test.js, next to `describe('chunker')`.
+ * `chunkMarkdown`, `slug`, `underPath` and `retrievalF1Loose` are all already
+ * imported at the top of that file; only `recallAtK` is new, and the import
+ * above folds into the existing `../src/eval/metrics.js` block.
+ *
+ * CHUNK IDENTITY. A chunk id is `<path>#<anchor>` plus, for the second and later
+ * parts of one long section, a suffix. That suffix used to be `-N` — which is
+ * also how a REPEATED HEADING is disambiguated, VitePress-style, so the two
+ * meanings shared one namespace and collided. Every case below is an executed
+ * reproduction of what that cost, plus the three smaller identity defects found
+ * with it.
+ *
+ * NOTE FOR WHOEVER MERGES THIS: the existing assertion
+ *   expect(underPath('guide/auth#request-2', 'guide/auth#request')).toBe(true)
+ * in `describe('metrics')` encodes the OLD spelling and must become `#request~2`
+ * (see the last `it` here, which pins both halves of the new rule).
+ */
+describe('chunker — the two things `-N` used to mean', () => {
+  const chunk = (src, path = '/p') => chunkMarkdown({ src, path, kind: 'guide' })
+  const ids = (src, path) => chunk(src, path).chunks.map((c) => c.id)
+
+  // Bodies have to clear MERGE_BELOW_TOKENS or rule 4 folds the sections into
+  // one and there is no second heading left to disambiguate.
+  const long = Array.from({ length: 26 }, (_, i) => `Paragraph ${i} ${'x'.repeat(220)}`).join('\n\n')
+  const mid = Array.from({ length: 6 }, (_, i) => `Other ${i} ${'y'.repeat(200)}`).join('\n\n')
+
+  /**
+   * The build-death case. Three `## Parameters` on one page, the first long
+   * enough to pack into five parts, used to produce
+   * `[parameters, parameters-2 … parameters-5, parameters-1, parameters-2]` and
+   * kill `build-rag-index.js` with `duplicate chunk id: api#parameters-2` — an
+   * id that appears nowhere in the author's source.
+   */
+  it('does not collide a split section with a repeated heading', () => {
+    const src = `# API\n\n## Parameters\n\n${long}\n\n## Parameters\n\n${mid}\n\n## Parameters\n\n${mid}`
+    const out = ids(src, '/api')
+    expect(out).toEqual([
+      'api#parameters',
+      'api#parameters~2',
+      'api#parameters~3',
+      'api#parameters~4',
+      'api#parameters~5',
+      'api#parameters-1',
+      'api#parameters-2',
+    ])
+    expect(new Set(out).size).toBe(out.length)
+  })
+
+  /** `-N` keeps VitePress's meaning, and only that meaning. */
+  it('still disambiguates repeated headings with -N', () => {
+    const src = `# P\n\n## Use cases\n\n${'x'.repeat(600)}\n\n## Use cases\n\n${'y'.repeat(600)}`
+    const anchors = chunk(src).chunks.map((c) => c.anchor)
+    expect(anchors).toContain('use-cases')
+    expect(anchors).toContain('use-cases-1')
+    expect(new Set(anchors).size).toBe(anchors.length)
+  })
+
+  /**
+   * The separator has to be one `slug()` can never emit, or the disambiguation
+   * path would start producing it and the namespaces would merge again.
+   */
+  it('uses a separator slug() strips', () => {
+    expect(slug('a ~ b')).not.toContain('~')
+    expect(slug('~~~')).toBe('')
+    const parts = ids(`# P\n\n## Long\n\n${long}`)
+    expect(parts.length).toBeGreaterThan(1)
+    expect(parts.slice(1).every((id) => /~\d+$/.test(id))).toBe(true)
+  })
+
+  /**
+   * The suffix lives in the ID only. `session.js` builds the citation href from
+   * the `anchor` FIELD, so a `~` must never reach a URL — which is what lets the
+   * separator be chosen for id-uniqueness rather than for link syntax.
+   */
+  it('keeps the suffix out of the anchor every part shares', () => {
+    const { chunks } = chunk(`# P\n\n## Long\n\n${long}`)
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(new Set(chunks.map((c) => c.anchor))).toEqual(new Set(['long']))
+    expect(chunks.some((c) => c.anchor.includes('~'))).toBe(false)
+  })
+
+  /**
+   * DEFECT 2 — VitePress custom anchors. `## Title {#custom-id}` is consumed by
+   * markdown-it-attrs and rendered as `id="custom-id"`. Reading the line whole
+   * left the markup in the citation label and slugged it into the anchor:
+   * artificial-intelligence.md:215 produced
+   * `how-to-get-api-keys-for-ai-models-how-to-get-api-keys-for-ai-models`, a
+   * fragment matching no element, so the citation landed at the top of the page.
+   */
+  it('takes a VitePress custom anchor verbatim and off the title', () => {
+    const src =
+      '# AI\n\nlead\n\n### How to Get API Keys for AI Models {#how-to-get-api-keys-for-ai-models}\n\nBody.'
+    const [, section] = chunk(src, '/ai').chunks
+    expect(section.anchor).toBe('how-to-get-api-keys-for-ai-models')
+    expect(section.title).toBe('How to Get API Keys for AI Models')
+    expect(section.id).toBe('ai#how-to-get-api-keys-for-ai-models')
+    expect(section.text).not.toContain('{#')
+  })
+
+  /** Verbatim means verbatim — never re-slugged, or the href stops resolving. */
+  it('does not slug a custom anchor', () => {
+    const { chunks } = chunk('# P\n\n## Whatever It Says {#POST_v1--Items}\n\nBody.')
+    expect(chunks[chunks.length - 1].anchor).toBe('POST_v1--Items')
+  })
+
+  /**
+   * A heading ABOUT the syntax ends in a backtick, not a brace, so the
+   * end-anchored pattern leaves it alone. A heading that is nothing BUT an id
+   * stays untouched too: an empty title reads downstream as the lead section.
+   */
+  it('leaves a heading that only mentions the syntax alone', () => {
+    const { chunks } = chunk('# P\n\n## The `{#id}` shorthand\n\nBody.')
+    const last = chunks[chunks.length - 1]
+    expect(last.title).toBe('The `{#id}` shorthand')
+    expect(last.anchor).toBe('the-id-shorthand')
+  })
+
+  /** Two headings claiming the same custom id still get distinct chunk ids. */
+  it('disambiguates a repeated custom anchor rather than failing the build', () => {
+    const src = `# P\n\n## One {#dup}\n\n${'x'.repeat(600)}\n\n## Two {#dup}\n\n${'y'.repeat(600)}`
+    const out = ids(src)
+    expect(out).toContain('p#dup')
+    expect(out).toContain('p#dup-1')
+    expect(new Set(out).size).toBe(out.length)
+  })
+
+  /**
+   * A disambiguated anchor is RESERVED, not merely counted. Two `## Parameters`
+   * take `parameters` and `parameters-1`; a custom `{#parameters-1}` — now
+   * reachable verbatim — and a literal `## Parameters 1` both want that same
+   * string, and a bare per-base counter would hand it out twice.
+   */
+  it('reserves a disambiguated anchor against a heading that spells it directly', () => {
+    const two = `# P\n\n## Parameters\n\n${'x'.repeat(600)}\n\n## Parameters\n\n${'y'.repeat(600)}`
+    for (const third of ['## Parameters 1', '## Anything {#parameters-1}']) {
+      const out = ids(`${two}\n\n${third}\n\n${'z'.repeat(600)}`)
+      expect(out).toContain('p#parameters')
+      expect(out).toContain('p#parameters-1')
+      expect(new Set(out).size).toBe(out.length)
+    }
+  })
+
+  /**
+   * DEFECT 3 — a heading with no letters and no digits. `slug()` keeps only
+   * `\p{L}\p{N}\s-`, so `## 🚀` slugs to '' — the anchor an untitled lead section
+   * already carries. Skipping the `anchorSeen` bookkeeping for that one value
+   * gave both chunks the id `p#`, pointed the lead's `next` at itself, and killed
+   * the build with `duplicate chunk id: /p#`.
+   */
+  it('registers the empty slug like any other anchor', () => {
+    const { chunks } = chunk('Lead paragraph here.\n\n## 🚀\n\nRocket section body.\n')
+    expect(chunks).toHaveLength(2)
+    expect(chunks.map((c) => c.id)).toEqual(['p#', 'p#-1'])
+    expect(chunks[0].next).toBe('p#-1')
+    expect(chunks[1].next).toBeNull()
+  })
+
+  /** With no lead section to collide with, the emoji heading keeps the clean id. */
+  it('leaves the first empty-slug section a fragment-less page link', () => {
+    const { chunks } = chunk('## 🚀\n\nRocket section body.\n')
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0].id).toBe('p#')
+    expect(chunks[0].anchor).toBe('')
+  })
+
+  /**
+   * DEFECT 4 — FAQ answers bypassed every splitter. Appended after `hardSplit`
+   * had run, an oversized FaqAccordion answer met nothing but the assertion at
+   * the end of `chunkMarkdown` and killed `docpilot index` with
+   * `chunk exceeds MAX_CHUNK_CHARS after rule 7: p#faq-1 (8109)` — blaming a rule
+   * that never ran on this path.
+   */
+  it('runs FAQ answers through the same ceiling as a section', () => {
+    const faq = (answer) => `Intro.\n\n<FaqAccordion :items="[{ question: 'Why?', answer: '${answer}' }]" />\n`
+    expect(() => chunk(faq('word '.repeat(3000)))).not.toThrow()
+    const parts = chunk(faq('word '.repeat(3000))).chunks.filter((c) => c.kind === 'faq')
+    expect(parts.length).toBeGreaterThan(1)
+    for (const c of parts) expect(c.text.length).toBeLessThanOrEqual(8000)
+    expect(parts.map((c) => c.id)).toEqual(['p#faq-1', 'p#faq-1~2'])
+    // One anchor for the whole answer, exactly as a split section keeps one.
+    expect(new Set(parts.map((c) => c.anchor))).toEqual(new Set(['faq-1']))
+  })
+
+  /** An answer that fits keeps the id it always had — no drift for real corpora. */
+  it('leaves a normal FAQ answer as one chunk with its old id', () => {
+    const src = `Intro.\n\n<FaqAccordion :items="[{ question: 'Why?', answer: 'Because.' }]" />\n`
+    const { chunks } = chunk(src)
+    const parts = chunks.filter((c) => c.kind === 'faq')
+    expect(parts.map((c) => c.id)).toEqual(['p#faq-1'])
+    expect(parts[0].text).toBe('/p — Why?\nBecause.')
+  })
+
+  /** Nothing this function emits may ever repeat an id — that is the build gate. */
+  it('never emits a duplicate id on a page that stresses every rule', () => {
+    const src = [
+      'Lead.',
+      '## 🚀',
+      'Rocket.',
+      '## Parameters',
+      long,
+      '## Parameters',
+      mid,
+      '## Parameters {#parameters-1}',
+      mid,
+      `<FaqAccordion :items="[{ question: 'Q?', answer: '${'word '.repeat(3000)}' }]" />`,
+    ].join('\n\n')
+    const out = ids(src)
+    expect(new Set(out).size).toBe(out.length)
+  })
+})
+
+describe('underPath — a split section is the same section, a repeated heading is not', () => {
+  /**
+   * The metric half of the same defect. While continuations were `-N`, gold
+   * pinned at `api/users#parameters` was credited for retrieving
+   * `api/users#parameters-1` — a DIFFERENT endpoint's Parameters section, which
+   * the answer could not have used. `recallAtK` returned 1 and
+   * `retrievalF1Loose` returned {p:1,r:1,f1:1} on a miss, inflating recall@8,
+   * MRR, retrieval F1 and citation precision together — and `docpilot tune`
+   * sweeps against exactly that objective.
+   */
+  it('accepts ~N continuations and rejects -N repeats', () => {
+    expect(underPath('api/users#parameters~2', 'api/users#parameters')).toBe(true)
+    expect(underPath('api/users#parameters~10', 'api/users#parameters')).toBe(true)
+    expect(underPath('api/users#parameters-1', 'api/users#parameters')).toBe(false)
+    expect(underPath('api/users#parameters-manually', 'api/users#parameters')).toBe(false)
+    expect(underPath('api/users#parameters', 'api/users#parameters')).toBe(true)
+  })
+
+  it('scores a repeated heading as the miss it is', () => {
+    const gold = ['api/users#parameters']
+    expect(recallAtK(['api/users#parameters-1'], gold, 8)).toBe(0)
+    expect(retrievalF1Loose(['api/users#parameters-1'], gold)).toEqual({ p: 0, r: 0, f1: 0 })
+    // ...and still credits the real continuation part.
+    expect(recallAtK(['api/users#parameters~2'], gold, 8)).toBe(1)
+  })
+
+  /** The suffix rule stays off bare paths: a sibling page must never match. */
+  it('never matches a bare page path through a suffix', () => {
+    expect(underPath('guide/auth~2', 'guide/auth')).toBe(false)
+    expect(underPath('guide/auth-2#x', 'guide/auth')).toBe(false)
+    expect(underPath('guide/authorisation#x', 'guide/auth')).toBe(false)
+    expect(underPath('guide/auth/oauth#step', 'guide/auth')).toBe(true)
+  })
+
+  /** FAQ ordinals live in the `-N` namespace, so `faq-1` must not swallow `faq-11`. */
+  it('keeps FAQ ordinals distinct from FAQ continuations', () => {
+    expect(underPath('p#faq-1~2', 'p#faq-1')).toBe(true)
+    expect(underPath('p#faq-11', 'p#faq-1')).toBe(false)
+  })
+})
+
+
+// ─── merged from tests-fix-normalise.js ───
+/**
+ * Paste this block into test/docpilot.test.js, next to `describe('normalise —
+ * llm content tags')`. It adds no imports: `normaliseMarkdown` and
+ * `chunkMarkdown` are already imported at the top of that file.
+ */
+
+/**
+ * Three ways the pipeline used to publish a Q&A the page never asserted, or
+ * point a citation at a fragment that does not exist.
+ *
+ * 1. The FAQ was extracted from the RAW page, before `applyLlmTags` ran. An
+ *    `<llm-exclude>` wrapped around a FaqAccordion island therefore excluded
+ *    nothing: the tag pass never saw the island, `stripVue` deleted the tag from
+ *    the prose stream a step later so the page looked redacted, and the Q&A was
+ *    already in `faq[]` on its way to an indexed, citable `#faq-n` chunk.
+ * 2. The same scan read fenced code, so a page DOCUMENTING the component turned
+ *    its own `<FaqAccordion :items="[…]" />` sample into a real FAQ chunk —
+ *    fabricated content, indistinguishable downstream from an authored answer.
+ * 3. `flattenLinks` appended the route to a heading whose text is a link, so the
+ *    chunker slugged the destination into the anchor. VitePress builds its
+ *    anchor from the heading's rendered TEXT, so every such citation pointed at
+ *    a fragment that exists nowhere — four sections of one real page — under a
+ *    label with the raw route printed inside it.
+ *
+ * The fence tests underneath pin the scan those first two now depend on: it
+ * closes a fence on CommonMark's rule instead of flipping a boolean, because a
+ * fence shown inside another inverted the boolean and inverted the meaning of
+ * every line after the sample.
+ */
+describe('normalise — FAQ islands, heading links and nested fences', () => {
+  const island = (q, a) => `<FaqAccordion :items="[{ question: '${q}', answer: '${a}' }]" />`
+  const chunk = (src) => chunkMarkdown({ src, path: '/p', kind: 'guide' })
+
+  it('honours <llm-exclude> around a FaqAccordion island', () => {
+    const src = [
+      '# Page',
+      '',
+      'Public intro.',
+      '',
+      '<llm-exclude>',
+      island('What is the internal rate limit?', 'Do not publish: 50/day on the internal key.'),
+      '</llm-exclude>',
+      '',
+      '## Next',
+      '',
+      'after',
+    ].join('\n')
+
+    expect(normaliseMarkdown(src).faq).toEqual([])
+    const { chunks } = chunk(src)
+    // The exclusion has to hold on the OUTPUT, not just in faq[]: the whole
+    // point of the tag is that nothing downstream ever sees the text.
+    expect(chunks.map((c) => c.kind)).not.toContain('faq')
+    expect(chunks.map((c) => c.id)).not.toContain('p#faq-1')
+    for (const c of chunks) expect(c.text).not.toContain('Do not publish')
+    // Excluding the island must not have taken the page with it.
+    expect(chunks.map((c) => c.title)).toEqual(['Page', 'Next'])
+  })
+
+  it('does not turn a fenced sample of the component into a real FAQ chunk', () => {
+    const src = [
+      '# Page',
+      '',
+      'Drop the component into any page:',
+      '',
+      '```vue',
+      island('Sample question?', 'Sample answer.'),
+      '```',
+      '',
+      '## Next',
+      '',
+      'after',
+    ].join('\n')
+
+    expect(normaliseMarkdown(src).faq).toEqual([])
+    const { chunks } = chunk(src)
+    expect(chunks.map((c) => c.kind)).not.toContain('faq')
+    // The sample is documentation and stays in the prose chunk verbatim — the
+    // fix is that it is not ALSO read as an assertion the page made.
+    expect(chunks[0].text).toContain("question: 'Sample question?'")
+  })
+
+  it('still extracts a real <script setup> island, which is how the corpus writes one', () => {
+    const src = [
+      '# Plugin',
+      '',
+      '<script setup>',
+      'const faqItems = [',
+      "  { question: 'Is the plugin free?', answer: 'There is a free tier.' },",
+      "  { question: 'Can I customize it?', answer: 'Yes, through the theme.' },",
+      ']',
+      '</script>',
+      '',
+      '## FAQ',
+      '',
+      '<FaqAccordion :items="faqItems" :single-open="true" />',
+    ].join('\n')
+
+    expect(normaliseMarkdown(src).faq).toEqual([
+      { question: 'Is the plugin free?', answer: 'There is a free tier.' },
+      { question: 'Can I customize it?', answer: 'Yes, through the theme.' },
+    ])
+    const faq = chunk(src).chunks.filter((c) => c.kind === 'faq')
+    expect(faq.map((c) => c.id)).toEqual(['p#faq-1', 'p#faq-2'])
+    expect(faq[0].text).toBe('Plugin — Is the plugin free?\nThere is a free tier.')
+  })
+
+  // The pattern tolerates 40 characters between `question:` and `answer:`, so the
+  // unfenced text is matched in RUNS. Joining the prose either side of a skipped
+  // fence would pair a question with an answer the document never put near it.
+  it('never pairs a question with an answer from the other side of a fence', () => {
+    const src = [
+      '# Page',
+      '',
+      "<FaqAccordion :items=\"[{ question: 'Left?' }]\" />",
+      '',
+      '```js',
+      'const x = 1',
+      '```',
+      '',
+      "<FaqAccordion :items=\"[{ answer: 'Right.' }]\" />",
+    ].join('\n')
+    expect(normaliseMarkdown(src).faq).toEqual([])
+  })
+
+  it('slugs a linked heading to the anchor VitePress actually renders', () => {
+    const src = [
+      '# Tutorials and Examples',
+      '',
+      '## Available How-To Guides',
+      '',
+      'g'.repeat(600),
+      '',
+      '### [Template Modifications](/extensions/tutorials/how-to/template-modifications)',
+      '',
+      'Learn how to modify templates, and see [Auth](/getting-started/authentication).',
+      'x'.repeat(600),
+    ].join('\n')
+
+    const { chunks } = chunk(src)
+    const c = chunks.find((x) => x.title === 'Template Modifications')
+    expect(c).toBeDefined()
+    expect(c.anchor).toBe('template-modifications')
+    expect(c.id).toBe('p#template-modifications')
+    // The route must be nowhere in the anchor, the id, or the label a citation
+    // row prints — all three came from the heading line.
+    for (const x of chunks) {
+      expect(x.anchor).not.toContain('extensionstutorialshow-to')
+      expect(x.title).not.toContain('/extensions/')
+    }
+    // A link in the BODY is unchanged: that route is content the model cites.
+    expect(c.text).toContain('Auth (/getting-started/authentication)')
+  })
+
+  it('keeps the surrounding words of a partly linked heading, and drops only the route', () => {
+    const src = `# P\n\n## See [the guide](/guide) first\n\n${'y'.repeat(600)}`
+    const c = chunk(src).chunks[0]
+    expect(c.title).toBe('See the guide first')
+    expect(c.anchor).toBe('see-the-guide-first')
+  })
+
+  it('leaves a linked heading inside a fenced sample verbatim', () => {
+    const src = ['# P', '', '```md', '## [Linked](/route)', '```', '', 'tail'].join('\n')
+    expect(normaliseMarkdown(src).text).toContain('## [Linked](/route)')
+  })
+
+  /**
+   * A ```` ```` ```` wrapper around a ``` sample is what every page documenting
+   * this pipeline contains. The old toggle flipped on the inner fence, so the
+   * lines after the sample read as code and `applyLlmTags` copied an
+   * `<llm-exclude>` block straight through — the same class of failure as the
+   * FAQ leak above, from the other direction.
+   */
+  it('honours <llm-exclude> after a fence shown inside another fence', () => {
+    const src = [
+      '# P',
+      '',
+      '````md',
+      '```vue',
+      '<script setup>',
+      'const x = 1',
+      '````',
+      '',
+      '## Two',
+      '',
+      '<llm-exclude>',
+      'SECRET rate limit',
+      '</llm-exclude>',
+      '',
+      'public tail',
+    ].join('\n')
+    const { text } = normaliseMarkdown(src)
+    expect(text).not.toContain('SECRET')
+    expect(text).toContain('public tail')
+  })
+
+  // The other parity: the sample's body read as page markup, so `stripVue` took
+  // an unterminated `<script>` in a snippet as a real island opener and dropped
+  // every line to end of file — two whole sections, silently.
+  it('does not read a documented <script> snippet as a real island', () => {
+    const src = [
+      '# P',
+      '',
+      '````md',
+      '```vue',
+      '<script setup>',
+      '```',
+      '````',
+      '',
+      '## Two',
+      '',
+      'body two',
+      '',
+      '## Three',
+      '',
+      'body three',
+    ].join('\n')
+    const { text } = normaliseMarkdown(src)
+    expect(text).toContain('body two')
+    expect(text).toContain('body three')
   })
 })

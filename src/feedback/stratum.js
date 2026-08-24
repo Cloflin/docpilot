@@ -61,10 +61,18 @@ export function suggest(c) {
     })
   }
 
-  // 2. MEASURED ON A DIFFERENT INSTRUMENT. A lexical-only turn had no dense
-  //    channel, so its G was scored against tauLexical. Calibrating tau with it
-  //    would compare two numbers that do not mean the same thing.
-  if (gate.mode === 'lexical-only') {
+  // 2. MEASURED ON A DIFFERENT INSTRUMENT. A turn whose embedder was DOWN had
+  //    no dense channel, so its G was scored against tauLexical while every
+  //    other record of the same deployment was scored against tau. Calibrating
+  //    with it would compare two numbers that do not mean the same thing.
+  //
+  //    `degraded`, not the mode: a site built with `embed: false` runs every
+  //    turn lexical-only by design, `docpilot calibrate` sweeps `tauLexical`
+  //    there and nothing else, and those records are the probe set for exactly
+  //    the threshold that gate consults. Dropping them left that site's
+  //    feedback loop proposing nothing, forever, with a note claiming an outage
+  //    that never happened.
+  if (gate.mode === 'lexical-only' && gate.degraded !== false) {
     return out('none', null, [], {
       needsReview: true,
       note: 'retrieval was degraded (lexical-only) — G is not comparable to tau',
@@ -199,7 +207,11 @@ export function suggest(c) {
 function fmtMargin(gate) {
   if (typeof gate.G !== 'number' || typeof gate.tau !== 'number') return 'unknown'
   const d = gate.G - gate.tau
-  return `${d >= 0 ? '+' : ''}${d.toFixed(3)} against tau`
+  // The record's `tau` is whatever threshold the turn was actually scored
+  // against, and on a lexical-only turn that is `tauLexical`. A reviewer acts on
+  // this sentence, and naming the wrong threshold is how one gets moved in the
+  // wrong file.
+  return `${d >= 0 ? '+' : ''}${d.toFixed(3)} against ${gate.mode === 'lexical-only' ? 'tauLexical' : 'tau'}`
 }
 
 function out(target, stratum, stratumOptions, extra) {

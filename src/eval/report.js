@@ -11,6 +11,26 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { DEFAULT_RUN_LEVEL } from './levels.js'
+
+/**
+ * The pool a report measured.
+ *
+ * THE `??` IS THE WHOLE FEATURE. Every report written before levels existed has
+ * no `meta.level`, and every one of them measured the entire golden set — which
+ * is exactly what a run with no `--level` measures today. Read the absence as
+ * anything else (`null`, `'high'`, the string `'undefined'`) and it stops
+ * matching the unfiltered runs that follow it: `previousReport` finds no
+ * candidate, `diffSummaries` gets no `prev`, and the report history of every
+ * existing consumer goes dark on the upgrade — silently, because a report with
+ * no "changes since the previous run" section looks exactly like the first run
+ * of a new index.
+ *
+ * One function, called from both readers, so the two can never disagree about
+ * what an old file meant.
+ */
+const levelOf = (m) => m?.level ?? DEFAULT_RUN_LEVEL
+
 /** Metrics where a larger number is better. Everything else reads the other way. */
 const HIGHER_IS_BETTER = new Set([
   'retrievalF1',
@@ -54,9 +74,10 @@ const fmt = (v) => {
 }
 
 /**
- * Find the newest report for the same (index, model) pair, whatever prompt it
- * used. A prompt change is not a reason to hide the comparison — it is a reason
- * to label every delta in it, which is what §6 asks for.
+ * Find the newest report for the same (index, model) pair and the same golden
+ * pool, whatever prompt it used. A prompt change is not a reason to hide the
+ * comparison — it is a reason to label every delta in it, which is what §6 asks
+ * for. A different pool is a reason to hide it: see `levelOf`.
  */
 export function previousReport(dir, meta) {
   if (!fs.existsSync(dir)) return null
@@ -76,6 +97,20 @@ export function previousReport(dir, meta) {
       // "changes since the previous run" that are really the two channels, which
       // is the exact confusion the separate filename was introduced to prevent.
       if (Boolean(doc.meta?.lexical) !== Boolean(meta.lexical)) continue
+      // `lexical` is true for two different reasons and only one of them has a
+      // hybrid twin. A diagnostic run on a vector-bearing index and the standing
+      // measurement of a `--no-embed` deployment agree on the flag, the corpus
+      // hash and the model — and comparing them reports as "changes since the
+      // previous run" the difference between an experiment and a deployment.
+      if (Boolean(doc.meta?.vectorlessIndex) !== Boolean(meta.vectorlessIndex)) continue
+      // A level-filtered run scores a DIFFERENT POPULATION, not a smaller sample
+      // of the same one: `--level=low` is ten smoke lookups, and its answerF1
+      // sits wherever ten easy questions put it. Diffed against the full set the
+      // deltas are the difference between two question lists, attributed to
+      // whatever was changed in between — every number in the table a lie, with
+      // no marker on it. Partitioned rather than labelled `incomparable` for
+      // that reason: there is nothing here worth reading.
+      if (levelOf(doc.meta) !== levelOf(meta)) continue
       return doc
     } catch {
       // A half-written report is not a comparison; skip it.
@@ -102,16 +137,41 @@ function markdown({ meta, summary, diff, incomparable, rows }) {
   const L = []
   L.push(`# DocPilot eval — ${meta.model}`)
   L.push('')
-  L.push(`- index \`${meta.indexHash}\` · ${meta.chunkCount} chunks · embed \`${meta.embedModel}\``)
-  L.push(`- prompt \`${meta.promptHash}\` · records ${meta.records} · maxIterations ${meta.maxIterations}`)
+  // `embed null` on a vectorless index reads as a bug rather than as a mode, and
+  // this line is the first thing anyone opening the report looks at. The two
+  // reasons a run is lexical are said apart for the same reason `previousReport`
+  // separates them: one has a hybrid twin to be read against and the other is the
+  // whole of what its deployment does.
+  L.push(
+    `- index \`${meta.indexHash}\` · ${meta.chunkCount} chunks · ` +
+      (meta.vectorlessIndex
+        ? 'no vectors — **lexical-only index** (`embed: false`)'
+        : `embed \`${meta.embedModel}\`${meta.lexical ? ' · **dense channel off for this run**' : ''}`),
+  )
+  // WHICH POOL. `records 12` is not enough to tell a smoke run from a full set
+  // that lost 48 questions, and the two are read very differently. Said only
+  // when it is not the whole set, so an unfiltered report renders byte for byte
+  // as it did before levels existed and the history stays diffable by eye.
+  L.push(
+    `- prompt \`${meta.promptHash}\` · records ${meta.records}` +
+      (levelOf(meta) === DEFAULT_RUN_LEVEL ? '' : ` · level \`${meta.level}\``) +
+      ` · maxIterations ${meta.maxIterations}`,
+  )
   L.push(
     `- transport ${meta.fallback ? '**fallback** (no tool calling)' : 'native tools'}` +
       `, think ${meta.thinkSupported ? 'on' : 'unsupported'}` +
       (meta.numCtx ? `, num_ctx \`${meta.numCtx}\`` : ''),
   )
+  // WHICH THRESHOLD GATED THESE ROWS. On a lexical-only run every verdict was
+  // `G = L` against `tauLexical`, and printing `tau` alone named the one number
+  // nothing consulted — while `denseMode` describes a channel that never ran.
   L.push(
-    `- guard mode \`${meta.guard.denseMode}\` tau \`${meta.guard.tau}\` ` +
-      `source \`${meta.guard.source}\` calibratedAt \`${meta.guard.calibratedAt ?? 'null'}\``,
+    meta.lexical
+      ? `- guard tauLexical \`${meta.guard.tauLexical}\` ` +
+        `source \`${meta.guard.source}\` calibratedAt \`${meta.guard.calibratedAt ?? 'null'}\`` +
+        `${meta.vectorlessIndex ? '' : ` (tau \`${meta.guard.tau}\`, not consulted by this run)`}`
+      : `- guard mode \`${meta.guard.denseMode}\` tau \`${meta.guard.tau}\` ` +
+        `source \`${meta.guard.source}\` calibratedAt \`${meta.guard.calibratedAt ?? 'null'}\``,
   )
   L.push('')
 
@@ -208,6 +268,12 @@ function siblingMismatches(dir, meta) {
     // Same reason as in `previousReport`: a lexical-only run is not a sibling of
     // a hybrid one, it is a different experiment.
     if (Boolean(m.lexical) !== Boolean(meta.lexical)) continue
+    // And the same reason again: a matrix row that ran a different pool is not a
+    // row of this matrix. `m.records` below would usually catch it — two pools
+    // rarely hold the same count — but "usually" is not a partition, and when
+    // the counts do collide the mismatch report reads as three comparable models
+    // measured on two different question lists.
+    if (levelOf(m) !== levelOf(meta)) continue
     if (m.promptHash !== meta.promptHash || m.records !== meta.records) continue
 
     const diffs = []
@@ -235,6 +301,11 @@ export function writeReport({ dir, name, meta, summary, rows }) {
     if (JSON.stringify(prev.meta.levers) !== JSON.stringify(meta.levers)) {
       incomparable.push('Levers changed')
     }
+    // Still needed, and it means something narrower than it used to. `prev` is
+    // now guaranteed to be the same pool, so a count that moved is the golden
+    // set having GROWN inside that pool — new questions the previous number
+    // never faced. Level partitions the population; this guards growth within a
+    // partition, and neither subsumes the other.
     if (prev.meta.records !== meta.records) {
       incomparable.push(`Golden changed: ${prev.meta.records} → ${meta.records} records`)
     }
@@ -251,8 +322,26 @@ export function writeReport({ dir, name, meta, summary, rows }) {
     path.join(dir, name.replace(/\.json$/, '.md')),
     markdown({ meta, summary, diff, incomparable, rows }),
   )
-  // Kept for the skill and for anything that still reads the old path.
-  fs.writeFileSync(path.join(dir, 'latest.json'), JSON.stringify(doc, null, 1))
+  /**
+   * `latest.json` MEANS "the last unfiltered run", and a narrowed run is filed
+   * beside it as `latest.<level>.json`.
+   *
+   * It is the one artefact this change did not partition, and it is the one every
+   * external consumer reads — the skill, and anything holding the old path. Left
+   * unconditional, `npx docpilot eval` followed by `npx docpilot eval --level=low`
+   * left it holding a ten-question smoke score (records 10, answerF1 0.95) where
+   * the project's actual number was 0.50 over sixty, with nothing in the file
+   * saying which. `meta.level` is inside the document either way, but a consumer
+   * that reads a fixed path is not looking.
+   *
+   * Same rule and the same asymmetry as `reportName`'s `-lvl-` and `bench emit`'s
+   * `.<level>`: `ultra` — which is what "no flag" means, and what every report
+   * written before levels existed reads as — adds no segment, so the path a
+   * consumer already hard-codes keeps pointing at exactly what it always did.
+   */
+  const level = levelOf(meta)
+  const latest = level === DEFAULT_RUN_LEVEL ? 'latest.json' : `latest.${level}.json`
+  fs.writeFileSync(path.join(dir, latest), JSON.stringify(doc, null, 1))
 
   for (const line of incomparable) console.log(`  ${line}`)
   if (diff.length) {

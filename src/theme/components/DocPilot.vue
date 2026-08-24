@@ -39,6 +39,25 @@
             >
               <Icon name="history" />
             </button>
+            <!--
+              The conversation as Markdown — ui-specs/009,
+              `history.exportThread`. Under the same condition as New chat, and
+              beside it: both act on the thread as a whole, which is what makes
+              them panel-level rather than turn-level controls.
+
+              Four 32px controls plus their gaps against the title at
+              `--dp-width: 360px` is tight, and the TITLE is what gives: at that
+              width the panel is named by the thread under it.
+            -->
+            <button
+              v-if="s.turns.length && s.config.history.exportThread"
+              type="button"
+              class="docpilot__icon-btn"
+              :aria-label="T('panel.copyThread')"
+              @click="copyThread"
+            >
+              <Icon :name="threadCopied ? 'check' : 'copy'" />
+            </button>
             <button
               v-if="s.turns.length"
               type="button"
@@ -88,7 +107,12 @@
           <!-- A list of things you activate, not a listbox: ARIA forbids an
                interactive descendant inside role="option", and every row here
                carries a delete control. -->
-          <ol v-else class="docpilot__sources docpilot__history-list" :aria-label="T('history.list')">
+          <ol
+            v-else
+            class="docpilot__sources docpilot__history-list"
+            role="list"
+            :aria-label="T('history.list')"
+          >
             <li v-for="c in s.history" :key="c.id" class="docpilot__source docpilot__history-row">
               <button
                 type="button"
@@ -142,7 +166,7 @@
               <p class="docpilot__greeting-h">{{ T('empty.heading') }}</p>
               <p class="docpilot__greeting-p">{{ T('empty.body') }}</p>
             </div>
-            <div class="docpilot__suggestions">
+            <div v-if="suggestions.length" class="docpilot__suggestions">
               <button
                 v-for="q in suggestions"
                 :key="q"
@@ -153,6 +177,44 @@
                 {{ q }}
               </button>
             </div>
+
+            <!--
+              Under a narrow scope, the pages in it — ui-specs/009.
+
+              The three built-in openers are suppressed there, correctly: they
+              would fall outside the scope and the gate would refuse all of them
+              on contact. The result was a blank panel shown to the one reader
+              who had expressed their intent more precisely than usual.
+
+              ROWS, not generated questions. The source-row recipe, because it is
+              the same object — a page with a title and a tail that opens when
+              pressed — and because nothing here is invented.
+            -->
+            <template v-if="scopedPages.length">
+              <p class="docpilot__meta">{{ T('empty.scopedLead') }}</p>
+              <ol class="docpilot__sources" role="list" :aria-label="T('empty.scopedLead')">
+                <li v-for="(p, i) in scopedPages" :key="p.path" class="docpilot__source">
+                  <span class="docpilot__source-n">{{ i + 1 }}</span>
+                  <a :href="p.path" @click="onSourceClick($event, { href: p.path })">
+                    <span class="docpilot__source-title">{{ p.title }}</span
+                    ><span v-if="p.tail" class="docpilot__source-tail"> · {{ p.tail }}</span>
+                  </a>
+                </li>
+              </ol>
+            </template>
+
+            <!--
+              The one thing a reader will not discover — ui-specs/009,
+              `ui.firstRunHint`, off by default. Withheld when neither quoting
+              switch is on, because a hint naming a gesture the panel does not
+              answer is worse than no hint.
+            -->
+            <p v-if="showHint" class="docpilot__row docpilot__hint">
+              <span class="docpilot__meta">{{ T('empty.hint') }}</span>
+              <button type="button" class="docpilot__text-btn" @click="dismissHint">
+                {{ T('empty.hintDismiss') }}
+              </button>
+            </p>
           </div>
 
           <article v-for="turn in s.turns" :key="turn.id" class="docpilot__turn">
@@ -306,10 +368,35 @@
                   </button>
                 </div>
               </template>
+              <!--
+                What "read N pages" was reading — ui-specs/009,
+                `citations.pagesRead`, off by default.
+
+                Under the verdict rather than under the provenance line it
+                belongs to, because the verdict is the message and evidence for
+                it reads after it, not before. Same position, same treatment and
+                the same list idiom as the closest pages directly below.
+              -->
+              <template v-if="turn.refusal.pages?.length">
+                <p class="docpilot__meta">{{ T('refusal.pagesReadLabel') }}</p>
+                <ol class="docpilot__sources" role="list" :aria-label="T('refusal.pagesReadLabel')">
+                  <li v-for="(p, i) in turn.refusal.pages" :key="p.path" class="docpilot__source">
+                    <span class="docpilot__source-n">{{ i + 1 }}</span>
+                    <a :href="p.path" @click="onSourceClick($event, { href: p.path })">
+                      <span class="docpilot__source-title">{{ p.title }}</span>
+                    </a>
+                  </li>
+                </ol>
+              </template>
               <p v-if="turn.refusal.closest.length" class="docpilot__meta">
                 {{ T(turn.refusal.closestAreOutside ? 'refusal.closestPagesElsewhere' : 'refusal.closestPages') }}
               </p>
-              <ol v-if="turn.refusal.closest.length" class="docpilot__sources" :aria-label="T('panel.closestPages')">
+              <ol
+                v-if="turn.refusal.closest.length"
+                class="docpilot__sources"
+                role="list"
+                :aria-label="T('panel.closestPages')"
+              >
                 <li v-for="(c, i) in turn.refusal.closest" :key="c.path" class="docpilot__source">
                   <span class="docpilot__source-n">{{ i + 1 }}</span>
                   <a
@@ -355,18 +442,60 @@
                 >
                   {{ T('error.retry') }}
                 </button>
+                <button
+                  v-if="hasSearch"
+                  type="button"
+                  class="docpilot__text-btn"
+                  @click="openSearch"
+                >
+                  {{ T('error.search') }}
+                </button>
+              </p>
+            </template>
+
+            <!--
+              The day's free requests are spent. A separate state from `error`
+              and separate copy, because the service DID answer and what it
+              answered was a schedule.
+
+              No `role="alert"` here, unlike the transport failure above: this
+              state settles a turn, and session.js announces every settled turn
+              through the polite live region already — an assertive region on top
+              of that reads the same sentence twice.
+
+              No Retry either. The next request is already known to be refused,
+              and offering to spend it is the one affordance that would make
+              things worse. Search still works, so it stays offered.
+            -->
+            <template v-if="turn.state === 'rate-limited'">
+              <p class="docpilot__lead">{{ T('error.rateLimited') }}</p>
+              <p v-if="resetLine(turn)" class="docpilot__meta">{{ resetLine(turn) }}</p>
+              <p v-if="hasSearch" class="docpilot__row">
                 <button type="button" class="docpilot__text-btn" @click="openSearch">
                   {{ T('error.search') }}
                 </button>
               </p>
             </template>
 
-            <ol v-if="turn.sources.length" class="docpilot__sources" :aria-label="T('panel.sources')">
+            <!--
+              `role="list"` on an ordered list is redundant markup everywhere
+              except here. `.docpilot__sources` sets `list-style: none`, and
+              Safari drops list semantics from a list styled that way outside a
+              `nav` — which takes the item count with it and leaves the
+              `aria-label` below naming an element that no longer has a role to
+              be named. All three lists in this panel carry it for that reason.
+            -->
+            <ol
+              v-if="turn.sources.length"
+              class="docpilot__sources"
+              role="list"
+              :aria-label="T('panel.sources')"
+            >
               <li
                 v-for="src in turn.sources"
                 :key="src.id"
                 class="docpilot__source"
-                :class="{ 'is-linked': linkedCite === src.n }"
+                :class="{ 'is-linked': linkedCite === src.n, 'has-passage': passage(turn, src) }"
               >
                 <span class="docpilot__source-n">{{ src.n }}</span>
                 <a
@@ -378,6 +507,38 @@
                   <span class="docpilot__source-title">{{ src.title }}</span
                   ><span v-if="src.tail" class="docpilot__source-tail"> · {{ src.tail }}</span>
                 </a>
+                <!--
+                  The passage this citation was drawn from — ui-specs/009.
+
+                  Absent, not disabled, when there is nothing to show: a restored
+                  conversation whose chunk the rebuilt index no longer has. A
+                  control that opens onto nothing is worse than no control.
+
+                  A disclosure on the ROW rather than a preview on the marker.
+                  ChatGPT Search previews on hover and its own help page says
+                  that does not exist on mobile — where checking a source means
+                  clicking through. A disclosure is one control for pointer,
+                  touch and keyboard alike.
+                -->
+                <button
+                  v-if="passage(turn, src)"
+                  type="button"
+                  class="docpilot__icon-btn"
+                  :aria-expanded="String(openPassage === src.id)"
+                  :aria-controls="`dp-passage-${turn.id}-${src.n}`"
+                  :aria-label="T(openPassage === src.id ? 'citation.hidePassage' : 'citation.showPassage')"
+                  @click="togglePassage(src.id)"
+                >
+                  <Icon name="chevronDown" :class="openPassage === src.id ? 'is-open' : null" />
+                </button>
+                <div
+                  v-if="openPassage === src.id"
+                  :id="`dp-passage-${turn.id}-${src.n}`"
+                  class="docpilot__passage"
+                  tabindex="0"
+                  role="region"
+                  :aria-label="T('citation.passageLabel')"
+                >{{ passage(turn, src) }}</div>
               </li>
             </ol>
 
@@ -442,6 +603,36 @@
               </button>
             </div>
 
+            <!--
+              Where to go next — ui-specs/009, `suggestions.followUps`, OFF.
+
+              Under the NEWEST turn only. Three rows after every answer turns a
+              thread into a feed, and the measurement behind the default is not a
+              taste: ChatGPT ships these and its readers write custom
+              instructions to suppress them.
+
+              The rows are headings from the pages this turn cited, minus the
+              headings it already used. Nothing is generated — the template does
+              the grammar — so nothing can name a section the corpus does not
+              have, which is the failure a generated opener has and this cannot.
+            -->
+            <div
+              v-if="followUps(turn).length"
+              class="docpilot__suggestions docpilot__suggestions--inline"
+              role="group"
+              :aria-label="T('empty.followUpsLabel')"
+            >
+              <button
+                v-for="f in followUps(turn)"
+                :key="f"
+                type="button"
+                class="docpilot__suggestion"
+                @click="submitText(f)"
+              >
+                {{ f }}
+              </button>
+            </div>
+
             <form v-if="turn.reasonOpen" class="docpilot__feedback" @submit.prevent="submitFeedback(turn)">
               <!-- aria-pressed toggles rather than checkboxes: a custom checkbox
                    indicator wants a resting border, and rule 1 names every one
@@ -487,6 +678,22 @@
                 </button>
               </div>
             </form>
+
+            <!--
+              What the form leaves behind — ui-specs/009, `feedback.confirm`.
+
+              Submitting used to remove the form and say nothing a sighted reader
+              could see, which is indistinguishable from closing it unsent.
+              Resident rather than timed out: it is the record of what the reader
+              did, and a transcript they scroll back through should still show it.
+
+              Two strings, because one would be false under two of the four
+              `send` modes — `feedbackLive` is the same predicate that decides
+              whether the action row stays visible at rest.
+            -->
+            <p v-if="turn.feedbackDone && !turn.reasonOpen" class="docpilot__meta">
+              {{ T(feedbackLive ? 'feedback.thanksSent' : 'feedback.thanks') }}
+            </p>
           </article>
         </div>
 
@@ -589,26 +796,97 @@
                 <Icon name="x" />
               </button>
             </div>
-            <div class="docpilot__picker-list" role="listbox" aria-multiselectable="true" :aria-label="T('picker.list')">
-              <div
-                v-for="p in orderedPages"
-                :key="p.path"
-                class="docpilot__pick"
-                role="option"
-                :aria-selected="String(selected.has(p.path))"
-                tabindex="0"
-                @click="togglePage(p.path)"
-                @keydown.enter.prevent="togglePage(p.path)"
-                @keydown.space.prevent="togglePage(p.path)"
-              >
-                <span class="docpilot__pick-mark">
-                  <Icon v-if="selected.has(p.path)" name="check" />
-                </span>
-                <span>
-                  <span class="docpilot__source-title">{{ p.title }}</span
-                  ><span v-if="p.tail" class="docpilot__source-tail"> · {{ p.tail }}</span>
-                </span>
-              </div>
+            <!--
+              A listbox is ONE tab stop — ui-specs/009.
+
+              Every row used to carry `tabindex="0"`, which on a three-hundred
+              page corpus put three hundred stops between this list and the
+              composer. Roving tabindex instead: exactly one row is in the tab
+              order at a time and the arrow keys move it, which is what the
+              pattern has always expected and what a reader arrives expecting.
+            -->
+            <!--
+              The filter — ui-specs/009. OUTSIDE the listbox, because a text
+              input is not an option, and bound to it with `aria-controls`.
+              `'auto'` shows it once the corpus is past the point where scanning
+              a list works, which is the number `promptListLimit` already picked.
+            -->
+            <template v-if="showFilter">
+              <label class="docpilot__sr" for="dp-pick-filter">{{ T('picker.filterLabel') }}</label>
+              <input
+                id="dp-pick-filter"
+                v-model="pickFilter"
+                type="search"
+                class="docpilot__picker-filter"
+                :placeholder="T('picker.filterPlaceholder')"
+                aria-controls="dp-picker-list"
+                @keydown.down.prevent="focusPickAt(0)"
+              />
+            </template>
+            <div
+              id="dp-picker-list"
+              class="docpilot__picker-list"
+              role="listbox"
+              aria-multiselectable="true"
+              :aria-label="T('picker.list')"
+            >
+              <!--
+                Grouped by section, and FLAT while a filter is on: grouping a
+                filtered list fragments it into headings with one row under each,
+                which is the opposite of what narrowing was for.
+
+                `g.offset + j` is the flat index, and it has to match DOM order —
+                `focusPickAt` reaches a row by position among the rendered
+                `.docpilot__pick` nodes, so the groups' concatenation IS the
+                keyboard's list. `pickFlat` is derived from these groups for
+                exactly that reason rather than computed alongside them.
+              -->
+              <template v-for="(g, gi) in pickGroups" :key="g.label || gi">
+                <div v-if="g.label" role="group" :aria-label="g.label">
+                  <!-- aria-hidden: the group is already named by the label above -->
+                  <p class="docpilot__pick-group" aria-hidden="true">{{ g.label }}</p>
+                  <div
+                    v-for="(p, j) in g.pages"
+                    :key="p.path"
+                    class="docpilot__pick"
+                    role="option"
+                    :aria-selected="String(selected.has(p.path))"
+                    :tabindex="p.path === rovingPath ? 0 : -1"
+                    @click="pickClicked(g.offset + j)"
+                    @keydown="onPickKeydown($event, g.offset + j)"
+                  >
+                    <span class="docpilot__pick-mark">
+                      <Icon v-if="selected.has(p.path)" name="check" />
+                    </span>
+                    <span>
+                      <span class="docpilot__source-title">{{ p.title }}</span
+                      ><span v-if="p.tail" class="docpilot__source-tail"> · {{ p.tail }}</span>
+                    </span>
+                  </div>
+                </div>
+                <!-- The ungrouped case: no wrapper, so the rows sit directly
+                     in the listbox where `role="option"` expects to be. -->
+                <template v-else>
+                  <div
+                    v-for="(p, j) in g.pages"
+                    :key="p.path"
+                    class="docpilot__pick"
+                    role="option"
+                    :aria-selected="String(selected.has(p.path))"
+                    :tabindex="p.path === rovingPath ? 0 : -1"
+                    @click="pickClicked(g.offset + j)"
+                    @keydown="onPickKeydown($event, g.offset + j)"
+                  >
+                    <span class="docpilot__pick-mark">
+                      <Icon v-if="selected.has(p.path)" name="check" />
+                    </span>
+                    <span>
+                      <span class="docpilot__source-title">{{ p.title }}</span
+                      ><span v-if="p.tail" class="docpilot__source-tail"> · {{ p.tail }}</span>
+                    </span>
+                  </div>
+                </template>
+              </template>
             </div>
           </div>
 
@@ -649,7 +927,7 @@
 
           <template v-if="s.degraded">
             <p class="docpilot__lead">{{ T('degraded.lead') }}</p>
-            <p class="docpilot__row">
+            <p class="docpilot__row" v-if="hasSearch">
               <button type="button" class="docpilot__text-btn" @click="openSearch">{{ T('degraded.search') }}</button>
             </p>
           </template>
@@ -679,7 +957,7 @@
                 maxlength="1000"
                 :placeholder="placeholder"
                 :readonly="s.busy"
-                aria-describedby="dp-quote dp-hint dp-counter dp-footnote"
+                aria-describedby="dp-quote dp-hint dp-counter dp-budget dp-footnote"
                 @input="grow"
                 @keydown="onKeydown"
               />
@@ -697,6 +975,15 @@
 
             <p v-if="input.length >= 950" id="dp-counter" class="docpilot__counter">
               {{ T('composer.counter', { n: input.length }) }}
+            </p>
+
+            <!-- What is left of the day's free answers, in the place the reader
+                 is deciding whether to spend one. Described BY the field for the
+                 same reason the counter is: it changes what a question costs,
+                 and a reader who cannot see it is the one most likely to be
+                 surprised when the answers stop. -->
+            <p v-if="budgetLine" id="dp-budget" class="docpilot__budget">
+              {{ budgetLine }}<span v-if="showBudgetLow"> · {{ T('error.budgetLow') }}</span>
             </p>
 
             <p id="dp-footnote" class="docpilot__footnote">
@@ -731,18 +1018,19 @@
 
 <script setup>
 import { computed, h, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { useData, useRouter } from 'vitepress'
 import * as session from '../docpilot/session.js'
+import { useHost, hostConfig } from '../docpilot/host.js'
 import { promptDocument, clampQuote } from '../docpilot/prompt.js'
 import { sectionFor } from '../docpilot/scope.js'
 import { GLYPH_BOX, GLYPH_DEFAULTS, symbolId } from '../docpilot/glyphs.js'
 import { resolveI18n, t as translate, normaliseLocale } from '../docpilot/i18n.js'
 import { relativeParts } from '../docpilot/history.js'
 import { COMMENT_MAX } from '../docpilot/feedback.js'
+import { createSelectionAsk } from '../docpilot/selection.js'
+import { FILTER_AUTO_ABOVE } from '../docpilot/switches.js'
 
 const s = session.state
-const { theme, page, lang } = useData()
-const router = useRouter()
+const { theme, route, lang, router } = useHost()
 
 /**
  * Every reader-facing string in this component goes through `T`.
@@ -821,15 +1109,12 @@ const announced = ref('')
 let trigger = null
 let mql = null
 let coarseMql = null
+// The selection watcher's five listeners, released as one — see `ask.bind`.
+let unbindAsk = null
 
 const scopeLabel = session.scopeLabel
 const offersSection = session.offersSection
 const currentPathIndexed = session.currentPathIndexed
-
-function routeOf(rel) {
-  if (!rel) return '/'
-  return `/${rel.replace(/\.md$/, '').replace(/\/index$/, '')}`.replace(/\/$/, '') || '/'
-}
 
 // Declared once, at module-body level, because it is both ADDED and REMOVED.
 // It used to be an arrow inside `onMounted` while the removal named a hoisted
@@ -850,49 +1135,190 @@ onMounted(() => {
   syncPointer()
   coarseMql.addEventListener('change', syncPointer)
 
-  // The selection watcher. `pointerdown` in the CAPTURE phase, so a press on a
-  // control that stops propagation still dismisses the popover.
-  canPopover = typeof HTMLElement !== 'undefined' && 'popover' in HTMLElement.prototype
-  document.addEventListener('selectionchange', onSelectionChange)
-  document.addEventListener('pointerdown', onPointerDown, true)
-  document.addEventListener('pointerup', onPointerUp, true)
-  document.addEventListener('pointercancel', onPointerLost, true)
-  window.addEventListener('blur', onPointerLost)
-  window.addEventListener('resize', reposition)
+  // Read on mount, not in the ref's initialiser: `localStorage` does not exist
+  // during SSR, and the default is `true` so a server render and the first
+  // client frame agree on showing nothing.
+  try {
+    hintSeen.value = localStorage.getItem(HINT_KEY) === '1'
+  } catch {
+    hintSeen.value = true
+  }
 
-  session.configure(theme.value, routeOf(page.value.relativePath), lang.value)
+  // Same reason, and the watcher is armed HERE rather than at setup so it can
+  // never fire before that read has decided whether this tab has already been
+  // told. A throw costs the notice a repeat after a reload, which is the
+  // cheaper of the two failures.
+  let toldBudgetLow = false
+  try {
+    toldBudgetLow = sessionStorage.getItem(BUDGET_LOW_KEY) === '1'
+  } catch {
+    /* private mode — the notice may come back once, and that is all */
+  }
+  if (!toldBudgetLow) {
+    watch(
+      budgetLowDue,
+      (due) => {
+        if (!due || budgetLowSaid.value) return
+        budgetLowSaid.value = true
+        // SAID as well as shown, and this is the half that was missing. The note
+        // renders inside the composer's `aria-describedby`, and no screen reader
+        // re-reads a description that changed under a textarea the reader is
+        // already focused in — so the one reader who cannot see answers getting
+        // shorter was the one reader never told they would. It goes through the
+        // store's live region, the same one session.js announces every settled
+        // turn through, so it queues behind "answer ready" instead of talking
+        // over it. Once per session, on the same flag the visible note is
+        // retired by: a mode change is news exactly once.
+        s.announce = T('error.budgetLow')
+        try {
+          sessionStorage.setItem(BUDGET_LOW_KEY, '1')
+        } catch {
+          /* see above */
+        }
+      },
+      { immediate: true },
+    )
+  }
+
+  // The selection watcher — five listeners, bound and unbound as one, in
+  // `selection.js`. `pointerdown` runs in the CAPTURE phase there, so a press
+  // on a control that stops propagation still dismisses the popover.
+  unbindAsk = ask.bind(onSelectionAccepted)
+
+  session.configure(theme.value, route.value, lang.value)
+
+  // `?dp-ask=` — ui-specs/009. After `configure`, because the switch that
+  // governs it arrives with the config; the question lands in `pendingQuestion`
+  // and is drained by the watcher below, which is also where a passage quoted
+  // in the host's article arrives.
+  session.applyDeepLink(location.search, (params) => {
+    const q = params.toString()
+    history.replaceState(history.state, '', `${location.pathname}${q ? `?${q}` : ''}${location.hash}`)
+  })
 })
+
+/**
+ * A question handed in from outside the panel — ui-specs/009.
+ *
+ * The store carries it rather than the component reading the URL itself,
+ * because two surfaces put a question there: the deep link above, and the
+ * article's own selection popover. Draining it here keeps `input` the single
+ * owner of what is in the field.
+ *
+ * NOT SUBMITTED, in either case. The reader reads what somebody else wrote
+ * before it is asked on their behalf.
+ */
+watch(
+  () => s.pendingQuestion,
+  (q) => {
+    if (!q) return
+    input.value = q
+    s.pendingQuestion = ''
+    nextTick(() => {
+      const ta = panel.value?.querySelector('.docpilot__field textarea')
+      if (!ta) return
+      fit(ta)
+      // The caret at the end, so the reader can add to it without pressing End
+      // first — `startTurnEdit`'s rule, and for the same reason.
+      ta.setSelectionRange(ta.value.length, ta.value.length)
+    })
+  },
+)
+
+// The passage half of the same handoff: a selection taken in the host's article
+// arrives as a draft chip, exactly as one taken inside an answer does.
+watch(
+  () => s.pendingQuote,
+  (text) => {
+    if (!text) return
+    quote.value = text
+    s.pendingQuote = ''
+  },
+)
 
 // The page's locale, kept in the store as well as here: session.js writes the
 // screen-reader announcements and settles the credential and social replies, and
-// none of that runs inside a component where `useData()` is reachable.
+// none of that runs inside a component where `useHost()` is reachable.
 watch(lang, (l) => session.setLang(l))
 
 onBeforeUnmount(() => {
   mql?.removeEventListener('change', sync)
   coarseMql?.removeEventListener('change', syncPointer)
-  document.removeEventListener('selectionchange', onSelectionChange)
-  document.removeEventListener('pointerdown', onPointerDown, true)
-  document.removeEventListener('pointerup', onPointerUp, true)
-  document.removeEventListener('pointercancel', onPointerLost, true)
-  window.removeEventListener('blur', onPointerLost)
-  window.removeEventListener('resize', reposition)
-  clearTimeout(selTimer)
+  unbindAsk?.()
+  unbindAsk = null
+  // The announce queue outlives one drain, so its timer has to be cancelled
+  // here as well: a pending callback would write into a ref whose component
+  // has gone.
+  clearTimeout(announceTimer)
+  announceQueue.length = 0
+  clearTimeout(typeTimer)
 })
 
-watch(() => page.value.relativePath, (rel) => (s.currentPath = routeOf(rel)))
+watch(route, (r) => (s.currentPath = r))
 
-// The polite region is throttled: pushing every token through it is a single
-// uninterruptible blast that cannot be paused, rewound or navigated.
+/**
+ * The polite region is a QUEUE, not a slot — ui-specs/009.
+ *
+ * It is still throttled, and for the reason it always was: pushing every token
+ * through a live region is one uninterruptible blast that cannot be paused,
+ * rewound or navigated, and `modern-web-guidance` adds the second half — a small
+ * delay keeps an announcement from landing on top of the speech that focus
+ * management has just produced.
+ *
+ * What changed is what happened to a message that arrived DURING the wait. It
+ * was dropped: `clearTimeout` and then overwrite, so of "Quote added" followed
+ * inside half a second by "Answer ready", only the second was ever spoken. The
+ * reader who depends on this region is the only one who could have noticed.
+ */
+const ANNOUNCE_MS = 500
+const announceQueue = []
 let announceTimer = null
+
+function drainAnnounce() {
+  const next = announceQueue.shift()
+  // A polite region speaks when its text CHANGES, so the same message twice in
+  // a row would be silent the second time. A zero-width space makes it a
+  // different string and reads identically.
+  announced.value = next === announced.value ? `${next}​` : next
+  announceTimer = announceQueue.length ? setTimeout(drainAnnounce, ANNOUNCE_MS) : null
+}
+
 watch(
   () => s.announce,
   (msg) => {
     if (!msg) return
-    clearTimeout(announceTimer)
-    announceTimer = setTimeout(() => (announced.value = msg), 500)
+    announceQueue.push(msg)
+    if (!announceTimer) announceTimer = setTimeout(drainAnnounce, ANNOUNCE_MS)
   },
 )
+
+/**
+ * `push` — the host's content moves aside instead of being covered.
+ * ui-specs/009, `ui.layout`, and `overlay` stays the default.
+ *
+ * A CLASS ON THE ROOT, because the rule that acts on it names VitePress's own
+ * selectors and therefore belongs in the adapter — where rule 2 allows exactly
+ * that and nothing else. The component decides WHEN; the adapter decides what it
+ * means on this host, and a consumer with a different theme overrides one rule
+ * rather than patching a component.
+ *
+ * Not below the sheet breakpoint: there the panel is edge to edge and there is
+ * no room to push anything into.
+ */
+const LAYOUT_CLASS = 'docpilot-push'
+
+watch(
+  () => [s.open, s.config.ui.layout, mobile.value],
+  ([open, layout, narrow]) => {
+    if (typeof document === 'undefined') return
+    const on = open && layout === 'push' && !narrow
+    document.documentElement.classList.toggle(LAYOUT_CLASS, on)
+  },
+)
+
+// The class outlives the component otherwise: a route change that unmounts the
+// panel with the drawer open would leave the host's content permanently inset.
+onBeforeUnmount(() => document.documentElement.classList.remove(LAYOUT_CLASS))
 
 watch(
   () => s.open,
@@ -923,8 +1349,7 @@ watch(
       await nextTick()
       const fallback =
         document.querySelector('.docpilot-nav-trigger') ||
-        document.getElementById('VPContent') ||
-        document.querySelector('main')
+        document.querySelector(hostConfig(s.config).content)
       if (trigger && document.contains(trigger)) trigger.focus()
       else fallback?.focus?.()
       trigger = null
@@ -1048,6 +1473,12 @@ function closeDock() {
   s.dockPanel = null
   editing.value = false
   confirmClear.value = false
+  // The picker's tab stop and its filter both go back with it. A reopened
+  // picker is a fresh decision, and returning the reader to a row — or to a
+  // narrowing — from three conversations ago is a memory nobody asked this
+  // control to keep.
+  activePick.value = null
+  pickFilter.value = ''
   nextTick(() => panel.value?.querySelector(opener)?.focus())
 }
 
@@ -1130,6 +1561,172 @@ const togglePage = (path) => {
   const next = new Set(s.scope.paths)
   next.has(path) ? next.delete(path) : next.add(path)
   session.setScope([...next])
+}
+
+/**
+ * ── the picker at corpus scale — ui-specs/009 ───────────────────────────────
+ *
+ * A flat, unfiltered list of every page in a `min(240px, 32dvh)` scroller is
+ * fine at twelve pages and unusable at three hundred.
+ */
+const pickFilter = ref('')
+
+const showFilter = computed(() => {
+  const mode = s.config.scope.filter
+  if (typeof mode === 'boolean') return mode
+  return pages.value.length > FILTER_AUTO_ABOVE
+})
+
+/** Title first, then route: a reader filtering by `/guide/` means the route. */
+const pickPages = computed(() => {
+  const q = pickFilter.value.trim().toLowerCase()
+  if (!q) return orderedPages.value
+  return orderedPages.value.filter(
+    (p) => (p.title || '').toLowerCase().includes(q) || p.path.toLowerCase().includes(q),
+  )
+})
+
+/**
+ * The rendered structure, and the keyboard's list, in one object.
+ *
+ * `offset` is the flat index of a group's first row, so `offset + j` is the
+ * position among the rendered `.docpilot__pick` nodes — which is how
+ * `focusPickAt` reaches one. Deriving `pickFlat` FROM these groups rather than
+ * computing it alongside them is what keeps those two definitions from drifting
+ * the day the grouping changes the order.
+ *
+ * Flat while a filter is on: grouping a filtered list fragments it into headings
+ * with one row under each, which is the opposite of what narrowing was for.
+ */
+const pickGroups = computed(() => {
+  const list = pickPages.value
+  if (!s.config.scope.groupBySection || pickFilter.value.trim() || !s.index) {
+    return [{ label: '', offset: 0, pages: list }]
+  }
+  const manifest = s.index.manifest
+  const labelOf = new Map()
+  for (const section of manifest.sections || []) {
+    for (const i of section.pageIdx) {
+      const page = manifest.pages[i]
+      // First section wins, so a page in a nested section is named by the
+      // outermost one it appears in — the order `manifest.sections` is built in.
+      if (page && !labelOf.has(page.path)) labelOf.set(page.path, section.label)
+    }
+  }
+  const groups = []
+  const byLabel = new Map()
+  for (const page of list) {
+    const label = labelOf.get(page.path) || ''
+    let group = byLabel.get(label)
+    if (!group) {
+      group = { label, offset: 0, pages: [] }
+      byLabel.set(label, group)
+      groups.push(group)
+    }
+    group.pages.push(page)
+  }
+  let offset = 0
+  for (const group of groups) {
+    group.offset = offset
+    offset += group.pages.length
+  }
+  return groups
+})
+
+const pickFlat = computed(() => pickGroups.value.flatMap((g) => g.pages))
+
+/**
+ * ── the picker's keyboard — ui-specs/009 ────────────────────────────────────
+ *
+ * Roving tabindex, not `aria-activedescendant`. Both are legal for a listbox and
+ * this one picks the variant where **focus is really on the option**, because
+ * every other row-shaped control in this package is styled from `:focus-visible`
+ * and the alternative would need a second, parallel "looks focused" rule that
+ * only this list uses.
+ *
+ * `activePick` is a PATH rather than an index, because the list it indexes into
+ * is re-sorted by `orderedPages` and, once the filter lands, re-filtered as well;
+ * an index would silently come to mean a different row.
+ */
+const activePick = ref(null)
+
+/**
+ * The one row in the tab order.
+ *
+ * Falls to the first row whenever `activePick` names nothing in the current
+ * list — nothing visited yet, or a filter that has just removed it. Never null
+ * while there are rows, which is the invariant that matters: a listbox with no
+ * tab stop is a listbox the keyboard cannot enter at all.
+ */
+const rovingPath = computed(() => {
+  const pages = pickFlat.value
+  if (!pages.length) return null
+  return pages.some((p) => p.path === activePick.value) ? activePick.value : pages[0].path
+})
+
+function focusPickAt(i) {
+  const page = pickFlat.value[i]
+  if (!page) return
+  activePick.value = page.path
+  // By position in the rendered list, not by a selector built from the path: a
+  // route contains `/` and would have to be escaped, and `CSS.escape` is one
+  // more thing to be missing in an engine somewhere.
+  nextTick(() => panel.value?.querySelectorAll('.docpilot__pick')?.[i]?.focus())
+}
+
+// A press moves the tab stop as well as toggling, so tabbing out and back in
+// returns to the row the reader was last working on rather than to the top.
+function pickClicked(i) {
+  const page = pickFlat.value[i]
+  if (!page) return
+  activePick.value = page.path
+  togglePage(page.path)
+}
+
+/**
+ * Type-ahead, which a listbox is expected to offer whether or not a filter field
+ * also exists — they answer different questions. The filter narrows the list and
+ * is a decision; this jumps to a row and is a reflex.
+ */
+let typeBuf = ''
+let typeTimer = null
+
+function onPickKeydown(e, i) {
+  const pages = pickFlat.value
+  const last = pages.length - 1
+  switch (e.key) {
+    // Clamped rather than wrapping. APG leaves the choice open, and a list this
+    // long is one a reader arrows through to get somewhere — arriving back at
+    // the top by surprise is the failure mode, not running out of list.
+    case 'ArrowDown':
+      e.preventDefault()
+      return focusPickAt(Math.min(last, i + 1))
+    case 'ArrowUp':
+      e.preventDefault()
+      return focusPickAt(Math.max(0, i - 1))
+    case 'Home':
+      e.preventDefault()
+      return focusPickAt(0)
+    case 'End':
+      e.preventDefault()
+      return focusPickAt(last)
+    case 'Enter':
+    case ' ':
+      // `preventDefault` on Space is not optional: without it the key scrolls
+      // the picker's own scroller out from under the row it just toggled.
+      e.preventDefault()
+      return pickClicked(i)
+  }
+
+  if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) return
+  clearTimeout(typeTimer)
+  typeBuf += e.key.toLowerCase()
+  typeTimer = setTimeout(() => (typeBuf = ''), 700)
+  const hit = pages.findIndex((p) => (p.title || '').toLowerCase().startsWith(typeBuf))
+  if (hit >= 0) {
+    e.preventDefault()
+    focusPickAt(hit)
+  }
 }
 
 function preset(kind) {
@@ -1240,79 +1837,51 @@ function onKeydown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     send()
+    return
   }
+  if (e.key === 'ArrowUp') editLastQuestion(e)
 }
 
 /**
- * ── quoting a passage — ui-specs/007 ────────────────────────────────────────
+ * `↑` in an EMPTY composer opens the last question's editor — ui-specs/009.
+ *
+ * ChatGPT's own behaviour, and readline's before it, so this is a port rather
+ * than an invention: a reader arrives already expecting the key to do this.
+ *
+ * **The empty condition is not a nicety.** Without it the key stops moving the
+ * caret inside a multi-line draft, which is the behaviour it is borrowing from —
+ * and a shortcut that eats a navigation key is worse than an absent one.
+ *
+ * Withheld while a turn is running, because `startTurnEdit` refuses on `busy`
+ * anyway and a control that visibly does nothing is the thing 008 argued
+ * against; and while an editor is already open, because "at most one editor"
+ * is the invariant `editingId` exists to make structural.
+ */
+function editLastQuestion(e) {
+  if (!s.config.composer.editLastOnArrowUp) return
+  if (input.value.length || s.busy || editingId.value) return
+  const last = s.turns[s.turns.length - 1]
+  if (!last) return
+  e.preventDefault()
+  startTurnEdit(last)
+}
+
+/**
+ * ── quoting a passage — ui-specs/007, extracted by 009 ──────────────────────
  *
  * Select inside a settled answer and one button appears above the selection.
  * Pressing it attaches the passage to the composer as a chip, where it stays
  * until it is sent or withdrawn.
  *
- * The quote is CAPTURED WHEN THE POPOVER OPENS, not when the button is pressed.
- * Pressing moves focus, and focusing a control collapses the document selection
- * in some engines before a click handler runs — so reading the selection at
- * press time would produce an empty quote on exactly the platforms where the
- * button is the only way in. Holding the string is also what makes the button
- * reachable by Tab at all: a keyboard reader has to leave the selection to get
- * to it.
+ * The MECHANISM now lives in `selection.js`, because 009 points a second
+ * instance of it at the host's own article and two copies of a list of platform
+ * failures is two places for one of them to come back. What stays here is what
+ * is specific to the panel: which element a selection has to be inside, whether
+ * that turn has settled, which box the button is clamped to, and what counts as
+ * furniture in the text.
  */
 const quote = ref('')
-const askOpen = ref(false)
 const askEl = ref(null)
-const askStyle = ref(null)
-const askBelow = ref(false)
-let askQuote = ''
-let askRange = null
-let canPopover = false
-let selTimer = null
-let dragging = false
-let placing = false
-
-/**
- * `selectionchange` is the primary and the pointer events are only a
- * suppressor. It is the one event that fires for EVERY way a selection is made —
- * a drag, Shift+Arrow, a double-click, and the native touch handles, which
- * produce no `pointerup` at all. The debounce is what stops the button chasing
- * the cursor mid-drag on the platforms that do fire one.
- */
-function onSelectionChange() {
-  clearTimeout(selTimer)
-  const sel = document.getSelection()
-  // Collapsing is immediate; opening waits. A reader who clicks to dismiss must
-  // not watch the button sit there for a fifth of a second first.
-  if (!sel || sel.isCollapsed) return closeAsk()
-  if (dragging) return
-  selTimer = setTimeout(evaluateSelection, 180)
-}
-
-function onPointerDown(e) {
-  dragging = e.pointerType === 'mouse' || e.pointerType === 'pen'
-  // The press that opens the button must never be the press that closes it.
-  if (!askEl.value?.contains(e.target)) closeAsk()
-}
-
-/**
- * Every way a pointer interaction ends, and that list is the point.
- *
- * `dragging` suppresses the popover, so a `pointerup` this never hears leaves it
- * stuck true and the feature silently dead for the rest of the page's life —
- * a failure with no error, no log and no way for the reader to recover short of
- * a reload. So the release is also read on `pointercancel` (a touch the platform
- * took over) and on the window losing focus (a drag that ended over the devtools
- * or another window), and the listener runs in the CAPTURE phase, where nothing
- * downstream can stop it.
- */
-function onPointerUp() {
-  dragging = false
-  clearTimeout(selTimer)
-  selTimer = setTimeout(evaluateSelection, 0)
-}
-
-function onPointerLost() {
-  dragging = false
-}
 
 /**
  * The answer node BOTH ends of the selection are inside, or null.
@@ -1328,94 +1897,56 @@ function answerOf(range) {
   return answer && panel.value?.contains(answer) ? answer : null
 }
 
-/**
- * The passage, without the panel's own furniture.
- *
- * `range.toString()` pulls a citation superscript's digit into the middle of a
- * sentence — "the scope picker1 lists" — because the marker is a real text node
- * inside the answer. Dropping the markers from a clone first is what makes the
- * quote read as the documentation it came from.
- */
-function selectionText(range) {
-  const frag = range.cloneContents()
-  for (const cite of frag.querySelectorAll?.('.docpilot__cite') || []) cite.remove()
-  return frag.textContent || ''
-}
+const ask = createSelectionAsk({
+  el: () => askEl.value,
+  enabled: () => s.config.quote.fromAnswer,
+  containerOf: answerOf,
+  /**
+   * Not while anything is running. A quote is a reference to a settled answer,
+   * and a passage taken out of a stream is a passage the next frame rewrites —
+   * the node behind that range is replaced every 90ms while a turn is live.
+   */
+  eligible: (answer) => {
+    const turn = s.turns.find((t) => t.id === answer.dataset.turn)
+    return !s.busy && !!turn && (turn.state === 'complete' || turn.state === 'aborted')
+  },
+  /**
+   * The THREAD's box, not the panel's: the panel includes the header and the
+   * composer, and a button clamped to that would sit on top of the title while
+   * pointing at a line scrolled up under it.
+   */
+  boxOf: () => thread.value?.getBoundingClientRect() || null,
+  clamp: clampQuote,
+  coarse: () => coarse.value,
+  /**
+   * `range.toString()` pulls a citation superscript's digit into the middle of a
+   * sentence — "the scope picker1 lists" — because the marker is a real text
+   * node inside the answer. Dropping the markers from a clone first is what
+   * makes the quote read as the documentation it came from.
+   */
+  strip: (frag) => {
+    for (const cite of frag.querySelectorAll?.('.docpilot__cite') || []) cite.remove()
+  },
+})
 
-function evaluateSelection() {
-  const sel = document.getSelection()
-  if (!sel || sel.isCollapsed || !sel.rangeCount) return closeAsk()
-  const range = sel.getRangeAt(0)
-  const answer = answerOf(range)
-  if (!answer) return closeAsk()
+const askOpen = ask.open
+const askStyle = ask.style
+const askBelow = ask.below
+const canPopover = ask.canPopover
+const closeAsk = ask.close
+const reposition = ask.reposition
 
-  // Not while anything is running. A quote is a reference to a settled answer,
-  // and a passage taken out of a stream is a passage the next frame rewrites —
-  // the node behind this range is replaced every 90ms while a turn is live.
-  const turn = s.turns.find((t) => t.id === answer.dataset.turn)
-  if (s.busy || !turn || (turn.state !== 'complete' && turn.state !== 'aborted')) return closeAsk()
-
-  const text = clampQuote(selectionText(range))
-  if (!text) return closeAsk()
-
-  askQuote = text
-  askRange = range.cloneRange()
-  askOpen.value = true
-  nextTick(() => {
-    if (canPopover) {
-      try {
-        askEl.value?.showPopover()
-      } catch {
-        /* already open — the reader extended a selection that was already ours */
-      }
-    }
-    place()
-  })
-}
-
-function place() {
-  const el = askEl.value
-  if (!el || !askRange || !thread.value) return
-  let rect = askRange.getBoundingClientRect()
-  if (!rect.width && !rect.height) rect = askRange.getClientRects()[0] || rect
-  // The THREAD's box, not the panel's: the panel includes the header and the
-  // composer, and a button clamped to that would sit on top of the title while
-  // pointing at a line scrolled up under it.
-  const box = thread.value.getBoundingClientRect()
-  // Scrolled out of the thread entirely. Following it off the edge would leave a
-  // button floating over the host's documentation.
-  if (rect.bottom < box.top || rect.top > box.bottom) return closeAsk()
-
-  const w = el.offsetWidth
-  const h = el.offsetHeight
-  const gap = 8
-  // Below the selection on a coarse pointer: iOS draws its own Copy / Look Up
-  // callout ABOVE a selection, and two bubbles fighting over the same forty
-  // pixels is one the reader cannot press.
-  const below = coarse.value || rect.top - h - gap < box.top + 4
-  const top = below ? rect.bottom + gap : rect.top - h - gap
-  const left = rect.left + rect.width / 2 - w / 2
-  askBelow.value = below
-  askStyle.value = {
-    top: `${Math.round(Math.min(Math.max(top, box.top + 4), box.bottom - h - 4))}px`,
-    left: `${Math.round(Math.min(Math.max(left, box.left + 8), box.right - w - 8))}px`,
-  }
-}
-
-// Coalesced into one rAF, because the thread's scroll listener is passive and
-// deliberately cheap — this must not be the thing that makes it expensive.
-function reposition() {
-  if (!askOpen.value || placing) return
-  placing = true
-  requestAnimationFrame(() => {
-    placing = false
-    place()
-  })
+// The factory hands back whether a selection was accepted; presenting it is the
+// component's job, because only the component knows when its own template has
+// flushed the popover into the DOM.
+const onSelectionAccepted = (accepted) => {
+  if (accepted) nextTick(() => ask.present())
 }
 
 function takeQuote() {
-  quote.value = askQuote
-  closeAsk()
+  const text = ask.take()
+  if (!text) return
+  quote.value = text
   s.announce = T('announce.quoteAdded')
   nextTick(() => panel.value?.querySelector('.docpilot__field textarea')?.focus())
 }
@@ -1426,25 +1957,79 @@ function dropQuote() {
   nextTick(() => panel.value?.querySelector('.docpilot__field textarea')?.focus())
 }
 
-function closeAsk() {
-  clearTimeout(selTimer)
-  if (!askOpen.value) return
-  if (canPopover) {
-    try {
-      askEl.value?.hidePopover()
-    } catch {
-      /* already closed */
-    }
+/**
+ * ── the passage behind a citation — ui-specs/009 ────────────────────────────
+ *
+ * One id, so at most one passage is open across the whole thread. Two open
+ * passages in a 420px column is a column of quotations with an answer somewhere
+ * in it, and the reader opened one to check one thing.
+ *
+ * The text itself comes from the store — see `passageFor`, which prefers the
+ * chunk THIS turn put in front of the model and falls back to the index by id.
+ */
+const openPassage = ref(null)
+const passage = (turn, src) => session.passageFor(turn, src)
+const togglePassage = (id) => (openPassage.value = openPassage.value === id ? null : id)
+
+/**
+ * The copied answer carries its sources — ui-specs/009, `citations.inCopy`.
+ *
+ * `answerText` alone is what this used to write, and the markers survive the
+ * paste with nothing behind them: `[1]` in a ticket is worse than no citation at
+ * all, because it looks like provenance. Absolute URLs, because the paste lands
+ * outside the site that could have resolved a route.
+ *
+ * Built from `turn.sources`, which is the list the reader is looking at — not
+ * from the answer text, which would mean parsing markers back out of prose the
+ * model wrote.
+ */
+function withSources(turn) {
+  const text = turn.answerText || ''
+  if (!s.config.citations.inCopy || !turn.sources?.length) return text
+  const origin = typeof location === 'undefined' ? '' : location.origin
+  const lines = turn.sources.map((src) => {
+    const href = src.origin || `${origin}${src.href}`
+    return `${src.n}. [${src.title}](${href})`
+  })
+  return `${text}\n\n${T('citation.copyHeading')}\n${lines.join('\n')}`
+}
+
+/**
+ * The whole conversation as Markdown — ui-specs/009, `history.exportThread`.
+ *
+ * Per-turn copy already existed; what a support engineer pastes into a ticket is
+ * the THREAD, and reassembling one from four separate copies is the work this
+ * removes.
+ *
+ * Through `withSources`, so the export honours `citations.inCopy` exactly as a
+ * single answer does — two copy paths that disagree about provenance would be
+ * two answers to one question.
+ *
+ * The quote rides as a blockquote above its question, which is where it sits on
+ * screen and what Markdown already has for it.
+ */
+const threadCopied = ref(false)
+
+async function copyThread() {
+  const text = s.turns
+    .map((turn) => {
+      const quoted = turn.quote ? `> ${turn.quote.replace(/\n/g, '\n> ')}\n\n` : ''
+      return `## ${turn.question}\n\n${quoted}${withSources(turn)}`
+    })
+    .join('\n\n---\n\n')
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    return /* clipboard denied — the thread is still selectable */
   }
-  askOpen.value = false
-  askStyle.value = null
-  askRange = null
-  askQuote = ''
+  threadCopied.value = true
+  setTimeout(() => (threadCopied.value = false), 2000)
+  s.announce = T('announce.threadCopied')
 }
 
 async function copy(turn) {
   try {
-    await navigator.clipboard.writeText(turn.answerText)
+    await navigator.clipboard.writeText(withSources(turn))
     turn.copied = true
     setTimeout(() => (turn.copied = false), 2000)
     s.announce = T('announce.copied')
@@ -1574,12 +2159,90 @@ const DEFAULT_SUGGESTIONS = [
   'How do I authenticate requests?',
 ]
 // Suppressed under a narrower scope: the defaults are almost certainly outside
-// it and the gate would refuse all three on contact.
-const suggestions = computed(() =>
-  s.scope.kind !== 'all'
-    ? []
-    : (s.config.suggestions?.length ? s.config.suggestions : DEFAULT_SUGGESTIONS).slice(0, 3),
+// it and the gate would refuse all three on contact. What goes there instead is
+// `scopedPages` below — ui-specs/009.
+const suggestions = computed(() => {
+  if (s.scope.kind !== 'all') return []
+  const configured = s.config.suggestions.questions
+  return (configured.length ? configured : DEFAULT_SUGGESTIONS).slice(0, 3)
+})
+
+/**
+ * The pages the reader scoped to — ui-specs/009, `suggestions.scoped`.
+ *
+ * Not capped and not scrolled on its own: the empty state lives inside the
+ * thread, which is already the panel's one scroller, so a long scope simply
+ * makes it longer. A second scroller inside a scroller is what the dock and the
+ * picker have to be, and neither of them is inside this one.
+ */
+const scopedPages = computed(() => {
+  if (!s.config.suggestions.scoped || s.scope.kind === 'all' || !s.index) return []
+  const known = new Map(s.index.manifest.pages.map((p) => [p.path, p]))
+  return s.scope.paths.map((path) => known.get(path)).filter(Boolean)
+})
+
+/**
+ * Where to go next, from the corpus — ui-specs/009, `suggestions.followUps`.
+ *
+ * The headings on the pages this turn cited, minus the ones it cited. No model
+ * call, in scope by construction, and **nothing invented**: the wording is a
+ * template that is grammatical for any heading, which is exactly the difference
+ * between this and the heading-derived openers 009 rejected for the default-on
+ * case. A generated question can name a section the corpus does not have; this
+ * cannot, because every string in it came out of the index.
+ *
+ * The newest turn only. Recomputed per call rather than memoised on the turn —
+ * it is cheap, and a field on the turn is a field `slimTurn` would have to
+ * decide about and the archive would have to carry.
+ */
+const FOLLOW_UPS_MAX = 3
+
+function followUps(turn) {
+  if (!s.config.suggestions.followUps || !s.index) return []
+  if (turn !== s.turns[s.turns.length - 1] || turn.state !== 'complete') return []
+  if (s.busy || !turn.sources?.length) return []
+
+  const pages = new Set(turn.sources.map((src) => String(src.id).split('#')[0]))
+  const used = new Set(turn.sources.map((src) => src.title))
+  const out = []
+  for (const chunk of s.index.chunks) {
+    if (out.length >= FOLLOW_UPS_MAX) break
+    if (!pages.has(chunk.path) || !chunk.title || used.has(chunk.title)) continue
+    used.add(chunk.title)
+    out.push(T('empty.followUp', { heading: chunk.title }))
+  }
+  return out
+}
+
+/**
+ * The first-visit line — ui-specs/009, `ui.firstRunHint`, off by default.
+ *
+ * WITHHELD WHEN NEITHER QUOTING SWITCH IS ON. The hint names one gesture, and a
+ * panel that does not answer that gesture must not advertise it — the same rule
+ * the three `disclaimer` variants keep about what they claim.
+ *
+ * `localStorage` directly rather than through history.js's store: this is one
+ * boolean about this device, it outlives the tab on purpose, and a private-mode
+ * throw here should cost the hint and nothing else.
+ */
+const HINT_KEY = 'docpilot:hint-seen'
+const hintSeen = ref(true)
+
+const showHint = computed(
+  () =>
+    s.config.ui.firstRunHint &&
+    !hintSeen.value &&
+    (s.config.quote.fromAnswer || s.config.quote.fromDocs),
 )
+
+function dismissHint() {
+  hintSeen.value = true
+  try {
+    localStorage.setItem(HINT_KEY, '1')
+  } catch {
+    /* private mode — the hint simply returns on the next visit */
+  }
+}
 
 // The one place the reader is told what they may ask about, so it names the
 // product when there is one to name and stays honest when there is not.
@@ -1598,6 +2261,63 @@ const disclaimer = computed(() => {
   if (!feedbackEndpoint || feedback.send === 'none') return T('disclaimer.base')
   return T(feedback.send === 'down' ? 'disclaimer.withFeedback' : 'disclaimer.withRating')
 })
+
+/**
+ * What is left of the day, in one muted line under the field.
+ *
+ * THREE conditions, and each one is a way of getting it wrong:
+ *
+ *   · the switch. `budget.showRemaining` is inside the panel, so it defaults on,
+ *     and a site that turned it off has asked this panel not to discuss its
+ *     bill — which retires the low-budget note below with it.
+ *   · a METERED deployment — `llm.freePool`, and nothing else. It is true only
+ *     where the answers come off the provider's own free catalogue, which is the
+ *     only place the ceiling is a count of REQUESTS per day; a deployment paying
+ *     per token has no such ceiling to report and a fabricated "50" would be
+ *     worse than silence. This used to read `llm.models`, which is a different
+ *     question with a similar shape: config.js returns an author's own
+ *     `chat.models` list for ANY provider, and a `{provider: 'openrouter',
+ *     model: '…'}` free-pool config has no list at all — so the one deployment
+ *     that was being rationed was the one deployment never told about it. It is
+ *     the same flag the daily ceiling is seeded from in session.js, so the line
+ *     and the rationing cannot disagree about who is metered.
+ *   · a KNOWN snapshot. `s.budget` is null until something has been learned —
+ *     a header, or a ceiling the project wrote down — and "? of ? left" is
+ *     worse than no line. The finite checks repeat that here because a partial
+ *     rate-limit read is normal: a `remaining` with no `limit` renders no
+ *     fraction rather than the word `undefined`.
+ */
+const budgetLine = computed(() => {
+  const snap = s.budget
+  if (!s.config.budget.showRemaining || !s.config.llm.freePool) return ''
+  if (!snap || !Number.isFinite(snap.remaining) || !Number.isFinite(snap.limit)) return ''
+  return T('error.budgetLeft', { n: snap.remaining, limit: snap.limit })
+})
+
+// Whether the NEXT question will be answered in one model call. Read off the
+// session rather than re-derived here: the plan is a decision, taken in one
+// place, and a template that applied `oneShotBelow` itself would be a second
+// place for it to drift.
+const oneShot = computed(() => s.budgetMode === 'one-shot')
+
+/**
+ * The one-shot notice, said once and then retired.
+ *
+ * `sessionStorage`, not the device store the first-run hint uses: this is a fact
+ * about TODAY's budget, and a reader who comes back tomorrow to a full quota
+ * must not meet a warning about yesterday's. Once per tab, because the drop in
+ * length is only surprising the first time and a line that reappears over every
+ * question for the rest of the day is nagging.
+ *
+ * `due` is what the flag is spent on, and it includes the budget line itself:
+ * a notice nobody could have seen must not count as having been given. It also
+ * keeps the note honest after it has been armed — the budget can refill
+ * mid-session, and "Running low" beside "40 of 50 left" is simply false.
+ */
+const BUDGET_LOW_KEY = 'docpilot:budget-low'
+const budgetLowSaid = ref(false)
+const budgetLowDue = computed(() => oneShot.value && !!budgetLine.value)
+const showBudgetLow = computed(() => budgetLowSaid.value && budgetLowDue.value)
 
 // Whether anything the reader types would leave the device. A textarea whose
 // contents go nowhere invites a sentence and silently discards it. The reason
@@ -1705,6 +2425,13 @@ const leadLine = (turn) =>
     ? T('refusal.degraded')
     : T('refusal.notFound', { scope: shortScope(turn.refusal) }))
 
+// When the quota comes back, as a clock time in the reader's locale — see
+// session.js, which owns it because the sentence is SPOKEN as well as shown. A
+// rate-limited turn is announced with its reset line attached, and a second
+// formatter here would eventually disagree with that one about the only fact in
+// the turn a reader can act on.
+const resetLine = session.resetLine
+
 function goSource(href) {
   if (mobile.value) close()
   router.go(href)
@@ -1769,8 +2496,31 @@ function onCiteEnter(e) {
   const cite = e.target.closest?.('.docpilot__cite')
   linkedCite.value = cite ? Number(cite.dataset.cite) : null
 }
+/**
+ * The host's own search, offered by the degraded and error states as the thing
+ * to do instead — and whether to offer it at all.
+ *
+ * A CONFIGURED SELECTOR IS NOT ENOUGH; the element has to be on the page. Every
+ * host's search is optional at the site level: DocSearch is opt-in on
+ * Docusaurus, and VitePress renders no search box for a project that configured
+ * none. So a binding's selector says "this is what search looks like here", not
+ * "there is search here", and the difference is a button that clicks nothing —
+ * measured on a stock `create-docusaurus` site, where the offer appeared and did
+ * nothing.
+ *
+ * Gated on `s.open` so the lookup runs each time the panel opens rather than
+ * being cached from the first: a computed over a `querySelector` has no reactive
+ * dependency on the DOM, and a host whose search box mounts lazily would
+ * otherwise be judged once, too early, forever.
+ */
+const hasSearch = computed(() => {
+  if (!s.open || typeof document === 'undefined') return false
+  const selector = hostConfig(s.config).search
+  return !!selector && !!document.querySelector(selector)
+})
 function openSearch() {
-  document.querySelector('.VPNavBarSearchButton, .DocSearch-Button')?.click()
+  const selector = hostConfig(s.config).search
+  if (selector) document.querySelector(selector)?.click()
 }
 
 // The VALUES are stable — they are recorded in feedback reports and compared

@@ -15,7 +15,7 @@
  * `prepare` runs this on `npm install` in a clone and again before publish, so
  * neither a contributor nor a consumer ever has to know it happened.
  *
- * THREE OUTPUTS, not one. The bundle is what almost everyone wants and what
+ * FOUR OUTPUTS, not one. The bundle is what almost everyone wants and what
  * `"./style.css"` still points at. The other two exist for the two cases the
  * bundle cannot serve: a host that is not VitePress (core alone), and a host
  * that wants the panel's own styling replaced wholesale but the VitePress
@@ -32,6 +32,7 @@ const ENTRIES = [
   ['src/theme/styles/docpilot.scss', 'docpilot.css'],
   ['src/theme/styles/core.scss', 'docpilot-core.css'],
   ['src/theme/styles/vitepress.scss', 'docpilot-vitepress.css'],
+  ['src/theme/styles/docusaurus.scss', 'docpilot-docusaurus.css'],
 ]
 
 let sass
@@ -45,11 +46,29 @@ try {
   // `exports` still points at it. The publish succeeds and the package is broken.
   const missing =
     err?.code === 'ERR_MODULE_NOT_FOUND' && /['"]sass['"]/.test(String(err?.message || ''))
-  if (!missing) throw err
-  // A consumer installing from the registry gets `dist/` in the tarball and
-  // never reaches this file; `prepare` still runs for them, so it has to be a
-  // no-op rather than a failed install.
-  console.log('[docpilot] sass not installed — skipping the stylesheet build (this is normal for a consumer install)')
+  // A RELEASE MAY NOT SKIP. `prepare` runs again during `npm publish` and
+  // `npm pack`, so on a machine where `sass` cannot resolve — a CI runner that
+  // installed with `--omit=dev`, a clone whose node_modules is half-written —
+  // the skip below would fire, exit 0, and hand npm a tarball with no `dist/`
+  // behind an exports map that names six files inside it. The publish is green
+  // and every consumer of `./style.css`, `./web` or `./style/docusaurus.css`
+  // gets ERR_MODULE_NOT_FOUND. npm sets `npm_command`, which is the only thing
+  // that distinguishes that case from a contributor's plain install.
+  const releasing = process.env.npm_command === 'publish' || process.env.npm_command === 'pack'
+  // Said in one line before Node's stack trace, because the trace names a
+  // specifier and not the reason a release just stopped.
+  if (missing && releasing) {
+    console.error(
+      `[docpilot] sass is missing and npm_command=${process.env.npm_command} — refusing to build a release without dist/  (fix: npm install)`,
+    )
+  }
+  if (!missing || releasing) throw err
+  // Not a consumer path: npm runs `prepare` for local-directory and git
+  // installs and before pack/publish — never for an install from the registry.
+  // The registry consumer gets `dist/` out of the tarball and never runs this
+  // file at all. The skip is for the contributor whose devDependencies are not
+  // in yet, whose install must not fail over a stylesheet they can rebuild.
+  console.log('[docpilot] sass not installed — skipping the stylesheet build (this is normal for a contributor install without devDependencies)')
   process.exit(0)
 }
 

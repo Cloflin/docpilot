@@ -8,7 +8,7 @@
  */
 
 import MiniSearch from 'minisearch'
-import { terms } from './text.js'
+import { terms, STOP } from './text.js'
 import {
   denseSeparation,
   denseFromCosine,
@@ -20,20 +20,63 @@ import {
 } from './gate.js'
 
 /**
- * Ranking constants, sweepable from the environment.
+ * Ranking constants — RAG-SPEC 7 levers 1 and 2, and the LAST of three layers.
  *
- * These are RAG-SPEC 7 lever 1 and 2, and a lever that cannot be swept is a
- * lever nobody pulls: `--gate-only` measures a candidate in seconds, so the only
- * thing standing between a hypothesis and a number was having to edit the file.
- * `globalThis.process` is undefined in the browser, so the shipped bundle reads
- * the literals below and no bundler has to define anything.
+ * A lever that cannot be swept is a lever nobody pulls: `--gate-only` measures a
+ * candidate in seconds, so the only thing standing between a hypothesis and a
+ * number was having to edit the file. But editing the file is also all there was:
+ * the literals below are what every consumer's bundle shipped, whatever their
+ * corpus measured. Three layers now resolve to one value, in `resolveLevers`:
+ *
+ *   an explicitly-set DOCPILOT_<NAME>  — a sweep running on this shell, now
+ *   > the per-instance `tuning` object — what `docpilot tune` measured on THIS
+ *                                        corpus, inlined into the manifest
+ *   > the constant below               — what was measured on ours
+ *
+ * THE ENV LAYER IS READ AT CALL TIME, out of `process.env`, and resolves to the
+ * value it actually read. The timing is the whole of it. Every CLI entry point
+ * loads `.env.local` into `process.env` AFTER the module graph is imported —
+ * tune.js does it at its own top level, run.js and calibrate.js through
+ * cli-context — and `.env.local` is exactly where every DocPilot doc tells a
+ * consumer to put their `DOCPILOT_*` keys.
+ *
+ * So an env layer that answered out of the constants below would be reading a
+ * fold taken BEFORE the file was loaded: `DOCPILOT_GATE_K=9` in `.env.local`
+ * made `envIsSet` true from the moment the file landed while the constant still
+ * said 5, and `resolveLevers` handed back 5 — discarding the env value AND the
+ * manifest tuning, and pinning the lever to the package literal on the one path
+ * the documentation actually recommends. Reading `process.env` and answering
+ * from something else is the bug; they have to be the same read.
+ *
+ * `globalThis.process` is undefined in the browser, so `envLever` is NaN for
+ * every name there and the rule collapses to `tuning ?? constant` — no bundler
+ * has to define anything, at call time exactly as at import time.
+ *
+ * `resolveLevers` is the ONLY implementation of that precedence. run.js,
+ * calibrate.js and tune.js import it rather than re-deriving it, because three
+ * copies of a precedence rule are three different answers to the one question a
+ * report has to be able to answer: which value did this run actually use.
  *
  * NOT sweepable here: tau, tauLexical, wDense, wLexical. Those live in the guard
  * and only `docpilot calibrate` may set them (RAG-SPEC 7).
  */
-const tune = (name, dflt) => {
+const envLever = (name) => {
   const raw = globalThis.process?.env?.[`DOCPILOT_${name}`]
-  const n = raw === undefined || raw === '' ? NaN : Number(raw)
+  return raw === undefined || raw === '' ? NaN : Number(raw)
+}
+/**
+ * The import-time fold, which is NOT the env layer of the precedence any more.
+ *
+ * It survives for one narrow job: `mmr()` and `rrf()` are exported with these as
+ * DEFAULT PARAMETERS, so a caller who scores the objective directly — the λ
+ * sweep, the tests — follows a variable exported on the shell without being
+ * handed a third spelling of the rule. Every lever the retrieval itself reads
+ * comes through `resolveLevers`, which re-reads `process.env` per call and never
+ * consults this fold for the env layer; see the header for the `.env.local`
+ * ordering that made the difference load-bearing.
+ */
+const tune = (name, dflt) => {
+  const n = envLever(name)
   return Number.isFinite(n) ? n : dflt
 }
 
@@ -101,7 +144,163 @@ const EXPAND_BELOW_TOKENS = tune('EXPAND_BELOW_TOKENS', 150)
 /** The gate's own k. The model's k is its tool argument, clamped 1..8 separately. */
 const GATE_K = tune('GATE_K', 5)
 
-/** One MiniSearch instance over the whole corpus, never rebuilt per scope. */
+/**
+ * The allowlist, and the reason `tuning` is not just spread over the defaults.
+ *
+ * A tuning object arrives from a manifest, which arrives from a file a consumer
+ * commits; `resolveLevers` reads only these eight names out of it, so a
+ * `tau` that finds its way in there — by hand, by a merge, by a future writer
+ * being helpful — resolves to nothing rather than to a threshold the guard never
+ * agreed to. The build drops such a key loudly; this is the second wall.
+ */
+export const LEVER_NAMES = [
+  'RRF_K',
+  'W_LEXICAL_RRF',
+  'W_DENSE_RRF',
+  'MMR_LAMBDA',
+  'CANDIDATES',
+  'FUSED',
+  'EXPAND_BELOW_TOKENS',
+  'GATE_K',
+]
+
+const FALLBACK = {
+  RRF_K,
+  W_LEXICAL_RRF,
+  W_DENSE_RRF,
+  MMR_LAMBDA,
+  CANDIDATES,
+  FUSED,
+  EXPAND_BELOW_TOKENS,
+  GATE_K,
+}
+
+/**
+ * Is this lever pinned by the environment, and to WHAT — one read, one answer.
+ *
+ * Exported because `docpilot tune` has to ask the question and must not re-derive
+ * it: its whole job is to vary the `tuning` object that this layer outranks, so a
+ * pinned axis makes all ~99 of its cells measure the identical retrieval, and a
+ * second copy of the parse in tune.js would be a second opinion about which runs
+ * are degenerate. The env variable's own spelling is returned with the value for
+ * the same reason — the message that names it must name what is really read.
+ *
+ * "Set" still means "parses as a finite number", which is what keeps a typo out
+ * of the precedence: `DOCPILOT_MMR_LAMBDA=high` returns null here, so the lever
+ * falls through to the tuning object rather than resolving to NaN and taking
+ * every comparison downstream with it. An empty value is treated the same, since
+ * `DOCPILOT_GATE_K=` is a shell that ate the value, not a decision.
+ *
+ * @param {string} name  one of LEVER_NAMES
+ * @returns {{env: string, value: number}|null}
+ */
+export function envPin(name) {
+  const value = envLever(name)
+  return Number.isFinite(value) ? { env: `DOCPILOT_${name}`, value } : null
+}
+
+/**
+ * @param {object|null} tuning  manifest.tuning — per-corpus levers, or null
+ * @returns {{RRF_K:number, W_LEXICAL_RRF:number, W_DENSE_RRF:number, MMR_LAMBDA:number, CANDIDATES:number, FUSED:number, EXPAND_BELOW_TOKENS:number, GATE_K:number}}
+ */
+export function resolveLevers(tuning = null) {
+  const out = {}
+  for (const name of LEVER_NAMES) {
+    // The env layer resolves to the value THIS CALL read, never to `FALLBACK`:
+    // the constants folded `process.env` at import, and `.env.local` lands after
+    // it, so answering out of them turns a set variable into the package literal
+    // and drops the tuning object on the way past. See the header.
+    const pin = envPin(name)
+    out[name] = pin ? pin.value : (tuning?.[name] ?? FALLBACK[name])
+  }
+  return out
+}
+
+/**
+ * The tokenizer, and it is ASYMMETRIC on purpose.
+ *
+ * MiniSearch's default splitter breaks at every non-alphanumeric, so
+ * `window.initEditor` indexes as two ordinary words and the compound the reader
+ * actually typed is not a term at all. `terms()` — the tokenizer `df.json` and
+ * the gate's L are both built from — keeps `.`, `/`, `#` and `-` inside a token,
+ * which is the right shape for a corpus made of identifiers and routes.
+ *
+ * Used alone it trades one failure for a worse one. `window.initEditor` becomes
+ * the single token `window.initeditor`, and a search for the bare `initEditor`
+ * then cannot reach it — `prefix: true` does not save it either, because a
+ * prefix match walks from the START of a term. Measured over this corpus:
+ * `initEditor` went from 14 hits to 1. A bare identifier is exactly what a
+ * `search_docs` call tends to be, so that is the common case, not a corner.
+ *
+ * So the index emits BOTH — the compound and its parts — while the query side
+ * stays plain `terms()`. A reader who types the compound matches the compound; a
+ * reader who types one half matches through the part. MiniSearch supports this
+ * directly: a top-level `tokenize` governs indexing, and `searchOptions.tokenize`
+ * overrides it for queries.
+ *
+ * NOT the reason: keeping BM25's vocabulary aligned with `df.json`. MiniSearch
+ * never reads `df.json` — it derives its own document frequencies, and `index.df`
+ * is consumed only by `lexicalCoverage`. The two lexical channels do different
+ * jobs and their alphabets were free to differ. This change has to earn its place
+ * on measurement alone, and the measurement is below.
+ *
+ * The extra `fieldName` argument MiniSearch passes is ignored by arity, and the
+ * default `processTerm` lowercases a string `terms()` has already lowercased.
+ */
+const indexTokens = (s) => {
+  const out = []
+  for (const t of terms(s)) {
+    out.push(t)
+    if (!/[./#-]/.test(t)) continue
+    for (const part of t.split(/[./#-]+/)) {
+      if (part.length >= 2 && !STOP.has(part)) out.push(part)
+    }
+  }
+  return out
+}
+
+/**
+ * One MiniSearch instance over the whole corpus, never rebuilt per scope.
+ *
+ * MEASURED, with the corrected `underPath` — and read the two numbers as the
+ * different things they are.
+ *
+ * The LEXICAL CHANNEL ALONE gains a lot: over the golden positives recall@8 goes
+ * roughly 0.32 → 0.42 and MRR 0.16 → 0.27, and the index builds about 7× faster,
+ * because the stop words leave it and the prefix and fuzzy trie walks collapse.
+ * (Those two figures were taken before the metrics fix and are understated in
+ * absolute terms; the direction is not in doubt.)
+ *
+ * THE SHIPPED PIPELINE gains a part of it, because the dense channel was already
+ * finding much of what the lexical one missed. `--gate-only` over the 60 records
+ * on text-embedding-3-small / 1216 chunks:
+ *
+ *   recall@8      0.7386 → 0.7841   +4.5pp, per-record 2 wins and 0 losses
+ *   MRR           0.4857 → 0.4734   -1.2pp
+ *   retrieval F1  0.3012 → 0.2975   -0.4pp
+ *
+ * with gate over-refusal, negatives caught and scope containment all unmoved. The
+ * two records that move are q-31 and q-34, both extension-API questions whose gold
+ * page is named by a dotted identifier the default splitter took apart.
+ *
+ * MRR pays about a point for it. That is the honest cost and it is inside the
+ * two-point revert rule, but it is not nothing: `evaluate()` builds the evidence
+ * text for L out of the TOP 3 of this list, so rank feeds the gate as well as the
+ * answer. Watch it if this is swept again.
+ *
+ * A NOTE ON AN EARLIER VERSION OF THIS COMMENT. It reported +2.3pp and "2 wins,
+ * 1 loss", and told a story about q-26 losing its gold chunk because a short
+ * follow-up is mostly stop words. That loss was an artefact of the broken
+ * `underPath` — q-26's gold is a split section, and the old matcher scored the
+ * right chunk as a miss. There was no stop-word regression. The lesson is the
+ * instrument, not the lever.
+ *
+ * A THING THIS TOUCHES THAT LOOKS UNRELATED: `evaluate()` builds L's evidence out
+ * of this list, so changing the ranking changes L, and L is half of G. On this set
+ * no verdict moved — gate over-refusal stayed 0/44, negatives caught stayed 3/16 —
+ * but `tau` was calibrated against the old distribution, and RAG-SPEC 5.6 wants a
+ * recalibration pass for changes of this class. It is owed.
+ */
 let miniCache = null
 function miniSearchFor(index) {
   if (miniCache?.hash === index.manifest.hash) return miniCache.ms
@@ -109,7 +308,13 @@ function miniSearchFor(index) {
     fields: ['text', 'title', 'breadcrumb'],
     storeFields: ['path'],
     idField: 'id',
-    searchOptions: { boost: { title: 2, breadcrumb: 1.5 }, prefix: true, fuzzy: 0.2 },
+    tokenize: indexTokens,
+    searchOptions: {
+      boost: { title: 2, breadcrumb: 1.5 },
+      prefix: true,
+      fuzzy: 0.2,
+      tokenize: terms,
+    },
   })
   ms.addAll(index.chunks)
   miniCache = { hash: index.manifest.hash, ms }
@@ -123,19 +328,32 @@ function dot(vectors, dims, row, query) {
   return sum / 16129 // 127²
 }
 
-/** Reciprocal rank fusion. Rank-derived, so its output carries no absolute meaning. */
-function rrf(lists) {
+/**
+ * Reciprocal rank fusion. Rank-derived, so its output carries no absolute meaning.
+ *
+ * `rrfK` is a parameter and not a closed-over constant so that a sweep can score
+ * a hundred grid cells against one loaded index in-process, without a module
+ * reload per cell.
+ */
+function rrf(lists, rrfK = RRF_K) {
   const scores = new Map()
   for (const { ids, weight } of lists) {
     ids.forEach((id, rank) => {
-      scores.set(id, (scores.get(id) || 0) + weight / (RRF_K + rank + 1))
+      scores.set(id, (scores.get(id) || 0) + weight / (rrfK + rank + 1))
     })
   }
   return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id)
 }
 
-/** Maximal marginal relevance. Without it three of five slots go to one page. */
-function mmr(ids, simTo, k) {
+/**
+ * Maximal marginal relevance. Without it three of five slots go to one page.
+ *
+ * Exported for the λ sweep, which needs to score the objective directly rather
+ * than through a whole retrieval — and for the tests, which pin what the two ends
+ * of the λ range mean: at 1.0 the redundancy term drops out and this is a
+ * relevance re-rank, at 0 relevance drops out and it is a pure diversity filter.
+ */
+export function mmr(ids, simTo, k, lambda = MMR_LAMBDA) {
   const picked = []
   const pool = [...ids]
   while (picked.length < k && pool.length) {
@@ -144,7 +362,7 @@ function mmr(ids, simTo, k) {
     for (const id of pool) {
       const rel = simTo.query(id)
       const red = picked.length ? Math.max(...picked.map((p) => simTo.pair(id, p))) : 0
-      const score = MMR_LAMBDA * rel - (1 - MMR_LAMBDA) * red
+      const score = lambda * rel - (1 - lambda) * red
       if (score > bestScore) {
         bestScore = score
         best = id
@@ -162,15 +380,44 @@ export class ScopeEscape extends Error {}
  * @param {object}  index    from store.loadIndex()
  * @param {object}  scope    { kind, paths, label } — frozen for the turn
  * @param {object}  guard    manifest.guard, possibly overridden by config
+ * @param {object}  tuning   manifest.tuning — per-corpus levers, or null
  * @param {boolean} dev      throw on a GATE 2 escape instead of filtering silently
  */
-export function createRetrieval({ index, scope, guard, dev = false, onDebug = null }) {
+export function createRetrieval({
+  index,
+  scope,
+  guard,
+  tuning = null,
+  dev = false,
+  onDebug = null,
+}) {
   assertWeights(guard)
+
+  /**
+   * Resolved ONCE per retrieval, and every lever read below goes through it.
+   *
+   * A bare constant left anywhere inside this closure is not a small
+   * inconsistency: it is a lever that the manifest says was tuned and that the
+   * running code ignores, and nothing downstream can see the difference — the
+   * report would name the tuned value and the retrieval would use ours.
+   */
+  const T = resolveLevers(tuning)
 
   const allow = !scope || scope.kind === 'all' ? null : new Set(scope.paths)
   const inScope = (c) => allow === null || allow.has(c.path)
   const scopedChunks = allow === null ? index.chunks : index.chunks.filter(inScope)
   const ms = miniSearchFor(index)
+
+  /**
+   * An index built with no embedder, which is NOT the runtime degradation of an
+   * embedder that stopped answering: there is no vector space here for a query
+   * vector to be scored in, and no later turn in which one appears.
+   *
+   * Settled once, so the two entry points that take a query vector can drop it
+   * at the top and every dense arithmetic site below keeps the single condition
+   * it already tests — a missing query vector — instead of growing a second.
+   */
+  const vectorless = !index.vectors || !index.dims
 
   /** GATE 2 — a post-condition on the final set. Expected to be a no-op. */
   const gate2 = (chunks) => {
@@ -214,7 +461,7 @@ export function createRetrieval({ index, scope, guard, dev = false, onDebug = nu
     const out = [...chunks]
     const have = new Set(out.map((c) => c.id))
     for (const c of chunks) {
-      if (c.text.length / 3.6 >= EXPAND_BELOW_TOKENS) continue
+      if (c.text.length / 3.6 >= T.EXPAND_BELOW_TOKENS) continue
       const next = c.next && index.byId.get(c.next)
       if (next && !have.has(next.id)) {
         out.push(next)
@@ -225,6 +472,10 @@ export function createRetrieval({ index, scope, guard, dev = false, onDebug = nu
   }
 
   function rank({ query, queryVec, k = 5, kind = null }) {
+    // Dropped ahead of the width check, which would otherwise read every query
+    // vector as a mismatch against a `dims` of 0. A mismatch is a disagreement
+    // between two vector spaces; here there is only one.
+    if (vectorless) queryVec = null
     // A vector of the wrong width means the embed model changed under a cached
     // index. Degrade to lexical-only — the mode the spec already defines for a
     // missing embedder — rather than scoring garbage or throwing mid-turn.
@@ -232,12 +483,15 @@ export function createRetrieval({ index, scope, guard, dev = false, onDebug = nu
       onDebug?.('dim-mismatch', { got: queryVec.length, want: index.dims })
       queryVec = null
     }
-    const lex = lexical(query, CANDIDATES)
-    const den = dense(queryVec, CANDIDATES)
-    const fused = rrf([
-      { ids: lex, weight: W_LEXICAL_RRF },
-      { ids: den.ids, weight: W_DENSE_RRF },
-    ]).slice(0, FUSED)
+    const lex = lexical(query, T.CANDIDATES)
+    const den = dense(queryVec, T.CANDIDATES)
+    const fused = rrf(
+      [
+        { ids: lex, weight: T.W_LEXICAL_RRF },
+        { ids: den.ids, weight: T.W_DENSE_RRF },
+      ],
+      T.RRF_K,
+    ).slice(0, T.FUSED)
 
     // `kind` is the one filter the model may request, and it can only intersect.
     const filtered = kind ? fused.filter((id) => index.byId.get(id)?.kind === kind) : fused
@@ -257,7 +511,7 @@ export function createRetrieval({ index, scope, guard, dev = false, onDebug = nu
       },
     }
 
-    const diverse = mmr(pool, simTo, Math.min(k, pool.length))
+    const diverse = mmr(pool, simTo, Math.min(k, pool.length), T.MMR_LAMBDA)
     const chunks = gate2(diverse.map((id) => index.byId.get(id)))
     return { chunks: sectionExpand(chunks), lexIds: lex, dense: den }
   }
@@ -298,8 +552,48 @@ export function createRetrieval({ index, scope, guard, dev = false, onDebug = nu
      * built and no token is ever sent. RAG-SPEC 3.4, 4.2 step 0.
      */
     evaluate({ question, previousQuestion, queryVec, composedVec, mode = 'hybrid' }) {
+      /**
+       * A lexical-only INDEX is a mode, not a mismatch.
+       *
+       * The block below names a real disagreement in the debug channel — a
+       * vector of one width scored against an index of another — and whoever
+       * reads that event goes looking for an embed model that changed under a
+       * cached index. An index built without an embedder disagrees with
+       * nothing: this is the mode the deployment chose, so it is named as such
+       * and reported no further.
+       *
+       * `composedVec` keeps the undefined/null distinction the composed channel
+       * runs on: undefined means "no second query to score", null means "score
+       * it lexically". Collapsing them here would silently drop the channel.
+       */
+      if (vectorless) {
+        queryVec = null
+        composedVec = composedVec === undefined ? undefined : null
+        mode = 'lexical-only'
+      }
+      /**
+       * A query vector of the wrong width is a MISSING embedder, not a weak one.
+       *
+       * `rank` has always dropped it — scoring a 2048-wide vector against a
+       * 1024-wide index is arithmetic on unrelated numbers — but it dropped it
+       * silently, three levels below the only place that knows what `mode`
+       * means. So D came back 0 from a run still labelled `hybrid`, the gate
+       * scored G against the hybrid threshold instead of `tauLexical`, and every
+       * question — including the most on-topic one in the corpus — refused while
+       * the panel reported a healthy search. Naming the mode here is what makes
+       * the refusal legible and the fallback the one RAG-SPEC 3.2 defines.
+       *
+       * Reachable whenever an index outlives the model that built it, which a
+       * free embedding pool makes ordinary rather than exotic.
+       */
+      if (queryVec && queryVec.length !== index.dims) {
+        onDebug?.('dim-mismatch', { got: queryVec.length, want: index.dims })
+        queryVec = null
+        composedVec = composedVec === undefined ? undefined : null
+        mode = 'lexical-only'
+      }
       const run = (query, vec) => {
-        const r = rank({ query, queryVec: vec, k: GATE_K })
+        const r = rank({ query, queryVec: vec, k: T.GATE_K })
         const evidence = r.lexIds
           .slice(0, 3)
           .map((id) => index.byId.get(id)?.text || '')
@@ -382,16 +676,26 @@ export function createRetrieval({ index, scope, guard, dev = false, onDebug = nu
       const pool = outsideScope ? index.chunks : scopedChunks
       const seen = new Set()
       const out = []
-      const scored = queryVec
-        ? pool
-            .map((c) => [c, dot(index.vectors, index.dims, c.row, queryVec)])
-            .sort((a, b) => b[1] - a[1])
-            .map(([c]) => c)
-        : ms
-            .search(query)
-            .map((r) => index.byId.get(r.id))
-            .filter(Boolean)
-            .filter((c) => (outsideScope ? true : inScope(c)))
+      /**
+       * The lexical branch is not only the missing-embedder fallback: a
+       * VECTORLESS INDEX takes it too, and the choice has to be made here
+       * because this is the one entry point whose query vector never passes
+       * through `rank`. A deployment that names an embedder over an index built
+       * without one — the disagreement `readiness()` reports rather than
+       * prevents — embeds the question perfectly well and arrives holding a
+       * vector with nothing to score it against.
+       */
+      const scored =
+        queryVec && !vectorless
+          ? pool
+              .map((c) => [c, dot(index.vectors, index.dims, c.row, queryVec)])
+              .sort((a, b) => b[1] - a[1])
+              .map(([c]) => c)
+          : ms
+              .search(query)
+              .map((r) => index.byId.get(r.id))
+              .filter(Boolean)
+              .filter((c) => (outsideScope ? true : inScope(c)))
       for (const c of scored) {
         if (outsideScope && inScope(c)) continue
         if (seen.has(c.path)) continue

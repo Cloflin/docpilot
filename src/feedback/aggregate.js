@@ -93,6 +93,7 @@ export function aggregate(rows) {
         taus: [],
         ns: [],
         wouldPassUnscoped: 0,
+        degraded: 0,
         // Numbers or nothing. `pull` reads "anything", and a source that hands
         // back an ISO string here used to seed the group with one — after which
         // `Math.min(string, number)` on the next row is NaN, and `iso` below
@@ -123,6 +124,12 @@ export function aggregate(rows) {
       // "composed 9 times, 7 of them from a quote" readable.
       tally(g.antecedents, r.gate.antecedent ?? 'none')
       tally(g.modes, r.gate.mode)
+      // A lexical-only turn is either an embedder that stopped answering or the
+      // mode the site was built in, and `mode` is the same string for both. A
+      // record written before the panel said which can only be the outage —
+      // that was the only way the mode existed then — so an absent value counts
+      // as one rather than quietly joining the declared population.
+      if (r.gate.mode === 'lexical-only' && (r.gate.degraded ?? true)) g.degraded++
       if (typeof r.gate.G === 'number') g.G.push(r.gate.G)
       if (typeof r.gate.tau === 'number') g.taus.push(r.gate.tau)
       if (typeof r.gate.n === 'number') g.ns.push(r.gate.n)
@@ -152,6 +159,7 @@ function finish(g, i) {
         channel: obj(g.channels),
         antecedent: obj(g.antecedents),
         mode: modes,
+        degraded: g.degraded,
         nP50: quantiles(g.ns)?.p50 ?? null,
         wouldPassUnscoped: g.wouldPassUnscoped,
       }
@@ -188,6 +196,11 @@ function finish(g, i) {
       G: gate.G?.p50 ?? null,
       tau: gate.tau,
       mode: top(g.modes),
+      // Without this the lexical-only branch in stratum.js cannot tell a broken
+      // embedder from a site that never had one, and this projection is a
+      // whitelist: a field it does not name does not exist as far as `suggest`
+      // is concerned.
+      degraded: g.degraded > 0,
       channel: top(g.channels),
       // Without this the quoted-turn branch in stratum.js can never fire: this
       // projection is a whitelist, and a field it does not name does not exist

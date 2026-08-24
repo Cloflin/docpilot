@@ -84,3 +84,19 @@ export const GOLDEN = path.join(DOCPILOT_DIR, 'golden.jsonl')
 export const CALIBRATION_SET = path.join(DOCPILOT_DIR, 'calibration.jsonl')
 export const REPORTS = path.join(DOCPILOT_DIR, 'reports')
 export const CALIBRATION_OUT = path.join(DOCPILOT_DIR, 'calibration.json')
+
+/**
+ * What `docpilot tune` writes and `docpilot index` reads back.
+ *
+ * A separate file from `CALIBRATION_OUT` because the two have independent
+ * lifecycles and, more importantly, independent AUTHORITY: thresholds are
+ * `calibrate`'s alone, levers are `tune`'s alone (RAG-SPEC 7). One document
+ * holding both would be one hand-edit away from moving a refusal threshold.
+ *
+ * It is stated HERE, once, for the reason every path above is: two modules
+ * derived it independently — the writer in `eval/tune.js` and the reader in
+ * `build/build-rag-index.js` — and two spellings of one path is precisely the
+ * drift that made `index` report "no calibration" after every successful
+ * `calibrate` for weeks (see `guardFor`).
+ */
+export const TUNING_OUT = path.join(DOCPILOT_DIR, 'tuning.json')

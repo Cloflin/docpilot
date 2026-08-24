@@ -4,9 +4,11 @@ DocPilot answers from a private index it builds itself. This is the other half: 
 
 The two share a corpus and nothing else. Improving one does not improve the other, and no metric in any DocPilot report moves when you change this.
 
-## VitePress only
+## The generator plugin is VitePress's, DocPilot is not
 
-This package is VitePress-only, and so is everything below. For another generator — Docusaurus, Mintlify, Starlight, MkDocs — find that generator's equivalent; the config shapes do not transfer, and a plugin API guessed at produces a build that silently emits nothing.
+DocPilot mounts on six hosts — VitePress, Docusaurus, Vue, React, any bundler with the Vue plugin, and a bare `<script>` tag — and it answers from an index `npx docpilot index` builds by walking markdown files, which knows nothing about the generator that renders them. See [Installing](/install/).
+
+What is VitePress-only is the plugin in the next section. `vitepress-plugin-llms` is one generator's Vite plugin, so on Docusaurus, Mintlify, Starlight or MkDocs you need that generator's equivalent; the config shapes do not transfer, and a plugin API guessed at produces a build that silently emits nothing. The rest of this page — serving the files, `robots.txt`, the sitemap — is generator-independent.
 
 ## Generating it
 

@@ -67,10 +67,22 @@ surviving citations is not shown at all. See
 
 It is worth being clear about the price, because there is one.
 
-**You need an embedding model**, and the model that built the index is the model
-every query must be embedded with. A mismatch degrades retrieval to keyword
-matching, silently. The index records which embedder it was built for so the
-mismatch is caught rather than suffered — see
+**You need an embedding model**, unless you declare that you do not. The default
+`embed: 'auto'` uses the chat provider's own embedder, and borrows OpenRouter's
+free embedding pool when the chat provider has no embeddings endpoint; an object
+names a second provider explicitly. The third arm is
+[`embed: false`](/reference/config#embed-false) — no embedder, no vectors in the
+index, retrieval by BM25 over the chunk text alone.
+
+That third arm has a price, and every build under it prints the price: measured on a 1191-chunk corpus, recall@8 fell from 0.97 to 0.41, retrieval F1
+from 0.35 to 0.18, and 11 of 44 answerable questions were refused outright. A
+question asked in a language the corpus is not written in scores **zero** on the
+lexical channel, because there is no overlap to count.
+
+On the two arms that have an embedder, the model that built the index is the
+model every query must be embedded with. A mismatch degrades retrieval to keyword matching,
+silently. The index records which embedder it was built for so the mismatch is
+caught rather than suffered — see
 [Choosing providers](./providers).
 
 **The index is bytes the reader downloads.** Small for a normal documentation
