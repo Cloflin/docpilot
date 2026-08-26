@@ -6,7 +6,7 @@
  * bundled in, for a host that does not.
  */
 import type { App, Component } from 'vue'
-import type { DocPilotThemeConfig } from './config.js'
+import type { DocPilotThemeConfig, UiTrigger } from './config.js'
 import type { HostRouter, HostSelectors } from './host.js'
 import type { Highlighter } from './highlight.js'
 
@@ -15,7 +15,11 @@ export interface MountOptions {
   config?: DocPilotThemeConfig
   /** Where to mount. A div is created and appended to `<body>` without one. */
   target?: Element | null
-  trigger?: 'fab' | 'nav' | 'none'
+  /**
+   * Which trigger instances to MOUNT — a different question from which of them
+   * render, which `config.ui.trigger` answers. A placement has to pass both.
+   */
+  trigger?: UiTrigger | 'none' | UiTrigger[]
   /** The current route, base-less. Read from `location.pathname` when omitted. */
   route?: string
   /** Read from `<html lang>` when omitted. */

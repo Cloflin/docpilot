@@ -31,7 +31,7 @@ import { mountDocPilot } from '@cloflin/docpilot/web'
  * @param {object}  props.config       the client config — `ai.themeConfig` from `defineDocPilot`
  * @param {string}  [props.route]      the current route, base-less. Read from `location` when omitted
  * @param {string}  [props.lang]       the page's locale
- * @param {'fab'|'nav'|'none'} [props.trigger='fab']
+ * @param {'fab'|'nav'|'screen'|'none'|Array<'fab'|'nav'|'screen'>} [props.trigger='fab']
  * @param {string}  [props.base]       the site's base path
  * @param {string}  [props.ragBase]    where the index is served from
  * @param {object}  [props.selectors]  `{article, search, content}` for this host

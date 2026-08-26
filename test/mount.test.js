@@ -93,6 +93,31 @@ describe('mounting', () => {
     expect(document.querySelector('.docpilot-nav-trigger.is-fab')).not.toBe(null)
   })
 
+  /**
+   * TWO GATES, and a placement has to pass both.
+   *
+   * `trigger` here says which instances are MOUNTED — the host's decision, made
+   * from its own layout — and `config.ui.trigger` says which of them render, the
+   * project's decision, made in the same settings file every other host reads.
+   * A list on either side is legal, and this is the combination that proves the
+   * two are actually independent: the navbar instance is mounted and stays
+   * silent because the config never asked for it.
+   */
+  it('mounts a list of triggers, and each one still asks the config', () => {
+    panel = mountDocPilot({
+      config: { ...CONFIG, ui: { trigger: ['nav', 'fab'], panel: 'popup' } },
+      trigger: ['nav', 'fab'],
+    })
+    expect(document.querySelector('.docpilot-nav-trigger.is-fab')).not.toBe(null)
+    expect(document.querySelectorAll('.docpilot-nav-trigger').length).toBe(2)
+
+    panel.destroy()
+    // Same mount list, a config that names one of them: one button.
+    panel = mountDocPilot({ config: CONFIG, trigger: ['nav', 'fab'] })
+    expect(document.querySelectorAll('.docpilot-nav-trigger').length).toBe(1)
+    expect(document.querySelector('.docpilot-nav-trigger.is-fab')).not.toBe(null)
+  })
+
   // The panel itself is `v-if="s.open"` — a reader who never asks pays for no
   // DOM at all — so "it is still there" means it can still be opened by hand.
   it('renders no trigger when the host places its own', async () => {

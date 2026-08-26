@@ -91,13 +91,21 @@ const enabled = computed(() => theme.value?.docPilot?.enabled !== false)
 const ui = computed(() => resolveUi(theme.value?.docPilot))
 
 /**
- * The nav-screen row follows the NAV trigger, not the FAB: in `fab` mode the
- * floating button is on screen at every width, and a second entry point in the
- * mobile menu is exactly what choosing one placement said not to have.
+ * One flag per placement, and the component never re-derives them.
+ *
+ * `resolveUi` has already turned `ui.trigger` into a list and the list into
+ * three booleans, including the rule that `'nav'` on its own carries the mobile
+ * nav-screen row with it — a navbar that collapses into a hamburger takes the
+ * button with it, and a placement with no mobile half disappears on a phone.
+ *
+ * All three instances are ALWAYS mounted; this is the only thing that decides
+ * which of them draws. That is what makes `trigger: ['nav','fab']` cost nothing
+ * but a boolean: nothing about the slot wiring changes, both instances simply
+ * say yes.
  */
-const visible = computed(
-  () => enabled.value && (kind.value === 'fab' ? ui.value.showFab : ui.value.showNavTrigger),
-)
+const SHOWN = { nav: 'showNavTrigger', screen: 'showScreen', fab: 'showFab' }
+
+const visible = computed(() => enabled.value && ui.value[SHOWN[kind.value]] === true)
 
 // The FAB stands alone on the page rather than beside a 40px search box, so it
 // carries the mark two pixels larger. Same drawing, same stroke.
@@ -187,8 +195,12 @@ const warm = () => {
  */
 let idleHandle = null
 onMounted(() => {
-  // The FAB is mounted once and the nav trigger once, so gating on `visible`
-  // keeps the two instances from both scheduling the same fetch.
+  // Gated on `visible` so a site with no trigger at all — `trigger: 'none'`, a
+  // host placing its own button — does not spend a reader's bandwidth on a
+  // control that is not there. It is NOT what keeps the fetch single: a site
+  // with every placement on has three visible instances and all three schedule.
+  // `store.loadIndex` is memoised on the in-flight promise, which is where that
+  // has always actually been settled.
   if (!visible.value || ui.value.prefetch !== 'idle') return
   const run = () => session.prefetchIndex()
   idleHandle = window.requestIdleCallback

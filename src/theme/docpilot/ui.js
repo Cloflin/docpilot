@@ -3,7 +3,7 @@
  * is made of, and how the panel treats the page it opens over.
  *
  *   ui: {
- *     trigger:      'nav' | 'fab',
+ *     trigger:      'nav' | 'fab' | 'screen' | 'both' | 'none' | [...],
  *     panel:        'auto' | 'drawer' | 'popup',
  *     fabLabel:     true | false | string,      // ui-specs/005
  *     fabIcon:      true | false,
@@ -12,13 +12,20 @@
  *     firstRunHint: true | false,               // ui-specs/009
  *   }
  *
+ * `trigger` IS A LIST, and a bare word is shorthand for one. A site is allowed
+ * every placement at once — the navbar button beside search, the row in the
+ * mobile nav menu, and the floating button — because they are not alternatives
+ * on the same screen: the first two only exist inside someone else's navbar and
+ * the third only exists outside it. Making them exclusive was a limit of the
+ * enum, never a design decision, and the enum is what changed.
+ *
  * `panel: 'auto'` is the default and means "whatever the trigger implies": a
- * floating button opens a floating popup, a navbar button opens the full-height
- * drawer that ships today. The shape of the option is VitePress's own — see
- * `resolveMode()` in theme-default's docsearch support — an enum with an `auto`
- * member plus a resolver that returns the FINISHED structure. Nothing
- * downstream re-derives `'auto'` for itself, so no two readers of the setting
- * can disagree about what it meant.
+ * list with the floating button in it opens a floating popup, a list without one
+ * opens the full-height drawer that ships today. The shape of the option is
+ * VitePress's own — see `resolveMode()` in theme-default's docsearch support —
+ * an enum with an `auto` member plus a resolver that returns the FINISHED
+ * structure. Nothing downstream re-derives `'auto'` for itself, so no two
+ * readers of the setting can disagree about what it meant.
  *
  * The explicit combinations — `nav` + `popup`, `fab` + `drawer` — are carried
  * out in silence. That is what `'auto'` is for: once the implied pairing has a
@@ -35,12 +42,59 @@
  * `i18n.js` on exactly those terms: pure data, pure functions, no Vue.
  *
  * IDEMPOTENT, and the suite asserts it. The build resolves, emits the result
- * under the same `ui` key, and the browser resolves that again; both members of
- * a resolved pair are legal input values, so the second pass changes nothing.
+ * under the same `ui` key, and the browser resolves that again; every member of
+ * a resolved result is a legal input value, so the second pass changes nothing.
+ * That is also why the resolved `trigger` is ALWAYS an array and never the word
+ * the author typed: `'nav'` means two placements, so a resolver that handed back
+ * `'nav'` would be handing back something it had not finished resolving.
  */
 
-/** The accepted values, in the order `npx docpilot init` offers them. */
-export const UI_TRIGGERS = ['nav', 'fab']
+/**
+ * The three placements, in the order they appear in the document.
+ *
+ *   'nav'     the button in the host's navigation bar, beside its search box
+ *   'screen'  a text row inside the host's mobile navigation menu
+ *   'fab'     the floating button, bottom corner, on every page and every width
+ *
+ * THE ORDER IS THE CANONICAL ORDER, and `resolveUi` sorts into it. A resolved
+ * list has to compare equal to another resolved list of the same placements, or
+ * the suite's idempotency assertion and every `toEqual` in it would depend on
+ * the order somebody happened to type.
+ */
+export const UI_TRIGGERS = ['nav', 'screen', 'fab']
+
+/**
+ * The words that stand for a LIST — the shape `trigger` had before it was one.
+ *
+ * `'nav'` is the load-bearing entry. It has always meant *both* the navbar
+ * button and the row in the mobile nav menu, because a navbar that collapses
+ * into a hamburger takes the button with it and a placement with no mobile half
+ * is a placement that disappears on a phone. Sites configured `trigger: 'nav'`
+ * on that promise, so the word keeps it: only an explicit `['nav']` gets the
+ * desktop button on its own.
+ *
+ * `'fab'` deliberately does NOT pull in the screen row: the floating button is
+ * on screen at every width already, and a second entry point in the mobile menu
+ * is exactly what choosing one placement said not to have. `['fab','screen']`
+ * is how a site asks for both.
+ *
+ * `'both'` and `'none'` were in `types/config.d.ts` from the start and were
+ * accepted by nothing — the resolver dropped them with a warning and fell back
+ * to `'nav'`. The types were the honest half of that disagreement, so they are
+ * the half that stays.
+ */
+const UI_TRIGGER_WORDS = {
+  nav: ['nav', 'screen'],
+  screen: ['screen'],
+  fab: ['fab'],
+  both: ['nav', 'screen', 'fab'],
+  all: ['nav', 'screen', 'fab'],
+  none: [],
+}
+
+/** What `npx docpilot init` offers, and what a bad value is reported against. */
+export const UI_TRIGGER_WORD_LIST = Object.keys(UI_TRIGGER_WORDS)
+
 export const UI_PANELS = ['auto', 'drawer', 'popup']
 
 /**
@@ -122,9 +176,99 @@ function label(value, err) {
   return true
 }
 
+/** In `UI_TRIGGERS` order, deduped — see why the order is fixed up there. */
+const canonical = (list) => UI_TRIGGERS.filter((t) => list.includes(t))
+
+/** A value, named in a message, without a way for the naming to throw. */
+function show(value) {
+  try {
+    const out = JSON.stringify(value)
+    // `undefined`, a function and a symbol all stringify to `undefined`.
+    return out === undefined ? String(value) : out
+  } catch {
+    return Object.prototype.toString.call(value)
+  }
+}
+
+/**
+ * `ui.trigger` — one word, or a list of placements.
+ *
+ * The two inputs are read differently ON PURPOSE. A WORD goes through
+ * `UI_TRIGGER_WORDS`, which is where `'nav'` keeps meaning "the navbar button
+ * and its mobile row". A LIST is taken literally, member by member, because an
+ * author who wrote the members out is describing the finished set and an
+ * expansion applied on top of that would add a placement they did not ask for.
+ * `'nav'` and `['nav']` therefore differ, and that asymmetry is the whole of
+ * the back-compatibility: it is the only shape a site could already have.
+ *
+ * AN EMPTY RESULT IS LEGAL, but only when it was asked for. `'none'` and `[]`
+ * both resolve to no visible trigger, which is a real configuration — the hotkey
+ * still binds, and a host that renders its own button wants exactly this. A list
+ * that ARRIVED non-empty and ended up empty is a typo instead, and falls back to
+ * the default: a cosmetic setting must never be able to leave a page with no way
+ * to open the panel.
+ */
+function triggers(value, err) {
+  // Absent is not wrong — it is the default, and the overwhelmingly common case.
+  if (value == null) return [...UI_TRIGGER_WORDS[UI_DEFAULTS.trigger]]
+
+  if (typeof value === 'string') {
+    /**
+     * `Object.hasOwn`, NOT a truthiness test on the lookup.
+     *
+     * A plain object literal inherits from `Object.prototype`, so
+     * `UI_TRIGGER_WORDS['toString']` is a FUNCTION and perfectly truthy — and
+     * `[...aFunction]` throws `TypeError: not iterable`. `trigger: 'toString'`,
+     * `'constructor'` or `'__proto__'` would therefore have taken down a docs
+     * build from inside the one resolver whose whole contract is that a typo in
+     * a cosmetic setting can never fail one.
+     */
+    const named = Object.hasOwn(UI_TRIGGER_WORDS, value) ? UI_TRIGGER_WORDS[value] : null
+    // A copy, never the table's own array: the resolved object is handed to the
+    // client and to two components, and one `.push()` anywhere would rewrite
+    // what every later build of this process resolves.
+    if (named) return [...named]
+    err(
+      `[docpilot] ui.trigger accepts ${UI_TRIGGER_WORD_LIST.map((v) => `"${v}"`).join(', ')} ` +
+        `or an array of ${UI_TRIGGERS.map((v) => `"${v}"`).join(', ')} — ` +
+        `using "${UI_DEFAULTS.trigger}"`,
+      value,
+    )
+    return [...UI_TRIGGER_WORDS[UI_DEFAULTS.trigger]]
+  }
+
+  if (Array.isArray(value)) {
+    const kept = value.filter((v) => UI_TRIGGERS.includes(v))
+    const dropped = value.filter((v) => !UI_TRIGGERS.includes(v))
+    // Named one by one rather than counted — "no silent caps": a list that lost
+    // a member is a list whose author is about to go looking for a button.
+    //
+    // `show`, not `JSON.stringify`, and for the same reason the word lookup uses
+    // `Object.hasOwn`: this resolver may not throw, and `JSON.stringify` throws
+    // on a circular reference and on a BigInt. The message is a courtesy; it
+    // must not be able to cost a build more than the value it is describing.
+    if (dropped.length) {
+      err(
+        `[docpilot] ui.trigger array accepts ${UI_TRIGGERS.map((v) => `"${v}"`).join(', ')} — ` +
+          `dropped ${dropped.map(show).join(', ')}`,
+        value,
+      )
+    }
+    // Emptied by the filter, not by the author. See the note above.
+    if (!kept.length && value.length) return [...UI_TRIGGER_WORDS[UI_DEFAULTS.trigger]]
+    return canonical(kept)
+  }
+
+  err(
+    `[docpilot] ui.trigger accepts a string or an array — using "${UI_DEFAULTS.trigger}"`,
+    value,
+  )
+  return [...UI_TRIGGER_WORDS[UI_DEFAULTS.trigger]]
+}
+
 export function resolveUi(docPilot, err = console.error) {
   const ui = docPilot?.ui || {}
-  const trigger = pick(ui.trigger, UI_TRIGGERS, UI_DEFAULTS.trigger, 'trigger', err)
+  const trigger = triggers(ui.trigger, err)
   const panel = pick(ui.panel, UI_PANELS, UI_DEFAULTS.panel, 'panel', err)
   const layout = pick(ui.layout, UI_LAYOUTS, UI_DEFAULTS.layout, 'layout', err)
   const prefetch = pick(ui.prefetch, UI_PREFETCH, UI_DEFAULTS.prefetch, 'prefetch', err)
@@ -134,20 +278,37 @@ export function resolveUi(docPilot, err = console.error) {
   let fabIcon = ui.fabIcon !== false
   // The one combination that has no rendering: a button with no icon and no
   // text is a control nobody can see, and the failure mode of a cosmetic
-  // setting must never be "the panel cannot be opened".
+  // setting must never be "the panel cannot be opened". Corrected whether or not
+  // the floating button is in the list, so that adding it later cannot resurrect
+  // a pair that was already invalid.
   if (!fabIcon && fabLabel === false) {
     err('[docpilot] ui.fabIcon and ui.fabLabel cannot both be off — keeping the icon', ui)
     fabIcon = true
   }
   return {
+    // ALWAYS an array. See the idempotency note at the top of the file for why
+    // the word the author typed is not what comes back out.
     trigger,
-    // Never 'auto' past this line. Every consumer reads a real shape.
-    panel: panel === 'auto' ? (trigger === 'fab' ? 'popup' : 'drawer') : panel,
+    /**
+     * Never 'auto' past this line. Every consumer reads a real shape.
+     *
+     * The floating button decides it, and it decides it even when the navbar
+     * button is in the list too: the popup is anchored to the corner the FAB
+     * sits in, and the drawer is not anchored to anything. So `['nav','fab']`
+     * opens the popup, both buttons open the same panel, and the one placement
+     * with a geometric opinion is the one that gets to hold it. A site that
+     * wants the drawer with a FAB says `panel: 'drawer'` — which was always
+     * legal and is still carried out in silence.
+     */
+    panel: panel === 'auto' ? (trigger.includes('fab') ? 'popup' : 'drawer') : panel,
     // Stated rather than left to each component to compute from `trigger`: the
-    // navbar trigger and the FAB are two mounted instances of one component,
-    // and "which one renders" is the answer both of them need.
-    showNavTrigger: trigger === 'nav',
-    showFab: trigger === 'fab',
+    // three placements are three mounted instances of one component, and "does
+    // this one render" is the answer all three need. Booleans rather than the
+    // list itself, because a component that reads `.includes()` is a component
+    // that can be handed a string by a hand-written themeConfig.
+    showNavTrigger: trigger.includes('nav'),
+    showScreen: trigger.includes('screen'),
+    showFab: trigger.includes('fab'),
     // These two describe the FLOATING placement only — see ui-specs/005. The
     // navbar trigger has always been icon-only beside the host's search box and
     // the nav-screen row has always been text; neither reads them.

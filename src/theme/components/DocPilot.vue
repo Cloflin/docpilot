@@ -1030,6 +1030,7 @@ import { relativeParts } from '../docpilot/history.js'
 import { COMMENT_MAX } from '../docpilot/feedback.js'
 import { createSelectionAsk } from '../docpilot/selection.js'
 import { FILTER_AUTO_ABOVE } from '../docpilot/switches.js'
+import { hasDailyAllowance } from '../docpilot/budget.js'
 
 const s = session.state
 const { theme, route, lang, router } = useHost()
@@ -1349,15 +1350,39 @@ watch(
       // would be dropped on the floor exactly in the mode where the button the
       // reader pressed is the only thing to return to.
       await nextTick()
-      const fallback =
-        document.querySelector('.docpilot-nav-trigger') ||
-        document.querySelector(hostConfig(s.config).content)
       if (trigger && document.contains(trigger)) trigger.focus()
-      else fallback?.focus?.()
+      else visibleTrigger()?.focus?.()
       trigger = null
     }
   },
 )
+
+/**
+ * Where focus lands when the element that opened the panel is gone — a route
+ * change while it was open, or a `v-if` that unmounted the mobile nav screen.
+ *
+ * HARDENING, NOT A FIX, and worth saying so plainly: no configuration is known
+ * where this changes the outcome today. It was written when `trigger` became a
+ * list, on the reasoning that `document.querySelector('.docpilot-nav-trigger')`
+ * returns whichever placement is FIRST IN THE DOCUMENT — the navbar button
+ * whenever there is one — and `focus()` on a `display: none` element is a silent
+ * no-op. Measured across 320–1400px on VitePress 1.6.4 and 2.0.0-alpha.19, the
+ * navbar button is displayed at every width, so the premise does not currently
+ * bite; the placements are configurable and the hide rules are CSS, so "the
+ * first one is the one you can see" is an assumption this had no reason to keep.
+ *
+ * `getClientRects()` is the test, not `offsetParent`: a `position: fixed`
+ * element — which the FAB is — reports a null `offsetParent` in every browser
+ * even when it is plainly on screen.
+ *
+ * The host's own content is the last resort and was already: somewhere in the
+ * document beats nowhere, which is what a dropped focus means for a keyboard.
+ */
+function visibleTrigger() {
+  const buttons = document.querySelectorAll('.docpilot-nav-trigger')
+  for (const el of buttons) if (el.getClientRects().length) return el
+  return document.querySelector(hostConfig(s.config).content)
+}
 
 // Autoscroll: written inside one coalesced rAF, and disengaged by pointer or
 // keyboard intent — never by a `scroll` event, which smooth scrolling makes
@@ -2265,6 +2290,18 @@ const disclaimer = computed(() => {
 })
 
 /**
+ * Whether this deployment HAS a daily allowance — the settings half of the
+ * question, hoisted so the line below reads as the three conditions its docblock
+ * names. `budget.js` owns the predicate; see `hasDailyAllowance`.
+ */
+const hasAllowance = computed(() =>
+  hasDailyAllowance({
+    dailyLimit: s.config.budget.dailyLimit,
+    freePool: s.config.llm.freePool,
+  }),
+)
+
+/**
  * What is left of the day, in one muted line under the field.
  *
  * THREE conditions, and each one is a way of getting it wrong:
@@ -2273,17 +2310,23 @@ const disclaimer = computed(() => {
  *     compute is not the count a shared key has — so this is a site saying it
  *     knows its own allowance and wants it stated. Off retires the low-budget
  *     note below with it, and the no-embedder note beside it.
- *   · a METERED deployment — `llm.freePool`, and nothing else. It is true only
- *     where the answers come off the provider's own free catalogue, which is the
- *     only place the ceiling is a count of REQUESTS per day; a deployment paying
- *     per token has no such ceiling to report and a fabricated "50" would be
- *     worse than silence. This used to read `llm.models`, which is a different
- *     question with a similar shape: config.js returns an author's own
- *     `chat.models` list for ANY provider, and a `{provider: 'openrouter',
- *     model: '…'}` free-pool config has no list at all — so the one deployment
- *     that was being rationed was the one deployment never told about it. It is
- *     the same flag the daily ceiling is seeded from in session.js, so the line
- *     and the rationing cannot disagree about who is metered.
+ *   · a DAILY ALLOWANCE — `hasDailyAllowance`, called with the same two facts
+ *     `session.js` seeds the ledger's ceiling from: a `budget.dailyLimit` the
+ *     site declared, or `llm.freePool`, true only where the answers come off the
+ *     provider's own free catalogue. Either one makes the ceiling a count of
+ *     REQUESTS per day; with neither there is no such ceiling to report and a
+ *     fabricated "50" would be worse than silence.
+ *
+ *     BOTH ARMS, and that is the fix. This tested `freePool` alone, so
+ *     `budget: {dailyLimit: 500, showRemaining: true}` on a metered provider was
+ *     rationed against 500 all day and never told the reader the count — the one
+ *     deployment being rationed was the one unable to see it. Before that it read
+ *     `llm.models`, a different question with a similar shape: config.js returns
+ *     an author's own `chat.models` list for ANY provider, and a
+ *     `{provider: 'openrouter', model: '…'}` free-pool config has no list at all.
+ *     It is now literally the function `trustworthy` opens with, so the line and
+ *     the rationing cannot disagree about who has an allowance — a claim that was
+ *     made here once before and was not true.
  *   · a KNOWN snapshot. `s.budget` is null until something has been learned —
  *     a header, or a ceiling the project wrote down — and "? of ? left" is
  *     worse than no line. The finite checks repeat that here because a partial
@@ -2292,7 +2335,7 @@ const disclaimer = computed(() => {
  */
 const budgetLine = computed(() => {
   const snap = s.budget
-  if (!s.config.budget.showRemaining || !s.config.llm.freePool) return ''
+  if (!s.config.budget.showRemaining || !hasAllowance.value) return ''
   if (!snap || !Number.isFinite(snap.remaining) || !Number.isFinite(snap.limit)) return ''
   return T('error.budgetLeft', { n: snap.remaining, limit: snap.limit })
 })

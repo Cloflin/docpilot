@@ -466,9 +466,11 @@ In a terminal, and only when nothing has already answered them, it asks two ques
 
 | flag | effect |
 |---|---|
-| `--trigger=nav\|fab` | answers the first question |
+| `--trigger=nav\|fab\|both\|none` | answers the first question. A comma list works too — `--trigger=nav,fab` |
 | `--panel=auto\|drawer\|popup` | answers the second |
 | `--yes`, `-y` | take the defaults, ask nothing |
+
+The trigger question offers the four words; [`ui.trigger`](/reference/config#ui-trigger) also takes an array written out, which is something you put in your own config rather than answer at a prompt.
 
 Any flag, a missing TTY, or a directory with no VitePress config skips the questions entirely — which is what makes `npx --yes`, CI and a Dockerfile work. Both values are validated by the same resolver the build and the browser run, so an unusable value is reported once, in the same words, wherever it was typed. See [`ui`](/reference/config#ui) for what the two settings mean.
 

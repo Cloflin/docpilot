@@ -174,9 +174,10 @@ const DEFAULTS = {
   // reachable from here. Equal to `resolveUi({})` by construction, and the
   // suite says so — this is what the panel runs on before `configure` lands.
   ui: {
-    trigger: 'nav',
+    trigger: ['nav', 'screen'],
     panel: 'drawer',
     showNavTrigger: true,
+    showScreen: true,
     showFab: false,
     fabLabel: true,
     fabIcon: true,

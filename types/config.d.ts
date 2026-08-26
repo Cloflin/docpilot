@@ -188,14 +188,48 @@ export interface PromptSettings {
   extend?: string
 }
 
+/** The three placements a trigger can occupy, in document order. */
+export type UiTrigger = 'nav' | 'screen' | 'fab'
+
+/**
+ * A word that stands for a list of placements.
+ *
+ * `'nav'` is both a placement and a word, and as a word it means the navbar
+ * button AND its row in the mobile nav menu — which is what it has always
+ * meant. Spell `['nav']` to get the desktop button on its own.
+ */
+export type UiTriggerWord = UiTrigger | 'both' | 'all' | 'none'
+
+/** What an author writes. `resolveUi` turns it into `ResolvedUi`. */
 export interface UiSettings {
-  trigger?: 'nav' | 'fab' | 'both' | 'none'
+  trigger?: UiTriggerWord | UiTrigger[]
   panel?: 'auto' | 'drawer' | 'popup'
   fabLabel?: boolean | string
   fabIcon?: boolean
   layout?: 'overlay' | 'push'
-  prefetch?: 'hover' | 'open' | 'never'
+  prefetch?: 'hover' | 'idle' | false
   firstRunHint?: boolean
+}
+
+/**
+ * What every consumer actually reads — the build emits it, the client store
+ * re-resolves it, and the three trigger instances render off the booleans.
+ *
+ * `trigger` is a LIST here and never a word: `'nav'` means two placements, so a
+ * resolved value that was still the word would not be resolved. `panel` is never
+ * `'auto'` for the same reason.
+ */
+export interface ResolvedUi {
+  trigger: UiTrigger[]
+  panel: 'drawer' | 'popup'
+  showNavTrigger: boolean
+  showScreen: boolean
+  showFab: boolean
+  fabLabel: boolean | string
+  fabIcon: boolean
+  layout: 'overlay' | 'push'
+  prefetch: 'hover' | 'idle' | false
+  firstRunHint: boolean
 }
 
 /**
@@ -325,7 +359,14 @@ export interface DocPilotThemeConfig {
   scope?: ScopeSettings
   history?: HistorySettings
   prompt?: PromptSettings
-  ui?: UiSettings
+  /**
+   * The resolved shape is what `themeDocPilot` emits and what every component
+   * reads. `UiSettings` is admitted alongside it because a HAND-WRITTEN
+   * themeConfig is a supported shape — `session.configure` and both components
+   * run `resolveUi` over whatever they are given, precisely so that a project
+   * that assembles this object itself does not have to resolve it first.
+   */
+  ui?: ResolvedUi | UiSettings
   host?: HostSettings
   i18n?: I18nSettings
 }

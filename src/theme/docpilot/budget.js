@@ -215,7 +215,7 @@ function rawHeader(headers, name) {
  * right, since a 429 is the one response that states what is left and when it
  * comes back. But the two 429s a free tier sends are nothing alike, and a BURST
  * limiter's `remaining: 0` is a fact about the next second. Written into a
- * ledger whose subject is the day, it becomes "0 of 20 free answers left today"
+ * ledger whose subject is the day, it becomes "0 of 20 answers left today"
  * on the panel and, through `merge`, in every other tab — for a service that
  * will answer again before the reader has finished reading the sentence.
  *
@@ -307,7 +307,7 @@ const fresh = () => ({
  * the two halves agree on every request instead of each claiming it.
  *
  * `limit` and `remaining` for the same reason always come from the SAME source.
- * Mixing them is what rendered "161 of 50 free answers left today" — a per-minute
+ * Mixing them is what rendered "161 of 50 answers left today" — a per-minute
  * `remaining` from a header beside a daily ceiling from the config.
  *
  * TWO CLOCKS, deliberately. `resetAt` belongs to the header numbers and may
@@ -452,7 +452,7 @@ export function createBudget({ storage, now = Date.now, dailyLimit = null } = {}
    * `spend()` and every other tab — and every tab opened afterwards — adopted
    * it. Reproduced over one store: A hears `remaining: 40`, B is still holding
    * an older 2 and spends, and A's next snapshot says 0 of 50. The panel then
-   * prints "0 of 50 free answers left today" and plans one-shot for the rest of
+   * prints "0 of 50 answers left today" and plans one-shot for the rest of
    * the day in front of a service with forty in hand.
    *
    * The pessimistic rule survives for statements of the SAME age, which is where
@@ -605,7 +605,7 @@ export function createBudget({ storage, now = Date.now, dailyLimit = null } = {}
    * 47 counted locally, then one response stating `x-ratelimit-remaining: 3` and
    * no reset. The same number, twice: from the count it planned {one-shot,
    * maxRequests 2}, and from the service saying it, {agentic, Infinity} — with
-   * "3 of 50 free answers left today" on the panel beside the unbounded plan.
+   * "3 of 50 answers left today" on the panel beside the unbounded plan.
    *
    * SO AN UNDEFENDABLE HEADER IS DEMOTED, NEVER DISCARDED. It keeps the display
    * where it is the lower number, because a service saying three is a reason for
@@ -615,7 +615,7 @@ export function createBudget({ storage, now = Date.now, dailyLimit = null } = {}
    * and they differ on exactly one kind of response.
    *
    * The pair `limit`/`remaining` still comes from ONE source, which is what
-   * stopped "161 of 50 free answers left today": a demoted count is shown
+   * stopped "161 of 50 answers left today": a demoted count is shown
    * against the local ceiling it was compared with, and the comparison is a
    * minimum, so it can never render as more than the ceiling.
    */
@@ -839,6 +839,42 @@ function threshold(value, inert) {
 }
 
 /**
+ * WHETHER A DAILY ALLOWANCE EXISTS AT ALL — the first of `trustworthy`'s two
+ * questions, exported because it turned out not to be only `trustworthy`'s.
+ *
+ * Two arms, and the DECLARED one comes first: `budget.dailyLimit` is how a site
+ * brings a provider this package does not know to be metered under these rules,
+ * and `freePool` — a fact about the target from config.js, never a setting an
+ * author can assert — is the fallback. It is the same shape `session.js` seeds
+ * the ledger's ceiling from, `dailyLimit ?? (freePool ? FREE_TIER_DAILY : null)`,
+ * so a deployment this returns true for is exactly a deployment `createBudget`
+ * was given a ceiling for.
+ *
+ * SEPARATE FROM `trustworthy` BECAUSE IT HAS A DIFFERENT SUBJECT AND A SECOND
+ * CALLER. This one is about the DEPLOYMENT and is answerable before a single
+ * request has been made; the other question — does this NUMBER describe the day
+ * — is about one snapshot. The panel's budget line only ever had the first to
+ * ask, and asked it by testing `freePool` alone: `budget: {dailyLimit: 500,
+ * showRemaining: true}` on a metered provider was rationed against 500 for the
+ * whole day and never told the reader the count, so the one deployment being
+ * rationed was the one deployment unable to see it. One predicate, two callers,
+ * and the line and the rationing can no longer disagree about who has an
+ * allowance.
+ *
+ * `Number.isFinite(n) && n > 0` because that is `createBudget`'s own test for a
+ * usable ceiling: everything under this key reads a falsy `dailyLimit` as
+ * ABSENCE, so `0` is no ceiling rather than a ceiling of none.
+ *
+ * @param {{dailyLimit?: number|null, freePool?: boolean}|null} [settings] the
+ *   resolved `budget` block plus `freePool`, as `budgetPlan` takes it
+ * @returns {boolean}
+ */
+export function hasDailyAllowance(settings) {
+  const s = settings || {}
+  return (Number.isFinite(s.dailyLimit) && s.dailyLimit > 0) || s.freePool === true
+}
+
+/**
  * Whether a `remaining` count is one this package may ration against.
  *
  * A count is not a budget. `x-ratelimit-limit`, `-remaining` and `-reset` are
@@ -853,8 +889,9 @@ function threshold(value, inert) {
  *
  *   · that a daily allowance EXISTS to be rationed — the site declared a ceiling
  *     with `budget.dailyLimit`, or the answering half runs on the provider's own
- *     free pool (`freePool`, from config.js, which is a fact about the target and
- *     deliberately not a setting an author can assert)
+ *     free pool. That is `hasDailyAllowance` above, extracted because the panel's
+ *     budget line asks the identical question and used to answer it with one of
+ *     the two arms.
  *   · that the NUMBER describes it. A header count is believed when the SERVICE
  *     named the day or its OWN reset is at least ten minutes out; a per-minute
  *     window is exactly the one that puts a reset seconds away. A count we made
@@ -873,9 +910,7 @@ function threshold(value, inert) {
  * because the alternative is trusting a `source` field any caller can write.
  */
 export function trustworthy(snapshot, settings, now = Date.now()) {
-  const s = settings || {}
-  const declared = Number.isFinite(s.dailyLimit) && s.dailyLimit > 0
-  if (!declared && s.freePool !== true) return false
+  if (!hasDailyAllowance(settings)) return false
   // Nothing counted and nothing stated is nothing to ration against, whatever
   // number a demoted header left on the display.
   if (snapshot?.source === 'unknown') return false

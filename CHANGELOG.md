@@ -7,6 +7,111 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## Unreleased
+
+### Added
+
+**`ui.trigger` is a list.** The navbar button, the row in the mobile navigation
+menu and the floating button are no longer alternatives — a site can have any
+combination of them, because the first two only exist inside a host's navigation
+bar and the third only exists outside it:
+
+```js
+ui: { trigger: ['nav', 'fab'], panel: 'popup', fabLabel: 'Ask AI' }
+ui: { trigger: 'both' }     // all three
+ui: { trigger: 'none' }     // no button — ⌘I and your own control still open it
+```
+
+A bare word is shorthand for a list, and every value that resolved before still
+resolves to what it always meant: `'nav'` is `['nav', 'screen']`, because a
+navigation bar that collapses into a hamburger takes the button with it and a
+placement with no mobile half disappears on a phone. Spell `['nav']` for the
+desktop button on its own. `'both'`, `'all'` and `'none'` are newly accepted —
+`types/config.d.ts` had promised `'both'` and `'none'` since the beginning and
+the resolver had never accepted either.
+
+`panel: 'auto'` now reads the list: the floating button decides it even in
+company, so `['nav', 'fab']` opens the popup. The popup is anchored to the corner
+the floating button sits in and the drawer is anchored to nothing, so the one
+placement with a geometric opinion holds it. `panel: 'drawer'` overrules that, in
+silence, as the crossed pairs always have.
+
+`mountDocPilot({ trigger })` and `<DocPilotPanel trigger>` take a list too. That
+option says which trigger instances are **mounted** — the host's decision, from
+its own layout — while `config.ui.trigger` says which of them **render**; a
+placement passes both or neither.
+
+`npx docpilot init --trigger=nav,fab` takes a comma list, and its interactive
+question now offers `nav`, `fab`, `both` and `none`. The block it prints writes a
+word as a word and a list as an array literal.
+
+### Fixed
+
+**A popup with no floating button no longer reserves room for one.** `trigger:
+['nav'], panel: 'popup'` used to leave the panel hovering 60px above the corner
+inset — the space the floating button occupies — with nothing in it. New
+`--dp-fab-clear` token, zeroed by a `:has()` rule when no floating button is on
+the page; a browser without `:has()` keeps the reserved room, which is the miss
+in the safe direction.
+
+**`ui.trigger` cannot fail a build, whatever is in it.** `ui: { trigger: 'toString' }`
+— or `'constructor'`, or `'__proto__'` — threw `TypeError: not iterable` out of the
+resolver and took the docs build with it, because the table of trigger words is a
+plain object and a lookup on it reaches `Object.prototype`. The word table is
+guarded with `Object.hasOwn` now, and a member the message has to name is rendered
+without `JSON.stringify`, which throws on a circular reference and on a BigInt. A
+typo in a cosmetic setting is reported and dropped; it has never been allowed to
+throw, and now it cannot.
+
+**`types/config.d.ts` agrees with the resolver again.** `ui.prefetch` was typed
+`'hover' | 'open' | 'never'`; the accepted values are `'hover' | 'idle' | false`.
+`DocPilotThemeConfig.ui` is now `ResolvedUi | UiSettings` — the resolved shape it
+actually carries, plus the settings shape, because a hand-written themeConfig is
+a supported input and `session.configure` resolves whatever it is given.
+
+### Changed
+
+**The request count no longer says "free".** `error.budgetLeft` was
+*{n} of {limit} free answers left today*; it is *{n} of {limit} answers left
+today* now. The word is a claim about the provider, and the line renders on a
+paid key with a declared `dailyLimit` as readily as on a free pool — widening the
+gate without this would have traded a missing line for a lying one. `budgetLow`
+beside it has always been tier-neutral. No new i18n key: the count is what a
+reader acts on, and whose catalogue it comes off is not.
+
+**Focus return walks the whole set of triggers.** With more than one placement on
+the page, `document.querySelector('.docpilot-nav-trigger')` is no longer a unique
+match, so the fallback used when the element that opened the panel is gone now
+takes the first trigger that has a box rather than the first in the document.
+Measured across 320–1400px on VitePress 1.6.4 and 2.0.0-alpha.19 there is no
+configuration where this changes where focus lands — it is hardening, not a fix.
+
+### Documentation
+
+**Every setting is now in one table.** `docs/reference/config.md` gained a
+`## Parameters` section under the existing `## All defaults` block: 67 rows of
+`Name | Type | Default | Description`, each name linking down to the section that
+says why the default is what it is. The block is what you paste; the table is
+what you scan.
+
+**Both views are checked against the code.** The table's Default column is
+executed and compared to `DEFAULTS`, by the same test that already held the
+block — a setting with no row, a row for a setting that does not exist, and a
+default written down wrong all fail the suite.
+
+**`budget.showRemaining` now shows the count it was rationing against.** The
+muted line under the composer gated on `llm.freePool` alone, so
+`budget: { dailyLimit: 500, showRemaining: true }` on a metered provider was
+rationed against 500 for the whole day and never told the reader the number — the
+one deployment being rationed was the one unable to see it. A daily allowance has
+always had two arms, and every other reader of it knew: `session.js` seeds the
+ledger's ceiling from `dailyLimit ?? (freePool ? FREE_TIER_DAILY : null)`, and
+`trustworthy` opened with `declared || freePool`.
+
+That test is now one exported function, `hasDailyAllowance` in `budget.js`, and
+both call it — the line's own docblock claimed the two could not disagree, which
+was the bug written down as a guarantee.
+
 ## 0.3.0 — 2026-08-26
 
 ### Breaking

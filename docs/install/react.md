@@ -91,7 +91,7 @@ reads what somebody else wrote before it is asked on their behalf.
 <DocPilotPanel
   config={config}
   route={pathname}
-  trigger="fab"                                    // 'fab' | 'nav' | 'none'
+  trigger="fab"                                    // 'fab' | 'nav' | 'screen' | 'none', or an array
   base="/docs/"
   ragBase="https://cdn.example.com/rag"
   selectors={{ article: 'article', search: '.DocSearch-Button' }}

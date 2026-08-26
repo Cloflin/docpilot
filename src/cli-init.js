@@ -2,17 +2,23 @@
  * The pure half of `npx docpilot init` — everything that can be tested without
  * running a CLI.
  *
- * `init` writes files and, since the panel grew two placements, also asks two
- * questions. The asking is in `bin/docpilot.js` because it owns stdin; the
+ * `init` writes files and, since the panel grew placements to choose between,
+ * also asks two questions. The asking is in `bin/docpilot.js` because it owns stdin; the
  * DECISIONS are here: where the config is, what the flags said, and what the
  * snippet the reader has to paste looks like.
  */
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
-import { resolveUi, UI_PANELS, UI_TRIGGERS, UI_DEFAULTS } from './theme/docpilot/ui.js'
+import {
+  resolveUi,
+  UI_PANELS,
+  UI_TRIGGERS,
+  UI_TRIGGER_WORD_LIST,
+  UI_DEFAULTS,
+} from './theme/docpilot/ui.js'
 
-export { UI_PANELS, UI_TRIGGERS, UI_DEFAULTS }
+export { UI_PANELS, UI_TRIGGERS, UI_TRIGGER_WORD_LIST, UI_DEFAULTS }
 
 /**
  * Where the settings live, in the order they are looked for.
@@ -53,6 +59,12 @@ export function findConfig(root = process.cwd()) {
 /**
  * `--trigger=fab --panel=popup --yes`. Anything else is handed back untouched
  * so the caller can complain about it in its own words.
+ *
+ * `--trigger` takes a COMMA LIST as well as a word — `--trigger=nav,fab` — because
+ * the setting is a list and a flag that could only say one of them would be the
+ * one place a project could not express what it wanted. A value with no comma
+ * stays a string, so `--trigger=nav` still means the word and still carries the
+ * mobile nav-screen row with it.
  */
 export function parseUiFlags(argv = []) {
   const out = { ui: {}, yes: false, unknown: [] }
@@ -63,7 +75,10 @@ export function parseUiFlags(argv = []) {
     }
     const m = /^--(trigger|panel)=(.*)$/.exec(arg)
     if (m) {
-      out.ui[m[1]] = m[2]
+      out.ui[m[1]] =
+        m[1] === 'trigger' && m[2].includes(',')
+          ? m[2].split(',').map((v) => v.trim()).filter(Boolean)
+          : m[2]
       continue
     }
     out.unknown.push(arg)
@@ -83,10 +98,31 @@ export function parseUiFlags(argv = []) {
 export function validateUi(raw, err = console.error) {
   const resolved = resolveUi({ ui: raw }, err)
   return {
-    trigger: resolved.trigger,
+    /**
+     * The SETTING, not the resolution — the same treatment `'auto'` gets below,
+     * and for the same reason twice over.
+     *
+     * `'nav'` resolves to two placements. Writing `['nav','screen']` into
+     * somebody's config file would be technically identical and would read as
+     * the tool having second-guessed the answer they gave; worse, it pins the
+     * expansion, so a later release that gave the word a third placement would
+     * silently skip every config this command had ever written.
+     *
+     * An array survives as the resolved array, which is the array they typed
+     * minus anything that was not a placement.
+     */
+    trigger: UI_TRIGGER_WORD_LIST.includes(raw?.trigger)
+      ? raw.trigger
+      : Array.isArray(raw?.trigger)
+        ? resolved.trigger
+        : UI_DEFAULTS.trigger,
     panel: UI_PANELS.includes(raw?.panel) ? raw.panel : UI_DEFAULTS.panel,
   }
 }
+
+/** A word is written as a word; a list is written as a list. */
+const triggerLiteral = (trigger) =>
+  Array.isArray(trigger) ? `[${trigger.map((t) => `'${t}'`).join(', ')}]` : `'${trigger}'`
 
 const isDefault = (ui) => ui.trigger === UI_DEFAULTS.trigger && ui.panel === UI_DEFAULTS.panel
 
@@ -112,7 +148,7 @@ export function uiSnippet(ui, configPath) {
     head,
     '',
     '    ui: {',
-    `      trigger: '${ui.trigger}',`,
+    `      trigger: ${triggerLiteral(ui.trigger)},`,
     `      panel: '${ui.panel}',`,
     '    },',
     '',
@@ -128,10 +164,22 @@ export const UI_QUESTIONS = [
   {
     key: 'trigger',
     label: 'Where should the button live?',
-    options: UI_TRIGGERS,
+    /**
+     * WORDS, not the placement list — `UI_TRIGGERS` is `nav, screen, fab` and
+     * `screen` alone is not an answer anybody means: it is the mobile half of
+     * the navbar button, and choosing it on its own leaves a desktop reader with
+     * nothing to press. A project that wants an unusual combination writes the
+     * array in its own config; a prompt is for the four that cover almost
+     * everyone. `'all'` is left out for the same reason it exists — it is a
+     * synonym of `'both'`, and two spellings of one answer in a numbered list is
+     * a worse list.
+     */
+    options: ['nav', 'fab', 'both', 'none'],
     hints: {
-      nav: 'in the navigation bar, beside search',
+      nav: 'in the navigation bar beside search, and in the mobile menu',
       fab: 'floating, bottom right of every page',
+      both: 'all three at once — navbar, mobile menu and floating',
+      none: 'no button; the ⌘I hotkey and your own control still open it',
     },
     default: UI_DEFAULTS.trigger,
   },

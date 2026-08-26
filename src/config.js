@@ -1067,15 +1067,19 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
     // against a build log that never mentions the setting.
     const ui = resolveUi(docPilot)
     if (Object.keys(DEFAULTS.ui).some((k) => docPilot.ui?.[k] !== DEFAULTS.ui[k])) {
-        // The floating button's own composition is named only when it IS the
-        // floating button: "no label" printed under a navbar trigger describes
-        // a control that is not on the page.
-        const fab =
-            ui.trigger === 'fab'
-                ? ` · ${[ui.fabIcon ? 'icon' : null, ui.fabLabel === false ? null : 'label'].filter(Boolean).join(' + ')}`
-                : ''
+        // The floating button's own composition is named only when it IS on the
+        // page: "no label" printed under a navbar trigger describes a control
+        // that does not exist.
+        const fab = ui.trigger.includes('fab')
+            ? ` · ${[ui.fabIcon ? 'icon' : null, ui.fabLabel === false ? null : 'label'].filter(Boolean).join(' + ')}`
+            : ''
+        // The placements spelled out rather than the array's own `toString`.
+        // `nav,screen,fab` is a line somebody has to decode; and "no trigger" is
+        // the one state worth naming in words, because a build log that said
+        // ` trigger` with nothing before it reads as a bug in the log.
+        const where = ui.trigger.length ? `${ui.trigger.join(' + ')} trigger` : 'no trigger'
         console.log(
-            `[docpilot] ui     ${ui.trigger} trigger · ${ui.panel} panel` +
+            `[docpilot] ui     ${where} · ${ui.panel} panel` +
                 `${docPilot.ui?.panel === 'auto' ? '   (auto)' : ''}${fab}`,
         )
     }
@@ -1359,9 +1363,15 @@ export const DEFAULTS = {
      * Where the button lives, what shape the panel takes, and what the floating
      * button is made of.
      *
-     * `panel: 'auto'` follows the trigger — `nav` opens the full-height drawer,
-     * `fab` opens the floating popup. Both crossed pairs are legal and are
-     * carried out in silence. `fabLabel` / `fabIcon` describe the floating
+     * `trigger` is a LIST and a bare word is shorthand for one, so a site can
+     * have the navbar button, the mobile menu row and the floating button at
+     * once: `['nav', 'fab']`, or `'both'` for all three. `'nav'` on its own
+     * still means the navbar button AND its mobile row, which is what it has
+     * always meant.
+     *
+     * `panel: 'auto'` follows the trigger — a list with `fab` in it opens the
+     * floating popup, a list without one opens the full-height drawer. Both
+     * crossed pairs are legal and are carried out in silence. `fabLabel` / `fabIcon` describe the floating
      * placement only: `true` takes the shipped words through i18n, a string
      * takes those words verbatim, `false` drops that half. See
      * `src/theme/docpilot/ui.js` for the resolver and ui-specs/005 for why;

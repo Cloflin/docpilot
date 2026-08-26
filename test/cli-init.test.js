@@ -11,7 +11,7 @@ import {
   uiSnippet,
   UI_QUESTIONS,
   UI_PANELS,
-  UI_TRIGGERS,
+  UI_TRIGGER_WORD_LIST,
 } from '../src/cli-init.js'
 
 /**
@@ -72,6 +72,13 @@ describe('init helpers', () => {
     // Not silently ignored — the CLI stops on it, because a misspelled flag
     // that scaffolds anyway is a placement the author thinks they chose.
     expect(parseUiFlags(['--colour=red']).unknown).toEqual(['--colour=red'])
+    // `trigger` is a LIST, so the flag can say one — otherwise it would be the
+    // one place a project could not express what the setting supports.
+    expect(parseUiFlags(['--trigger=nav,fab']).ui).toEqual({ trigger: ['nav', 'fab'] })
+    expect(parseUiFlags(['--trigger=nav, fab ']).ui).toEqual({ trigger: ['nav', 'fab'] })
+    // No comma is still a WORD, so `--trigger=nav` keeps carrying the mobile
+    // nav-screen row with it the way the word always has.
+    expect(parseUiFlags(['--trigger=nav']).ui).toEqual({ trigger: 'nav' })
   })
 
   it('validates through resolveUi and keeps `auto` as `auto`', () => {
@@ -90,8 +97,30 @@ describe('init helpers', () => {
     expect(said).toHaveLength(2)
   })
 
+  /**
+   * The WORD survives; the LIST is written back resolved.
+   *
+   * `'nav'` resolves to two placements, and writing `['nav','screen']` into
+   * somebody's config would read as the tool second-guessing the answer they
+   * gave — and would pin the expansion, so a later release that gave the word a
+   * third placement would skip every config this command had ever written.
+   */
+  it('keeps the word a word and the list a list', () => {
+    const said = []
+    const v = (raw) => validateUi(raw, (m) => said.push(m))
+    expect(v({ trigger: 'nav' }).trigger).toBe('nav')
+    expect(v({ trigger: 'both' }).trigger).toBe('both')
+    expect(v({ trigger: 'none' }).trigger).toBe('none')
+    // Sorted and filtered by the resolver — the list they typed, minus anything
+    // that was not a placement.
+    expect(v({ trigger: ['fab', 'nav'] }).trigger).toEqual(['nav', 'fab'])
+    expect(said).toEqual([])
+    expect(v({ trigger: ['fab', 'sidebar'] }).trigger).toEqual(['fab'])
+    expect(said).toHaveLength(1)
+  })
+
   it('writes a pasteable block for every combination', () => {
-    for (const trigger of UI_TRIGGERS) {
+    for (const trigger of UI_TRIGGER_WORD_LIST) {
       for (const panel of UI_PANELS) {
         const out = uiSnippet({ trigger, panel }, 'docs/.vitepress/config.mjs')
         expect(out).toContain(`trigger: '${trigger}',`)
@@ -110,9 +139,27 @@ describe('init helpers', () => {
     expect(uiSnippet({ trigger: 'fab', panel: 'auto' }, null)).toContain('your `docPilot` settings')
   })
 
+  // A list is written as a list — valid JavaScript in the block the reader
+  // pastes, which is the only thing the snippet has ever promised.
+  it('writes a list as an array literal', () => {
+    const out = uiSnippet({ trigger: ['nav', 'fab'], panel: 'popup' }, null)
+    expect(out).toContain("trigger: ['nav', 'fab'],")
+    expect(out).not.toContain('the shipped default')
+  })
+
   it('offers exactly the values the resolver accepts', () => {
     const byKey = Object.fromEntries(UI_QUESTIONS.map((q) => [q.key, q]))
-    expect(byKey.trigger.options).toEqual(UI_TRIGGERS)
+    /**
+     * WORDS, and a subset of them — `UI_TRIGGERS` is the placement list, and
+     * `'screen'` alone is not an answer anybody means: it is the mobile half of
+     * the navbar button, and choosing it on its own leaves a desktop reader with
+     * nothing to press. `'all'` is left out as a synonym of `'both'`.
+     *
+     * What IS asserted is that every option offered is a word the resolver
+     * accepts, which is the property the question actually depends on.
+     */
+    expect(byKey.trigger.options).toEqual(['nav', 'fab', 'both', 'none'])
+    for (const o of byKey.trigger.options) expect(UI_TRIGGER_WORD_LIST).toContain(o)
     expect(byKey.panel.options).toEqual(UI_PANELS)
     // A question with an option nobody explained is a question nobody can
     // answer; the defaults have to be offerable too.

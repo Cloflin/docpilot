@@ -142,6 +142,17 @@
   --dp-fab-size-coarse: 56px;
   --dp-popup-inset: 20px;
   --dp-popup-block: 640px;
+  /**
+   * The room the popup leaves BELOW itself, for the button it opens above.
+   *
+   * A separate token rather than the sum written out twice, because it is not a
+   * constant: `trigger` is a list now, so `panel: 'popup'` no longer implies
+   * that there is a floating button at all — `['nav']` with a popup is a
+   * perfectly ordinary configuration, and reserving 60px under it leaves the
+   * panel hovering over a gap with nothing in it. The rule that zeroes this
+   * lives beside the popup, where the geometry it feeds is.
+   */
+  --dp-fab-clear: calc(var(--dp-fab-size) + 12px);
 
   /**
    * ── Radius — SIX STEPS, AND NONE OF THEM MOVES ──────────────────────────────
@@ -313,12 +324,12 @@
 .docpilot__panel--popup {
   @media (min-width: bp.$sheet) {
     inset-block-start: auto;
-    inset-block-end: calc(var(--dp-popup-inset) + var(--dp-fab-size) + 12px);
+    inset-block-end: calc(var(--dp-popup-inset) + var(--dp-fab-clear));
     inset-inline-end: var(--dp-popup-inset);
     inline-size: var(--dp-width); // the same width as the drawer, deliberately
     block-size: min(
       var(--dp-popup-block),
-      calc(100dvh - var(--dp-top) - var(--dp-popup-inset) * 2 - var(--dp-fab-size) - 12px)
+      calc(100dvh - var(--dp-top) - var(--dp-popup-inset) * 2 - var(--dp-fab-clear))
     );
     // Ring AND shadow. The shadow alone was its whole edge, which is invisible
     // on a dark host and erased outright by forced-colors — the one mode where a
@@ -2112,10 +2123,13 @@
   /**
    * The floating button: same component, same base class, a third placement.
    *
-   * Keeping `.docpilot-nav-trigger` as the base is what lets `DocPilot.vue` find the
-   * button to return focus to with one `document.querySelector`. In `fab` mode
-   * the navbar instance does not render, so the FAB is the only match — the
-   * component and that query are two halves of one arrangement, and both say so.
+   * Keeping `.docpilot-nav-trigger` as the base is what lets `DocPilot.vue` find a
+   * button to return focus to with one selector. It used to be able to assume the
+   * match was unique — in `fab` mode the navbar instance did not render — and it
+   * cannot any more: `trigger` is a list, and `['nav','fab']` puts two of them on
+   * the page. `visibleTrigger()` there walks the whole match set and takes the
+   * first one with a box, so the shared base class is still the arrangement; what
+   * changed is that the query returns a set rather than a single element.
    *
    * It sits UNDER the scrim (z − 2) and stays visible while the popup is open:
    * a chat widget's own button is how everyone expects to close it again, and a
@@ -2177,6 +2191,25 @@
   .docpilot-nav-trigger.is-fab.has-label {
     width: auto;
   }
+}
+
+/**
+ * NO FLOATING BUTTON, NO ROOM RESERVED FOR ONE.
+ *
+ * `trigger` is a list, so `panel: 'popup'` with no `fab` in it is an ordinary
+ * configuration — the navbar button opening the floating shape — and the 60px
+ * this normally keeps clear would be a gap under the panel with nothing in it.
+ *
+ * Written as the ABSENCE of the button rather than its presence so that a
+ * browser without `:has()` keeps the reserved room: that is the miss in the safe
+ * direction, because the failure it avoids is a popup sitting on top of the
+ * button that opened it.
+ *
+ * On `body`, for the same reason the two rules below are: the panel is teleported
+ * to `body` and is the FAB's sibling, not its descendant.
+ */
+body:not(:has(.docpilot-nav-trigger.is-fab)) {
+  --dp-fab-clear: 0px;
 }
 
 /**

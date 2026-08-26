@@ -166,7 +166,7 @@ if (cmd === 'init') {
   const flags = parseUiFlags(rest)
   if (flags.unknown.length) {
     console.error(`[docpilot] unknown option${flags.unknown.length === 1 ? '' : 's'}: ${flags.unknown.join(' ')}`)
-    console.error('  init accepts --trigger=nav|fab, --panel=auto|drawer|popup, --yes')
+    console.error('  init accepts --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup, --yes')
     process.exit(1)
   }
 

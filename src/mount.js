@@ -58,7 +58,7 @@ const INERT = {
  * @param {object}   [options]
  * @param {object}   [options.config]      the client config — `ai.themeConfig` from `defineDocPilot`
  * @param {Element}  [options.target]      where to mount. A div is created and appended to `<body>` without one
- * @param {'fab'|'nav'|'none'} [options.trigger='fab']  which button to render, if any
+ * @param {'fab'|'nav'|'screen'|'none'|Array<'fab'|'nav'|'screen'>} [options.trigger='fab']  which buttons to mount, if any
  * @param {string}   [options.route='/']   the current page's route, base-less
  * @param {string}   [options.lang]        the page's locale. Read from `<html lang>` when omitted
  * @param {string}   [options.base]        the site's base path
@@ -132,6 +132,25 @@ export function mountDocPilot(options = {}) {
 
   if (highlighter) setHighlighter(highlighter)
 
+  /**
+   * WHICH BUTTONS EXIST, which is a different question from which ones draw.
+   *
+   * This option says what to MOUNT; `config.ui.trigger` says what each mounted
+   * instance renders, and a placement has to pass both. The split is not
+   * redundant: a host embedding the panel decides the first from its own layout
+   * — a React page has no navbar of ours to put a button in — and the project
+   * decides the second in the same settings file every other host reads.
+   *
+   * The default is still the floating button alone, because that is the one
+   * placement that needs nothing from the host. An array mounts several, and
+   * `'none'` mounts nothing at all — which is what a host placing its own
+   * control wants, and which `open()` on the returned handle is the door for.
+   */
+  const mounted =
+    trigger === 'none' || trigger == null
+      ? []
+      : (Array.isArray(trigger) ? trigger : [trigger]).filter((v) => v !== 'none')
+
   const el = target || document.createElement('div')
   if (!target) {
     // The panel, the sprite and the popover all teleport to `<body>`, so this
@@ -149,7 +168,7 @@ export function mountDocPilot(options = {}) {
       // a panel with empty icon buttons.
       h(DocPilotIcons),
       h(DocPilot),
-      trigger === 'none' ? null : h(DocPilotTrigger, { variant: trigger }),
+      ...mounted.map((variant) => h(DocPilotTrigger, { variant, key: variant })),
       // Renders nothing unless `quote.fromDocs` is on, and decides that itself.
       h(DocPilotQuote),
     ],

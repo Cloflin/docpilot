@@ -71,3 +71,129 @@
 .button {
   font-family: var(--font-mono);
 }
+
+/*
+ * `pageClass: wide-table` — a page whose widest thing is a table, not a
+ * paragraph.
+ *
+ * The reference's Parameters table is sixty-seven rows of four dense columns,
+ * and the theme gives any page carrying an outline 688px: VPDoc.vue's scoped
+ * `.VPDoc.has-aside .content-container`. That is the right measure for prose and
+ * about half what this table needs — the description column lands near 240px and
+ * every row wraps to eight lines.
+ *
+ * THE CAP IS ONLY HALF THE STORY, and measuring is what showed it. It is worth
+ * about 95px at 1440 and wider and about 115px between 900 and 1023, and NOTHING
+ * between 1024 and roughly 1400: there the aside claims its 256px before the page
+ * wrapper reaches its own 90rem ceiling, so the column is already narrower than
+ * the cap and the cap never binds. Most of the width therefore has to come from
+ * the CHROME instead — the theme spends 32px of cell padding and 12px of
+ * inline-code chip per column, and the first three columns sit pinned at their
+ * minimum content width, so every pixel released there goes straight to the
+ * description, at every viewport including the band the cap cannot reach.
+ *
+ * SPECIFICITY, NOT ORDER, is what beats the theme. Its selector compiles to
+ * `.VPDoc.has-aside .content-container[data-v-…]` — three classes and an
+ * attribute — and the bundle emits it twice, from two copies of the component.
+ * Loading later is therefore not enough; the page class in front is.
+ *
+ * Prose gets its measure back explicitly. Without the second rule the lifted cap
+ * would set fourteen hundred lines of reference at ninety-odd characters a line.
+ *
+ * The floor on the last column is what makes the narrow band survivable.
+ * `.vp-doc table` is `display: block`, so the real table inside it is an
+ * anonymous box that shrinks to that block — which is why cells wrap today
+ * instead of tripping the `overflow-x: auto` the theme already put there. A
+ * min-width pushes the anonymous table past the block and the block scrolls, and
+ * the scroll is contained: the block is still exactly as wide as the content
+ * column, so the page itself never scrolls sideways. `table-layout: fixed` is
+ * not an option here for the same reason — the property never reaches the box
+ * that lays the columns out.
+ *
+ * WRITTEN FOR ANY WIDE TABLE, not for this one. The last column is the prose
+ * column in every table in this repo, so `i18n.md` or `evaluation.md` can opt in
+ * later with one line of frontmatter and no new CSS.
+ */
+.Layout.wide-table .VPDoc.has-aside .content-container {
+  max-width: none;
+}
+
+/*
+ * The prose keeps its measure, named element by element.
+ *
+ * THE OBVIOUS SELECTOR IS WRONG, twice over, and both wrong versions shipped
+ * briefly before this was measured. `.vp-doc` does not hold the content:
+ * VitePress puts every block inside ONE unclassed `<div>`, and the table is a
+ * direct child of that div alongside the paragraphs. So `.vp-doc > :not(table)`
+ * matches the wrapper and caps the table with everything else, and adding
+ * `:not(:has(> table))` to spare the table spares the wrapper — which is to say
+ * it caps nothing at all and sets fourteen hundred lines of reference at
+ * ninety-odd characters a line.
+ *
+ * Naming the types is what survives the wrapper being an implementation detail.
+ * The list is the inventory of that div measured on this page: 184 `p`, 50 `h3`,
+ * 31 `ul`, 30 code blocks, 28 `h2`, one `h1`, one `ol` — and 6 tables, which are
+ * the only things meant to spend the extra width.
+ */
+.Layout.wide-table
+  .vp-doc
+  :is(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, hr, .custom-block, div[class*='language-']) {
+  max-width: 688px;
+}
+
+.Layout.wide-table .vp-doc :is(th, td) {
+  padding: 6px 10px;
+}
+
+/*
+ * A DESCENDANT combinator, deliberately: the name cell is
+ * `<a href="#…"><code>key</code></a>`, so a child combinator would miss the one
+ * column where the chip padding costs the most.
+ */
+.Layout.wide-table .vp-doc :is(th, td) code {
+  padding: 1px 3px;
+}
+
+/*
+ * A row is as tall as its tallest cell, and at its minimum width the type column
+ * wraps `ui.trigger`, `embed` and `i18n` to five and six lines — so the
+ * description gaining room buys nothing on exactly the rows that need it most.
+ * `width` rather than `min-width`: it is a hint the automatic layout may still
+ * shrink under pressure. Guarded against a two-column table, where the second
+ * column is the prose one.
+ */
+.Layout.wide-table .vp-doc th:nth-child(2):not(:last-child) {
+  width: 11rem;
+}
+
+/*
+ * 20rem, and it is a measured value rather than a round one.
+ *
+ * The floor buys description width and pays in horizontal scroll, and the curve
+ * was read at 1024 and 1440 before it was chosen. At 20rem the table fits its
+ * column exactly at 1440 and wider — zero scroll on the width most readers are
+ * on — while 22rem starts it scrolling for 570px of height, and 18rem gives the
+ * height back and still scrolls at 1024. In the 1024-1366 band, where the
+ * sidebar and the aside leave 590px, some scroll is unavoidable at any readable
+ * description width; the sticky first column below is what makes it navigable.
+ */
+.Layout.wide-table .vp-doc :is(th, td):last-child {
+  min-width: 20rem;
+}
+
+/*
+ * The name travels with the scroll.
+ *
+ * The floor above is a trade: the description keeps a readable width and the
+ * table scrolls inside its own box to pay for it. Scrolling right would
+ * otherwise take the one column identifying the row off screen, which turns a
+ * reference into a guessing game. `background-color: inherit` picks up the row's
+ * own zebra fill, which is what makes the sticky cell opaque rather than a
+ * window onto the columns sliding under it.
+ */
+.Layout.wide-table .vp-doc :is(th, td):first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: inherit;
+}

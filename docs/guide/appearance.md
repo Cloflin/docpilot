@@ -87,6 +87,7 @@ Geometry is declared once and does not vary with appearance:
 | `--dp-fab-size`, `--dp-fab-size-coarse` | `48px`, `56px` | the floating button's **block** size |
 | `--dp-popup-inset` | `20px` | the distance from the corner, shared by the button and the popup so they line up |
 | `--dp-popup-block` | `640px` | the popup's height ceiling |
+| `--dp-fab-clear` | `--dp-fab-size + 12px`, or `0px` with no floating button on the page | the room the popup leaves below itself for the button it opens above |
 
 **Radii do not animate.** They used to be rest/hover/focus tiers that grew under the cursor; they are static now, because the reference this design follows has static corners and a shape that moves competes with the colour change already saying the same thing.
 
@@ -119,7 +120,7 @@ See [`ui`](/reference/config#ui) for the values. What each produces:
 
 **Drawer** — full height, docked to the trailing edge, `--dp-width` wide, starting below `--dp-top`, with a hairline on its leading edge.
 
-**Popup** — `--dp-width` wide and at most `--dp-popup-block` tall, `--dp-popup-inset` from the trailing edge, sitting `12px` above the floating button, at `--dp-r-lg`. It carries a hairline **and** `--dp-shadow`: a shadow alone is invisible on a dark host and erased outright by `forced-colors`, which is the one mode where a floating surface most needs an edge.
+**Popup** — `--dp-width` wide and at most `--dp-popup-block` tall, `--dp-popup-inset` from the trailing edge, sitting `--dp-fab-clear` above that edge — `12px` above the floating button, or flush against the inset when [`ui.trigger`](/reference/config#ui) does not include one — at `--dp-r-lg`. It carries a hairline **and** `--dp-shadow`: a shadow alone is invisible on a dark host and erased outright by `forced-colors`, which is the one mode where a floating surface most needs an edge.
 
 The floating button stays visible while the popup is open and closes it again — the convention every chat widget has already taught, and what makes returning focus to it correct. It hides itself when it would be underneath: always beneath a drawer, and below 960px beneath either shape.
 
@@ -153,7 +154,7 @@ Below 960px the two shapes are identical: a full-screen sheet with a scrim, `rol
 
 ## What degrades, and how
 
-Two rules use `:has()` — hiding the floating button under an open panel, and shrinking the host's search box only when the navbar trigger is actually there. A browser without `:has()` applies neither: the button stays visible behind a drawer that covers it, and the trigger sits at the far edge of the navbar instead of beside search. Both are cosmetic, and both miss in the safe direction — nothing is hidden and nothing stops working.
+Three rules use `:has()` — hiding the floating button under an open panel, shrinking the host's search box only when the navbar trigger is actually there, and dropping the room the popup reserves below itself when there is no floating button to reserve it for. A browser without `:has()` applies none of them: the button stays visible behind a drawer that covers it, the trigger sits at the far edge of the navbar instead of beside search, and a popup opened from the navbar floats one button-height above the corner. All three are cosmetic, and all three miss in the safe direction — nothing is hidden and nothing stops working.
 
 `prefers-reduced-motion` replaces every entrance with a fade, stops the two repeating animations and cancels every press scale, restoring the status label's own colour rather than freezing it mid-gradient.
 

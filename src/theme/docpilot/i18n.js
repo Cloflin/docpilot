@@ -168,7 +168,15 @@ const UI_EN = {
     rateResets: 'Answers resume {when}.',
     // The count sits under the composer, in the tense of the decision it
     // informs: what is left, not what was spent.
-    budgetLeft: '{n} of {limit} free answers left today',
+    //
+    // NOT "free answers". That word is a claim about the PROVIDER, and this line
+    // renders on both arms of `hasDailyAllowance`: a site that declared
+    // `budget.dailyLimit` on a paid key is metered in requests per day and is
+    // paying for every one of them. `budgetLow` below has always been
+    // tier-neutral — "the daily limit" — and this was the outlier. Widening the
+    // gate without this edit would have traded a missing line for a lying one.
+    // The COUNT is what the reader acts on; whose catalogue it comes off is not.
+    budgetLeft: '{n} of {limit} answers left today',
     // Below the cutoff the panel drops to one model call per question, which
     // a reader experiences as shorter, less researched answers. Stating the
     // trade beats letting them conclude the panel got worse.

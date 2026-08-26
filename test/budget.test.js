@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
+import { readFileSync } from 'node:fs'
+
 import {
   FREE_TIER_DAILY,
   readLimitHeaders,
@@ -7,6 +9,7 @@ import {
   budgetPlan,
   trustworthy,
   classifyLimit,
+  hasDailyAllowance,
 } from '../src/theme/docpilot/budget.js'
 import {
   resolveBudget,
@@ -270,7 +273,7 @@ describe('the ledger', () => {
    * `trustworthy` then refused, so the SAME number planned two opposite turns
    * depending on which half of the ledger it came out of. Measured at ceiling 50
    * with 47 counted: from the count, `{one-shot, maxRequests 2}`; from the
-   * service saying "3", `{agentic, Infinity}`, with "3 of 50 free answers left
+   * service saying "3", `{agentic, Infinity}`, with "3 of 50 answers left
    * today" printed beside the unbounded plan.
    *
    * Demoted, never discarded: the count still shows, because a service saying
@@ -296,7 +299,7 @@ describe('the ledger', () => {
   })
 
   /**
-   * "161 of 50 free answers left today" was a real render, out of a header
+   * "161 of 50 answers left today" was a real render, out of a header
    * `remaining` beside a configured daily ceiling. The pair has to come from one
    * source or the fraction describes nothing that was ever reported.
    */
@@ -547,7 +550,7 @@ describe('the ledger with a second tab open', () => {
    * every other tab, and every NEW tab, adopted it. Reproduced over one store,
    * and the numbers below are what it measured: A hears 40, B (still holding an
    * older 2) spends, and A's next snapshot says 0 of 50 — so the panel prints
-   * "0 of 50 free answers left today" and plans one-shot for the rest of the day
+   * "0 of 50 answers left today" and plans one-shot for the rest of the day
    * in front of a service with forty in hand.
    *
    * The routine trigger is a burst 429, which is why the rule matters more than
@@ -694,7 +697,7 @@ describe('the ledger with a second tab open', () => {
  * `meter` reports the headers of every completed response, a 429 included —
  * which is right, because a 429 is the most informative response of the lot. But
  * a BURST limiter's `remaining: 0` is a fact about the next second, and written
- * into this ledger it becomes "0 of 20 free answers left today", displayed to
+ * into this ledger it becomes "0 of 20 answers left today", displayed to
  * the reader and merged into every other tab.
  */
 describe('a statement about a minute never enters the day’s ledger', () => {
@@ -1338,5 +1341,112 @@ describe('a statement is judged by its own window, and a spent day counts itself
 
     expect(s.remaining).toBe(FREE_TIER_DAILY - 7)
     expect(budget.exhausted()).toBe(false)
+  })
+})
+
+/**
+ * THE PREDICATE, AND THE BUG IT WAS EXTRACTED TO END.
+ *
+ * "Does this deployment have a daily allowance" has two arms and always has:
+ * `session.js` seeds the ledger's ceiling from
+ * `dailyLimit ?? (freePool ? FREE_TIER_DAILY : null)`, and `trustworthy` opened
+ * with `declared || freePool`. The panel's budget line asked the same question
+ * and tested `freePool` alone, so `budget: {dailyLimit: 500, showRemaining: true}`
+ * on a metered provider was rationed against 500 for the whole day and never
+ * shown the count — the one deployment being rationed was the one unable to see
+ * it, which is the exact failure the `llm.models` version before it had.
+ *
+ * The fix is one exported function with two callers, so this suite owns the
+ * predicate and the second half of the pair is pinned on the component's source
+ * below: there is no mounted-panel harness here, and what matters about that
+ * line is which facts gate it.
+ */
+describe('hasDailyAllowance — the two arms of a ceiling', () => {
+  it('says yes to a declared limit, whatever the provider', () => {
+    expect(hasDailyAllowance({ dailyLimit: 500, freePool: false })).toBe(true)
+    expect(hasDailyAllowance({ dailyLimit: 1 })).toBe(true)
+  })
+
+  it('says yes to the free pool with nothing declared', () => {
+    expect(hasDailyAllowance({ dailyLimit: null, freePool: true })).toBe(true)
+    expect(hasDailyAllowance({ freePool: true })).toBe(true)
+  })
+
+  /**
+   * A falsy ceiling is ABSENCE, not a ceiling of none — the same reading
+   * `createBudget` gives it, and the reason `resolveBudget` reports and drops a
+   * `dailyLimit` of `0` rather than obeying it.
+   */
+  it('reads a zero or negative ceiling as no ceiling', () => {
+    expect(hasDailyAllowance({ dailyLimit: 0, freePool: false })).toBe(false)
+    expect(hasDailyAllowance({ dailyLimit: -1, freePool: false })).toBe(false)
+  })
+
+  it('says no to a metered provider that declared nothing, and never throws', () => {
+    expect(hasDailyAllowance({ dailyLimit: null, freePool: false })).toBe(false)
+    for (const input of [undefined, null, {}, { dailyLimit: 'lots' }, { freePool: 'yes' }]) {
+      expect(() => hasDailyAllowance(input)).not.toThrow()
+      expect(hasDailyAllowance(input)).toBe(false)
+    }
+  })
+
+  // `trustworthy` must be exactly what it was — the extraction moved the test,
+  // it did not change it. Both arms, and the metered-and-silent case that is the
+  // whole reason the first question exists.
+  it('is the first question `trustworthy` asks, unchanged', () => {
+    const snap = { source: 'local', remaining: 10 }
+    expect(trustworthy(snap, { dailyLimit: 500, freePool: false })).toBe(true)
+    expect(trustworthy(snap, { dailyLimit: null, freePool: true })).toBe(true)
+    expect(trustworthy(snap, { dailyLimit: null, freePool: false })).toBe(false)
+    expect(trustworthy(snap, { dailyLimit: 0, freePool: false })).toBe(false)
+  })
+
+  /**
+   * The count the panel would print, end to end and without a browser: a metered
+   * provider with a ceiling written down counts against it from the first
+   * request, so both halves of the fraction are finite and the line has
+   * something to say.
+   */
+  it('gives a declared ceiling a finite fraction to render', () => {
+    const ledger = createBudget({ storage: null, dailyLimit: 500 })
+    ledger.spend()
+    ledger.spend()
+    const snap = ledger.snapshot()
+    expect(snap.limit).toBe(500)
+    expect(snap.remaining).toBe(498)
+    expect(Number.isFinite(snap.remaining) && Number.isFinite(snap.limit)).toBe(true)
+    expect(snap.source).toBe('local')
+  })
+
+  /**
+   * The component half, pinned on the source the way `embedNote` is in
+   * no-embed.test.js. What matters is which facts gate the line — and that the
+   * one-armed test that caused this is gone rather than merely joined.
+   */
+  it('gates the panel line on the predicate, not on the free pool alone', () => {
+    const panel = readFileSync(
+      new URL('../src/theme/components/DocPilot.vue', import.meta.url),
+      'utf8',
+    )
+    expect(panel).toContain("import { hasDailyAllowance } from '../docpilot/budget.js'")
+    expect(panel).toContain(
+      "if (!s.config.budget.showRemaining || !hasAllowance.value) return ''",
+    )
+    // The old gate, in the form that shipped the bug. Its absence is the test.
+    expect(panel).not.toContain('!s.config.llm.freePool) return')
+  })
+
+  /**
+   * The copy follows the gate. "free" is a claim about the provider, and the
+   * line renders on a paid key with a declared ceiling — so the word had to go
+   * with the widening rather than after it.
+   */
+  it('has copy that is true on both arms', () => {
+    const shipped = readFileSync(
+      new URL('../src/theme/docpilot/i18n.js', import.meta.url),
+      'utf8',
+    )
+    expect(shipped).toContain("budgetLeft: '{n} of {limit} answers left today',")
+    expect(shipped).not.toContain('free answers left today')
   })
 })

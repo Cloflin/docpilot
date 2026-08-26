@@ -88,7 +88,7 @@ history.listen((location) => panel.setRoute(location.pathname))  // History API
 mountDocPilot({
   config: window.__DOCPILOT__,   // ai.themeConfig from defineDocPilot
   target: document.querySelector('#panel'),
-  trigger: 'fab',                // 'fab' | 'nav' | 'none'
+  trigger: 'fab',                // 'fab' | 'nav' | 'screen' | 'none', or an array of them
   route: '/guide/install',       // base-less
   lang: 'en',                    // read from <html lang> when omitted
   base: '/docs/',

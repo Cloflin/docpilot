@@ -99,7 +99,7 @@ import {
   DEFAULTS,
   THEME_ONLY,
 } from '../src/config.js'
-import { resolveUi, UI_DEFAULTS } from '../src/theme/docpilot/ui.js'
+import { resolveUi, UI_DEFAULTS, UI_TRIGGERS } from '../src/theme/docpilot/ui.js'
 import {
   record as recordFeedback,
   resolveFeedback,
@@ -1964,6 +1964,76 @@ describe('rule 11 — every action has a switch', () => {
   })
 
   /**
+   * 11e — the PARAMETERS TABLE, held to the same standard as the block above it.
+   *
+   * The reference carries two views of one tree now: `## All defaults`, which is
+   * paste-able, and `## Parameters`, which is scannable — a row per setting with
+   * its type, its shipped value and one line of what it does. Two views is two
+   * places to drift, and the second one is the worse place: a reader who scans a
+   * table trusts it precisely because they are not reading the prose.
+   *
+   * So the table is parsed and its Default column is EXECUTED, exactly as 11d
+   * executes the block. What is checked is the set of rows and the value in each
+   * one; the wording of a description is not something a test can hold, and the
+   * types are held by the review that wrote them.
+   *
+   * `i18n` is the one row that is not a leaf. Its two keys are open maps — a
+   * translation tree and a locale table — so `leavesOf` bottoms out at `{}` and
+   * yields nothing for either, and the whole key is documented, and tabulated,
+   * as one thing.
+   */
+  it('11e — the `Parameters` table is DEFAULTS, row for row', () => {
+    const doc = read('docs/reference/config.md')
+    const section = doc.match(/^## Parameters$([\s\S]*?)^## /m)
+    expect(section, 'a `## Parameters` section').not.toBe(null)
+
+    /**
+     * Split on an UNESCAPED pipe. The Type column is a TypeScript union and is
+     * therefore full of `\|` — a naive `[^|]*` per cell tears
+     * `'openai' \| 'together'` in half and reads the second fragment as the
+     * default, which is a parser bug that would have been reported as a
+     * documentation one.
+     *
+     * The link text is the key in code formatting — [`ui.trigger`](#ui-trigger)
+     * — because every key on this page is.
+     */
+    const rows = section[1]
+      .split('\n')
+      .filter((line) => /^\|\s*\[/.test(line))
+      .map((line) => {
+        const cells = line.replace(/^\||\|\s*$/g, '').split(/(?<!\\)\|/)
+        const name = /\[([^\]]+)\]\(#[^)]+\)/.exec(cells[0])
+        return {
+          name: name ? name[1].replace(/`/g, '').trim() : cells[0].trim(),
+          type: (cells[1] || '').trim(),
+          value: (cells[2] || '').trim(),
+        }
+      })
+    expect(rows.length, 'parsed table rows').toBeGreaterThan(0)
+
+    // Every setting, once, in the order the tree declares them — a table sorted
+    // differently from the block above it is two orders for the reader to hold.
+    const expected = [...leavesOf(DEFAULTS), 'i18n']
+    expect(rows.map((r) => r.name).sort(), 'the tabulated settings').toEqual([...expected].sort())
+
+    // And the VALUE, executed rather than string-matched: `'docs'` and `"docs"`
+    // are the same default written two ways, and only one of them is the way
+    // anybody writes JavaScript.
+    const leafOf = (path) => path.split('.').reduce((o, k) => o?.[k], DEFAULTS)
+    for (const row of rows) {
+      const literal = row.value.replace(/^`|`$/g, '').trim()
+      let got
+      expect(() => {
+        // eslint-disable-next-line no-new-func
+        got = new Function(`return (${literal})`)()
+      }, `${row.name} — Default cell is not a JavaScript value: ${row.value}`).not.toThrow()
+      expect(got, `${row.name} — documented default`).toEqual(leafOf(row.name))
+      // A type nobody wrote is a column that is decoration.
+      expect(row.type.replace(/`/g, '').trim(), `${row.name} — Type cell`).not.toBe('')
+    }
+  })
+
+  /**
    * 11c — the inventory, printed, the way rule 1b prints the rings. A reviewer
    * should be able to see every switch by name without reading the config.
    */
@@ -2679,9 +2749,11 @@ describe('resolveUi — trigger placement and panel shape', () => {
   it('defaults to the navbar trigger and the drawer', () => {
     const err = collect()
     const expected = {
-      trigger: 'nav',
+      // The WORD `'nav'` is two placements, and the resolved value says so.
+      trigger: ['nav', 'screen'],
       panel: 'drawer',
       showNavTrigger: true,
+      showScreen: true,
       showFab: false,
       fabLabel: true,
       fabIcon: true,
@@ -2704,14 +2776,161 @@ describe('resolveUi — trigger placement and panel shape', () => {
     // Spelling the default out loud must not change what it resolves to.
     expect(resolveUi({ ui: { trigger: 'fab', panel: 'auto' } }).panel).toBe('popup')
     expect(resolveUi({ ui: UI_DEFAULTS })).toEqual(resolveUi({}))
+    // The floating button decides it even in company: the popup is anchored to
+    // the corner it sits in, and the drawer is anchored to nothing.
+    expect(resolveUi({ ui: { trigger: ['nav', 'fab'] } }).panel).toBe('popup')
+    expect(resolveUi({ ui: { trigger: ['nav', 'screen'] } }).panel).toBe('drawer')
+  })
+
+  /**
+   * `trigger` IS A LIST, and the three placements are not alternatives — the
+   * navbar button and the mobile row only exist inside someone else's navbar,
+   * and the floating button only exists outside it.
+   *
+   * The asymmetry between `'nav'` and `['nav']` is the whole of the
+   * back-compatibility and is asserted rather than remembered: the word has
+   * always meant the navbar button AND its mobile row, so a site that wrote it
+   * keeps both, and only an author who spelled the list out gets it literally.
+   */
+  it('takes a list of placements, and a word as shorthand for one', () => {
+    const err = collect()
+    const trig = (value) => resolveUi({ ui: { trigger: value } }, err).trigger
+
+    expect(trig('nav')).toEqual(['nav', 'screen'])
+    expect(trig(['nav'])).toEqual(['nav'])
+    expect(trig('fab')).toEqual(['fab'])
+    expect(trig('screen')).toEqual(['screen'])
+    expect(trig('both')).toEqual(['nav', 'screen', 'fab'])
+    expect(trig('all')).toEqual(['nav', 'screen', 'fab'])
+    expect(trig(['nav', 'fab'])).toEqual(['nav', 'fab'])
+    // Sorted into document order and deduped, so two lists of the same
+    // placements compare equal however they were typed.
+    expect(trig(['fab', 'nav', 'fab'])).toEqual(['nav', 'fab'])
+    expect(err.messages).toEqual([])
+  })
+
+  /**
+   * An empty result is legal — but only when it was asked for.
+   *
+   * `'none'` is a real configuration: the hotkey still binds and a host that
+   * places its own control wants exactly this. A list that ARRIVED non-empty and
+   * was emptied by the filter is a typo instead, and a cosmetic setting must
+   * never be able to leave a page with no way to open the panel.
+   */
+  it('separates "no trigger" from "every trigger was a typo"', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { trigger: 'none' } }, err)).toMatchObject({
+      trigger: [],
+      showNavTrigger: false,
+      showScreen: false,
+      showFab: false,
+    })
+    expect(resolveUi({ ui: { trigger: [] } }, err).trigger).toEqual([])
+    expect(err.messages).toEqual([])
+
+    expect(resolveUi({ ui: { trigger: ['sidebar'] } }, err).trigger).toEqual(['nav', 'screen'])
+    expect(err.messages).toHaveLength(1)
+  })
+
+  // "No silent caps": a list that lost a member is a list whose author is about
+  // to go looking for a button that never renders.
+  it('names every member it dropped from a list, and keeps the rest', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { trigger: ['fab', 'sidebar', 'nav'] } }, err).trigger).toEqual(['nav', 'fab'])
+    expect(err.messages).toHaveLength(1)
+    expect(err.messages[0]).toContain('ui.trigger')
+    expect(err.messages[0]).toContain('"sidebar"')
+  })
+
+  /**
+   * THE RESOLVER MAY NOT THROW. Not for a typo, not for a hostile value, not for
+   * a word that happens to name something on `Object.prototype`.
+   *
+   * This is not a hypothetical. `UI_TRIGGER_WORDS` is a plain object literal, so
+   * it inherits from `Object.prototype` — `UI_TRIGGER_WORDS['toString']` is a
+   * FUNCTION and perfectly truthy, and `[...aFunction]` throws
+   * `TypeError: not iterable`. `ui: { trigger: 'toString' }` took the whole docs
+   * build down from inside the one resolver whose entire contract is that a
+   * cosmetic setting cannot fail one. `Object.hasOwn` is the guard.
+   *
+   * The second half is the error MESSAGE, which names each dropped member:
+   * `JSON.stringify` throws on a circular reference and on a BigInt, so naming
+   * the value could cost more than the value did.
+   */
+  it('never throws — not on a prototype key, not on a value that cannot be stringified', () => {
+    const circular = {}
+    circular.self = circular
+    const hostile = [
+      'constructor',
+      'toString',
+      '__proto__',
+      'hasOwnProperty',
+      'valueOf',
+      'isPrototypeOf',
+      ['constructor'],
+      ['fab', circular],
+      ['fab', 1n],
+      ['fab', () => {}],
+      ['fab', Symbol('x')],
+      ['fab', undefined],
+      ['fab', ['nav']],
+      { nav: true },
+      42,
+      true,
+      Symbol('x'),
+      () => {},
+    ]
+    // Labelled by INDEX. The obvious `JSON.stringify(trigger)` label throws on
+    // the circular case — which is the case being tested, in the assertion that
+    // says nothing may throw.
+    for (const [i, trigger] of hostile.entries()) {
+      /**
+       * NOT `collect()`. That helper stringifies the offending VALUE into its
+       * record, which is exactly the thing a circular reference kills — the
+       * suite's own reporter would have thrown where the resolver did not, and
+       * the failure would have read as the resolver's.
+       *
+       * `resolveUi` hands the raw value to `err` as a second argument on
+       * purpose, so that the real default — `console.error` — can render it
+       * however the host renders objects. What a caller's own reporter does
+       * with it is that caller's business, which is what this stands in for.
+       */
+      const err = () => {}
+      let out
+      expect(() => {
+        out = resolveUi({ ui: { trigger } }, err)
+      }, `hostile[${i}] (${Object.prototype.toString.call(trigger)})`).not.toThrow()
+      // And it still returns something a page can be opened with.
+      expect(Array.isArray(out.trigger)).toBe(true)
+      for (const t of out.trigger) expect(UI_TRIGGERS).toContain(t)
+    }
+  })
+
+  // A word on `Object.prototype` is a TYPO, and gets a typo's treatment: named,
+  // dropped, and the shipped default in its place.
+  it('treats a prototype key as the typo it is', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { trigger: 'toString' } }, err).trigger).toEqual(['nav', 'screen'])
+    expect(err.messages).toHaveLength(1)
+    expect(err.messages[0]).toContain('ui.trigger')
+    expect(resolveUi({ ui: { trigger: ['toString', 'fab'] } }, collect()).trigger).toEqual(['fab'])
+  })
+
+  // The resolved list is handed to the client and to three components. One
+  // `.push()` anywhere must not be able to rewrite what the next call returns.
+  it('hands out a list of its own, never the shared table', () => {
+    const first = resolveUi({}, () => {})
+    first.trigger.push('fab')
+    expect(resolveUi({}, () => {}).trigger).toEqual(['nav', 'screen'])
   })
 
   it('carries out the explicit combinations in silence', () => {
     const err = collect()
     expect(resolveUi({ ui: { trigger: 'nav', panel: 'popup' } }, err)).toEqual({
-      trigger: 'nav',
+      trigger: ['nav', 'screen'],
       panel: 'popup',
       showNavTrigger: true,
+      showScreen: true,
       showFab: false,
       fabLabel: true,
       fabIcon: true,
@@ -2720,9 +2939,10 @@ describe('resolveUi — trigger placement and panel shape', () => {
       firstRunHint: false,
     })
     expect(resolveUi({ ui: { trigger: 'fab', panel: 'drawer' } }, err)).toEqual({
-      trigger: 'fab',
+      trigger: ['fab'],
       panel: 'drawer',
       showNavTrigger: false,
+      showScreen: false,
       showFab: true,
       fabLabel: true,
       fabIcon: true,
@@ -2778,11 +2998,11 @@ describe('resolveUi — trigger placement and panel shape', () => {
     // The panel still resolves off the trigger that WAS given: a typo in one
     // key must not quietly undo the other.
     expect(resolveUi({ ui: { trigger: 'fab', panel: 'modal' } }, err)).toMatchObject({
-      trigger: 'fab',
+      trigger: ['fab'],
       panel: 'popup',
     })
     expect(resolveUi({ ui: { trigger: 'sidebar' } }, err)).toMatchObject({
-      trigger: 'nav',
+      trigger: ['nav', 'screen'],
       panel: 'drawer',
     })
     expect(err.messages).toHaveLength(2)
@@ -2795,7 +3015,20 @@ describe('resolveUi — trigger placement and panel shape', () => {
   // under the same key, the browser resolves what it received. If a resolved
   // member were not itself legal input, the second pass would rewrite it.
   it('is idempotent across the build/browser round trip', () => {
-    for (const trigger of [undefined, 'nav', 'fab']) {
+    // Every input shape, because the resolved `trigger` is an array whichever
+    // one went in — and an array is the shape the second pass reads back.
+    for (const trigger of [
+      undefined,
+      'nav',
+      'fab',
+      'screen',
+      'both',
+      'none',
+      [],
+      ['nav'],
+      ['nav', 'fab'],
+      ['nav', 'screen', 'fab'],
+    ]) {
       for (const panel of [undefined, 'auto', 'drawer', 'popup']) {
         // Every resolved value of the union is itself legal input, which is what
         // makes the second pass a no-op rather than a rewrite.
@@ -2913,9 +3146,10 @@ describe('ui — from settings to the browser', () => {
 
   it('emits the resolved structure, so no component re-derives it', () => {
     expect(themeDocPilot(resolveDocPilot({})).ui).toEqual({
-      trigger: 'nav',
+      trigger: ['nav', 'screen'],
       panel: 'drawer',
       showNavTrigger: true,
+      showScreen: true,
       showFab: false,
       fabLabel: true,
       fabIcon: true,
@@ -2924,9 +3158,26 @@ describe('ui — from settings to the browser', () => {
       firstRunHint: false,
     })
     expect(themeDocPilot(resolveDocPilot({ ui: { trigger: 'fab', fabLabel: 'Ask AI' } })).ui).toEqual({
-      trigger: 'fab',
+      trigger: ['fab'],
       panel: 'popup',
       showNavTrigger: false,
+      showScreen: false,
+      showFab: true,
+      fabLabel: 'Ask AI',
+      fabIcon: true,
+      layout: 'overlay',
+      prefetch: 'hover',
+      firstRunHint: false,
+    })
+    // The combination this whole change exists for, end to end: both buttons on
+    // the page, the popup chosen by the one placement with a geometric opinion.
+    expect(
+      themeDocPilot(resolveDocPilot({ ui: { trigger: ['nav', 'fab'], panel: 'popup', fabLabel: 'Ask AI' } })).ui,
+    ).toEqual({
+      trigger: ['nav', 'fab'],
+      panel: 'popup',
+      showNavTrigger: true,
+      showScreen: false,
       showFab: true,
       fabLabel: 'Ask AI',
       fabIcon: true,
@@ -2939,9 +3190,10 @@ describe('ui — from settings to the browser', () => {
   it('reaches the client through configure', () => {
     configure({ docPilot: themeDocPilot(resolveDocPilot({ ui: { trigger: 'fab', panel: 'drawer' } })) })
     expect(sessionState.config.ui).toEqual({
-      trigger: 'fab',
+      trigger: ['fab'],
       panel: 'drawer',
       showNavTrigger: false,
+      showScreen: false,
       showFab: true,
       fabLabel: true,
       fabIcon: true,

@@ -1,5 +1,6 @@
 ---
 title: Configuration
+pageClass: wide-table
 ---
 
 # Configuration
@@ -83,6 +84,97 @@ Four things the block cannot say on its own:
   provider has one, and a build-stopping error where it does not.
 - **Five keys never reach the browser** — `docsDir`, `indexDir`, `evalDir`,
   `importDir` and `sources`. See [What reaches the browser](#what-reaches-the-browser).
+
+## Parameters
+
+Every setting, what it accepts, what it ships as, and one line of what it does.
+The block above is what you paste; this is what you scan. Each name links to the
+section below that says *why* the default is what it is.
+
+**Both views are checked against the code.** The table's Default column is
+executed and compared to `DEFAULTS` in `src/config.js` by the same test that
+holds the block — a setting with no row, a row for a setting that does not exist,
+and a default written down wrong all fail the suite. Types and descriptions are
+written by hand; only the values are mechanical.
+
+<!-- PARAMETERS TABLE -->
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| [`enabled`](#enabled) | `boolean` | `true` | `false` mounts nothing — the site builds exactly as if the package were not installed |
+| [`product`](#product) | `string \| null` | `null` | Names what the corpus is about in the system prompt, composer placeholder and greeting; `null` reads as "this documentation" — *reaches the system prompt, so changing it moves `promptHash` and refiles every eval report* |
+| [`docsDir`](#docsdir) | `string` | `'docs'` | Where the VitePress site lives, relative to the project root, and the root `indexDir` defaults under — *server-only — the CLI and the build read it, the browser never receives it* |
+| [`indexDir`](#indexdir) | `string \| null` | `null` | Overrides where the built index is written and read — set it only if you moved it out of `${docsDir}/public/rag` — *server-only, and a moved index also needs `host.ragBase` so the browser can fetch it* |
+| [`evalDir`](#evaldir) | `string` | `'docpilot'` | Holds the golden set, the calibration set and the reports — a statement about your corpus, resolved from the project root — *server-only — the CLI reads it, the panel never sees it* |
+| [`importDir`](#importdir) | `string \| null` | `null` | A second corpus root that is indexed but never routed — its pages carry a mandatory frontmatter `source:` as their citation — *server-only, and it must sit outside `docsDir` or VitePress publishes the pages anyway* |
+| [`sources`](#sources) | `{ allow: string[] } \| null` | `null` | The https origins a page may name in `source:`, each optionally narrowed to a path prefix; `null` forbids `source:` outright — *server-only, and assigned whole rather than merged, so a partial object is the entire allowlist* |
+| [`chat.provider`](#chat-provider) | `ProviderId` | `'ollama'` | Picks which service answers and where the request is sent; a misspelled id stops the build instead of quietly becoming a local Ollama — *fourteen ids, listed under [Choosing providers](/guide/providers)* |
+| [`chat.model`](#chat-model) | `string \| null` | `'qwen3:8b'` | The id the provider knows the model by — `'auto'`, `'free'` and `''` all normalise to unset, which a free pool or your own `chat.models` then fills — *not inherited across a provider change — naming any provider but `ollama` without a model leaves it unset* |
+| [`chat.models`](#chat-models) | `string[] \| null` | `null` | An ordered fallback pool walked on a 429, a retired id or an empty answer, with the model that answered tried first next time — *left `null` on `openrouter` with no model named, the shipped free pool rotates anyway* |
+| [`chat.temperature`](#chat-temperature-chat-maxtokens) | `number` | `0.2` | Sampling spread for the answering model; 0.2 keeps one question from yielding two different sets of steps, higher loosens the wording — *never sent to Anthropic, whose API rejects sampling parameters outright* |
+| [`chat.maxTokens`](#chat-temperature-chat-maxtokens) | `number` | `2048` | Caps the tokens in a single reply; a reply cut off at that ceiling is continued rather than lost, up to `budget.maxContinuations` — *the Ollama transport drops it — that adapter sends no token ceiling at all* |
+| [`chat.numCtx`](#chat-numctx) | `number` | `8192` | Context window asked of Ollama; 8192 keeps a primed turn plus its tool calls from shifting the system block off the front |
+| [`embed`](#embed) | `EmbedConfig` | `'auto'` | Picks who embeds the corpus and each query — `'auto'` follows `chat.provider`, an object splits them, `false` or `'none'` means BM25 only — *under `'auto'` a provider with no embeddings endpoint borrows OpenRouter's free pool at build time* |
+| [`topK`](#topk) | `number \| null` | `null` | How many excerpts the gate primes a turn with — `null` takes the k `docpilot tune` measured into the manifest, a number overrides it — *a number is rounded and clamped to 1..12, and the model's own `search_docs` k stays capped at 8* |
+| [`maxIterations`](#maxiterations) | `number` | `2` | Caps the tool-calling steps before the forced final answer — each step re-sends every observation, so a turn's cost grows quadratically — *a budget plan that lands in one-shot mode drives it to 0 for that turn* |
+| [`budget.mode`](#budget-mode) | `'auto' \| 'agentic' \| 'one-shot'` | `'auto'` | Shape of a turn: `'agentic'` runs the tool loop, `'one-shot'` spends one request, `'auto'` switches when answers run thin — *the whole `budget` key also accepts `false` — agentic every turn, both thresholds retired* |
+| [`budget.oneShotBelow`](#budget-oneshotbelow-budget-rotateabove) | `number` | `15` | Answers left at or below which `'auto'` collapses a turn to one request, roughly tripling the questions left in the day — *a whole number of 0 or more, or `-1` for never; it never fires against a remaining count the panel cannot vouch for* |
+| [`budget.rotateAbove`](#budget-oneshotbelow-budget-rotateabove) | `number` | `6` | Pool rotation stops once answers left reach this, buying back the request rather than a second opinion; `-1` retires the rule — *read whatever `mode` is, so `mode: 'agentic'` does not disable it — only `-1` or `budget: false` does* |
+| [`budget.maxContinuations`](#budget-maxcontinuations) | `number` | `1` | Follow-up requests a reply truncated at the provider's output ceiling may spend to finish itself; `0` loses the answer to a refusal — *0 to 3 only, and driven to `0` once two answers are left* |
+| [`budget.showRemaining`](#budget-showremaining) | `boolean` | `false` | Adds the muted line under the composer — answers left today, and where `embed: false` that this deployment has no embedder — *the count half needs a daily allowance: a declared `dailyLimit`, or the provider's own free pool* |
+| [`budget.probe`](#budget-probe) | `'auto' \| 'always' \| 'never'` | `'auto'` | Governs the tool-detection call made on page load: `'auto'` skips it for a pool, `'always'` keeps it, `'never'` drops it |
+| [`budget.dailyLimit`](#budget-dailylimit) | `number \| null` | `null` | Declares a ceiling to count against locally for a metered service that sends no rate-limit headers; header counts still win — *`0` is reported and ignored — everything downstream reads a falsy ceiling as no ceiling at all* |
+| [`suggestions.questions`](#suggestions-questions) | `string[]` | `[]` | Replaces the built-in three empty-state openers with your own — the first three are used, extras, empties and repeats dropped and named on stdout — *`suggestions: ['One?']` — a bare array — sets this same key* |
+| [`suggestions.scoped`](#suggestions-scoped) | `boolean` | `true` | Under a narrowed scope, fills the empty panel with the pages in that scope as rows rather than leaving it blank — no text is generated — *`false` gives back the blank panel, not the questions: those never show under a narrow scope* |
+| [`suggestions.followUps`](#suggestions-followups) | `boolean` | `false` | Adds up to three next-question rows under the newest answer, built from headings on the pages it cited — no model call and nothing invented |
+| [`quote.fromAnswer`](#quote-fromanswer) | `boolean` | `true` | Selecting text inside an answer raises one button that attaches the passage to the composer as a chip — *off together with `fromDocs` also suppresses `ui.firstRunHint`, which names that gesture* |
+| [`quote.fromDocs`](#quote-fromdocs) | `boolean` | `false` | Extends that selection popover to your own article, so a reader can ask about the paragraph that confused them without retyping it — *only inside `host.article` — nav, sidebar and footer are deliberately out of bounds* |
+| [`citations.passage`](#citations-passage) | `boolean` | `false` | Gives every source row a chevron that expands the exact retrieved chunk inline, costing no request since the text is already in the browser — *on a restored conversation the chunk is resolved by id, so a rebuilt index simply drops the control* |
+| [`citations.inCopy`](#citations-incopy) | `boolean` | `true` | Copying an answer appends its sources as Markdown links with absolute URLs, so a pasted `[1]` arrives with something behind it — *exported threads honour it too, via `history.exportThread`* |
+| [`citations.pagesRead`](#citations-pagesread) | `boolean` | `false` | Names the pages a refused turn actually read, under the line that already counts them, turning that claim into something checkable — *built at turn time, so refusals archived while it was off never gain the list* |
+| [`composer.editLastOnArrowUp`](#composer-editlastonarrowup) | `boolean` | `true` | `↑` in an empty composer reopens the last question for editing, caret at the end — ChatGPT's behaviour and readline's before it |
+| [`composer.deepLink`](#composer-deeplink) | `boolean` | `true` | Reads `?dp-ask=` into the composer and deliberately does not submit, so a link can hand a reader a question and spend no turn — *`false` disables the companion `&dp-scope=page` as well* |
+| [`feedbackEndpoint`](#feedbackendpoint) | `string \| null` | `null` | Where a thumbs-up or thumbs-down POSTs as JSON; `null` keeps every vote in localStorage for console export |
+| [`feedback.send`](#feedback-send) | `'both' \| 'down' \| 'up' \| 'none'` | `'both'` | Which verdicts leave the device — `'down'` for complaints only, `'none'` keeps the thumbs on screen but sends nothing — *inert without `feedbackEndpoint`; an unrecognised value logs and falls back to `'both'`* |
+| [`feedback.comment`](#feedback-comment) | `boolean` | `true` | Offers a free-text box beside the down-vote reason buttons; `false` keeps the buttons and drops the box — *the box is hidden anyway when there is no `feedbackEndpoint` or `send` is `'none'`* |
+| [`feedback.confirm`](#feedback-confirm) | `boolean` | `true` | Replaces the submitted form with a line naming where the report went; `false` leaves only the live-region announcement |
+| [`guard.mode`](#guard-mode-guard-supportminidentifiers) | `'calibrated' \| 'off'` | `'calibrated'` | Enforces the gate's verdict, so a question with too little evidence is refused; `'off'` lets every question reach the model instead — *`'off'` still scores every turn and records the verdict — only the refusal is skipped* |
+| [`guard.tau`](#guard-tau-guard-taulexical) | `number \| null` | `null` | Pass mark for the hybrid score `wDense·D + wLexical·L`; null takes the calibrated pair from the manifest, a number overrides it — *a value at or below `wLexical` (0.25 provisional) throws at retrieval init* |
+| [`guard.tauLexical`](#guard-tau-guard-taulexical) | `number \| null` | `null` | The pass mark on turns with no dense channel, where G is lexical coverage alone; null keeps the manifest's measured value — *setting either threshold stamps `gate.source: "config"` on every record of the session* |
+| [`guard.supportMinIdentifiers`](#guard-mode-guard-supportminidentifiers) | `number` | `3` | Minimum code identifiers an answer must carry before its identifier-support ratio is scored rather than assumed perfect — *support is recorded for calibration only and never enforced, so this blocks no answer* |
+| [`scope.enabled`](#scope) | `boolean` | `true` | Shows the scope picker; `false` removes it and every question then searches the whole corpus |
+| [`scope.default`](#scope) | `'all'` | `'all'` | The scope a reader's first question starts in — whole-corpus is the only accepted value, since a narrowed default hides pages silently — *anything else is reported to the console and reset to `'all'` at configure() time* |
+| [`scope.promptListLimit`](#scope) | `number` | `12` | How many page paths a narrowed scope names in the system prompt before it states a count instead |
+| [`scope.filter`](#scope-filter) | `'auto' \| boolean` | `'auto'` | A search field above the page list; `'auto'` shows it once the corpus passes twelve pages, `true` or `false` decide it outright — *the .d.ts says `'always'` or `'never'` — the code takes booleans and drops those strings* |
+| [`scope.groupBySection`](#scope-groupbysection) | `boolean` | `true` | Groups the picker's pages under their sidebar section headings instead of showing one flat list — *suspended while the filter field has text, so a filtered list stays flat* |
+| [`history.enabled`](#history-enabled) | `boolean` | `true` | Keeps past threads in the reader's `localStorage` and lists them in the panel switcher, so a reload or a new tab loses nothing — *`false` also clears what is already stored, on the reader's next visit* |
+| [`history.maxConversations`](#history-maxconversations) | `number` | `20` | How many threads the switcher holds before the oldest falls off the end; raise it for a longer archive — *A 512KB localStorage ceiling in history.js trims underneath it, so this is a cap and not a guarantee* |
+| [`history.exportThread`](#history-exportthread) | `boolean` | `true` | Adds a header button that copies the whole conversation as Markdown, with sources per `citations.inCopy` — *not gated on `history.enabled` — the live thread still exports* |
+| [`prompt.show`](#prompt-show-prompt-allowappend) | `boolean` | `false` | `true` publishes the system instruction verbatim in a disclosure the reader can open from the composer row — *off also forces `allowAppend` off and clears any addendum the reader saved* |
+| [`prompt.allowAppend`](#prompt-show-prompt-allowappend) | `boolean` | `false` | Lets a reader add a standing line of their own for the session; it rides as a separate user message, never in the system prompt — *ignored unless `prompt.show` is true and `appendMaxChars` is non-zero* |
+| [`prompt.appendMaxChars`](#prompt-appendmaxchars) | `number` | `500` | Caps that reader line as a `maxlength` on the field, so the limit shows before it bites; `0` switches appending off — *the field only — what is sent is clamped at a hard-coded 500 in prompt.js* |
+| [`prompt.override`](#prompt-override-prompt-extend) | `string \| null` | `null` | Replaces the shipped system instruction outright with text you wrote in full — `{product}` is not interpolated into it — *losing the shipped citation and confidence-0 rules refuses every turn; re-run `npx docpilot calibrate`* |
+| [`prompt.extend`](#prompt-override-prompt-extend) | `string` | `''` | Appended to whichever instruction is in force, shipped or overridden, for house rules short of a full rewrite |
+| [`ui.trigger`](#ui-trigger) | `UiTriggerWord \| UiTrigger[]` | `'nav'` | Picks which of the three placements show an open button; `'both'` gives all three, `'none'` leaves only the hotkey — *as a word `'nav'` means the navbar button and its mobile row — `['nav']` is the desktop button alone* |
+| [`ui.panel`](#ui-panel) | `'auto' \| 'drawer' \| 'popup'` | `'auto'` | Shape the answer opens in — `'drawer'` full height at the trailing edge, `'popup'` floating above the button — *`'auto'` resolves to `'popup'` whenever `fab` is in the trigger list, even alongside `nav`* |
+| [`ui.fabLabel`](#ui-fablabel-ui-fabicon) | `true \| false \| string` | `true` | Words on the floating button: `true` takes the i18n string, a string is used verbatim, `false` leaves the icon alone — *floating placement only, and a blank or whitespace string counts as `false`* |
+| [`ui.fabIcon`](#ui-fablabel-ui-fabicon) | `boolean` | `true` | Drops the sparkle glyph from the floating button when `false`, leaving the label as the whole control — *floating placement only, and `false` is overruled when `fabLabel` is `false` too* |
+| [`ui.layout`](#ui-layout) | `'overlay' \| 'push'` | `'overlay'` | How the panel treats the page beneath it — `'push'` pads the content aside so docs and answer sit side by side — *does nothing below 960px, where the panel is already edge to edge* |
+| [`ui.prefetch`](#ui-prefetch) | `'hover' \| 'idle' \| false` | `'hover'` | When the retrieval index is downloaded — `'idle'` pays up front, `false` waits until the panel is opened — *skipped entirely when the browser reports `saveData` or a 2G-class connection* |
+| [`ui.firstRunHint`](#ui-firstrunhint) | `boolean` | `false` | Shows one dismissible line on a first visit, naming the gesture nobody discovers: selecting a passage to ask about it — *withheld when both `quote` switches are off* |
+| [`host.base`](#host-base) | `string \| null` | `null` | Path the site is served from, e.g. `/docs/` for a subdirectory install — neutral fallback `/` — *applied only at the index fetch and citation navigation — manifest paths and answer hrefs stay base-less* |
+| [`host.ragBase`](#host-ragbase) | `string \| null` | `null` | Where the built index is served from — set it when the index lives on a CDN or a separate origin — *unset resolves to `${host.base}rag`, not to nothing* |
+| [`host.article`](#host-article) | `string \| null` | `null` | Bounds the selection-to-quote offer to real documentation text — falls back to the binding's selector, then `main` |
+| [`host.search`](#host-search) | `string \| false \| null` | `null` | Selector for the host's own search button, offered as the thing to do instead in degraded and error states — *no neutral fallback — nothing renders without a selector, and `false` suppresses one the binding supplies* |
+| [`host.content`](#host-content) | `string \| null` | `null` | Focus target when the panel closes and the control that opened it is gone — the binding's selector, else `main` |
+| [`i18n`](#i18n) | `I18nSettings` | `{ translations: {}, locales: {} }` | Replaces reader-facing strings one at a time, globally through `translations` or per language through `locales` — *only `reply.*` ships translated — the rest of the chrome stays English until you override it* |
+
+<!-- /PARAMETERS TABLE -->
+
+Five settings are **server-only** and never reach the browser; three keys are
+**unions** whose off form is a single word rather than an object. Both are marked
+in the table and explained under [What reaches the browser](#what-reaches-the-browser)
+and in each key's own section.
 
 ## enabled
 
@@ -616,17 +708,21 @@ day. A larger value is reported and the shipped 1 used instead.
 The one muted line under the composer, saying what the next question is limited
 to. It has two halves and renders whichever it has:
 
-- *38 of 50 free answers left today* — a known count, on a deployment that is
-  actually metered: the free pool from the first test above, and nothing else. A
-  `chat.models` list you wrote yourself is not that test, so the line follows the
-  rationing rather than the shape of the config, and the deployment being
-  rationed is never the one left unable to see it. Once the panel has dropped to
-  one-shot, one further sentence says that answers get shorter — announced to a
-  screen reader as well as shown.
+- *38 of 50 answers left today* — a known count, on a deployment with a daily
+  allowance: one you declared with [`dailyLimit`](#budget-dailylimit), or the
+  provider's own free pool. A `chat.models` list you wrote yourself is neither,
+  so the line follows the rationing rather than the shape of the config, and the
+  deployment being rationed is never the one left unable to see it. Once the
+  panel has dropped to one-shot, one further sentence says that answers get
+  shorter — announced to a screen reader as well as shown.
 - *No embedding model — search matches words only.* — where the site declared
   [`embed: false`](#embed-false). Both together read as
-  *38 of 50 free answers left today · No embedding model — search matches words
+  *38 of 50 answers left today · No embedding model — search matches words
   only.*
+
+The count does **not** say "free". It renders on a paid key with a declared
+ceiling as readily as on a free pool, and whose catalogue the answers come off is
+not what the reader is deciding on.
 
 The second half is deliberately **not** the degraded-retrieval warning. That one
 belongs to an embedder that was configured and could not be reached, and it
@@ -637,12 +733,24 @@ in the place where the reader is deciding what to ask.
 public documentation site every reader draws on one key, so the count a browser
 can compute is a lower bound on what other people have already spent — *35 of 50
 left* is stated with an authority the arithmetic behind it does not have. A
-project that knows its key is not shared, or that has written down a
-[`dailyLimit`](#budget-dailylimit), turns it on:
+project that knows its key is not shared turns it on:
 
 ```js
 budget: { showRemaining: true }
 ```
+
+**The count half needs a daily allowance**, which is the same test the rationing
+runs: a [`dailyLimit`](#budget-dailylimit) you declared, or the provider's own
+free pool. With neither there is no ceiling of requests per day to report and the
+count stays silent — a deployment paying per token has nothing here to count
+against. The no-embedder half is gated on this switch alone and appears either
+way.
+
+For one release the count read the free pool alone, so a site that declared a
+`dailyLimit` on a paid key was rationed against it all day and never shown the
+number — the one deployment being rationed was the one unable to see it. Both
+halves now call the same `hasDailyAllowance`, so the line and the rationing
+cannot disagree about who has an allowance.
 
 Turning it off is also how a site asks this panel not to discuss its own limits
 at all — the low-budget sentence and the no-embedder note go with it.
@@ -958,7 +1066,7 @@ privacy review leaves nothing behind.
 - **Default:** `{ trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false }`
 - **Related:** [Appearance](/guide/appearance)
 
-Where the button lives, what shape the panel takes, what the floating button is
+Where the buttons live, what shape the panel takes, what the floating button is
 made of, and how the panel treats the page it opens over.
 
 ```js
@@ -967,7 +1075,7 @@ ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true }
 
 | key | values | default |
 |---|---|---|
-| `trigger` | `'nav'` — beside the search box · `'fab'` — floating, bottom right | `'nav'` |
+| `trigger` | a placement, a word standing for several, or an array — [see below](#ui-trigger) | `'nav'` |
 | `panel` | `'auto'` · `'drawer'` — full height, right edge · `'popup'` — floating, above the button | `'auto'` |
 | `fabLabel` | `true` — the shipped words · a string — those words · `false` — no label | `true` |
 | `fabIcon` | `false` drops the sparkle | `true` |
@@ -978,6 +1086,51 @@ ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true }
 A value outside either enum is reported on stdout during the build and falls back
 to the default; nothing throws, because a typo in a cosmetic setting must not be
 able to fail a docs build.
+
+### ui.trigger
+
+**A list**, and a bare word is shorthand for one. The three placements are not
+alternatives: the first two only exist inside your navigation bar, and the third
+only exists outside it — so a site is allowed all of them at once.
+
+| placement | where |
+|---|---|
+| `'nav'` | in your navigation bar, beside the search box |
+| `'screen'` | a text row inside your mobile navigation menu |
+| `'fab'` | floating, bottom corner, on every page and at every width |
+
+```js
+ui: { trigger: ['nav', 'fab'], panel: 'popup' }   // both buttons, one popup
+ui: { trigger: 'both' }                           // all three
+ui: { trigger: 'fab', fabLabel: 'Ask AI' }        // the floating button alone
+ui: { trigger: 'none' }                           // no button — ⌘I still opens it
+```
+
+Four words stand for a list:
+
+| word | means |
+|---|---|
+| `'nav'` | `['nav', 'screen']` — the navbar button **and** its mobile row |
+| `'both'`, `'all'` | `['nav', 'screen', 'fab']` |
+| `'none'` | `[]` — no visible trigger at all |
+| `'fab'`, `'screen'` | themselves |
+
+`'nav'` carries the mobile row with it because a navigation bar that collapses
+into a hamburger takes the button with it, and a placement with no mobile half
+disappears on a phone. **`'nav'` and `['nav']` therefore differ** — spell the
+array to get the desktop button on its own. `'fab'` deliberately does *not* pull
+in the mobile row: the floating button is on screen at every width already.
+Write `['fab', 'screen']` if you want both.
+
+A member the resolver does not recognise is named on stdout and dropped, and the
+rest of the list stands. A list that ends up empty because *every* member was a
+typo falls back to the default instead — `'none'` and `[]` are how you ask for no
+trigger, and a cosmetic setting must never be able to leave a page with no way to
+open the panel.
+
+**With no visible trigger the panel is still reachable**: <kbd>⌘I</kbd> /
+<kbd>Ctrl I</kbd> binds regardless, and on a host that mounts the panel itself
+`open()` on the handle from [`mountDocPilot`](/install/javascript) is the door.
 
 ### ui.layout
 
@@ -1022,10 +1175,20 @@ a gesture the panel does not answer is worse than no hint.
 
 ### ui.panel
 
-`'auto'` follows the trigger: `nav` opens the drawer, `fab` opens the popup. The
-crossed pairs — `nav` + `popup`, `fab` + `drawer` — are carried out in silence,
-which is what `'auto'` is for: once the implied pairing has a name of its own, an
-explicit value is an intention rather than a mistake to correct.
+`'auto'` follows the trigger: a list with `fab` in it opens the popup, a list
+without one opens the drawer. The crossed pairs — `nav` + `popup`, `fab` +
+`drawer` — are carried out in silence, which is what `'auto'` is for: once the
+implied pairing has a name of its own, an explicit value is an intention rather
+than a mistake to correct.
+
+The floating button decides it **even in company**, so `['nav', 'fab']` opens the
+popup: the popup is anchored to the corner the floating button sits in, the
+drawer is anchored to nothing, and the one placement with a geometric opinion is
+the one that holds it. Say `panel: 'drawer'` to overrule that.
+
+A popup with **no** floating button on the page — `trigger: ['nav'], panel:
+'popup'` — sits flush against the corner inset instead of reserving room for a
+button that is not there.
 
 Below 960px both shapes are the same full-screen sheet, and the floating button
 hides itself while it is open.
@@ -1055,7 +1218,8 @@ cosmetic setting must never be a panel nobody can open.
 Both keys describe the **floating** placement only. The navbar trigger has always
 been icon-only beside the host's search box and the mobile nav-screen row has
 always been text; neither reads them, and `npx docpilot init` still asks only the
-two placement questions.
+two placement questions — its trigger question offers the four words, and a list
+is something you write in your own config.
 
 **This is a departure from convention, and worth saying so.** No package in either
 dependency tree of this project exposes an enum for placement — placement is
