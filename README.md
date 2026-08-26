@@ -17,7 +17,7 @@ Retrieval runs **in the reader's browser** against a static index built at deplo
 | Bun | `bun add @cloflin/docpilot` | `bunx docpilot init` |
 | Deno | `deno add npm:@cloflin/docpilot` | `deno run -A npm:@cloflin/docpilot init` |
 
-`pnpm exec docpilot`, not `pnpm docpilot`: `pnpm run` looks for a package.json script and reports the bin as missing. Nothing here runs `dlx` or `npx` against the bare name — the unscoped `docpilot` on the registry is not this package.
+`pnpm exec docpilot`, not `pnpm docpilot`: `pnpm run` looks for a package.json script and reports the bin as missing. Nothing here runs `dlx` or `npx` against the bare name — the unscoped `docpilot` is not this package, and nothing is published under that name today.
 
 Node 20 or newer. Every command below is written `npx docpilot …`; substitute the runner from your own row — it is the same bin either way.
 
