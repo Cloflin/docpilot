@@ -7,7 +7,7 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
-## Unreleased
+## 0.3.1 — 2026-08-27
 
 ### Added
 
