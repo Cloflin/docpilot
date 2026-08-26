@@ -1,5 +1,6 @@
 ---
 title: Vue
+titleTemplate: 'DocPilot for :title'
 ---
 
 # Vue

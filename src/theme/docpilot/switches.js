@@ -26,9 +26,12 @@
  *   · outside the panel   OFF. Anything that reflows the host's layout or paints
  *                         on the host's article must not arrive with an upgrade
  *
- * Exactly three settings are in the third tier: `ui.layout: 'push'`,
- * `quote.fromDocs` and `ui.firstRunHint`. `suggestions.followUps` is off for a
- * separate, measured reason recorded in 009's research.
+ * Three settings are in the third tier by that test: `ui.layout: 'push'`,
+ * `quote.fromDocs` and `ui.firstRunHint`. Three more are off for reasons of
+ * their own, each recorded where it is resolved: `suggestions.followUps` on a
+ * measurement outside this repository, `citations.passage` because a second
+ * layer over a link is a layer a project turns on, and `budget.showRemaining`
+ * because the count a browser can compute is not the count the account has.
  *
  * NO IMPORTS, and none may be added — the same terms `ui.js` states and for the
  * same three readers: `themeDocPilot` at build time in Node, `session.configure`
@@ -45,7 +48,7 @@
  */
 
 export const QUOTE_DEFAULTS = { fromAnswer: true, fromDocs: false }
-export const CITATIONS_DEFAULTS = { passage: true, inCopy: true, pagesRead: false }
+export const CITATIONS_DEFAULTS = { passage: false, inCopy: true, pagesRead: false }
 export const COMPOSER_DEFAULTS = { editLastOnArrowUp: true, deepLink: true }
 export const SUGGESTIONS_DEFAULTS = { questions: [], scoped: true, followUps: false }
 
@@ -82,7 +85,7 @@ export const BUDGET_DEFAULTS = {
   oneShotBelow: 15,
   rotateAbove: 6,
   maxContinuations: 1,
-  showRemaining: true,
+  showRemaining: false,
   probe: 'auto',
   dailyLimit: null,
 }
@@ -230,11 +233,16 @@ export function resolveQuote(docPilot, err = console.error) {
 /**
  * What a citation is worth — ui-specs/009.
  *
- * `passage` and `inCopy` are ON, and both are corrections rather than additions.
- * The README's position is that citation is provenance and not entailment, which
- * makes checking a source a normal step of reading; today the only way to take
- * that step is a navigation that, below 960px, closes the panel. And a copied
- * answer arrives wherever it was pasted carrying `[1]` with nothing behind it.
+ * `inCopy` is ON, and it is a correction rather than an addition: a copied answer
+ * used to arrive wherever it was pasted carrying `[1]` with nothing behind it,
+ * which looks like provenance and is not.
+ *
+ * `passage` is OFF. The source row is already a link, and this key adds a SECOND
+ * layer of information on top of one — a chevron on every row of every answer,
+ * opening the raw retrieved chunk inline. That is worth having where a project
+ * wants checking a source to be a normal step of reading, and it is a decision
+ * about how dense this panel is rather than a defect the package should fix on
+ * everybody's behalf. The reader who wants the source still has the link.
  *
  * `pagesRead` is OFF: it is a second list on a surface that already carries one.
  */
@@ -388,12 +396,20 @@ export function resolveEmbed(docPilot, report = console.error) {
  * their answers quietly shortened by a guess about scarcity. `budget.js` owns
  * the predicate; this file owns the numbers it reads.
  *
- * `showRemaining` is ON, on the plain reading of the second tier: it is a line
- * inside this package's own panel, and it is what turns a panel that has stopped
- * working into a limit that was stated. It renders only where there is something
- * to state — a known snapshot, on a target that is actually metered, by the same
- * definition of metered the ceiling is seeded from — so a site that never learns
- * a budget never grows a line about one.
+ * `showRemaining` is OFF, and it is the one member of the second tier that does
+ * not follow that tier's rule. The line is inside this package's own panel, so
+ * the tier says ON; what the tier cannot see is that the NUMBER is not the
+ * reader's. On a public documentation site every reader draws on one key, so a
+ * browser's own count is a lower bound on somebody else's spending — "35 of 50
+ * left" is stated with an authority the arithmetic behind it does not have.
+ * `docs/guide/free-tier.md` has said this since it was written. A project that
+ * knows its key is not shared turns it on and gets the count, plus the note that
+ * this deployment has no embedder where that is true — one muted line about what
+ * the next question is limited to, offered rather than imposed.
+ *
+ * Either way it renders only where there is something to state: a known snapshot,
+ * on a target that is actually metered by the same definition the ceiling is
+ * seeded from, or a declared `embed: false`.
  *
  * `probe` is a setting because the `detectTools` call costs a request on every
  * page load, before the reader has asked anything, and on a 50-request day that

@@ -1,5 +1,6 @@
 ---
 title: VitePress
+titleTemplate: 'DocPilot for :title'
 ---
 
 # VitePress

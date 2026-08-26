@@ -28,6 +28,62 @@ Nested objects merge with their defaults one level deep. Two do not: `embed` is 
 union rather than an object, and `sources` is assigned whole — a half-merged
 allowlist is one whose contents nobody wrote.
 
+## All defaults
+
+Every shipped value, in one block. Write none of it and this is what you get; the
+sections below say what each one means and why it is what it is.
+
+```js [every default, written out]
+export const docPilot = {
+  enabled: true,
+  product: null,
+  docsDir: 'docs',
+  indexDir: null,
+  evalDir: 'docpilot',
+  importDir: null,
+  sources: null,
+  chat: { provider: 'ollama', model: 'qwen3:8b', models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192 },
+  embed: 'auto',
+  topK: null,
+  maxIterations: 2,
+  budget: { mode: 'auto', oneShotBelow: 15, rotateAbove: 6, maxContinuations: 1, showRemaining: false, probe: 'auto', dailyLimit: null },
+  suggestions: { questions: [], scoped: true, followUps: false },
+  quote: { fromAnswer: true, fromDocs: false },
+  citations: { passage: false, inCopy: true, pagesRead: false },
+  composer: { editLastOnArrowUp: true, deepLink: true },
+  feedbackEndpoint: null,
+  feedback: { send: 'both', comment: true, confirm: true },
+  guard: { mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
+  scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
+  history: { enabled: true, maxConversations: 20, exportThread: true },
+  prompt: { show: false, allowAppend: false, appendMaxChars: 500, override: null, extend: '' },
+  ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false },
+  host: { base: null, ragBase: null, article: null, search: null, content: null },
+  i18n: { translations: {}, locales: {} },
+}
+```
+
+**This block is checked against the code.** A test walks `DEFAULTS` in
+`src/config.js` and fails unless it equals what is written here — the same
+discipline the [i18n key table](/guide/i18n#the-keys) is held to. A default that
+moves without this page moving cannot ship.
+
+Four things the block cannot say on its own:
+
+- **[`chat.extraBody`](#chat-extrabody) is absent, because it has no single
+  default.** It is the provider's own: `{ provider: { require_parameters: true } }`
+  on `openrouter`, nothing anywhere else. Writing `null` is how you decline it.
+- **Three keys are unions, and are written above in their resolved form** — the
+  shape the browser receives. [`embed`](#embed) also accepts `false`,
+  [`budget`](#budget) also accepts `false`, and [`suggestions`](#suggestions) also
+  accepts a plain array of strings.
+- **[`chat.model`](#chat-model) does not survive a change of provider.**
+  `qwen3:8b` is a statement about Ollama, so naming another provider and no model
+  resolves to *you choose* rather than to that name — a free pool where the
+  provider has one, and a build-stopping error where it does not.
+- **Five keys never reach the browser** — `docsDir`, `indexDir`, `evalDir`,
+  `importDir` and `sources`. See [What reaches the browser](#what-reaches-the-browser).
+
 ## enabled
 
 - **Type:** `boolean`
@@ -41,8 +97,10 @@ allowlist is one whose contents nobody wrote.
 - **Default:** `null`
 - **Related:** [`i18n`](#i18n)
 
-What the docs are about, in the reader's words. The one brand-shaped string this
-package has.
+What the corpus is about, in the reader's words. The one brand-shaped string this
+package has, and the one setting that matters more on a site that is not a
+documentation site: "this documentation" is a correct default for docs and a
+wrong one on a pricing page.
 
 ```js
 product: 'Acme Editor'
@@ -448,7 +506,7 @@ context long before reaching it.
 ## budget
 
 - **Type:** `object | false`
-- **Default:** `{ mode: 'auto', oneShotBelow: 15, rotateAbove: 6, maxContinuations: 1, showRemaining: true, probe: 'auto', dailyLimit: null }`
+- **Default:** `{ mode: 'auto', oneShotBelow: 15, rotateAbove: 6, maxContinuations: 1, showRemaining: false, probe: 'auto', dailyLimit: null }`
 
 The day's **requests**, which is a different scarcity from the tokens
 [`maxIterations`](#maxiterations) argues about. OpenRouter's free tier caps at
@@ -555,18 +613,39 @@ day. A larger value is reported and the shipped 1 used instead.
 
 ### budget.showRemaining
 
-The one muted line under the composer — *38 of 50 free answers left today* — and,
-once the panel has dropped to one-shot, one sentence saying that answers get
-shorter, which is announced to a screen reader as well as shown. It renders only
-where there is something to state: a known count, on a deployment that is
-actually metered — the free pool from the first test above, and nothing else. A
-`chat.models` list you wrote yourself is not that test, so the line follows the
-rationing rather than the shape of the config, and the deployment being rationed
-is never the one left unable to see it.
+The one muted line under the composer, saying what the next question is limited
+to. It has two halves and renders whichever it has:
 
-**On by default**, because it is a line inside this package's own panel, and
-because it is what turns a panel that has stopped working into a limit that was
-stated.
+- *38 of 50 free answers left today* — a known count, on a deployment that is
+  actually metered: the free pool from the first test above, and nothing else. A
+  `chat.models` list you wrote yourself is not that test, so the line follows the
+  rationing rather than the shape of the config, and the deployment being
+  rationed is never the one left unable to see it. Once the panel has dropped to
+  one-shot, one further sentence says that answers get shorter — announced to a
+  screen reader as well as shown.
+- *No embedding model — search matches words only.* — where the site declared
+  [`embed: false`](#embed-false). Both together read as
+  *38 of 50 free answers left today · No embedding model — search matches words
+  only.*
+
+The second half is deliberately **not** the degraded-retrieval warning. That one
+belongs to an embedder that was configured and could not be reached, and it
+appears on the refusal it explains; this is a mode the site chose, stated calmly
+in the place where the reader is deciding what to ask.
+
+**Off by default**, and this is the one switch inside the panel that is. On a
+public documentation site every reader draws on one key, so the count a browser
+can compute is a lower bound on what other people have already spent — *35 of 50
+left* is stated with an authority the arithmetic behind it does not have. A
+project that knows its key is not shared, or that has written down a
+[`dailyLimit`](#budget-dailylimit), turns it on:
+
+```js
+budget: { showRemaining: true }
+```
+
+Turning it off is also how a site asks this panel not to discuss its own limits
+at all — the low-budget sentence and the no-embedder note go with it.
 
 ### budget.probe
 
@@ -684,7 +763,7 @@ is a decision about your site rather than about this panel.
 ## citations
 
 - **Type:** `object`
-- **Default:** `{ passage: true, inCopy: true, pagesRead: false }`
+- **Default:** `{ passage: false, inCopy: true, pagesRead: false }`
 - **Related:** [What DocPilot guarantees](/concepts/guarantees)
 
 What a reader can do with a citation besides believe it.
@@ -697,16 +776,31 @@ Not to be confused with [`sources`](#sources), which is the allowlist of origins
 an imported page may name. That one decides what may become a link; this one
 decides what the reader can see behind the links that are already there.
 
+**The source list itself is not a setting.** Every answer names what it cited and
+every one of those rows is a link, whatever is written here. What this block
+decides is what sits *on top of* those links.
+
 ### citations.passage
 
-A source row expands to show the exact retrieved passage — the chunk the host put
-in front of the model on that turn. It costs no request: the text is already in
-the reader's browser.
+A source row grows a chevron, and it expands to show the exact retrieved passage —
+the chunk the host put in front of the model on that turn. It costs no request:
+the text is already in the reader's browser.
 
-The point is what [the guarantees](/concepts/guarantees) say out loud — citation
-is provenance, not entailment — which makes checking a source a normal step of
-reading rather than an edge case. Without it, the only way to take that step is a
-navigation that on a narrow screen closes the panel and takes the thread with it.
+**Off by default.** The row is already a link, and this is a second layer over
+one: a disclosure control on every source of every answer, and the raw chunk
+inline when it is opened. That is worth having where you want checking a source
+to be a normal step of reading — what [the guarantees](/concepts/guarantees) say
+out loud is that citation is provenance and not entailment — and it is a decision
+about how dense you want this panel to be rather than a defect the package should
+fix on everyone's behalf. Turn it on with:
+
+```js
+citations: { passage: true }
+```
+
+The reader who wants the source has the link either way; what the disclosure buys
+them is not having to follow it, which on a narrow screen closes the panel and
+takes the thread with it.
 
 On a conversation restored from a previous visit the passage is resolved by id
 against the current index; if the docs have been rebuilt and that chunk is gone,

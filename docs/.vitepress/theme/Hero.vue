@@ -73,14 +73,15 @@ onMounted(() => {
     <div class="flex flex-col p-10 justify-between items-center md:items-start">
       <div class="flex flex-col gap-5 text-center md:text-left items-center md:items-start">
         <span class="text-grey text-xs font-mono uppercase tracking-wide">
-          MIT licensed &middot; no server
+          MIT licensed &middot; no server &middot; any page
         </span>
         <h1 class="text-white text-pretty max-w-[40rem]">
-          Grounded AI answers<br />inside your VitePress docs
+          Grounded AI answers<br />on every page of your site
         </h1>
         <p class="text-white/70 text-lg max-w-[30rem] text-pretty">
-          Retrieval runs in the browser against a static index, and a calibrated
-          gate refuses before the model is ever called
+          A docs site, a landing page, a help centre, an app you already ship.
+          Retrieval runs in the browser against an index you built, and refuses
+          before the model is called
         </p>
         <div class="flex items-center gap-5 mt-6">
           <a href="/guide/" class="button button--primary inline-block w-fit">

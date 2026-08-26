@@ -1259,7 +1259,13 @@ export const DEFAULTS = {
         oneShotBelow: 15,
         rotateAbove: 6,
         maxContinuations: 1,
-        showRemaining: true,
+        // OFF, and it is the one switch inside the panel that is: on a public
+        // docs site every reader draws on one key, so the count a browser can
+        // compute is not the count the account has. Turned on it states the
+        // remaining requests AND, where the site declared `embed: false`, that
+        // there is no embedder — one muted line about what the next question is
+        // limited to. See switches.js for the whole of the reasoning.
+        showRemaining: false,
         probe: 'auto',
         dailyLimit: null,
     },
@@ -1290,8 +1296,12 @@ export const DEFAULTS = {
      * expands a source row to the exact retrieved chunk, which is already in the
      * browser; `inCopy` appends the source list to a copied answer, so a `[1]`
      * pasted into a ticket arrives with something behind it.
+     *
+     * `passage` is off: the source row is already a link, and a chevron on every
+     * row of every answer is a second layer over one. The project that wants
+     * checking a source to be a normal step of reading turns it on.
      */
-    citations: {passage: true, inCopy: true, pagesRead: false},
+    citations: {passage: false, inCopy: true, pagesRead: false},
     /**
      * Two composer affordances — ui-specs/009. `editLastOnArrowUp` is ChatGPT's
      * own behaviour and readline's before it; `deepLink` reads `?dp-ask=` into

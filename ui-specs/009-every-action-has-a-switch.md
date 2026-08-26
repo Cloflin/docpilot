@@ -188,8 +188,21 @@ by how much anyone likes the feature.
 | an action that changes the host's layout, or paints outside the panel | **off** | an `npm update` must not rearrange somebody's documentation site |
 
 The third tier holds exactly three: `ui.layout: 'push'`, `quote.fromDocs`, and
-`ui.firstRunHint`. `suggestions.followUps` is off for the separate, measured
-reason above.
+`ui.firstRunHint`.
+
+Three more are off for reasons of their own, each recorded where it is resolved,
+and they are the exceptions the second tier's rule does not reach:
+
+- `suggestions.followUps` — the separate, measured reason above.
+- `citations.passage` — a source row is already a link, and the disclosure is a
+  second layer over one. Density inside the panel is still a decision about
+  somebody's documentation site; a project that wants checking a source to be a
+  normal step of reading turns it on.
+- `budget.showRemaining` — the line is inside the panel, but the NUMBER is not
+  the reader's. On a shared key a browser's own count is a lower bound on other
+  people's spending, so *35 of 50 left* claims an authority its arithmetic does
+  not have. Turned on it also states a declared `embed: false`, which is the
+  other thing that limits what the next question can find.
 
 **The asymmetry between A5 and B3 is deliberate and is the policy working.**
 Copy that ships **on** has to be good for every corpus, which is why A5 does not

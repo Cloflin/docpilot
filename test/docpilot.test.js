@@ -1358,8 +1358,12 @@ describe('009 — the passage behind a citation', () => {
   const SRC = { n: 1, id: '/guide#auth', href: '/guide#auth', title: 'Auth', tail: 'Guide' }
   const chunk = (text) => ({ id: SRC.id, text })
 
+  // `passage: true` written out, because it is no longer the shipped value: the
+  // disclosure is a second layer over a link and a project opts into it. The
+  // three cases below are about what it resolves to WHEN it is on; the fourth is
+  // about the default itself.
   beforeEach(() => {
-    configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
+    configure({ docPilot: themeDocPilot(resolveDocPilot({ citations: { passage: true } })) })
     sessionState.index = null
   })
 
@@ -1387,6 +1391,16 @@ describe('009 — the passage behind a citation', () => {
 
   it('is off entirely when the project switched it off', () => {
     configure({ docPilot: themeDocPilot(resolveDocPilot({ citations: { passage: false } })) })
+    sessionState.index = { byId: new Map([[SRC.id, chunk('still here')]]) }
+    expect(session.passageFor({ gate: { chunks: [chunk('still here')] } }, SRC)).toBe('')
+  })
+
+  // And off is the SHIPPED state, which is the half a `passage: false` case
+  // cannot say on its own: a project that writes nothing gets the link and no
+  // chevron, and the component's `v-if="passage(...)"` renders neither the
+  // control nor the region for an empty string.
+  it('is off on a config that says nothing', () => {
+    configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
     sessionState.index = { byId: new Map([[SRC.id, chunk('still here')]]) }
     expect(session.passageFor({ gate: { chunks: [chunk('still here')] } }, SRC)).toBe('')
   })
@@ -1920,6 +1934,33 @@ describe('rule 11 — every action has a switch', () => {
       )
     }
     expect(leavesOf(DEFAULTS).filter((l) => !named(l)), 'undocumented settings').toEqual([])
+  })
+
+  /**
+   * 11d — the documented VALUE, not just the documented name.
+   *
+   * 11b above asks whether a key is mentioned anywhere on the page, which is the
+   * check a setting nobody wrote down fails. It is not the check a setting whose
+   * default MOVED fails: `- **Default:** ... showRemaining: true` went on
+   * satisfying 11b for as long as the key was called `showRemaining`, and a
+   * reference that states the wrong shipped value is worse than one that omits
+   * it — the reader configures against it and gets a panel they did not ask for.
+   *
+   * So the `## All defaults` block is executed and compared to the tree it
+   * claims to be. This is the same arrangement the i18n key table is held to at
+   * the bottom of this file, and it exists for the same reason: that table had
+   * drifted by twenty-one leaves before anything was checking.
+   */
+  it('11d — the `All defaults` block in the reference is DEFAULTS', () => {
+    const doc = read('docs/reference/config.md')
+    const fence = doc.match(/^## All defaults$[\s\S]*?```js[^\n]*\n([\s\S]*?)^```$/m)
+    expect(fence, 'a js block under `## All defaults`').not.toBe(null)
+
+    // `export const docPilot =` is there because the block is meant to be
+    // pasted into a config file, not because anything here needs it.
+    const literal = fence[1].replace(/^\s*export\s+const\s+docPilot\s*=\s*/, '')
+    // eslint-disable-next-line no-new-func
+    expect(new Function(`return (${literal})`)(), 'the documented defaults').toEqual(DEFAULTS)
   })
 
   /**

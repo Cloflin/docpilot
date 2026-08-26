@@ -1,5 +1,6 @@
 ---
 title: Docusaurus
+titleTemplate: 'DocPilot for :title'
 ---
 
 # Docusaurus

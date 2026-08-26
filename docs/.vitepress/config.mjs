@@ -65,7 +65,7 @@ const ragIndex = new URL('../public/rag/manifest.json', import.meta.url)
  */
 export const docPilot = {
   enabled: existsSync(ragIndex),
-  product: 'DocPilot for VitePress',
+  product: 'DocPilot',
   chat: { provider: 'openrouter' },
   embed: 'auto',
   /**
@@ -105,6 +105,13 @@ const sidebarForGuide = [
     text: 'Introduction',
     items: [
       { text: 'Getting started', link: '/guide/' },
+      /**
+       * Second, not last. "Getting started" is a VitePress quickstart, and the
+       * very next link a reader needs is the one that says the panel is not
+       * only for VitePress and not only for docs. Buried under Install it
+       * arrives after the decision it is supposed to inform.
+       */
+      { text: 'Where it can go', link: '/guide/where-it-goes' },
       { text: 'Philosophy', link: '/guide/philosophy' },
       { text: 'Why DocPilot', link: '/guide/why' },
     ],
@@ -187,9 +194,9 @@ const config = defineConfig({
   // `/ai/*` proxy that attaches the key, and the build-time readiness report.
   vite: { plugins: [ai.plugin()] },
 
-  title: 'DocPilot for VitePress',
+  title: 'DocPilot',
   description:
-    'A grounded AI answer panel for VitePress docs. Browser-side retrieval, a calibrated refusal gate, checked citations.',
+    'A grounded Ask AI panel for any page of your site — docs, a landing page, a help centre, or an app you already ship. Retrieval runs in the browser, the gate refuses before the model is called, and every citation is checked.',
   cleanUrls: true,
   lastUpdated: true,
 
@@ -202,10 +209,22 @@ const config = defineConfig({
       'meta',
       {
         property: 'og:title',
-        content: 'DocPilot for VitePress | Grounded answers in your docs',
+        content: 'DocPilot | Grounded AI answers on any page of your site',
       },
     ],
-    ['meta', { property: 'og:site_name', content: 'DocPilot for VitePress' }],
+    // VitePress emits `<meta name="description">` from `description` above but
+    // never an og:description — `isDescriptionOverridden` only looks at
+    // `name === "description"`. Without this, every shared link renders a card
+    // with a title and no body.
+    [
+      'meta',
+      {
+        property: 'og:description',
+        content:
+          'Mounts on any page of any site and answers from a static index you build. Retrieval runs in the browser; the gate refuses before the model is called; every citation is checked against what was retrieved.',
+      },
+    ],
+    ['meta', { property: 'og:site_name', content: 'DocPilot' }],
     ['meta', { name: 'twitter:card', content: 'summary' }],
   ],
 

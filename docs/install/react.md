@@ -1,5 +1,6 @@
 ---
 title: React
+titleTemplate: 'DocPilot for :title'
 ---
 
 # React

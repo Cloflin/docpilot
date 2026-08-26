@@ -981,3 +981,80 @@ describe('the eval commands — all three loaders, not two', () => {
     expect(fn).toContain('composedVec = vectorless\n        ? null')
   })
 })
+
+/**
+ * Saying it out loud — the one place a reader is told this site has no embedder.
+ *
+ * Every other assertion in this file is about NOT reporting the declared mode as
+ * an outage: no console line, no `degraded` on the refusal, no retry against a
+ * service nobody configured. This is the other half of that decision, and it was
+ * missing. Silence is right for a refusal, which is about one question; it is
+ * wrong for the composer, where the reader is choosing what to ask and lexical
+ * retrieval scores ZERO for a question in a language the corpus is not written
+ * in. A site can now state the limit without stating a failure.
+ *
+ * It rides `budget.showRemaining`, which is the same muted line and the same
+ * question from the reader's side: what is this next question limited to. A
+ * project that asked the panel not to discuss its own limits is not told about
+ * this one either.
+ */
+describe('embed: false — the panel may say so under the composer', () => {
+  const panel = readFileSync(
+    new URL('../src/theme/components/DocPilot.vue', import.meta.url),
+    'utf8',
+  )
+
+  it('is silent on the shipped defaults', () => {
+    const client = themeDocPilot(cfg({ chat: { provider: 'ollama', model: 'x' }, embed: false }))
+    expect(client.embed.lexicalOnly).toBe(true)
+    // Both halves of the line are off, so there is no paragraph at all — which
+    // is the state every site that writes nothing is in.
+    expect(client.budget.showRemaining).toBe(false)
+  })
+
+  it('is offered by the switch that offers the request count', () => {
+    const client = themeDocPilot(
+      cfg({
+        chat: { provider: 'ollama', model: 'x' },
+        embed: false,
+        budget: { showRemaining: true },
+      }),
+    )
+    expect(client.budget.showRemaining).toBe(true)
+    expect(client.embed.lexicalOnly).toBe(true)
+  })
+
+  // The two conditions the component ANDs, pinned on the source: there is no
+  // mounted-component harness in this suite, and what matters about this line is
+  // which two facts gate it.
+  it('reads the declared mode, not the runtime one', () => {
+    expect(panel).toContain(
+      "s.config.budget.showRemaining && s.config.embed.lexicalOnly ? T('error.noEmbedder') : ''",
+    )
+    // `state.retrieval` is the same word arrived at by the other route — an
+    // embedder that was configured and could not be reached — and it is only
+    // known after a question has been asked. This line has to be readable
+    // before the reader types one.
+    expect(panel).not.toContain('s.retrieval ===')
+  })
+
+  // One paragraph, either half, or neither — and the count keeps its own name so
+  // the low-budget sentence beside it still tracks the count rather than the note.
+  it('joins the two halves into one line', () => {
+    expect(panel).toContain(
+      "const statusLine = computed(() => [budgetLine.value, embedNote.value].filter(Boolean).join(' · '))",
+    )
+    expect(panel).toContain('v-if="statusLine"')
+    expect(panel).toContain('const budgetLowDue = computed(() => oneShot.value && !!budgetLine.value)')
+  })
+
+  it('has copy that names the mode rather than a failure', () => {
+    const shipped = readFileSync(
+      new URL('../src/theme/docpilot/i18n.js', import.meta.url),
+      'utf8',
+    )
+    expect(shipped).toContain(
+      "noEmbedder: 'No embedding model — search matches words only.',",
+    )
+  })
+})

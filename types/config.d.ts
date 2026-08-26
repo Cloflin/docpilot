@@ -102,6 +102,10 @@ export interface QuoteSettings {
 }
 
 export interface CitationsSettings {
+  /**
+   * A source row expands to the exact retrieved passage. Off by default: the row
+   * is already a link, and this is a second layer over one.
+   */
   passage?: boolean
   inCopy?: boolean
   pagesRead?: boolean
@@ -135,6 +139,11 @@ export interface BudgetSettings {
   rotateAbove?: number
   /** How many follow-up requests may reassemble a reply the provider truncated — 0 to 3. */
   maxContinuations?: number
+  /**
+   * The muted line under the composer: how many answers are left today, and —
+   * where the site declared `embed: false` — that it has no embedder. Off by
+   * default, because on a shared key a browser's own count is not the account's.
+   */
   showRemaining?: boolean
   /** The tool-detection call, which costs a request on every page load. */
   probe?: 'auto' | 'always' | 'never'

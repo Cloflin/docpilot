@@ -977,13 +977,15 @@
               {{ T('composer.counter', { n: input.length }) }}
             </p>
 
-            <!-- What is left of the day's free answers, in the place the reader
-                 is deciding whether to spend one. Described BY the field for the
-                 same reason the counter is: it changes what a question costs,
-                 and a reader who cannot see it is the one most likely to be
-                 surprised when the answers stop. -->
-            <p v-if="budgetLine" id="dp-budget" class="docpilot__budget">
-              {{ budgetLine }}<span v-if="showBudgetLow"> · {{ T('error.budgetLow') }}</span>
+            <!-- What the next question is limited to — what is left of the day's
+                 free answers, and whether this site retrieves without an
+                 embedder — in the place the reader is deciding whether to spend
+                 one. Described BY the field for the same reason the counter is:
+                 it changes what a question costs and what it can find, and a
+                 reader who cannot see it is the one most likely to be surprised
+                 when the answers stop. -->
+            <p v-if="statusLine" id="dp-budget" class="docpilot__budget">
+              {{ statusLine }}<span v-if="showBudgetLow"> · {{ T('error.budgetLow') }}</span>
             </p>
 
             <p id="dp-footnote" class="docpilot__footnote">
@@ -2267,9 +2269,10 @@ const disclaimer = computed(() => {
  *
  * THREE conditions, and each one is a way of getting it wrong:
  *
- *   · the switch. `budget.showRemaining` is inside the panel, so it defaults on,
- *     and a site that turned it off has asked this panel not to discuss its
- *     bill — which retires the low-budget note below with it.
+ *   · the switch. `budget.showRemaining` defaults OFF — the count a browser can
+ *     compute is not the count a shared key has — so this is a site saying it
+ *     knows its own allowance and wants it stated. Off retires the low-budget
+ *     note below with it, and the no-embedder note beside it.
  *   · a METERED deployment — `llm.freePool`, and nothing else. It is true only
  *     where the answers come off the provider's own free catalogue, which is the
  *     only place the ceiling is a count of REQUESTS per day; a deployment paying
@@ -2293,6 +2296,27 @@ const budgetLine = computed(() => {
   if (!snap || !Number.isFinite(snap.remaining) || !Number.isFinite(snap.limit)) return ''
   return T('error.budgetLeft', { n: snap.remaining, limit: snap.limit })
 })
+
+/**
+ * The other thing that line can say: this deployment has no embedder.
+ *
+ * `config.embed.lexicalOnly` — the DECLARED mode, `embed: false` — and not
+ * `state.retrieval`, which is the same word arrived at by a different route. That
+ * one is only known after a question has been asked, and this line has to be
+ * readable before the reader types one; an embedder that was configured and could
+ * not be reached is the other case, and it already has `refusal.degraded`.
+ *
+ * Under `budget.showRemaining` rather than a switch of its own, because it is the
+ * same sentence from the reader's side: what is this next question limited to.
+ * A site that asked the panel not to discuss its own limits is not told about
+ * this one either.
+ */
+const embedNote = computed(() =>
+  s.config.budget.showRemaining && s.config.embed.lexicalOnly ? T('error.noEmbedder') : '',
+)
+
+/** The two, joined — either alone, both, or nothing and no paragraph at all. */
+const statusLine = computed(() => [budgetLine.value, embedNote.value].filter(Boolean).join(' · '))
 
 // Whether the NEXT question will be answered in one model call. Read off the
 // session rather than re-derived here: the plan is a decision, taken in one

@@ -2,12 +2,15 @@
 
 ## Overview
 
-DocPilot is a grounded AI answer panel for documentation. It consists
+DocPilot is a grounded Ask AI panel that mounts on any page a script tag can
+reach — a docs site, a landing page, a help centre, an app you already ship —
+and answers from an index you build, not from the page it sits on. It consists
 of three parts:
 
-- **A build step** that turns your markdown into a static retrieval index, and a
-  Vite plugin that mounts the panel, proxies the model call in development, and
-  reports at build time whether the panel will render at all.
+- **A build step** that turns your markdown into a static retrieval index, and an
+  adapter that mounts the panel — a Vite plugin on VitePress, which also proxies
+  the model call in development and reports at build time whether the panel will
+  render at all; one `mountDocPilot()` call anywhere else.
 
 - **A browser-side retriever** that scores a question against that index without
   a vector database, a search service, or any server beyond the one already
@@ -17,16 +20,19 @@ of three parts:
   question costs zero tokens — and a validator that checks every citation the
   reader sees against what the host actually retrieved that turn.
 
-The rationale is in [Why DocPilot](./why), and the rules the project holds itself
-to are in [Philosophy](./philosophy). What follows is the ten minutes it takes to
+The rationale is in [Why DocPilot](./why), the rules the project holds itself to
+are in [Philosophy](./philosophy), and the pages it can sit on are in
+[Where it can go](./where-it-goes). What follows is the ten minutes it takes to
 have it running **on VitePress**.
 
-::: tip Not VitePress?
+::: tip Not VitePress? Not a docs site?
 Only the mounting differs. [Installing](/install/) has a page each for
 [Docusaurus](/install/docusaurus), [Vue](/install/vue), [React](/install/react),
 [JavaScript](/install/javascript), [TypeScript](/install/typescript) and a bare
 [`<script>` tag](/install/web) — and the config, the index and the calibration
-below are identical on all of them.
+below are identical on all of them. For a page that is not part of a
+documentation site at all, [Where it can go](./where-it-goes) is the shorter
+read.
 :::
 
 ## Installing

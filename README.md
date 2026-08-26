@@ -3,7 +3,9 @@
   <img alt="DocPilot" src="docs/public/logo-light.svg" width="320">
 </picture>
 
-A grounded AI answer panel for documentation — VitePress, Docusaurus, Vue, React, or a blog with a `<script>` tag.
+A grounded Ask AI panel for **any page of any site** — VitePress, Docusaurus, Vue, React, or a landing page with a `<script>` tag.
+
+It mounts wherever a page can load a stylesheet and a script: a docs site, a landing page, a pricing page, a help centre, an app you already ship. What it answers **from** is the corpus you built — `npx docpilot index` walks your markdown and OpenAPI files, and `npx docpilot import <url>` pulls in an allowlisted page that lives in neither. A panel on your pricing page answers from that corpus, not from the pricing page.
 
 Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
@@ -23,7 +25,7 @@ Node 20 or newer. Every command below is written `npx docpilot …`; substitute 
 
 ## Where it mounts
 
-The question is not which framework you use — it is whether your bundler compiles a `.vue` file, because that decides whether you get the source or a prebuilt bundle.
+Any page that can load a stylesheet and a script — a docs site, a landing page, a help centre, an app you already ship. Which *build* of the panel you load is the only real question, and it is not which framework you use: it is whether your bundler compiles a `.vue` file, because that decides whether you get the source or a prebuilt bundle.
 
 | your setup | entry point |
 |---|---|

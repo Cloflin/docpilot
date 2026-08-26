@@ -21,8 +21,8 @@ const citations = [
       <div class="p-5 sm:p-15 pb-0 sm:pb-0 flex flex-col gap-3">
         <h5 class="text-balance sm:text-pretty text-white">No infrastructure</h5>
         <p class="sm:max-w-[30rem] text-pretty">
-          The index is a static file built at deploy time and fetched by the
-          browser
+          The index is a static file built at deploy time, so the panel goes
+          wherever your pages already go
         </p>
       </div>
       <div class="p-5 sm:p-15 flex flex-col gap-6">
@@ -38,7 +38,8 @@ const citations = [
         </ul>
         <p class="text-sm">
           No vector database, no search service, no server beyond the one already
-          serving your site.
+          serving your site &mdash; a docs site, a landing page, or an app you
+          already ship.
         </p>
       </div>
     </div>

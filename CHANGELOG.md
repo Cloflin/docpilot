@@ -7,6 +7,98 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 0.3.0 — 2026-08-26
+
+### Breaking
+
+**Three defaults moved.** None of them changes what an answer contains; all
+three change what the panel puts on screen out of the box. A project that had
+already written any of these keys is unaffected — an explicit value always wins.
+
+- **`citations.passage` is now `false`.** The chevron that expanded a source row
+  to the retrieved chunk is off by default. The source list itself is untouched:
+  every answer still names what it cited and every row is still a link. Write
+  `citations: { passage: true }` to keep the disclosure.
+- **`budget.showRemaining` is now `false`.** The muted line under the composer —
+  *38 of 50 free answers left today* — is off, because on a shared key a
+  browser's own count is a lower bound on what other readers have already spent.
+  `docs/guide/free-tier.md` has described the default this way since it was
+  written; the code now agrees with it. Write `budget: { showRemaining: true }`
+  on a key only you draw on. Nothing about the **rationing** changed — one-shot
+  mode, the rotation threshold and the `429` message are all where they were.
+- **The panel header reads `Docpilot`.** It was `DocPilot`. One i18n leaf,
+  `panel.title`; override it with
+  `i18n: { translations: { panel: { title: '…' } } }`. The trigger, its tooltip
+  and the end-of-article link are unchanged.
+
+### Added
+
+**The muted line can say a site has no embedder.** With
+`budget.showRemaining: true` on a deployment that declared
+[`embed: false`](https://docpilot-nine.vercel.app/reference/config#embed-false),
+the same line reads *No embedding model — search matches words only.* — beside
+the request count where there is one. It is deliberately not the degraded-search
+warning: that one belongs to an embedder that was configured and could not be
+reached, and it appears on the refusal it explains. New i18n leaf
+`error.noEmbedder`.
+
+**Every default in one block.** `docs/reference/config.md` opens with an
+`All defaults` section carrying the whole of `DEFAULTS`, copy-pasteable, plus the
+four things the block cannot state on its own — `chat.extraBody`'s
+provider-supplied default, the three unions, `chat.model` not surviving a change
+of provider, and the five keys that never reach the browser. A test executes the
+block and compares it to `DEFAULTS`, so a default cannot move without this page
+moving with it.
+
+**A `Where it can go` page**, second in the guide sidebar. It is the one place
+that states the condition plainly, in both directions: what the panel needs from
+a page, which is very little — `location.pathname`, `<html lang>`, a full page
+load and `main` are all defaults it works out on its own, and only `host.search`
+has none — and what it will not do, which is answer about the page it is sitting
+on.
+
+**`og:description` on the docs site.** VitePress emits
+`<meta name="description">` from `description` but never an Open Graph one —
+`isDescriptionOverridden` only looks at `name === "description"` — so every
+shared link rendered a card with a title and no body.
+
+### Changed
+
+**The package is no longer described as being for documentation sites.** It
+mounts on any page that can load a stylesheet and a script — a landing page, a
+pricing page, a help centre, an app you already ship — and that is now what
+`package.json#description`, the README, the site's title, its `h1` and its og
+tags say. Nothing about the panel changed: the copy had been narrower than the
+code ever since `/mount` and `/web` landed. The limit travels with the claim
+everywhere it appears, in the same breath — the panel answers from the corpus
+you built, not from the page it sits on.
+
+**`keywords` reordered and retargeted.** npm clips the keyword list to a single
+line in search results, so the first six now read `ask-ai`, `ai-search`,
+`site-search`, `ai-chatbot`, `rag`, `answer-engine`. `vitepress` is demoted
+rather than dropped — it stays in `description`, which npm weighs higher. Gone:
+`search`, `ai` and `documentation`, unrankable head terms, and
+`documentation-search`, a duplicate of `docs-search`.
+
+**The site title is `DocPilot`, not `DocPilot for VitePress`.** The phrase moved
+rather than went. `docs/install/{vitepress,docusaurus,vue,react}.md` each carry a
+`titleTemplate`, so those four pages render `DocPilot for VitePress` and its
+siblings as their whole `<title>` — one page whose title is the query, instead of
+thirty-three sharing a suffix.
+
+### Fixed
+
+**`docs/guide/free-tier.md` printed `showRemaining: 'auto'`**, which is not a
+value that key accepts — it is a boolean, and `'auto'` was reported on stdout and
+replaced at build time by anyone who copied the example.
+
+**The npm description was being truncated mid-word.** The registry caps
+`description` at 255 characters — silently, and documented nowhere — and 0.2.0's
+was 286, so the registry has served `…every citation is checked against wh` since
+the day it shipped. A published version cannot be corrected, only superseded. The
+new description is 233 characters, and its first sentence closes at 111 so the
+whole claim survives Google's ~120-character mobile snippet.
+
 ## 0.2.0 — 2026-08-24
 
 The first release published to npm. 0.1.0 existed only in this repository, so

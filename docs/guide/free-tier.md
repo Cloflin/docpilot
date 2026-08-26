@@ -84,9 +84,10 @@ spends a request per page load asking whether the model can call tools.
 **Whether the key is shared.** On a public documentation site every reader draws
 on one key, so a browser's own count is not the account's. That is why the panel
 does not print "43 of 50 left" by default —
-[`budget.showRemaining`](/reference/config#budget-showremaining) shows the count
-only where it can be true. What is always shown is the fact the service stated:
-when the day is gone, the panel says so and when answers resume.
+[`budget.showRemaining`](/reference/config#budget-showremaining) is off, and set
+to `true` it shows the count only where it can be true anyway. What is always
+shown is the fact the service stated: when the day is gone, the panel says so and
+when answers resume.
 
 **Whether to buy ten credits.** It raises the ceiling from 50 to 1000 requests a
 day, which is the difference between a demo and a documentation site. Set
@@ -106,7 +107,7 @@ export const docPilot = {
     oneShotBelow: 15,
     rotateAbove: 6,
     dailyLimit: null,    // 1000 once you have bought credits
-    showRemaining: 'auto',
+    showRemaining: false, // true on a key only you draw on
   },
 }
 ```

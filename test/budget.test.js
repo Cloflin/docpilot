@@ -1062,7 +1062,7 @@ describe('the budget settings', () => {
       oneShotBelow: 15,
       rotateAbove: 6,
       maxContinuations: 1,
-      showRemaining: true,
+      showRemaining: false,
       probe: 'auto',
       dailyLimit: null,
     })

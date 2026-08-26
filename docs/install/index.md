@@ -10,9 +10,16 @@ DocPilot has two halves, and only one of them cares what your site is built with
 static files. Retrieval, the refusal gate and the tool harness are plain ESM
 modules that run in any browser. None of it knows what a VitePress is.
 
-**The panel needs a host** — four answers, really: what is configured, what page
-is this, what language is it in, and how do I navigate. Every page below is about
-supplying those four.
+**The panel needs a page.** Four answers, really: what is configured, what page
+is this, what language is it in, and how do I navigate — and three of the four
+have a default it works out on its own (`location.pathname`, `<html lang>`, a
+full page load). Every page below is about supplying them properly.
+
+**And it answers from the index, not from the page it is on.** Mounted on a
+pricing page it still answers from the markdown you indexed, which is usually
+exactly what you want — and is worth knowing before you mount it somewhere your
+corpus does not cover. [Where it can go](/guide/where-it-goes) is the page about
+that.
 
 ## Installing it
 

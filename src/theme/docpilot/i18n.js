@@ -69,7 +69,7 @@ import { SOCIAL_COPY } from './social.js'
  */
 const UI_EN = {
   panel: {
-    title: 'DocPilot',
+    title: 'Docpilot',
     newChat: 'New chat',
     // The whole conversation as Markdown — ui-specs/009. Per-turn copy already
     // existed; the artefact a support engineer wants is the thread.
@@ -173,6 +173,14 @@ const UI_EN = {
     // a reader experiences as shorter, less researched answers. Stating the
     // trade beats letting them conclude the panel got worse.
     budgetLow: 'Running low — answers get shorter to stretch the daily limit.',
+    // NOT a failure, which is why it reads as a statement rather than as an
+    // apology: the site declared `embed: false`, so retrieval is BM25 over the
+    // chunk text and there is no semantic channel to be missing. It shares the
+    // line — and the switch — with the request count above it, because both
+    // answer the one question a reader has while deciding whether to type:
+    // what is this search limited to. `refusal.degraded` is the other case,
+    // an embedder that was configured and could not be reached.
+    noEmbedder: 'No embedding model — search matches words only.',
   },
   actions: {
     copy: 'Copy answer',

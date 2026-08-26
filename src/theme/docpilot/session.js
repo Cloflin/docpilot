@@ -138,7 +138,7 @@ const DEFAULTS = {
     oneShotBelow: 15,
     rotateAbove: 6,
     maxContinuations: 1,
-    showRemaining: true,
+    showRemaining: false,
     probe: 'auto',
     dailyLimit: null,
   },
@@ -147,7 +147,7 @@ const DEFAULTS = {
   // so, which is what makes these safe to run on before `configure` lands.
   suggestions: { questions: [], scoped: true, followUps: false },
   quote: { fromAnswer: true, fromDocs: false },
-  citations: { passage: true, inCopy: true, pagesRead: false },
+  citations: { passage: false, inCopy: true, pagesRead: false },
   composer: { editLastOnArrowUp: true, deepLink: true },
   // The product this documentation is about. Null renders as "this
   // documentation" everywhere it appears — in the instruction, in the composer
