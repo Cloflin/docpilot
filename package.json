@@ -20,7 +20,7 @@
   ],
   "license": "MIT",
   "author": "Cloflin (https://github.com/Cloflin)",
-  "homepage": "https://docpilot.vercel.app",
+  "homepage": "https://docpilot-nine.vercel.app/",
   "bugs": {
     "url": "https://github.com/Cloflin/docpilot/issues"
   },
@@ -110,7 +110,7 @@
     "./src/web.js"
   ],
   "bin": {
-    "docpilot": "./bin/docpilot.js"
+    "docpilot": "bin/docpilot.js"
   },
   "files": [
     "CHANGELOG.md",
