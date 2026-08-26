@@ -88,11 +88,11 @@ describe('vercel /ai proxy', () => {
   })
 
   const post = (init = {}) =>
-    new Request('https://docpilot.vercel.app/api/ai/chat', { method: 'POST', ...init })
+    new Request('https://docpilot-nine.vercel.app/api/ai/chat', { method: 'POST', ...init })
 
   describe('the gates before the fetch', () => {
     it('answers anything but POST with 405 and names the method it takes', async () => {
-      const res = await proxy(new Request('https://docpilot.vercel.app/api/ai/chat'), '/v1/chat/completions', {
+      const res = await proxy(new Request('https://docpilot-nine.vercel.app/api/ai/chat'), '/v1/chat/completions', {
         [KEY_ENV]: 'k',
       })
       expect(res.status).toBe(405)
@@ -107,13 +107,13 @@ describe('vercel /ai proxy', () => {
     })
 
     it('names the missing variable rather than reporting an outage', async () => {
-      const res = await proxy(post({ headers: { origin: 'https://docpilot.vercel.app' } }), '/v1/chat/completions', {})
+      const res = await proxy(post({ headers: { origin: 'https://docpilot-nine.vercel.app' } }), '/v1/chat/completions', {})
       expect(res.status).toBe(503)
       expect((await res.json()).error.message).toContain(KEY_ENV)
     })
 
     it('accepts this deployment’s own origin, and a request that sent none', () => {
-      expect(sameOrigin(post({ headers: { origin: 'https://docpilot.vercel.app' } }))).toBe(true)
+      expect(sameOrigin(post({ headers: { origin: 'https://docpilot-nine.vercel.app' } }))).toBe(true)
       // A browser that omits Origin on a same-origin POST must not 403 every
       // question; the cross-origin case is stopped by the absence of any
       // access-control-allow-* header on the way out.
