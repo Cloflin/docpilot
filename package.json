@@ -105,7 +105,9 @@
   },
   "sideEffects": [
     "*.css",
-    "*.scss"
+    "*.scss",
+    "./src/theme/index.js",
+    "./src/web.js"
   ],
   "bin": {
     "docpilot": "./bin/docpilot.js"

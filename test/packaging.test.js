@@ -122,8 +122,22 @@ describe('packaging', () => {
   // Now that the `.vue` files carry no `<style>` block, nothing in this package
   // has a side effect except a stylesheet — and saying so is what lets a
   // consumer's bundler drop what they do not use.
+  //
+  // The glob halves are not enough on their own. A bundler tests this list
+  // against the module it just resolved, not against what that module goes on
+  // to import: `src/theme/index.js` matches neither `*.css` nor `*.scss`, so it
+  // is marked side-effect-free, and its one statement — the bare
+  // `import '../../dist/docpilot.css'` — is dropped with it. The panel then
+  // renders with no stylesheet at all, on a build that is green. Every module
+  // whose whole purpose is a bare stylesheet import has to be named here, which
+  // is what the second half of this test enforces.
   it('declares its side effects', () => {
-    expect(pkg.sideEffects).toEqual(['*.css', '*.scss'])
+    expect(pkg.sideEffects).toEqual([
+      '*.css',
+      '*.scss',
+      './src/theme/index.js',
+      './src/web.js',
+    ])
     for (const f of [
       'src/theme/components/DocPilotTrigger.vue',
       'src/theme/components/DocPilotCta.vue',
@@ -132,6 +146,32 @@ describe('packaging', () => {
       // Anchored: both components mention `<style>` in the comment that says
       // why they no longer have one.
       expect(/^<style/m.test(fs.readFileSync(abs(f), 'utf8')), f).toBe(false)
+    }
+  })
+
+  // The list above is a literal, so it only stays right for as long as someone
+  // remembers to extend it. This walks src/ instead and fails on the module
+  // that grows a stylesheet import without being declared.
+  it('names every module that imports a stylesheet for its side effect', () => {
+    const declared = new Set(pkg.sideEffects)
+    const walk = (dir) =>
+      fs.readdirSync(abs(dir), { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walk(`${dir}/${e.name}`)
+          : /\.(js|mjs)$/.test(e.name)
+            ? [`${dir}/${e.name}`]
+            : [],
+      )
+    for (const f of walk('src')) {
+      const src = fs.readFileSync(abs(f), 'utf8')
+      // Bare imports only. A default or named import from a stylesheet is not
+      // a thing, and quoting one inside a comment or a doc block is — every
+      // adapter's header shows the consumer which stylesheet to pull in.
+      const bare = src
+        .split('\n')
+        .some((line) => /^import\s+['"][^'"]+\.(css|scss)['"]/.test(line))
+      if (!bare) continue
+      expect(declared.has(`./${f}`), `${f} imports a stylesheet but is not in sideEffects`).toBe(true)
     }
   })
 
