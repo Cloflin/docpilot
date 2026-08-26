@@ -1,0 +1,50 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for trusted publishing: lets the job mint the OIDC token
+      # npm exchanges for a short-lived publish credential. Also what
+      # --provenance signs with.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          # Not derived from package.json engines (>=20): trusted publishing
+          # needs Node >= 22.14.0, which is a constraint on the publishing job
+          # only, not on who may install the package.
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      # The runner's bundled npm is routinely older than 11.5.1. Below that
+      # floor the OIDC exchange is not attempted at all — npm falls back to
+      # token auth, finds no token, and the job dies with an auth error that
+      # never mentions OIDC.
+      - run: npm install -g npm@latest
+      - run: npm --version
+
+      - name: Refuse a tag that disagrees with package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag $GITHUB_REF_NAME says $tag, package.json says $pkg" >&2
+            exit 1
+          fi
+
+      # Not --ignore-scripts: dist/ is gitignored and only exists because
+      # `prepare` builds it. prepublishOnly then runs the full gate
+      # (check -> typecheck -> vitest -> build -> check-publish).
+      - run: npm ci
+
+      - run: npm publish --provenance
