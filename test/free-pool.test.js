@@ -500,11 +500,37 @@ describe('the configuration a free pool resolves from', () => {
    * posted to OpenRouter — a 404 on every question, naming a model that appears
    * nowhere in their config file.
    */
-  it('does not carry the default model across a provider change', () => {
-    expect(cfg({ chat: { provider: 'openrouter' } }).chat.model).toBe(null)
-    expect(cfg({ chat: { provider: 'openai' } }).chat.model).toBe(null)
-    expect(cfg({}).chat.model).toBe('qwen3:8b')
-    expect(cfg({ chat: { model: 'llama3' } }).chat.model).toBe('llama3')
+  /**
+   * A model name belongs to ONE service, and the shape of that rule changed
+   * without the rule changing.
+   *
+   * It used to be enforced by having no answer: `qwen3:8b` was the single
+   * shipped `chat.model`, so naming any other provider dropped it and left the
+   * half unnamed, which `assertChat` then refused. Now every provider carries
+   * its own `chatModel` in the table, so naming a provider names a model — and
+   * what is still forbidden is exactly what was forbidden before: one
+   * provider's name reaching another provider's endpoint.
+   */
+  it('gives each provider its own model and carries none across', () => {
+    expect(cfg({ chat: { provider: 'openrouter' } }).chat.model).toBe(null) // the pool answers
+    expect(cfg({ chat: { provider: 'openai' } }).chat.model).toBe('gpt-4o-mini')
+    expect(cfg({ chat: { provider: 'anthropic' } }).chat.model).toBe('claude-sonnet-4-6')
+    expect(cfg({ chat: { provider: 'ollama' } }).chat.model).toBe('qwen3:8b')
+    // The author's own name outranks the table on every provider.
+    expect(cfg({ chat: { provider: 'ollama', model: 'llama3' } }).chat.model).toBe('llama3')
+    expect(cfg({ chat: { provider: 'openai', model: 'gpt-4.1' } }).chat.model).toBe('gpt-4.1')
+  })
+
+  /**
+   * And with NOTHING named, the environment answers both questions at once.
+   * `ENV` here carries `OPENROUTER_API_KEY` and nothing else, so the chain stops
+   * on `openrouter` — whose model is the pool, hence null.
+   */
+  it('resolves provider and model together from the environment', () => {
+    expect(cfg({}).chat.provider).toBe('openrouter')
+    expect(cfg({}).chat.model).toBe(null)
+    expect(cfg({}).chat.providerAuto).toBe(true)
+    expect(cfg({ chat: { provider: 'ollama' } }).chat.providerAuto).toBe(false)
   })
 
   it('gives an unnamed OpenRouter both pools and no single name', () => {
@@ -517,8 +543,10 @@ describe('the configuration a free pool resolves from', () => {
 
   it('leaves every other provider unpooled', () => {
     expect(chatModels(cfg({ chat: { provider: 'openai', model: 'gpt-4o-mini' } }))).toBe(null)
-    expect(chatModels(cfg({}))).toBe(null)
-    expect(embedModels(cfg({}))).toBe(null)
+    // Named, not left to `ENV` — the chain resolves an empty config to
+    // `openrouter` here, which is the one provider that IS pooled.
+    expect(chatModels(cfg({ chat: { provider: 'ollama' } }))).toBe(null)
+    expect(embedModels(cfg({ chat: { provider: 'ollama' } }))).toBe(null)
   })
 
   it('lets an author pin their own order, beside a named primary', () => {
@@ -723,8 +751,11 @@ describe('the configuration a free pool resolves from', () => {
     expect(resolveEmbed(cfg({ chat: { provider: 'openai', model: 'gpt-4o-mini' } })).model).toBe(
       'text-embedding-3-small',
     )
-    expect(resolveEmbed(cfg({})).model).toBe('bge-m3')
-    expect(resolveEmbed(cfg({})).borrowed).toBeUndefined()
+    // `cfg({})` resolves through the chain against `ENV`, which lands on
+    // `openrouter` and its pool. Ollama is named to ask the question this test
+    // is actually about: a chat provider that embeds keeps its own embedder.
+    expect(resolveEmbed(cfg({ chat: { provider: 'ollama' } })).model).toBe('bge-m3')
+    expect(resolveEmbed(cfg({ chat: { provider: 'ollama' } })).borrowed).toBeUndefined()
   })
 })
 
@@ -843,10 +874,22 @@ describe('choosing an embedder at build time', () => {
 describe('a provider named without a model', () => {
   const cfg = (settings) => resolveDocPilot(settings, ENV)
 
+  /**
+   * `custom` is the one provider left where nothing can choose, and that is what
+   * it is for: it names a HOST rather than a service, so there is no catalogue
+   * to have a default in and no pool behind it. Every branded provider now
+   * carries a `chatModel`, so this used to be spelled with `openai` and is not a
+   * failure there any more.
+   */
   it('stops the build where nothing can choose for you', () => {
-    expect(() => themeDocPilot(cfg({ chat: { provider: 'openai' } }), ENV)).toThrow(
-      /chat\.model is not set for "openai"/,
+    expect(() => themeDocPilot(cfg({ chat: { provider: 'custom' } }), ENV)).toThrow(
+      /chat\.model is not set for "custom"/,
     )
+  })
+
+  it('does not, where the provider table can', () => {
+    expect(() => themeDocPilot(cfg({ chat: { provider: 'openai' } }), ENV)).not.toThrow()
+    expect(cfg({ chat: { provider: 'openai' } }).chat.model).toBe('gpt-4o-mini')
   })
 
   it('does not, where a pool can', () => {
@@ -1262,7 +1305,7 @@ describe('the halves are asserted where they are used', () => {
    * where the panel is assembled.
    */
   it('builds an index for a configuration whose chat half is unusable', () => {
-    const c = cfg({ chat: { provider: 'openai' }, embed: { provider: 'ollama', model: 'bge-m3' } })
+    const c = cfg({ chat: { provider: 'custom' }, embed: { provider: 'ollama', model: 'bge-m3' } })
     expect(() => nodeEmbedTarget(c, ENV)).not.toThrow()
     expect(() => themeDocPilot(c, ENV)).toThrow(/chat\.model is not set/)
   })

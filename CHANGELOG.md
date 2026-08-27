@@ -7,9 +7,167 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
-## Unreleased
+## 0.3.2 — 2026-08-27
+
+### Migration
+
+**A project that named no provider no longer resolves to a local Ollama.** That
+is the whole of the breaking change, and it has two halves.
+
+`chat.provider` shipped as `'ollama'` and now ships as `'auto'`, so a key sitting
+in the environment for something else — a CI secret, a sibling service — is now
+consulted. And `ollama` is selected by `OLLAMA_BASE_URL` rather than by closing
+the chain, so an environment with nothing in it falls through to OpenRouter's
+free tier instead of to `localhost:11434`.
+
+If you were running a local Ollama without saying so in your config, say so:
+
+```js
+chat: { provider: 'ollama' }        // pin it; the chain is not consulted
+```
+
+or say it in the environment, which also lets you move it:
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+Everything else is unaffected: a config that named its provider resolves exactly
+as it did, and the build log stays silent about the chain there. Whenever the
+environment *did* choose, it says so out loud:
+
+```
+[docpilot] chain  auto → openai
+[docpilot]        openai ✓ · gemini — · mistral — · … · ollama —
+```
+
+`npx docpilot doctor` prints the same list on demand, with the member that
+answered marked, and works without a config file at all.
 
 ### Added
+
+**The provider chain — `chat.provider: 'auto'`, and the end of "installed, keyed,
+and still talking to localhost".**
+
+`chat.provider` shipped as `'ollama'`, and the environment could only ever
+*confirm* a choice you had already made: the resolver went from a named provider
+to the name of that provider's key, never the other way. So a project that
+installed this package, put `OPENAI_API_KEY` in `.env.local` and wrote nothing
+else resolved to a local Ollama and spent every question on a connection refused.
+The key was read, found, and ignored.
+
+`'auto'` — the new default, and what an omitted `chat` block now means — walks an
+ordered list and takes the first service the environment holds a key for:
+
+```js
+const ai = defineDocPilot({}, loadEnv('', process.cwd(), ''))
+```
+```bash
+OPENAI_API_KEY=sk-…      # the whole configuration
+```
+
+**Providers that embed come first**, and that is the ordering argument rather
+than a ranking of answer quality — `openai`, `gemini`, `mistral`, `together`,
+`fireworks`, `nebius`, `openrouter`, then the answering-only `anthropic`, `groq`,
+`deepseek`, `xai`, `cerebras`, then the self-hosted `custom`, `llamacpp` and
+`ollama`. One key covering both halves is the difference between a working
+install and a second decision: a chat-only provider sends `embed: 'auto'` to
+OpenRouter's free pool, which needs a second key and posts the whole corpus to a
+third party at build time. Fine to choose, poor to be defaulted into.
+
+**The self-hosted tail is selected by ADDRESS.** A local server has no credential
+to be found by, so `OLLAMA_BASE_URL` and `LLAMACPP_BASE_URL` do both jobs: setting
+one selects that provider, and its value is where requests go.
+`OLLAMA_BASE_URL=http://localhost:11434` says *the usual one*.
+
+**An environment that selects nothing falls through to OpenRouter's free tier.**
+The local Ollama used to hold that place, because it closed the list and needed
+nothing to be selected by, so every unconfigured build landed there — right for a
+laptop running one, a connection refused everywhere else, and indistinguishable
+from inside a build that makes no network calls. OpenRouter's remaining setup is
+a single free key, with no model to choose on either half and no card, so the
+build now prints one instruction instead of producing a silent outage.
+
+Nothing here touches the network. A config file is read synchronously at build
+time, so a resolver that reached out to decide what a default means would be a
+build that fails offline and answers differently on two machines. Reachability is
+`npx docpilot doctor`'s question, and it now prints the chain with the member
+that answered marked.
+
+**Every provider carries its own default model.** `chat.model` had one shipped
+value — `qwen3:8b`, a statement about Ollama — which every other provider then
+inherited, so it was dropped on any provider change and `assertChat` stopped the
+build. Correct, and a dead end: `chat: { provider: 'openai' }` reads as a
+complete sentence to everyone and was a build failure. The default lives on the
+provider's own row now, beside `embedModel`. Two rows still have none:
+`openrouter`, where the free pool answers, and `custom`, which names a host
+rather than a service.
+
+**The embedder is asked for, not assumed.** `PROVIDERS` carries one `embedModel`
+string per service and the paragraph above that table says what they are:
+defaults, not guarantees. When the model was **not written down by you** —
+you named a provider and stopped, or you named neither — `npx docpilot index`
+now asks the service which embedding models it serves and walks those answers
+behind the configured name:
+
+```
+  embedders 2 to try — custom offers 1, and BAAI/bge-m3 is configured
+  warn  BAAI/bge-m3 is not answering (HTTP 404); trying the next embedder
+  embedder  acme/gte-large-v2 · 1024d — chosen from 2 candidate(s)
+```
+
+Three things it fixes, all one defect. `custom` and `llamacpp` name a HOST rather
+than a service, so `BAAI/bge-m3` and `local` were this package guessing what you
+loaded onto your own gateway. A stale catalogue name meant the build dying on its
+first chunk with a 404 naming a model nobody typed. And a provider named without
+a model stopped the build on the embed half while the same shape was a complete
+sentence on the chat half.
+
+**A name you wrote is never walked past.** `embed: {provider: 'x', model: 'y'}`
+is used as given, no catalogue is read, and a wrong one fails loudly rather than
+being quietly replaced. The candidate list is allowed to be a loose guess — an
+OpenAI-compatible `/v1/models` is `{id}` and nothing else — precisely because
+`createEmbedder` commits only to a candidate that answered a real embedding
+request. Discovery proposes; the probe disposes.
+
+**Discovery changes the model, never the provider.** The reverse proxy carrying
+`/ai/v1/embeddings` is written from `resolveEmbed()` at config time,
+synchronously, with no network, so a build that moved itself would leave every
+reader's query vector posted to the wrong upstream.
+
+**`embed: {provider: 'openai'}` is a complete sentence.** The unnamed model is
+filled from the provider table, exactly as `resolveChat` fills `chatModel`. One
+asymmetry with no reason behind it, gone.
+
+**`npx docpilot doctor --models` checks the chat-only claim.** `anthropic`,
+`deepseek`, `groq`, `xai` and `cerebras` are recorded as serving no embeddings
+endpoint, and that is a claim rather than a law — the same table said it of
+OpenRouter for months after it stopped being true, and the cost of it going stale
+is a second key plus the text of the whole corpus posted to a third party at
+build time. So the endpoint is knocked on, with a candidate from the provider's
+own catalogue:
+
+```
+[docpilot] embed?    groq answers /v1/embeddings after all — nomic-embed-text-v1.5
+                     embed: {provider: 'groq'} drops the borrowed openrouter key
+```
+
+Silent otherwise. It reports and never acts, for the proxy reason above; two
+candidates at most, so it cannot become a survey; and `anthropic` is skipped
+without a request, its API having no embeddings path to knock on.
+
+**`chat.baseURL` is documented.** It has been read since the first release — by
+`targetOf`, by `nodeChatTarget`, by `resolveEmbed` deciding where an automatic
+embedder lives — and was in neither `DEFAULTS` nor the reference, so rule 11b
+could not see it and nobody could find it. It is in both now, with `null`
+meaning the provider's own address.
+
+**`llamacpp` — llama.cpp's own server, as a provider.** Selected by
+`LLAMACPP_BASE_URL` rather than by a key, because a local server has no
+credential to be detected by, and that variable also moves the upstream:
+`http://gpu.internal:9000` and requests go there. `CUSTOM_BASE_URL` does the same
+for `custom`, which was pinned to `localhost:8000` in package source with no way
+to move it.
 
 **`embed: { fallback: 'lexical' }` — a vectorless index preferred to no index.**
 `npx docpilot index` dies when the embedder will not answer, and that stays the
@@ -43,6 +201,53 @@ every query must land in one vector space, so a second embedder is a second inde
 — and its address would have to reach every reader's browser. A local Ollama
 solves the build and breaks the site. `'lexical'` needs no address, because there
 is nothing left to call.
+
+### Changed
+
+**`npx docpilot index` and `doctor` no longer exit on a missing config.** Both
+used to `process.exit(1)` twice over: no config file, and a config file with no
+named `docPilot` export. The named export is a contract about *agreement* — the
+CLI and the build must resolve one object or the index is built with one embedder
+and queried with another — and that argument holds exactly while there is an
+object. With none, both sides resolve the same empty settings against the same
+environment and reach the same provider. They warn and continue now, which is
+what makes the zero-config install runnable end to end.
+
+**`readiness` reports one missing key per provider, not per half.** `embed: 'auto'`
+follows chat wherever chat can embed, so the two halves are usually one service —
+and a missing key produced the identical sentence twice with the identical fix
+under each, which the fall-through above makes the common case.
+
+**`npx docpilot init` writes the index into your `.gitignore`.** `docs/public/rag/`
+is megabytes of quantised vectors rewritten whole by every rebuild.
+`.gitignore` in this repository has claimed `init` did this since it shipped;
+nothing implemented it. Appended rather than created, so an existing file keeps
+its contents, and idempotent.
+
+**`@scalar/openapi-parser` is declared as an optional peer.** An OpenAPI file in
+`public/` threw with the install command in the message, for a package that
+appeared in no dependency list at all.
+
+**VitePress is supported from 1.2.** The peer was `^1.6.4 || ^2.0.0-alpha.16`; it
+is now `>=1.2 || >=2.0.0-alpha.16`. The four slots the theme fills —
+`layout-bottom`, `nav-bar-content-before`, `nav-screen-content-after`,
+`doc-footer-before` — have been there the whole time, and the version floor was
+tracking the version this repository happened to build on. Below 1.6, VitePress
+carries Shiki 1.x, which never published `@shikijs/langs` or `@shikijs/themes` at
+all: there the four Shiki packages are a real install rather than an optional one.
+
+### Fixed
+
+**Shiki peers accept what VitePress already ships.** The four `@shikijs/*` peers
+asked for `^4.0.0` while VitePress 1.6.4 — the current stable — carries Shiki
+2.5.0, so `npm i @cloflin/docpilot` on a stable VitePress site ended in
+`npm error code ELSPROBLEMS ... invalid: @shikijs/core@2.5.0`, and the usual way
+out was an `overrides` block that either pinned the panel to the old version or
+rewrote somebody else's subtree. The range is now `>=2`, which is what the adapter
+actually needs: `createHighlighterCore`, the JavaScript regex engine and the
+per-language and per-theme subpaths are unchanged across 2.x, 3.x and 4.x. Nothing
+to install on VitePress 1.6+, and [nothing to override](https://docpilot-nine.vercel.app/reference/highlighting)
+anywhere.
 
 ## 0.3.1 — 2026-08-27
 

@@ -24,6 +24,21 @@ Builds the retrieval index into `docs/public/rag/` (or wherever `indexDir` point
 
 Idempotent: identical input produces byte-identical output.
 
+**It asks the provider which embedding models it serves**, when the model was not
+one you wrote down — you named a provider and stopped, or you named neither. The
+configured name is tried first and the provider's own answers line up behind it:
+
+```
+  embedders 2 to try — custom offers 1, and BAAI/bge-m3 is configured
+  warn  BAAI/bge-m3 is not answering (HTTP 404); trying the next embedder
+  embedder  acme/gte-large-v2 · 1024d — chosen from 2 candidate(s)
+```
+
+One extra request at most, and none at all when you named the model or when a
+free pool already stands behind the provider. A name **you** wrote is used as
+given and a wrong one fails loudly rather than being replaced. See
+[Asking the provider](/reference/config#asking-the-provider).
+
 `--no-embed` writes a real index with **no vectors in it**: no embedding calls, no `vectors.<hash>.bin`, and retrieval by BM25 alone. It is the one-off form of [`embed: false`](/reference/config#embed-false) — the config key is what a deployment sets, because the browser has to be told as well.
 
 The flag alone is not a deployable state, and this is the part to know before reaching for it: a vectorless index under a config that still names an embedder is a readiness FAILURE, not a warning. `npx docpilot doctor` reports it, and a site built in that state ships `{enabled: false}` — no panel at all. Use the flag to look at what the mode produces; set `embed: false` to run on it.
@@ -448,7 +463,31 @@ npx docpilot doctor --models
 
 Prints what was resolved and either confirms the panel will render or lists what is missing, each with the command or variable that fixes it. **Exits non-zero when not ready** — the build never fails for these, so this is the opt-in place to gate CI.
 
+It also prints [the provider chain](/guide/providers#name-nothing-the-provider-chain) in full, with the member that answered marked — unconditionally, whether the provider was named in your config or chosen by the environment:
+
+```
+[docpilot] chain     auto → openai
+                     ✓ openai      OPENAI_API_KEY         ←
+                     · gemini      GEMINI_API_KEY
+                     · mistral     MISTRAL_API_KEY
+                     …
+                     ✓ ollama      no key needed
+```
+
+The build log stays quiet about this when a provider is named, because a line restating your config file is noise in a block people read at every start. `doctor` is the opposite: it is run precisely when the question is *why is it talking to that*, and which variables are set is not visible anywhere else. Only the **name** of a variable is ever printed, never its value.
+
+It runs without a config file at all, on the shipped defaults and your environment. That is the zero-config install, and a command that exited there could not check it.
+
 `--proxy` additionally prints the contract a production reverse proxy has to satisfy: the exact paths, the upstream for each, and the name of the header the key goes in. The key value is never printed. See [Production](/guide/production) for what to do with it.
+
+`--models` also asks whether the **chat-only** claim in the provider table still holds. `anthropic`, `deepseek`, `groq`, `xai` and `cerebras` are recorded as serving no embeddings endpoint, which is a claim rather than a law — the same table said that of OpenRouter for months after it stopped being true, and the cost of it going stale is a second key and the text of your whole corpus posted to a third party at build time. So the endpoint is knocked on, with a candidate from the provider's own catalogue, and the answer is printed when it has changed:
+
+```
+[docpilot] embed?    groq answers /v1/embeddings after all — nomic-embed-text-v1.5
+                     embed: {provider: 'groq'} drops the borrowed openrouter key
+```
+
+Silent otherwise, which is the expected case. It **reports and never acts**: the reverse proxy carrying `/ai/v1/embeddings` is written from your config at build time, so a build that moved itself would send every reader's query vector to the wrong upstream. Two candidates at most, so this cannot become a survey of somebody's catalogue. `anthropic` is skipped without a request — its API has no embeddings path to knock on.
 
 `--models` asks the provider's live free catalogue whether the model list in force is still being served — the chat half and the embed half separately, and for each it is the free pool this package ships when the model is left unnamed, or your own `chat.models` where you wrote one. It prints the pool size against the catalogue size, then `RETIRED:` for every id upstream no longer lists and up to six that are new upstream. This is the one question a baked list cannot answer for itself, and free ids are retired weekly: a pool whose members have all been retired fails in the least legible way available, 404ing model by model until the reader is told the last one's name.
 
@@ -482,12 +521,15 @@ Scaffolds the whole loop, and **never overwrites**:
 | `${evalDir}/golden.jsonl` | three starter records, one of which must be refused, each carrying a [`level`](#level) |
 | `${evalDir}/calibration.jsonl` | six starter probes, half answerable |
 | `${evalDir}/.gitignore` | the raw cache and the bench scratch |
+| `.gitignore` | **appended, not created** — one entry for `docs/public/rag/`, the built index |
 | `.claude/skills/docs-rag/` | the tuning and measurement loop, as a skill |
 | `.claude/skills/docs-import/` | the imported-page contract, as a skill |
 
 The two starter golden records that expect an answer enter at `low` and `medium`, and the negative — the one that must be refused — enters at `low`, so the smallest pool cannot be passed by answering everything. See [`--level=`](#level).
 
 The skills are copied rather than left in the package because `.claude/` inside `node_modules` is not discovered — copying is the only way they reach anyone. See [Skills](/reference/skills).
+
+`.gitignore` is the one exception to *never overwrites*, and it is an append rather than a write: your project almost certainly has one, and skipping it is how the ignore rule ended up documented and never implemented. The index is megabytes of quantised vectors rewritten whole by every `npx docpilot index`, so a repository that commits it grows by that much per rebuild. Delete the line if you would rather commit it — a deploy that ships the index makes no API requests of its own, which is what this repository does. Running `init` twice adds the entry once.
 
 Every file is reported as written or kept, so running it twice is safe and running it in an existing project is honest.
 

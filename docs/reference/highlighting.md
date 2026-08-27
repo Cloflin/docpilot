@@ -62,8 +62,51 @@ npm i highlight.js
 Four names for Shiki rather than one, because there is no single package that
 reaches all of them: `shiki` exports `./core` and `./engine/javascript` but no
 per-language or per-theme subpath, and `shiki/langs` is every grammar there is.
-On VitePress they are already installed — `vitepress` depends on `shiki` — but
-declaring them is what makes the install work under pnpm and on every other host.
+On VitePress 1.6 and up they are already installed — `vitepress` depends on
+`shiki` — but declaring them is what makes the install work under pnpm and on
+every other host.
+
+### Which version, and why not to pin one
+
+**Any Shiki from 2.0 up**, which is what the peer range says: `>=2`. The adapter
+needs `createHighlighterCore`, the JavaScript regex engine, and the per-language
+and per-theme subpaths — four things that have not moved across 2.x, 3.x and 4.x.
+So the version is simply whatever the host already ships: 2.x under VitePress 1.6,
+4.x under VitePress 2. Nothing to install, nothing to align, nothing to override.
+
+Below VitePress 1.6 the calculation changes: those releases carry Shiki 1.x, which
+never published `@shikijs/langs` or `@shikijs/themes` at all — there the four names
+are not optional.
+
+Wanting the newest Shiki on VitePress 1.x is an ordinary dependency, not a version
+fight:
+
+```json
+"dependencies": {
+  "@shikijs/core": "^4.4.3",
+  "@shikijs/engine-javascript": "^4.4.3",
+  "@shikijs/langs": "^4.4.3",
+  "@shikijs/themes": "^4.4.3"
+}
+```
+
+npm hoists 4.4.3 to the root for the panel and leaves VitePress's own 2.5.0 under
+`node_modules/vitepress`. Two copies, neither of them wrong: VitePress highlights
+its pages at build time in Node, the panel highlights answers in the browser, and
+the two never share a module graph.
+
+**What not to do is `overrides` — or yarn's `resolutions`.** A scoped override on
+an *optional peer* installs nothing. It rewrites the range that edge asks for, the
+already-hoisted copy then fails to satisfy the rewritten range, and every `npm i`
+and `npm ls` ends the same way:
+
+```
+npm error code ELSPROBLEMS
+npm error invalid: @shikijs/core@2.5.0 node_modules/@shikijs/core
+```
+
+An exact pin — `"4.4.3"` rather than `"^4.4.3"` — buys the same error one patch
+release later. Declare the four packages and let npm place them.
 
 ### And a stylesheet, for two of the three
 

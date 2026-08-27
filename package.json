@@ -1,6 +1,6 @@
 {
   "name": "@cloflin/docpilot",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "description": "A grounded Ask AI panel for any page of any website — VitePress, Docusaurus, Vue, React, or a plain script tag. Hybrid search runs in the browser against a static index you build; a calibrated gate refuses before the model is called.",
   "keywords": [
@@ -150,19 +150,23 @@
     "minisearch": "^7.2.0"
   },
   "peerDependencies": {
-    "@shikijs/core": "^4.0.0",
-    "@shikijs/engine-javascript": "^4.0.0",
-    "@shikijs/langs": "^4.0.0",
-    "@shikijs/themes": "^4.0.0",
+    "@shikijs/core": ">=2",
+    "@shikijs/engine-javascript": ">=2",
+    "@shikijs/langs": ">=2",
+    "@shikijs/themes": ">=2",
     "highlight.js": "^11.0.0",
     "linkedom": "^0.18.0",
+    "@scalar/openapi-parser": "^0.22.0",
     "prismjs": "^1.29.0",
-    "vitepress": "^1.6.4 || ^2.0.0-alpha.16",
+    "vitepress": ">=1.2 || >=2.0.0-alpha.16",
     "vue": "^3.5.41",
     "react": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
     "linkedom": {
+      "optional": true
+    },
+    "@scalar/openapi-parser": {
       "optional": true
     },
     "@shikijs/core": {

@@ -18,17 +18,13 @@ side under [Installing](/install/#installing-it).
 
 ## The config
 
+Settings are optional. This is a complete one:
+
 ```js [docs/.vitepress/config.mjs]
 import { defineConfig, loadEnv } from 'vitepress'
 import { defineDocPilot } from '@cloflin/docpilot'
 
-export const docPilot = {
-  product: 'Acme Editor',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
-  embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
-}
-
-const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
+const ai = defineDocPilot({}, loadEnv('', process.cwd(), ''))
 
 export default defineConfig({
   vite: { plugins: [ai.plugin()] },
@@ -36,12 +32,39 @@ export default defineConfig({
 })
 ```
 
+```bash [.env.local]
+OPENAI_API_KEY=sk-…
+```
+
+`chat.provider` ships as `'auto'`: it reads that environment, takes the first
+service it holds a key for, and brings that service's default model and embedder
+with it. One key is the whole configuration — see [the provider
+chain](/guide/providers#name-nothing-the-provider-chain) for the order, and
+`npx docpilot doctor` for which member your environment selected.
+
+With settings, the shape is the same plus a **named `docPilot` export**:
+
+```js [docs/.vitepress/config.mjs]
+export const docPilot = {
+  product: 'Acme Editor',
+  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
+}
+
+const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
+```
+
 No `docpilot.config.mjs` here: the CLI reads this file, so the index is built with
-the model the panel queries with.
+the model the panel queries with. Name the object rather than passing it inline —
+that is how `npx docpilot index` finds the same settings the build used, and a
+site whose index and panel disagree about the embedder refuses questions its docs
+can answer.
 
 **`loadEnv` is called by you, not by the plugin.** `defineDocPilot` reads whatever
 object you hand it, defaulting to `process.env`. A package that decided which
-`.env` files your project has would be wrong for half of them.
+`.env` files your project has would be wrong for half of them — and with the
+provider chain reading that object, passing it is what makes a key in
+`.env.local` visible at all.
 
 ## The theme
 
@@ -77,7 +100,10 @@ own `router.go` does not apply. Without that, a citation click on a site served 
 
 **Shiki.** VitePress highlights its own pages with it, so an answer is the same
 code in the same colours as the page behind it. The grammars are fetched when the
-panel is first opened, never before.
+panel is first opened, never before. The version comes from VitePress itself —
+Shiki 2.x on VitePress 1.6+, 4.x on VitePress 2 — so there is nothing to install
+and nothing to override; [Syntax highlighting](/reference/highlighting) covers the
+older releases and the case for a newer Shiki than the one your VitePress ships.
 
 **The three selectors** — `.vp-doc, main` for the article, VitePress's own search
 button, `#VPContent` for focus return. You never set [`host`](/reference/config#host)

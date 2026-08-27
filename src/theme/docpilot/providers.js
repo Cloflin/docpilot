@@ -207,6 +207,19 @@ const ollama = {
   embedUrl: (baseURL) => `${baseURL}/api/embed`,
   embedBody: (model, input) => ({ model, input }),
   embedParse: (json) => json.embeddings?.[0] || json.embedding,
+
+  /**
+   * What this server will actually answer to — asked by `docpilot doctor
+   * --models` and by nothing else.
+   *
+   * It lives here for the same reason `chatUrl` does: the path and the payload
+   * shape are facts about an API, and config.js knows brands rather than APIs.
+   * Ollama is the odd one, listing PULLED models at `/api/tags` rather than a
+   * catalogue at `/v1/models` — which is the honest answer for a local server,
+   * where "available" means "downloaded".
+   */
+  modelsUrl: (baseURL) => `${baseURL}/api/tags`,
+  modelsParse: (json) => (json.models || []).map((m) => m.name || m.model).filter(Boolean),
 }
 
 // ── openai and every service that copied it ──────────────────────────────────
@@ -374,6 +387,10 @@ const openai = {
   embedUrl: (baseURL) => `${baseURL}/v1/embeddings`,
   embedBody: (model, input) => ({ model, input }),
   embedParse: (json) => json.data?.[0]?.embedding,
+
+  /** `{data: [{id}]}` — the shape every service that copied this API kept. */
+  modelsUrl: (baseURL) => `${baseURL}/v1/models`,
+  modelsParse: (json) => (json.data || []).map((m) => m.id).filter(Boolean),
 }
 
 // ── anthropic ────────────────────────────────────────────────────────────────
@@ -532,6 +549,12 @@ const anthropic = {
   // Anthropic has no embeddings endpoint at all; `embed.provider` is configured
   // separately for exactly this reason.
   embedUrl: null,
+
+  // Same path and the same `{data: [{id}]}` as the OpenAI shape, reached with
+  // this adapter's own headers — `x-api-key` plus the version, which `headers`
+  // already builds.
+  modelsUrl: (baseURL) => `${baseURL}/v1/models`,
+  modelsParse: (json) => (json.data || []).map((m) => m.id).filter(Boolean),
 }
 
 const REGISTRY = { ollama, openai, anthropic }

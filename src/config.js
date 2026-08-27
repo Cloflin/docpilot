@@ -48,9 +48,22 @@ import {isAutoModel, FREE_CHAT, FREE_EMBED} from './theme/docpilot/openrouter.js
  * it serves `/v1/embeddings` and publishes its own catalogue of embedding
  * models.
  *
- * These names are defaults, not guarantees — catalogues change. A wrong one
- * fails loudly on the first chunk of `npx docpilot index`, not silently at
- * runtime, so verify against the provider's current list when you switch.
+ * `chatModel` is the same statement about the ANSWERING half, and it exists so
+ * that naming a provider is a complete instruction. `chat.model` used to have
+ * one shipped value — Ollama's `qwen3:8b` — which is a statement about one
+ * service and nothing else, so `resolveChat` deliberately dropped it the moment
+ * an author named a different provider and `assertChat` then stopped the build.
+ * That was correct and it made `chat: {provider: 'openai'}` an incomplete
+ * sentence for no reason anyone could act on: the service has an obvious default
+ * and this table is where a per-provider default belongs. Null where a POOL
+ * stands behind the provider instead (`openrouter`) or where only the author can
+ * know (`custom`).
+ *
+ * BOTH NAMES ARE DEFAULTS, NOT GUARANTEES — catalogues change, and free tiers
+ * change weekly. A wrong one fails loudly on the first request rather than
+ * silently at runtime, so verify against the provider's current list when you
+ * switch. `npx docpilot doctor --models` is the check that does not need a
+ * reader to hit it first.
  */
 const openaiCompatible = (upstream, envKeys, extra = {}) => ({
     adapter: 'openai',
@@ -59,6 +72,7 @@ const openaiCompatible = (upstream, envKeys, extra = {}) => ({
     envKeys,
     rewrite: (path) => path.replace(/^\/ai/, ''),
     header: (k) => ({authorization: `Bearer ${k}`}),
+    chatModel: null,
     embedModel: null,
     ...extra,
 })
@@ -66,18 +80,23 @@ const openaiCompatible = (upstream, envKeys, extra = {}) => ({
 const PROVIDERS = {
     // ── chat and embeddings: one provider is enough ──────────────────────────
     openai: openaiCompatible('https://api.openai.com', ['OPENAI_API_KEY'], {
+        chatModel: 'gpt-4o-mini',
         embedModel: 'text-embedding-3-small',
     }),
     together: openaiCompatible('https://api.together.xyz', ['TOGETHER_API_KEY'], {
+        chatModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
         embedModel: 'BAAI/bge-large-en-v1.5',
     }),
     fireworks: openaiCompatible('https://api.fireworks.ai/inference', ['FIREWORKS_API_KEY'], {
+        chatModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
         embedModel: 'nomic-ai/nomic-embed-text-v1.5',
     }),
     mistral: openaiCompatible('https://api.mistral.ai', ['MISTRAL_API_KEY'], {
+        chatModel: 'mistral-small-latest',
         embedModel: 'mistral-embed',
     }),
     nebius: openaiCompatible('https://api.studio.nebius.com', ['NEBIUS_API_KEY'], {
+        chatModel: 'meta-llama/Llama-3.3-70B-Instruct',
         embedModel: 'BAAI/bge-en-icl',
     }),
 
@@ -112,6 +131,9 @@ const PROVIDERS = {
      * other provider here bills per token, where a request count means nothing.
      */
     openrouter: openaiCompatible('https://openrouter.ai/api', ['OPENROUTER_API_KEY'], {
+        // Null on BOTH halves, and that is the pool speaking rather than an
+        // omission — see `freePool` below and `chatModels`.
+        chatModel: null,
         embedModel: FREE_EMBED[0],
         freePool: {chat: FREE_CHAT, embed: FREE_EMBED},
         extraBody: {provider: {require_parameters: true}},
@@ -119,21 +141,55 @@ const PROVIDERS = {
     }),
 
     // ── chat only ────────────────────────────────────────────────────────────
-    deepseek: openaiCompatible('https://api.deepseek.com', ['DEEPSEEK_API_KEY']),
-    groq: openaiCompatible('https://api.groq.com/openai', ['GROQ_API_KEY']),
-    xai: openaiCompatible('https://api.x.ai', ['XAI_API_KEY']),
-    cerebras: openaiCompatible('https://api.cerebras.ai', ['CEREBRAS_API_KEY']),
+    deepseek: openaiCompatible('https://api.deepseek.com', ['DEEPSEEK_API_KEY'], {
+        chatModel: 'deepseek-chat',
+    }),
+    groq: openaiCompatible('https://api.groq.com/openai', ['GROQ_API_KEY'], {
+        chatModel: 'llama-3.3-70b-versatile',
+    }),
+    xai: openaiCompatible('https://api.x.ai', ['XAI_API_KEY'], {
+        chatModel: 'grok-4',
+    }),
+    cerebras: openaiCompatible('https://api.cerebras.ai', ['CEREBRAS_API_KEY'], {
+        chatModel: 'llama-3.3-70b',
+    }),
 
     // The escape hatch. Assumed to embed, because a self-hosted vLLM or a
     // gateway usually serves both; set embedModel to what it actually offers.
+    //
+    // `chatModel` stays null: this entry is a HOST, not a service, so there is
+    // no catalogue to have a default in. Naming one would be this file guessing
+    // what somebody else's gateway loaded.
     custom: openaiCompatible('http://localhost:8000', ['CUSTOM_API_KEY'], {
         embedModel: 'BAAI/bge-m3',
+        baseUrlEnv: 'CUSTOM_BASE_URL',
+    }),
+
+    /**
+     * llama.cpp's own server — `llama-server`, which speaks the OpenAI-compatible
+     * API on :8080 and serves whatever weights it was started with.
+     *
+     * `chatModel: 'local'` is not a catalogue id and is not pretending to be
+     * one. llama-server ignores the field and answers with the loaded model, so
+     * the string exists only to satisfy `assertChat`, which is right to demand
+     * that SOMETHING be named — a config where the model is silently absent is
+     * the failure that check exists for.
+     *
+     * `LLAMACPP_BASE_URL` is what puts this in the chain, because a local server
+     * has no key to be detected by. See `resolveChain`.
+     */
+    llamacpp: openaiCompatible('http://localhost:8080', ['LLAMACPP_API_KEY'], {
+        chatModel: 'local',
+        embedModel: 'local',
+        baseUrlEnv: 'LLAMACPP_BASE_URL',
+        keyless: true,
     }),
 
     // ── the two that are not plain OpenAI clones ─────────────────────────────
     gemini: openaiCompatible('https://generativelanguage.googleapis.com', ['GEMINI_API_KEY'], {
         rewrite: (path) => path.replace(/^\/ai\/v1/, '/v1beta/openai'),
         directBase: null,
+        chatModel: 'gemini-2.5-flash',
         embedModel: 'text-embedding-004',
     }),
     anthropic: {
@@ -143,6 +199,7 @@ const PROVIDERS = {
         envKeys: ['ANTHROPIC_API_KEY'],
         rewrite: (path) => path.replace(/^\/ai/, ''),
         header: (k) => ({'x-api-key': k, 'anthropic-version': '2023-06-01'}),
+        chatModel: 'claude-sonnet-4-6',
         embedModel: null,
     },
 }
@@ -151,6 +208,180 @@ export const PROVIDER_IDS = ['ollama', ...Object.keys(PROVIDERS)]
 
 const LOCAL_BASE_URL = 'http://localhost:11434'
 const LOCAL_EMBED_MODEL = 'bge-m3'
+/**
+ * What SELECTS the local Ollama, now that it is no longer the terminal member of
+ * the chain.
+ *
+ * It used to need nothing: `ollama` closed `CHAIN`, was keyless, and therefore
+ * always matched — which is what made it unreachable-by-default in the common
+ * case and unavoidable in the rare one. A laptop with Ollama running and a CI box
+ * with nothing installed resolved identically, and only the first of them worked.
+ *
+ * So it is selected the way `llamacpp` is: by ADDRESS, because a local server has
+ * no credential to be found by, and because the same variable then answers the
+ * second question — `http://gpu.internal:11434` and requests go there. Setting it
+ * to the standard `http://localhost:11434` is how you say "the usual one".
+ */
+const OLLAMA_BASE_URL_ENV = 'OLLAMA_BASE_URL'
+
+/**
+ * Ollama's own default model — the value `DEFAULTS.chat.model` used to carry.
+ *
+ * It moved here for the reason `chatModel` exists on every other provider: it is
+ * a statement about ONE service, and as a global default it was inherited by
+ * every provider an author named. Ollama is not in `PROVIDERS` — it is the
+ * keyless local case the whole file treats separately — so its two names are
+ * constants rather than a table row.
+ */
+const LOCAL_CHAT_MODEL = 'qwen3:8b'
+
+/**
+ * The two localhost entries can be somewhere else, and the environment is where
+ * that is said.
+ *
+ * `custom` and `llamacpp` name a PORT, not a service, so `http://localhost:8000`
+ * is a placeholder in a way `https://api.openai.com` is not. Left as a literal
+ * they were unmovable: `targetOf` rewrites every hosted provider's base to the
+ * same-origin `/ai`, so `chat.baseURL` beside a hosted provider is ignored, and
+ * the proxy at the other end of that `/ai` reads `hosted.upstream` — which was
+ * this file's constant and nothing else. The only way to point llama.cpp at a
+ * GPU box was to edit the package.
+ *
+ * `null` for `directBase` is preserved rather than overridden: Gemini has no
+ * directly-callable base at all, and a value here would tell a Node tool to post
+ * where nothing answers.
+ */
+const upstreamOf = (hosted, env = {}) =>
+    (hosted?.baseUrlEnv && env[hosted.baseUrlEnv]) || hosted?.upstream
+
+const directBaseOf = (hosted, env = {}) =>
+    hosted?.directBase == null
+        ? hosted?.directBase
+        : (hosted.baseUrlEnv && env[hosted.baseUrlEnv]) || hosted.directBase
+
+/**
+ * THE PROVIDER CHAIN — what `chat.provider: 'auto'` walks, in order.
+ *
+ * The whole of "install the package, put a key in the environment, done". Before
+ * it, `keyOf(env, id)` was the only relationship between the environment and a
+ * provider and it ran one way only: from a provider the author had already named
+ * to the name of the variable holding its key. Nothing ever asked the opposite
+ * question — WHICH provider does this environment have a key for — so a project
+ * with `OPENAI_API_KEY` set and no `chat` block resolved to the shipped default,
+ * a local Ollama, and every question died on a connection refused to a service
+ * nobody installed. The key was read, found, and ignored.
+ *
+ * EMBEDDING-CAPABLE PROVIDERS COME FIRST, and that is the whole of the ordering
+ * argument rather than a ranking of answer quality. One key covering both halves
+ * is the difference between a working install and a second decision: a chat
+ * provider with no embeddings endpoint sends `embed: 'auto'` to OpenRouter's
+ * free pool (see `resolveEmbed`), which needs a SECOND key and posts the text of
+ * the whole corpus to a third party at build time. `readiness` says so out loud,
+ * and a default that has to be explained in a warning is the wrong default.
+ *
+ * THE TAIL IS LOCAL AND HAS NO KEY TO BE FOUND BY. `llamacpp` is selected by
+ * `LLAMACPP_BASE_URL` — naming where the server is, is the only way to say you
+ * have one — and `ollama` is the terminal case: no key anywhere means the
+ * shipped configuration, which is exactly what every build did before this
+ * existed. So an environment with nothing in it resolves precisely as it always
+ * has, and only an environment carrying a key changes its answer.
+ *
+ * NO NETWORK, EVER. A config file is read synchronously at build time, and a
+ * resolver that reached out to decide what a default means is a build that fails
+ * offline and answers differently on two machines. Whether the chosen provider
+ * is actually reachable is `readiness`'s question and `doctor`'s, both of which
+ * report rather than guess.
+ */
+export const CHAIN = [
+    // ── one key covers chat and retrieval ────────────────────────────────────
+    'openai',
+    'gemini',
+    'mistral',
+    'together',
+    'fireworks',
+    'nebius',
+    // Free, and needs no model named on either half — but metered in REQUESTS
+    // (50 a day, shared by every reader of the site), so it sits behind the
+    // providers whose allowance is the account's rather than the tier's.
+    'openrouter',
+    // ── answering only: `embed: 'auto'` borrows OpenRouter's free pool ───────
+    'anthropic',
+    'groq',
+    'deepseek',
+    'xai',
+    'cerebras',
+    // ── self-hosted, each selected by its ADDRESS ───────────────────────────
+    'custom',
+    'llamacpp',
+    'ollama',
+]
+
+/**
+ * Where the walk lands when NO member matched — an environment with no key and
+ * no local address in it.
+ *
+ * It used to be the local Ollama, because `ollama` closed the list and needed
+ * nothing to be selected by. That is the shipped configuration and it is the
+ * wrong thing to arrive at by falling through: from inside a build there is no
+ * way to tell a laptop running Ollama from a CI box that has never heard of it,
+ * so the majority of the projects that reached the end of the chain got a
+ * connection refused to a service nobody installed, per question, with the
+ * config file naming neither the service nor the port.
+ *
+ * OpenRouter is what a fall-through should reach instead, and the reason is that
+ * it is the one member whose remaining setup is a single free key: no model to
+ * choose on either half — the free pool answers both — no card, and both halves
+ * covered. So the failure this produces is one legible instruction rather than a
+ * silent outage, `readiness` prints it on the first build, and the panel is one
+ * variable away from working.
+ *
+ * It is NOT a second entry in the list. The chain is what an environment
+ * SELECTS; this is what happens when it selects nothing, and OpenRouter's own
+ * place at position 7 is where it is chosen on its merits, with a key.
+ */
+const CHAIN_FALLBACK = 'openrouter'
+
+/** The env var that selects a chain member — a key, or an address. */
+function chainKeyNameOf(id, env) {
+    const hosted = hostedOf(id)
+    // Ollama is the one member with no entry in `PROVIDERS`: it is the keyless
+    // local case the whole file treats separately.
+    if (!hosted) return OLLAMA_BASE_URL_ENV
+    // A keyless local server is selected by WHERE it is, not by a credential.
+    if (hosted.keyless) return hosted.baseUrlEnv || null
+    return hosted.envKeys.find((name) => env[name]) || hosted.envKeys[0] || null
+}
+
+/** Whether this environment selects `id` — a key for it, or an address for it. */
+function chainHas(id, env) {
+    const hosted = hostedOf(id)
+    if (!hosted) return Boolean(env[OLLAMA_BASE_URL_ENV])
+    if (hosted.keyless) return Boolean(hosted.baseUrlEnv && env[hosted.baseUrlEnv])
+    return Boolean(keyOf(env, id))
+}
+
+/**
+ * Which provider this environment resolves to, and what was tried on the way.
+ *
+ * `tried` is carried rather than recomputed by every caller because three of
+ * them need the same list and would drift: `logDocPilot` prints it at startup,
+ * `readiness` turns an empty environment into one actionable sentence, and
+ * `doctor` shows it without a build.
+ *
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {{id: string, tried: Array<{id: string, envKey: string|null, found: boolean}>}}
+ */
+export function resolveChain(env = {}) {
+    const tried = CHAIN.map((id) => ({
+        id,
+        envKey: chainKeyNameOf(id, env),
+        found: chainHas(id, env),
+    }))
+    // Nothing matching is a REAL outcome now — an empty environment is exactly
+    // that — so the fallback below is the answer rather than a guard against an
+    // impossible case. See `CHAIN_FALLBACK` for why it is OpenRouter.
+    return {id: tried.find((t) => t.found)?.id || CHAIN_FALLBACK, tried}
+}
 
 /**
  * Where `embed: 'auto'` goes when the chat provider cannot embed.
@@ -165,6 +396,17 @@ const EMBED_FALLBACK = 'openrouter'
 const hostedOf = (id) => PROVIDERS[id] || null
 
 const canEmbed = (id) => (id === 'ollama' ? true : Boolean(PROVIDERS[id]?.embedModel))
+
+/**
+ * The provider's own embedding model, from the table — Ollama's lives in a
+ * constant because Ollama has no table row.
+ *
+ * One function rather than the ternary it replaces in three places: the two arms
+ * of `resolveEmbed` and `assertEmbed`'s message all had to agree about what a
+ * provider's default embedder is called, and three copies of a lookup is three
+ * places for it to stop agreeing.
+ */
+const embedModelOf = (id) => (id === 'ollama' ? LOCAL_EMBED_MODEL : hostedOf(id)?.embedModel ?? null)
 
 /**
  * The ordered list of models a half falls back through when the author named
@@ -316,7 +558,15 @@ export function resolveEmbed(docPilot) {
     // other layer reads; `manifest.vectors === null` is the index's half of the
     // same statement.
     if (noEmbed(docPilot)) {
-        return {provider: null, model: null, baseURL: null, auto: false, lexicalOnly: true, fallback: null}
+        return {
+            provider: null,
+            model: null,
+            baseURL: null,
+            auto: false,
+            modelAuto: false,
+            lexicalOnly: true,
+            fallback: null,
+        }
     }
 
     if (e && typeof e === 'object') {
@@ -330,7 +580,23 @@ export function resolveEmbed(docPilot) {
         // manifest on every turn, and runs lexical-only for the life of the
         // deployment with nothing failing anywhere. An explicit `null` survives
         // the round trip; `undefined` does not.
-        return {...e, model: isAutoModel(e.model) ? null : e.model, fallback}
+        //
+        // AND AN UNNAMED MODEL IS FILLED FROM THE PROVIDER TABLE, exactly as
+        // `resolveChat` fills `chatModel`. `embed: {provider: 'openai'}` used to
+        // be a build-stopping error while `chat: {provider: 'openai'}` was a
+        // complete sentence — one asymmetry, no reason behind it, and the
+        // service has an obvious default sitting in the same table row. A pooled
+        // provider still resolves to null, because there the pool is the answer.
+        const named = isAutoModel(e.model) ? null : e.model
+        return {
+            ...e,
+            model: named ?? (freePoolFor(e.provider, 'embed') ? null : embedModelOf(e.provider)),
+            // WHOSE NAME THIS IS. An author's is a sentence; the table's is a
+            // default that ages, and the indexer is allowed to walk past a
+            // default when the provider's own catalogue disagrees with it.
+            modelAuto: named == null,
+            fallback,
+        }
     }
 
     const id = docPilot.chat.provider
@@ -368,6 +634,11 @@ export function resolveEmbed(docPilot) {
             model: null,
             baseURL: PROVIDERS[EMBED_FALLBACK].directBase,
             auto: true,
+            // The pool is the answer here, so there is no configured name for
+            // discovery to walk past — but the flag is stated rather than left
+            // undefined, because the indexer branches on it and a key that is
+            // absent on one arm of a union is a key read by luck.
+            modelAuto: true,
             borrowed: id,
             // NOT `EMBED_FALLBACK`, which is the provider borrowed a few lines
             // up when the chat half cannot embed. This is the author's answer to
@@ -382,11 +653,7 @@ export function resolveEmbed(docPilot) {
         // was reachable is a fact about the minute the index was built, and the
         // manifest is where that fact is recorded — naming one now would put a
         // second, older answer in the config for the browser to disagree with.
-        model: freePoolFor(id, 'embed')
-            ? null
-            : id === 'ollama'
-              ? LOCAL_EMBED_MODEL
-              : PROVIDERS[id]?.embedModel,
+        model: freePoolFor(id, 'embed') ? null : embedModelOf(id),
         // The chat provider's host, not just its name. `auto` means "the same
         // provider as chat", and a provider is where it is served from as much as
         // what it is called — a hosted one supplies its own `directBase` and this
@@ -396,6 +663,10 @@ export function resolveEmbed(docPilot) {
         // a different server than the one that answers against it.
         baseURL: docPilot.chat.baseURL || LOCAL_BASE_URL,
         auto: true,
+        // Nobody named this model — it came out of the provider table, which is
+        // a default that ages. The indexer may walk past it if the provider's own
+        // catalogue disagrees; an author's name it may not.
+        modelAuto: true,
         fallback,
     }
 }
@@ -438,6 +709,7 @@ export function nodeEmbedTarget(docPilot, env = {}) {
             baseURL: null,
             model: null,
             models: null,
+            modelAuto: false,
             apiKey: null,
         }
     }
@@ -446,11 +718,21 @@ export function nodeEmbedTarget(docPilot, env = {}) {
     return {
         id: embed.provider,
         provider: hosted ? hosted.adapter : 'ollama',
-        baseURL: hosted ? hosted.directBase : embed.baseURL || LOCAL_BASE_URL,
+        baseURL: hosted ? directBaseOf(hosted, env) : embed.baseURL || LOCAL_BASE_URL,
         model: embed.model,
         // Null unless the author left the model to the provider. The indexer
         // walks this in order and writes the winner into the manifest.
         models: embedModels(docPilot),
+        /**
+         * WHOSE NAME `model` IS — the author's, or the provider table's.
+         *
+         * The indexer needs the difference and cannot see it from the name: both
+         * arrive as the same string. A name the author wrote is a sentence and is
+         * used as given; a name the table supplied is a default that ages, so it
+         * becomes the HEAD of a pool with the provider's own catalogue behind it.
+         * See `discoverEmbedModels` in src/build/lib/embed-discovery.js.
+         */
+        modelAuto: Boolean(embed.modelAuto),
         apiKey: keyOf(env, embed.provider),
     }
 }
@@ -470,7 +752,7 @@ export function nodeChatTarget(docPilot, env = {}) {
     return {
         id: docPilot.chat.provider,
         provider: hosted ? hosted.adapter : 'ollama',
-        baseURL: hosted ? hosted.directBase : docPilot.chat.baseURL || LOCAL_BASE_URL,
+        baseURL: hosted ? directBaseOf(hosted, env) : docPilot.chat.baseURL || LOCAL_BASE_URL,
         model: docPilot.chat.model,
         models: chatModels(docPilot),
         apiKey: keyOf(env, docPilot.chat.provider),
@@ -742,7 +1024,7 @@ function route(routes, path, providerId, env) {
     if (!hosted) return // a local provider is called directly, with no proxy
     const key = keyOf(env, providerId)
     routes[`^${escapeRe(path)}(?:\\?.*)?$`] = {
-        target: hosted.upstream,
+        target: upstreamOf(hosted, env),
         changeOrigin: true,
         rewrite: hosted.rewrite,
         configure(proxy) {
@@ -807,10 +1089,15 @@ export function proxyContract(docPilot, env = {}) {
         routes.push({
             path: p,
             provider: id,
-            upstream: hosted.upstream,
+            upstream: upstreamOf(hosted, env),
             rewrite: hosted.rewrite(p),
             header,
             envKey: keyNameOf(env, id) || null,
+            // A server you started rather than an account you have. Without
+            // this the contract reads `NO KEY — none set` beside a self-hosted
+            // llama.cpp, which sends the reader looking for a credential the
+            // service does not check.
+            keyless: Boolean(hosted.keyless),
         })
     }
     const notes = [
@@ -953,33 +1240,28 @@ function assertEmbed(docPilot) {
 
     assertKnown('embed', embed.provider)
 
-    // An unnamed model is a configuration ERROR everywhere except where a pool
-    // stands behind it, which is the one case where "you choose" is a complete
-    // instruction rather than an omission.
-    if (canEmbed(embed.provider) && (embed.model || freePoolFor(embed.provider, 'embed'))) return
+    // A provider that embeds is a complete configuration, named model or not:
+    // its own default is in the table, a pool stands behind the one provider
+    // that has one, and `npx docpilot index` asks the service itself when
+    // neither is right. What is left below is the provider that cannot embed
+    // at all.
+    if (canEmbed(embed.provider)) return
 
-    // There used to be an `if (embed.auto)` arm here, for a chat provider that
-    // cannot embed. It is unreachable now: `resolveEmbed` sends that case to
-    // OpenRouter's free embed pool rather than raising, so an `auto` embedder is
-    // always one that embeds. Everything below is about an EXPLICIT `embed:
-    // {provider: …}` — a sentence the author wrote, which this package will not
-    // quietly rewrite into a third party's.
-
-    // The provider CAN embed; what is missing is the model. Said separately
-    // because the message below sends the reader off to change providers, and
-    // one of the providers it then lists is the one they already chose — a
-    // diagnosis that reads as a contradiction and costs an hour.
-    if (canEmbed(embed.provider)) {
-        const suggestion =
-            embed.provider === 'ollama' ? LOCAL_EMBED_MODEL : PROVIDERS[embed.provider]?.embedModel
-        throw new Error(
-            `[docpilot] embed.model is not set for "${embed.provider}", which does have an\n` +
-                `  embeddings endpoint. Name the model — e.g. embed: {provider: '${embed.provider}',\n` +
-                `  model: '${suggestion || LOCAL_EMBED_MODEL}'} — then rebuild the index with\n` +
-                '  `npx docpilot index`.',
-        )
-    }
-
+    /**
+     * Two arms used to stand here and both are gone.
+     *
+     * `if (embed.auto)` — a chat provider with no embeddings endpoint — became
+     * unreachable when `resolveEmbed` started borrowing OpenRouter's free pool
+     * rather than raising. And `embed.model is not set for X, which does have an
+     * embeddings endpoint` became unreachable when the object arm of
+     * `resolveEmbed` began filling an unnamed model from the provider table, the
+     * way `resolveChat` fills `chatModel`: there is no longer a way to reach this
+     * function with an embed-capable provider and no name behind it.
+     *
+     * What remains is an EXPLICIT `embed: {provider: …}` naming a service that
+     * answers but does not retrieve — a sentence the author wrote, which this
+     * package will not quietly rewrite into a third party's.
+     */
     throw new Error(
         `[docpilot] embed.provider "${embed.provider}" has no embeddings endpoint — it can\n` +
             `  answer, not retrieve. Point embed at a service that can: ${EMBEDDERS()}\n` +
@@ -1006,9 +1288,18 @@ function promptSummary(docPilot) {
 
 function describe(cfg, env, pool = null) {
     const hosted = hostedOf(cfg.provider)
-    const route = hosted ? `/ai → ${hosted.upstream}` : cfg.baseURL || LOCAL_BASE_URL
+    const route = hosted ? `/ai → ${upstreamOf(hosted, env)}` : cfg.baseURL || LOCAL_BASE_URL
     const name = keyNameOf(env, cfg.provider)
-    const key = !hosted ? 'no key needed' : name ? `key ${name}` : `NO KEY — set ${hosted.envKeys[0]}`
+    // `hosted.keyless` reads as "no key needed" on the same terms Ollama does —
+    // it is a server you started, not an account you have. Printing `NO KEY —
+    // set LLAMACPP_API_KEY` there names a fault that is not one and a variable
+    // that fixes nothing.
+    const key =
+        !hosted || hosted.keyless
+            ? 'no key needed'
+            : name
+              ? `key ${name}`
+              : `NO KEY — set ${hosted.envKeys[0]}`
     // A pooled half has no single name to print, and printing `null` reads as a
     // bug. Say what it is instead: the size of the list and its head.
     const what = cfg.model
@@ -1049,6 +1340,23 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
         return
     }
     assertProviders(docPilot)
+
+    // WHO CHOSE THE PROVIDER, and only when it was not the author.
+    //
+    // A configuration whose answering half was decided by an environment
+    // variable is one where the config file does not contain the answer, so the
+    // build log has to. Silent for every project that names its provider, which
+    // is the same silence rule the `ui`, `histry` and `i18n` lines below follow:
+    // a line restating what is already written down is noise in the one block
+    // anyone reads.
+    if (docPilot.chat.providerAuto) {
+        const {tried} = resolveChain(env)
+        const marks = tried
+            .map((t) => `${t.id} ${t.found ? '✓' : '—'}`)
+            .join(' · ')
+        console.log(`[docpilot] chain  auto → ${docPilot.chat.provider}`)
+        console.log(`[docpilot]        ${marks}`)
+    }
 
     const embed = resolveEmbed(docPilot)
     console.log(`[docpilot] chat   ${describe(docPilot.chat, env, chatModels(docPilot))}`)
@@ -1226,8 +1534,45 @@ export const DEFAULTS = {
      */
     sources: null,
     chat: {
-        provider: 'ollama',
-        model: 'qwen3:8b',
+        /**
+         * `'auto'` — the environment decides, by walking `CHAIN`.
+         *
+         * It used to be `'ollama'`, which was the right shipped value in a world
+         * where nothing read the environment: a local server needs no key, so it
+         * was the only provider that could be a default at all. The cost was that
+         * `OPENAI_API_KEY` in a project's `.env.local` did nothing — `keyOf` only
+         * ever asked "what is the key for the provider we already chose" — and the
+         * panel spent every question on a connection refused to localhost.
+         *
+         * The old behaviour is what an EMPTY environment still resolves to, so a
+         * build with no key anywhere is unchanged. Write `provider: 'ollama'` to
+         * pin it whatever the environment carries.
+         */
+        provider: 'auto',
+        /**
+         * Null — the PROVIDER's default, from the provider table, once one is
+         * chosen. `qwen3:8b` lived here and was a statement about Ollama being
+         * inherited by every other service; it is `LOCAL_CHAT_MODEL` now, beside
+         * the other Ollama constant. `resolveChat` carries the reasoning.
+         */
+        model: null,
+        /**
+         * WHERE the provider is, for the ones that are somewhere of your own.
+         *
+         * It has been read since the first release — by `targetOf`, by
+         * `nodeChatTarget`, by `resolveEmbed` deciding where an automatic
+         * embedder lives — and it has never been in this object, so rule 11b
+         * could not see it and nothing wrote it down. A setting nobody can find
+         * is the defect that rule exists to catch, and it caught this one only
+         * once `OLLAMA_BASE_URL` gave it a second way in.
+         *
+         * `null` means "the provider's own address": the table's `upstream` for
+         * a hosted service, `OLLAMA_BASE_URL` or `http://localhost:11434` for a
+         * local Ollama. IGNORED for a hosted provider, which the browser reaches
+         * through the same-origin `/ai` — move one of those with the provider's
+         * own `*_BASE_URL` variable instead.
+         */
+        baseURL: null,
         /**
          * An ORDERED fallback pool, tried in turn until one member answers.
          *
@@ -1549,21 +1894,80 @@ export const THEME_ONLY = [
 
 /** Settings with defaults filled in. Nested objects merge; `embed` does not. */
 /**
- * `chat`, merged — with the one key that must not be inherited across a
- * provider change held back.
+ * `chat`, merged — and the one place the environment gets to answer a question
+ * about the configuration.
  *
- * `DEFAULTS.chat.model` is `qwen3:8b`, which is a statement about Ollama. Merged
- * blindly, an author who wrote `chat: {provider: 'openrouter'}` and nothing else
- * had that name posted to OpenRouter: a 404 on every question, naming a model
- * they never typed, in a config file where the name does not appear. A provider
- * named without a model now means what it reads as — you choose — and who
- * chooses depends on the provider: a pool where there is one, and the error
- * `assertProviders` already raises where there is not.
+ * TWO THINGS ARE RESOLVED HERE and they used to be one omission each.
+ *
+ * THE PROVIDER. `'auto'` — which is also what an omitted `chat` block means —
+ * walks `CHAIN` and takes the first member this environment carries a key for.
+ * An id the author wrote down always wins; the environment is consulted only
+ * where nobody said. See `resolveChain` for the order and for why it never
+ * touches the network.
+ *
+ * THE MODEL. `chat.model` used to have one shipped value, `qwen3:8b`, which is a
+ * statement about Ollama and about nothing else — so a blind merge posted that
+ * name to OpenRouter for an author who wrote `chat: {provider: 'openrouter'}`,
+ * and the guard against it was to drop the name and let `assertChat` stop the
+ * build. Correct, and a dead end: `chat: {provider: 'openai'}` is a complete
+ * sentence in every reader's head and was a build failure here. The per-provider
+ * default now lives in the provider table beside `embedModel`, where a statement
+ * about a service belongs, so naming a provider names a model too — and naming
+ * NEITHER, which is the whole zero-config path, resolves both from the one key
+ * in the environment.
+ *
+ * The null case is unchanged and still reachable: `openrouter` and `custom` name
+ * no `chatModel`, because a pool answers for the first and only the author can
+ * answer for the second.
  */
-function resolveChat(chat = {}) {
-    const merged = {...DEFAULTS.chat, ...chat}
-    if (chat.provider && chat.provider !== DEFAULTS.chat.provider && chat.model === undefined) {
-        merged.model = null
+/**
+ * `baseURL` is in the parameter type and not in `DEFAULTS.chat`, which is not an
+ * oversight being papered over: it is read by `targetOf`, `nodeChatTarget` and
+ * `resolveEmbed` and has never had a shipped value, because there is no address
+ * that is right for every provider. Naming it here is what lets this function
+ * resolve one.
+ *
+ * @param {{provider?: string, model?: string|null, models?: string[]|null,
+ *   temperature?: number, maxTokens?: number, numCtx?: number,
+ *   baseURL?: string|null, extraBody?: object|null}} [chat]
+ * @param {Record<string, string|undefined>} [env]
+ */
+function resolveChat(chat = {}, env = {}) {
+    const named = {...DEFAULTS.chat, ...chat}
+    /**
+     * WHETHER THE ENVIRONMENT CHOSE, recorded because the resolved value cannot
+     * say. `provider: 'openai'` written by an author and `provider: 'auto'`
+     * resolved against `OPENAI_API_KEY` are the same string here and are not the
+     * same decision — one is worth printing the chain for at startup and the
+     * other is noise. It is deliberately NOT in `DEFAULTS`: nothing can set it,
+     * it is an output of this function, and `themeDocPilot` names the keys it
+     * emits one by one, so it never reaches the browser.
+     */
+    const providerAuto = !named.provider || named.provider === 'auto'
+    const provider = providerAuto ? resolveChain(env).id : named.provider
+    const merged = {
+        ...named,
+        providerAuto,
+        provider,
+        /**
+         * WHERE the local Ollama is, from the same variable that selects it.
+         *
+         * Every hosted provider gets its address from the provider table and,
+         * for the two self-hosted entries, from `baseUrlEnv` through
+         * `upstreamOf`. Ollama has no table row — it is the keyless local case
+         * this file handles separately — so the same courtesy is extended by
+         * hand, and extended to an EXPLICIT `provider: 'ollama'` too: a project
+         * that pinned the local one still deserves to move it without editing
+         * code. The author's own `chat.baseURL` outranks it, as everywhere else.
+         *
+         * Stated in the literal rather than assigned below, so the key is part
+         * of the object's shape on every branch: it is read by `targetOf`,
+         * `nodeChatTarget` and `resolveEmbed`, none of which should have to ask
+         * whether it happens to be there.
+         */
+        baseURL:
+            named.baseURL ||
+            (provider === 'ollama' ? env[OLLAMA_BASE_URL_ENV] || LOCAL_BASE_URL : named.baseURL),
     }
     // `model: 'auto'` is a spelling openrouter.js advertises, and a spelling that
     // is recognised but never STRIPPED is worse than one that is not recognised
@@ -1572,6 +1976,13 @@ function resolveChat(chat = {}) {
     // the head of it. Normalise once, here, and every reader downstream sees the
     // same null the omitted case produces.
     if (isAutoModel(merged.model)) merged.model = null
+    // The provider's own default, and only where the author named nothing. A
+    // pooled provider keeps the null it just normalised to — `chatModels` reads
+    // that as "you choose" and walks the free pool, which is the answer there.
+    if (merged.model == null) {
+        merged.model =
+            merged.provider === 'ollama' ? LOCAL_CHAT_MODEL : hostedOf(merged.provider)?.chatModel ?? null
+    }
     return merged
 }
 
@@ -1579,7 +1990,11 @@ export function resolveDocPilot(settings = {}, env = {}) {
     return {
         ...DEFAULTS,
         ...settings,
-        chat: resolveChat(settings.chat),
+        // The one resolver that reads the environment. Every other value in this
+        // object is the author's or this file's; `chat.provider` may also be the
+        // deployment's, which is what makes an install with nothing but a key in
+        // `.env.local` a working install.
+        chat: resolveChat(settings.chat, env),
         // `embed` is a union — the string 'auto' or an object — so a spread
         // would turn 'auto' into an object of numbered characters.
         embed: settings.embed ?? DEFAULTS.embed,
@@ -1670,14 +2085,57 @@ export function readiness(docPilot, env = {}) {
     }
 
     const embed = resolveEmbed(docPilot)
+    /**
+     * ONE ENTRY PER PROVIDER, not per half.
+     *
+     * The two halves are usually the same service — `embed: 'auto'` follows chat
+     * wherever chat can embed — so a missing key produced the identical sentence
+     * twice, with the identical fix under each, and the reader counting "2 things
+     * to set up" for one variable. It became the common case the moment an empty
+     * environment started resolving both halves to OpenRouter's free tier.
+     */
+    const halvesOf = new Map()
     for (const [half, id] of [['chat', docPilot.chat.provider], ['embed', embed.provider]]) {
         const hosted = hostedOf(id)
         if (!hosted) continue // ollama needs no key
+        // A self-hosted server on a port of your own. It is in `PROVIDERS`
+        // because it speaks a hosted provider's API and is reached through the
+        // same `/ai`, not because it has an account behind it — so demanding a
+        // credential here is a missing entry for a fault that does not exist,
+        // and one the author cannot fix.
+        if (hosted.keyless) continue
         if (keyOf(env, id)) continue
+        if (!halvesOf.has(id)) halvesOf.set(id, [])
+        halvesOf.get(id).push(half)
+    }
+    for (const [id, halves] of halvesOf) {
+        const hosted = hostedOf(id)
         missing.push({
-            what: `${half}: "${id}" needs a key and none is set`,
+            what: `${halves.join(' and ')}: "${id}" needs a key and none is set`,
             fix: `export ${hosted.envKeys[0]}=… (or put it in .env.local and pass loadEnv('', process.cwd(), '') to defineDocPilot)`,
         })
+    }
+
+    /**
+     * A NOTE beside the missing key above, saying WHY the configuration names a
+     * provider the config file never mentions.
+     *
+     * `provider: 'auto'` reaching `CHAIN_FALLBACK` means the environment selected
+     * nothing at all, and "chat and embed: openrouter needs a key" on its own
+     * reads as a setting somebody made and then broke. What it actually is is the
+     * fall-through, and the useful half of saying so is what it costs to finish:
+     * one free key, no model to choose, both halves covered.
+     */
+    if (docPilot.chat.providerAuto && docPilot.chat.provider === CHAIN_FALLBACK && !keyOf(env, CHAIN_FALLBACK)) {
+        notes.push(
+            "chat.provider is 'auto' and no provider key was found in the environment, so both " +
+                `halves fell through to ${CHAIN_FALLBACK} — its free tier needs no model named on ` +
+                'either side and no card, so one free key finishes the install. Any other key ' +
+                'is chosen ahead of it: ' +
+                `${resolveChain(env).tried.filter((t) => t.envKey && t.id !== CHAIN_FALLBACK).map((t) => t.envKey).join(', ')}. ` +
+                `${OLLAMA_BASE_URL_ENV} selects a local Ollama, and chat: {provider: 'ollama'} pins ` +
+                'it whatever the environment holds.',
+        )
     }
 
     /**

@@ -34,7 +34,18 @@ import { resolveEmbed as resolveClientEmbed } from '../src/theme/docpilot/switch
  */
 
 const ENV = {}
-const cfg = (settings) => resolveDocPilot(settings, ENV)
+/**
+ * The chat half is NAMED, and only so that it stops being a variable.
+ *
+ * This file is about the embedder — `embed: false`, what the index carries, what
+ * `readiness` owes the mode — and it used to leave `chat` to the defaults, which
+ * meant a local Ollama. Since `chat.provider` ships as `'auto'` an unnamed half
+ * resolves against the environment and, with `ENV` empty, falls through to
+ * OpenRouter's free tier: a different provider, a different embedder, and a
+ * missing key in every readiness report here. Naming it puts the subject of these
+ * tests back in the foreground. Anything a case passes wins the spread.
+ */
+const cfg = (settings = {}) => resolveDocPilot({ chat: { provider: 'ollama' }, ...settings }, ENV)
 
 /**
  * Manifests written to disk, because `readiness` reads the index through the
@@ -75,6 +86,12 @@ describe('embed: false — one mode, two spellings', () => {
       model: null,
       baseURL: null,
       auto: false,
+      // `modelAuto` says whose name `model` is — the author's, or the provider
+      // table's — and here it is neither, because there is no model. Stated
+      // rather than omitted for the same reason every other key on this arm is:
+      // the indexer branches on it, and a key that exists on one arm of a union
+      // and not the other is a key read by luck.
+      modelAuto: false,
       lexicalOnly: true,
       fallback: null,
     }
@@ -129,6 +146,9 @@ describe('embed: false — one mode, two spellings', () => {
       baseURL: null,
       model: null,
       models: null,
+      // No model, so no question about whose name it is — and stated anyway, on
+      // the same terms as every other key on this arm.
+      modelAuto: false,
       apiKey: null,
     }
     expect(nodeEmbedTarget(cfg({ embed: false }), { OPENROUTER_API_KEY: 'sk-or-x' })).toEqual(want)
@@ -207,9 +227,29 @@ describe('the embed assertion — silent for the mode, unchanged for everything 
   // The other arm, for a provider that CAN embed and was named without a model.
   // Also untouched, and it fails with the message about the model rather than
   // the one about the provider.
-  it('still refuses an embedder named without a model', () => {
-    expect(() => themeDocPilot(cfg({ embed: { provider: 'openai' } }), ENV)).toThrow(
-      /embed\.model is not set/,
+  /**
+   * IT NO LONGER REFUSES ONE, and that is the point of the change rather than a
+   * relaxation of this file's subject.
+   *
+   * `embed: {provider: 'openai'}` used to stop the build while
+   * `chat: {provider: 'openai'}` was a complete sentence — one asymmetry with no
+   * reason behind it, since the service's own default sits in the same provider
+   * table row that `chatModel` does. The unnamed model is filled from there and
+   * marked `modelAuto`, which is what lets `npx docpilot index` walk past it if
+   * the provider's catalogue disagrees.
+   *
+   * What is still refused is the sentence that cannot be completed by anyone: a
+   * provider that answers but does not retrieve.
+   */
+  it('completes an embedder named without a model, and still refuses one that cannot embed', () => {
+    expect(() => themeDocPilot(cfg({ embed: { provider: 'openai' } }), ENV)).not.toThrow()
+    expect(resolveEmbed(cfg({ embed: { provider: 'openai' } })).model).toBe('text-embedding-3-small')
+    expect(resolveEmbed(cfg({ embed: { provider: 'openai' } })).modelAuto).toBe(true)
+    // An author's own name is a sentence and is left alone.
+    expect(resolveEmbed(cfg({ embed: { provider: 'openai', model: 'x' } })).modelAuto).toBe(false)
+
+    expect(() => themeDocPilot(cfg({ embed: { provider: 'groq' } }), ENV)).toThrow(
+      /has no embeddings endpoint/,
     )
   })
 })

@@ -106,7 +106,18 @@ reader who never opens the panel pays for none of it.
 
 Whichever page you follow, three steps are identical.
 
-### 1 · The settings, exported by name
+### 1 · The settings — optional
+
+There may be none. `chat.provider` ships as `'auto'`, which reads your
+environment and takes the first service in
+[the provider chain](/guide/providers#name-nothing-the-provider-chain) that a key
+is set for; that service's default model and embedder come with it.
+
+```bash [.env.local]
+OPENAI_API_KEY=sk-…
+```
+
+When you do have settings, export them **by name**:
 
 ```js [docpilot.config.mjs]
 export const docPilot = {

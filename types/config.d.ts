@@ -25,16 +25,25 @@ export type ProviderId =
   | 'xai'
   | 'cerebras'
   | 'custom'
+  | 'llamacpp'
   | 'gemini'
   | 'anthropic'
 
 export interface ChatSettings {
-  provider?: ProviderId
   /**
-   * Omit it and the provider chooses — which only one provider can do. On
-   * `openrouter` an unnamed model resolves to the shipped free pool; anywhere
-   * else it stops the build, because the alternative is a 400 in a reader's
-   * browser naming a model that appears nowhere in your config.
+   * `'auto'` — the default, and what an omitted key means — reads the
+   * environment: the provider chain is walked in order and the first service a
+   * key is set for answers. An id written down here is never overridden.
+   *
+   * See `CHAIN` in src/config.js for the order and the reasoning.
+   */
+  provider?: ProviderId | 'auto'
+  /**
+   * Omit it and the PROVIDER's own default is used — every branded provider
+   * carries one. Two do not: `openrouter`, where an unnamed model resolves to
+   * the shipped free pool, and `custom`, which names a host rather than a
+   * service and therefore stops the build, because the alternative is a 400 in
+   * a reader's browser naming a model that appears nowhere in your config.
    */
   model?: string
   /**
@@ -66,12 +75,17 @@ export interface ChatSettings {
 export interface EmbedSettings {
   provider?: ProviderId
   /**
-   * Omit it only where a free embedding pool stands behind the provider —
-   * `openrouter`. `npx docpilot index` then embeds with the first free model
-   * that answers and writes its name into the manifest, and the browser reads
-   * it back from there. Rotation is a BUILD decision: two embedding models are
-   * two vector spaces, so a busy embedder at query time degrades retrieval to
-   * lexical-only rather than switching.
+   * Omit it and the PROVIDER's own default is used, then checked: `npx docpilot
+   * index` asks the service which embedding models it serves and walks those
+   * answers behind the configured name, writing whichever answered into the
+   * manifest for the browser to read back.
+   *
+   * A name you DO write here is used as given — no catalogue is read, and a
+   * wrong one fails loudly rather than being quietly replaced.
+   *
+   * Rotation is a BUILD decision either way: two embedding models are two vector
+   * spaces, so a busy embedder at query time degrades retrieval to lexical-only
+   * rather than switching.
    */
   model?: string
   baseURL?: string
@@ -400,6 +414,17 @@ export interface Readiness {
 
 export declare const DEFAULTS: Required<DocPilotSettings>
 export declare const PROVIDER_IDS: readonly ProviderId[]
+/**
+ * The order `chat.provider: 'auto'` walks — providers that embed first, then
+ * answering-only ones, then the self-hosted tail. `'ollama'` closes it and is
+ * always available, so the walk cannot come back empty.
+ */
+export declare const CHAIN: readonly ProviderId[]
+/** What one environment resolves to, and what was tried on the way. */
+export declare function resolveChain(env?: Record<string, string | undefined>): {
+  id: ProviderId
+  tried: Array<{ id: ProviderId; envKey: string | null; found: boolean }>
+}
 /** Keys deliberately withheld from the client half. */
 export declare const SERVER_ONLY: readonly string[]
 /** Keys the theme reads that `docPilot` deliberately does not carry. */
@@ -423,7 +448,37 @@ export declare function providerKey(provider: ProviderId): string
 export declare function nodeEmbedTarget(
   settings: Required<DocPilotSettings>,
   env?: Record<string, string | undefined>,
-): { provider: ProviderId; baseURL: string; model: string; apiKey?: string }
+): {
+  provider: ProviderId
+  baseURL: string
+  model: string
+  models: string[] | null
+  /**
+   * Whose name `model` is — the author's, or the provider table's. A default
+   * that ages may be walked past by the index build; a name somebody wrote may
+   * not.
+   */
+  modelAuto: boolean
+  apiKey?: string
+}
+/**
+ * The chat half as a NODE tool sees it: the real host rather than `/ai`, and the
+ * key in hand. `id` is the brand, `provider` the adapter that speaks to it.
+ */
+export declare function nodeChatTarget(
+  settings: Required<DocPilotSettings>,
+  env?: Record<string, string | undefined>,
+): {
+  id: ProviderId
+  provider: ProviderId
+  baseURL: string | null
+  model: string | null
+  models: string[] | null
+  apiKey: string | null
+  maxTokens?: number
+  numCtx?: number
+  extraBody?: Record<string, unknown> | null
+}
 export declare function devProxy(
   settings: Required<DocPilotSettings>,
   env?: Record<string, string | undefined>,

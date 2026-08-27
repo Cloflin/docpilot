@@ -91,6 +91,22 @@ if (!COMMANDS.includes(cmd)) {
  * it means depending on where the user happened to put them. The same named
  * export is what a `docpilot.config.mjs` carries on a project that has no
  * VitePress at all — one contract, two places.
+ *
+ * WHY IT WARNS RATHER THAN EXITS, which it used to do twice.
+ *
+ * The named export is a contract about AGREEMENT: the CLI and the site build
+ * have to resolve one object, or the index is built with one embedder and
+ * queried with another and nothing says so until a reader is refused an answer
+ * the docs contain. That argument holds exactly while there IS an object. When
+ * there is not — `defineDocPilot()` with no arguments, which is the whole
+ * zero-config install — both sides resolve the same empty settings against the
+ * same environment and reach the same provider, so there is no second object to
+ * disagree with.
+ *
+ * Exiting there cost the one path this package most wants to work: install,
+ * put a key in `.env.local`, run `npx docpilot index`. The warning stays,
+ * because a config that exists and names its settings somewhere this cannot see
+ * is still a real fault, and a silent fallback to defaults would hide it.
  */
 async function loadSettings() {
   const found = findConfig()
@@ -98,28 +114,29 @@ async function loadSettings() {
     // The cwd is printed because the candidates below are RELATIVE to it, and
     // "looked for docs/.vitepress/config.mjs" is unanswerable until you know
     // where it looked from — which is the actual fault most of the time.
-    console.error(
+    console.warn(
       `[docpilot] no config under ${process.cwd()}. Looked for:\n    ` +
         CONFIG_CANDIDATES.join('\n    ') +
-        '\n\n  Run it from your project root. On a site that is not VitePress that\n' +
-        '  root is wherever you put docpilot.config.mjs:\n\n' +
+        '\n\n  Continuing on the shipped defaults and your environment. If that is not\n' +
+        '  what you meant, run this from your project root — on a site that is not\n' +
+        '  VitePress that root is wherever you put docpilot.config.mjs:\n\n' +
         "    export const docPilot = { product: 'Acme', chat: { … }, embed: { … } }\n",
     )
-    process.exit(1)
+    return { settings: {}, configPath: null }
   }
   const mod = await import(pathToFileURL(path.resolve(found)).href)
   if (!mod.docPilot) {
-    // Not a naming convention: the CLI and the site build have to read the SAME
-    // object, or the index is built with one embedder and queried with another
-    // and nothing says so until a reader is refused an answer the docs contain.
-    console.error(
-      `[docpilot] ${found} has no \`docPilot\` export\n\n` +
-        '  Name the settings you pass to defineDocPilot, so this command and the\n' +
-        '  build read one object instead of two:\n\n' +
-        "    export const docPilot = { chat: { … }, embed: { … } }\n" +
+    console.warn(
+      `[docpilot] ${found} has no \`docPilot\` export — continuing on the shipped\n` +
+        '  defaults and your environment.\n\n' +
+        '  That is correct for a zero-config install:\n\n' +
+        '    const ai = defineDocPilot()\n\n' +
+        '  If you DO pass settings, name them, so this command and the build read\n' +
+        '  one object instead of two:\n\n' +
+        '    export const docPilot = { chat: { … }, embed: { … } }\n' +
         "    const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))\n",
     )
-    process.exit(1)
+    return { settings: {}, configPath: found }
   }
   return { settings: mod.docPilot, configPath: found }
 }
@@ -132,7 +149,16 @@ const {
   chatModels,
   embedModels,
   poolProviderOf,
+  resolveChain,
+  nodeChatTarget,
+  resolveEmbed,
 } = await import('../src/config.js')
+// The catalogue reader `npx docpilot index` uses, so `doctor --models` proposes
+// the same candidates the build would.
+const { discoverEmbedModels, probeEmbedEndpoint } = await import('../src/build/lib/embed-discovery.js')
+// The adapters, for the ONE thing `doctor --models` needs from them: the path a
+// service lists its models at, and the shape of what comes back.
+const { providerFor } = await import('../src/theme/docpilot/providers.js')
 const { CONFIG_CANDIDATES, findConfig, parseUiFlags, validateUi, uiSnippet, UI_QUESTIONS } =
   await import('../src/cli-init.js')
 
@@ -300,6 +326,46 @@ if (cmd === 'init') {
   )
 
   /**
+   * The built index, kept out of the project's history.
+   *
+   * APPENDED rather than `put`, because the project almost certainly has a
+   * `.gitignore` already and `put` skips a file that exists — which is how this
+   * ended up being a documented behaviour that nothing implemented. The rule is
+   * worth a few lines of special-casing: the index is megabytes of quantised
+   * vectors, rewritten in full by every `npx docpilot index`, and a repository
+   * that commits it grows by that much per rebuild.
+   *
+   * A project that DELIBERATELY commits its index — this one does, so its deploy
+   * makes zero API requests — deletes the line. Idempotent: the entry is matched
+   * before anything is written, so running `init` twice adds it once.
+   */
+  {
+    const rel = '.gitignore'
+    const target = path.resolve(rel)
+    // The SHIPPED path, not this project's: `init` runs before the config is
+    // loaded — it is the command for a project that does not have one yet — so
+    // there is no `indexDir` to have been moved. A project that later moves it
+    // is a project editing this line anyway.
+    const entry = `${indexDirOf(resolveDocPilot({})).replace(/\\/g, '/').replace(/\/*$/, '')}/`
+    const current = existsSync(target) ? readFileSync(target, 'utf8') : ''
+    if (current.split('\n').some((l) => l.trim() === entry)) {
+      skipped.push(`${rel} — ${entry}`)
+    } else {
+      const block = [
+        '',
+        '# DocPilot: the built retrieval index. Megabytes of quantised vectors,',
+        '# rewritten whole by every `npx docpilot index`. Delete this line if you',
+        '# would rather commit it — a deploy that ships the index makes no API',
+        '# requests of its own.',
+        entry,
+        '',
+      ].join('\n')
+      writeFileSync(target, current ? `${current.replace(/\n*$/, '\n')}${block}` : block.replace(/^\n/, ''))
+      wrote.push(`${rel}   (+ ${entry})`)
+    }
+  }
+
+  /**
    * The skills, copied into the project.
    *
    * Not a convenience: `.claude/` inside `node_modules` is not discovered, so a
@@ -323,11 +389,19 @@ if (cmd === 'init') {
 
   console.log(`
   Next:
-    1. cp .env.example .env.local  and fill in one key
-    2. add the plugin — and the block above — to .vitepress/config.mjs, see the README
+    1. cp .env.example .env.local  and fill in ONE key — any one. The provider
+       chain reads it and picks the service; nothing else has to be configured.
+    2. add the plugin to .vitepress/config.mjs, and the theme to
+       .vitepress/theme/index.js — see the README. The settings argument is
+       optional:
+
+         const ai = defineDocPilot({}, loadEnv('', process.cwd(), ''))
+
     3. npx docpilot index
     4. npx docpilot calibrate
     5. edit docpilot/golden.jsonl for your corpus, then: npx docpilot lint && npx docpilot eval
+
+  npx docpilot doctor  says which provider your environment selected.
 `)
   process.exit(0)
 }
@@ -410,9 +484,35 @@ if (cmd === 'doctor') {
   const say = (label, value) => console.log(`[docpilot] ${label.padEnd(10)}${value}`)
   const PAD = ' '.repeat(21)
 
-  say('config', configPath)
+  say('config', configPath || 'none — shipped defaults + your environment')
   say('docs', resolved.docsDir)
   say('index', indexDirOf(resolved))
+
+  /**
+   * THE CHAIN, and this is the one command where it is printed unconditionally.
+   *
+   * The build log stays quiet about it when a provider is named, because a line
+   * restating the config file is noise in a block people read at every start.
+   * `doctor` is the opposite: it is run precisely when the question is "why is
+   * it talking to THAT", and the answer — which variables are set and which
+   * member of the chain they select — is not visible anywhere else. The key
+   * VALUE is never printed, only the name of the variable.
+   */
+  {
+    const { tried } = resolveChain(env)
+    const chosen = resolved.chat.provider
+    say('chain', resolved.chat.providerAuto ? `auto → ${chosen}` : `${chosen} (named in config)`)
+    for (const t of tried) {
+      const mark = t.found ? '✓' : '·'
+      // `←` on a row that nothing selected would read as a contradiction — the
+      // dot says "not set" and the arrow says "this one". Name it instead: that
+      // row is where the walk LANDED rather than what it matched.
+      const here = t.id !== chosen ? '' : t.found ? ' ←' : ' ←  nothing matched — fall-through'
+      console.log(
+        `${PAD}${mark} ${t.id.padEnd(12)}${(t.envKey || 'no key needed').padEnd(22)}${here}`.trimEnd(),
+      )
+    }
+  }
 
   /**
    * `--proxy` prints the contract a production reverse proxy has to satisfy.
@@ -432,7 +532,8 @@ if (cmd === 'doctor') {
     for (const r of contract.routes) {
       say('proxy', r.path)
       console.log(`${PAD}→ ${r.upstream}${r.rewrite}`)
-      console.log(`${PAD}${r.header}: ${r.envKey ? `<${r.envKey}>` : 'NO KEY — none set'}`)
+      const cred = r.keyless ? 'no key needed' : r.envKey ? `<${r.envKey}>` : 'NO KEY — none set'
+      console.log(`${PAD}${r.header}: ${cred}`)
     }
     if (contract.routes.length) {
       for (const n of contract.notes) console.log(`  · ${n}`)
@@ -485,6 +586,84 @@ if (cmd === 'doctor') {
       if (gone.length) console.log(`${PAD}RETIRED: ${gone.join(', ')}`)
       if (fresh.length) console.log(`${PAD}new upstream: ${fresh.slice(0, 6).join(', ')}`)
       if (!gone.length && !fresh.length) console.log(`${PAD}the shipped pool matches the catalogue`)
+    }
+
+    /**
+     * THE NAMED MODEL, checked against the service's own list.
+     *
+     * The pool check above answers "are the free ids we shipped still served",
+     * which was the only question worth asking while `chat.model` had one
+     * shipped value. Every provider carries its own default now, and a default
+     * ages exactly the way a free id does — `gpt-4o-mini` is a name in a table
+     * in this package, not a promise from OpenAI. The failure it produces is a
+     * 404 naming a model that appears nowhere in the reader's config, which is
+     * the same illegible failure the pool check exists to prevent.
+     *
+     * Asked of `/v1/models` — or Ollama's `/api/tags`, which lists what has been
+     * PULLED, the honest local equivalent — through the adapter, so there is no
+     * second copy of a path here. Every failure is reported as a failure to
+     * check rather than as a verdict: a catalogue that is unreachable, a key
+     * that is not set, a provider with no directly-callable base (Gemini serves
+     * its compatible surface under a rewrite the browser's `/ai` hides and a
+     * Node tool has nothing to hide it with).
+     */
+    const target = nodeChatTarget(resolved, env)
+    if (!target.models?.length && target.model) {
+      const adapter = providerFor(target.provider)
+      const url = adapter.modelsUrl?.(target.baseURL)
+      const hosted = target.id !== 'ollama'
+      if (!target.baseURL || !url) {
+        say('model', `${target.model} — ${target.id} publishes no list this can read`)
+      } else if (hosted && !target.apiKey) {
+        say('model', `${target.model} — no key set, cannot ask ${target.id}`)
+      } else {
+        try {
+          const res = await fetch(url, { headers: adapter.headers(target.apiKey) })
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const ids = adapter.modelsParse(await res.json())
+          if (!ids.length) say('model', `${target.model} — ${target.id} returned no list`)
+          else if (ids.includes(target.model)) say('model', `${target.model} — served by ${target.id}`)
+          else {
+            say('model', `${target.model} — NOT in ${target.id}'s list of ${ids.length}`)
+            console.log(`${PAD}name one in chat.model, or upgrade the package`)
+          }
+        } catch (e) {
+          say('model', `${target.model} — cannot reach ${target.id} (${e.message})`)
+        }
+      }
+    }
+
+    /**
+     * DOES THE CHAT PROVIDER EMBED AFTER ALL?
+     *
+     * `PROVIDERS` carries `embedModel: null` for anthropic, groq, deepseek, xAI
+     * and cerebras, and that is a claim rather than a law: the same table
+     * asserted for months that OpenRouter ships no embeddings endpoint, which
+     * was true when it was written and silently wrong afterwards. The cost of
+     * the claim going stale is paid every build — `embed: 'auto'` borrows
+     * OpenRouter's free pool, so the deployment needs a SECOND key and posts the
+     * text of the whole corpus to a third party.
+     *
+     * So it is checked, here, where checking is free. It cannot be acted on
+     * automatically: the proxy that carries `/ai/v1/embeddings` is written from
+     * `resolveEmbed()` at config time, synchronously, with no network — so a
+     * build that decided mid-flight to embed somewhere else would leave every
+     * reader's query vector posted to the wrong upstream. This reports; the
+     * author writes the one line.
+     *
+     * Silent when the endpoint does not answer, which is the expected case and
+     * the one nobody needs told. Skipped outright for an adapter with no
+     * embeddings path at all — Anthropic — because there is nowhere to knock.
+     */
+    const embedNow = resolveEmbed(resolved)
+    if (embedNow.borrowed && target.baseURL) {
+      const adapter = providerFor(target.provider)
+      const url = adapter.embedUrl?.(target.baseURL)
+      const probe = adapter.embedUrl && url ? await probeEmbedEndpoint(target) : null
+      if (probe) {
+        say('embed?', `${target.id} answers ${url.replace(target.baseURL, '')} after all — ${probe}`)
+        console.log(`${PAD}embed: {provider: '${target.id}'} drops the borrowed ${embedNow.provider} key`)
+      }
     }
     console.log('')
   }

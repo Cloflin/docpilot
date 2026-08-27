@@ -53,17 +53,14 @@ DocPilot needs **Node 20 or newer**; the package declares `engines.node: ">=20"`
 
 ## Wiring the config
 
+The settings argument is optional. This is a complete config:
+
 ```js
 // docs/.vitepress/config.mjs
 import { defineConfig, loadEnv } from 'vitepress'
 import { defineDocPilot } from '@cloflin/docpilot'
 
-export const docPilot = {
-  product: 'Acme Editor',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
-}
-
-const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
+const ai = defineDocPilot({}, loadEnv('', process.cwd(), ''))
 
 export default defineConfig({
   vite: { plugins: [ai.plugin()] },
@@ -71,11 +68,29 @@ export default defineConfig({
 })
 ```
 
-Two details are load-bearing.
+```bash
+# .env.local
+OPENAI_API_KEY=sk-…
+```
+
+**One key is the whole configuration.** `chat.provider` ships as `'auto'`, which walks an ordered list of services and stops at the first one your environment holds a key for — `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, any of fifteen. That service's own default model comes with it, and so does its embedder. A local server is selected by address instead: `OLLAMA_BASE_URL` or `LLAMACPP_BASE_URL`. With nothing set at all the chain falls through to OpenRouter's free tier, whose remaining setup is one free key. `npx docpilot doctor` prints the chain and marks the member that answered; [Choosing providers](./providers#name-nothing-the-provider-chain) is the whole order and the reasoning behind it.
+
+**`loadEnv` is called by you, not by the plugin.** `defineDocPilot` reads whatever object you hand it, defaulting to `process.env`. A package that decided which `.env` files your project has would be wrong for half of them — and it is what makes a key in `.env.local` visible to the chain at all.
+
+### When you do pass settings
+
+```js
+export const docPilot = {
+  product: 'Acme Editor',
+  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+}
+
+const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
+```
 
 **`docPilot` is exported by name.** The CLI imports it from this file, so the index is built with the model the site queries with. A second copy of that decision is a copy that drifts, and the failure is silent: a query scored against a foreign vector space degrades retrieval to keyword matching, and a calibrated gate then refuses questions your docs can answer, with nothing in the UI to say why.
 
-**`loadEnv` is called by you, not by the plugin.** `defineDocPilot` reads whatever object you hand it, defaulting to `process.env`. A package that decided which `.env` files your project has would be wrong for half of them.
+A provider you name is **never** overridden by the environment, whatever keys are set. Naming the provider and not the model is a complete sentence — every provider carries its own default.
 
 `embed` is absent on purpose. It defaults to `'auto'`, which embeds with the chat provider's own embedding model — `text-embedding-3-small` for OpenAI — so a single-provider setup needs no second decision and no second key. Where the chat provider serves no embeddings endpoint at all, `'auto'` borrows OpenRouter's free embedding pool and the build says so. Naming a second provider, or none, is [Choosing providers](./providers).
 
@@ -143,15 +158,20 @@ The build does not fail. The panel switches itself off and one block appears:
 ```
 [docpilot] the panel is OFF — 2 things to set up:
 
-  · chat: "openai" needs a key and none is set
-      export OPENAI_API_KEY=…
+  · chat and embed: "openrouter" needs a key and none is set
+      export OPENROUTER_API_KEY=…
   · no index at docs/public/rag
       npx docpilot index
+  · chat.provider is 'auto' and no provider key was found in the environment,
+    so both halves fell through to openrouter — its free tier needs no model
+    named on either side and no card, so one free key finishes the install.
 
   The site builds and every other feature is untouched.
 ```
 
 That is deliberate. A dependency that can break someone's docs build on the day it lands is a dependency they remove. When you want the same facts to fail a pipeline, `npx docpilot doctor` exits non-zero.
+
+Both lines are one instruction each, and the note under them is why the block names a provider your config file never mentions. Nothing here asks the network whether that provider is reachable — a config file is read synchronously at build time, and a build that answered differently on two machines would be worse than one that reports what it resolved. `npx docpilot doctor` is where reachability is checked.
 
 ## Next steps
 

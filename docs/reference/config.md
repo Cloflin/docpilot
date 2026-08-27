@@ -43,7 +43,7 @@ export const docPilot = {
   evalDir: 'docpilot',
   importDir: null,
   sources: null,
-  chat: { provider: 'ollama', model: 'qwen3:8b', models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192 },
+  chat: { provider: 'auto', model: null, baseURL: null, models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192 },
   embed: 'auto',
   topK: null,
   maxIterations: 2,
@@ -78,10 +78,17 @@ Four things the block cannot say on its own:
   shape the browser receives. [`embed`](#embed) also accepts `false`,
   [`budget`](#budget) also accepts `false`, and [`suggestions`](#suggestions) also
   accepts a plain array of strings.
-- **[`chat.model`](#chat-model) does not survive a change of provider.**
-  `qwen3:8b` is a statement about Ollama, so naming another provider and no model
-  resolves to *you choose* rather than to that name — a free pool where the
-  provider has one, and a build-stopping error where it does not.
+- **[`chat.provider`](#chat-provider) and [`chat.model`](#chat-model) are the
+  two the environment can answer.** `'auto'` walks [the provider
+  chain](#the-provider-chain) and takes the first service this environment holds
+  a key for; that service's own default model comes with it. An empty
+  environment resolves to a local Ollama on `qwen3:8b`, which is what this
+  package shipped with before the chain existed.
+- **A model name never crosses providers.** `qwen3:8b` is a statement about
+  Ollama and `gpt-4o-mini` is one about OpenAI, so each lives on its provider's
+  row in the table rather than in this block. Naming a provider with no model
+  gets that provider's default; naming one that has neither a default nor a free
+  pool — `custom` — is still a build-stopping error.
 - **Five keys never reach the browser** — `docsDir`, `indexDir`, `evalDir`,
   `importDir` and `sources`. See [What reaches the browser](#what-reaches-the-browser).
 
@@ -108,8 +115,9 @@ written by hand; only the values are mechanical.
 | [`evalDir`](#evaldir) | `string` | `'docpilot'` | Holds the golden set, the calibration set and the reports — a statement about your corpus, resolved from the project root — *server-only — the CLI reads it, the panel never sees it* |
 | [`importDir`](#importdir) | `string \| null` | `null` | A second corpus root that is indexed but never routed — its pages carry a mandatory frontmatter `source:` as their citation — *server-only, and it must sit outside `docsDir` or VitePress publishes the pages anyway* |
 | [`sources`](#sources) | `{ allow: string[] } \| null` | `null` | The https origins a page may name in `source:`, each optionally narrowed to a path prefix; `null` forbids `source:` outright — *server-only, and assigned whole rather than merged, so a partial object is the entire allowlist* |
-| [`chat.provider`](#chat-provider) | `ProviderId` | `'ollama'` | Picks which service answers and where the request is sent; a misspelled id stops the build instead of quietly becoming a local Ollama — *fourteen ids, listed under [Choosing providers](/guide/providers)* |
-| [`chat.model`](#chat-model) | `string \| null` | `'qwen3:8b'` | The id the provider knows the model by — `'auto'`, `'free'` and `''` all normalise to unset, which a free pool or your own `chat.models` then fills — *not inherited across a provider change — naming any provider but `ollama` without a model leaves it unset* |
+| [`chat.provider`](#chat-provider) | `ProviderId \| 'auto'` | `'auto'` | Picks which service answers and where the request is sent; `'auto'` reads the environment and takes the first key it finds along [the chain](#the-provider-chain) — *fifteen ids, listed under [Choosing providers](/guide/providers); a misspelled one stops the build instead of quietly becoming a local Ollama* |
+| [`chat.model`](#chat-model) | `string \| null` | `null` | The id the provider knows the model by — `null` takes that provider's own default from the table in [Choosing providers](/guide/providers), and `'auto'`, `'free'` and `''` normalise to it — *never inherited across providers; `openrouter` and `custom` have no default, so a free pool answers for the first and only you can answer for the second* |
+| [`chat.baseURL`](#chat-baseurl) | `string \| null` | `null` | Where the provider is, for one that is somewhere of your own — `null` takes the provider's own address, and `OLLAMA_BASE_URL` / `LLAMACPP_BASE_URL` / `CUSTOM_BASE_URL` set it from the environment — *ignored for a hosted provider, which the browser reaches through the same-origin `/ai`* |
 | [`chat.models`](#chat-models) | `string[] \| null` | `null` | An ordered fallback pool walked on a 429, a retired id or an empty answer, with the model that answered tried first next time — *left `null` on `openrouter` with no model named, the shipped free pool rotates anyway* |
 | [`chat.temperature`](#chat-temperature-chat-maxtokens) | `number` | `0.2` | Sampling spread for the answering model; 0.2 keeps one question from yielding two different sets of steps, higher loosens the wording — *never sent to Anthropic, whose API rejects sampling parameters outright* |
 | [`chat.maxTokens`](#chat-temperature-chat-maxtokens) | `number` | `2048` | Caps the tokens in a single reply; a reply cut off at that ceiling is continued rather than lost, up to `budget.maxContinuations` — *the Ollama transport drops it — that adapter sends no token ceiling at all* |
@@ -295,21 +303,155 @@ chat: {
 
 ### chat.provider
 
-Any id from [Choosing providers](/guide/providers). A misspelling stops the build
+Any id from [Choosing providers](/guide/providers), or `'auto'` — the default,
+which is also what leaving the key out means. A misspelling stops the build
 rather than quietly becoming a local Ollama nobody is running.
+
+`'auto'` reads the environment. It walks [the provider chain](#the-provider-chain)
+and takes the first service a key is set for; an id you write down is never
+overridden, whatever the environment holds.
+
+### The provider chain
+
+The whole of *install the package, put a key in the environment, done*.
+
+Before it, the environment could only ever confirm a choice you had already
+made: the resolver went from `chat.provider` to the name of that provider's key,
+never the other way. A project with `OPENAI_API_KEY` in `.env.local` and no
+`chat` block resolved to the shipped default — a local Ollama — and spent every
+question on a connection refused. The key was read, found, and ignored.
+
+`chat.provider: 'auto'` walks this list in order and stops at the first member
+the environment selects:
+
+| # | id | Selected by | Embeds? | Model when you name none |
+|---|---|---|---|---|
+| 1 | `openai` | `OPENAI_API_KEY` | yes | `gpt-4o-mini` |
+| 2 | `gemini` | `GEMINI_API_KEY` | yes | `gemini-2.5-flash` |
+| 3 | `mistral` | `MISTRAL_API_KEY` | yes | `mistral-small-latest` |
+| 4 | `together` | `TOGETHER_API_KEY` | yes | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| 5 | `fireworks` | `FIREWORKS_API_KEY` | yes | `accounts/fireworks/models/llama-v3p3-70b-instruct` |
+| 6 | `nebius` | `NEBIUS_API_KEY` | yes | `meta-llama/Llama-3.3-70B-Instruct` |
+| 7 | `openrouter` | `OPENROUTER_API_KEY` | yes | *the free pool* |
+| 8 | `anthropic` | `ANTHROPIC_API_KEY` | no | `claude-sonnet-4-6` |
+| 9 | `groq` | `GROQ_API_KEY` | no | `llama-3.3-70b-versatile` |
+| 10 | `deepseek` | `DEEPSEEK_API_KEY` | no | `deepseek-chat` |
+| 11 | `xai` | `XAI_API_KEY` | no | `grok-4` |
+| 12 | `cerebras` | `CEREBRAS_API_KEY` | no | `llama-3.3-70b` |
+| 13 | `custom` | `CUSTOM_API_KEY` *(`CUSTOM_BASE_URL` moves it)* | yes | — *you name it* |
+| 14 | `llamacpp` | `LLAMACPP_BASE_URL` | yes | `local` |
+| 15 | `ollama` | `OLLAMA_BASE_URL` | yes | `qwen3:8b` |
+| — | **nothing matched** | → `openrouter`, free tier | yes | *the free pool* |
+
+**Providers that embed come first, and that is the whole ordering argument** —
+not a ranking of answer quality. One key covering both halves is the difference
+between a working install and a second decision. A chat provider with no
+embeddings endpoint sends [`embed: 'auto'`](#embed) to OpenRouter's free pool,
+which needs a *second* key and posts the text of your whole corpus to a third
+party at build time. That is a fine thing to choose and a poor thing to be
+defaulted into.
+
+**The self-hosted tail is selected by address, not by key.** A local server has
+no credential to be found by, so `LLAMACPP_BASE_URL` and `OLLAMA_BASE_URL` do
+both jobs: setting one selects that provider, and its value is where requests go.
+`OLLAMA_BASE_URL=http://localhost:11434` says *the usual one*;
+`http://gpu.internal:11434` says where instead.
+
+**An environment that selects nothing falls through to OpenRouter's free tier.**
+That is the last row, and it is not a list entry — it is what happens when the
+list matches nothing. It used to be the local Ollama, which closed the list and
+needed nothing to be selected by, so every unconfigured build landed there: right
+for a laptop running one, a connection refused everywhere else, and
+indistinguishable from inside a build that makes no network calls. OpenRouter is
+what a fall-through should reach instead, because its remaining setup is a single
+free key — no model to choose on either half, no card, both halves covered — so
+the build prints one instruction rather than producing a silent outage:
+
+```
+[docpilot] the panel is OFF — 2 things to set up:
+
+  · chat and embed: "openrouter" needs a key and none is set
+      export OPENROUTER_API_KEY=…
+  · no index at docs/public/rag
+      npx docpilot index
+```
+
+**Nothing here touches the network.** A config file is read synchronously at
+build time, and a resolver that reached out to decide what a default means would
+be a build that fails offline and answers differently on two machines. Whether
+the chosen provider is actually *reachable* is a different question, and `npx
+docpilot doctor` is where it is asked.
+
+The build says which member answered, and only when the environment chose:
+
+```
+[docpilot] chain  auto → openai
+[docpilot]        openai ✓ · gemini — · mistral — · together — · … · ollama ✓
+```
+
+To stop the chain being consulted at all, name the provider:
+
+```js
+chat: { provider: 'ollama' }   // whatever the environment holds
+```
+
+`OLLAMA_BASE_URL` still moves a named `ollama` — pinning *which* provider and
+saying *where* it is are two different statements, and a project that pinned the
+local one still deserves to relocate it without editing a config file. Your own
+`chat.baseURL` outranks both.
 
 ### chat.model
 
-The name the provider knows the model by. **The default belongs to the default
-provider** — `qwen3:8b` is a statement about Ollama — so naming another provider
-and no model does *not* inherit it. What happens instead depends on the provider:
+The name the provider knows the model by. `null` — the default — takes **that
+provider's** own default, listed in the table above and in
+[Choosing providers](/guide/providers).
 
-- `openrouter` falls back to its **free pool** (see `chat.models` below).
-- Everything else stops the build, because a provider with no model named and no
-  pool behind it has nothing to send.
+A model name never crosses providers. `qwen3:8b` is a statement about Ollama and
+`gpt-4o-mini` is one about OpenAI, so each lives on its provider's row rather
+than as a single shipped value that the next provider inherits — which is what
+used to happen, and what used to make `chat: { provider: 'openai' }` a
+build-stopping error for want of a name everybody could guess.
+
+Two providers still have no default, for two different reasons:
+
+- `openrouter` falls back to its **free pool** (see `chat.models` below), because
+  a shared free tier is a list rather than a model.
+- `custom` stops the build, because it names a *host* and not a service — there
+  is no catalogue for this package to have an opinion about.
+
+**These names are defaults, not guarantees.** Catalogues change. A wrong one
+fails loudly on the first request rather than silently at runtime, and
+`npx docpilot doctor --models` is the check that does not need a reader to hit it
+first.
 
 `'auto'` and `'free'` mean the same as leaving the key out, and are normalised to
 that before anything reads them — neither is ever sent as a model name.
+
+### chat.baseURL
+
+- **Type:** `string | null`
+- **Default:** `null` — the provider's own address
+
+Where the service is, for one that is somewhere of your own.
+
+`null` resolves per provider: the table's upstream for a hosted service,
+`OLLAMA_BASE_URL` or `http://localhost:11434` for a local Ollama. The two
+self-hosted entries take theirs from the environment, which is also what selects
+them — see [the provider chain](#the-provider-chain):
+
+```bash
+OLLAMA_BASE_URL=http://gpu.internal:11434
+LLAMACPP_BASE_URL=http://gpu.internal:8080
+CUSTOM_BASE_URL=https://gateway.internal
+```
+
+A value written here outranks all of them.
+
+**It is ignored for a hosted provider.** The browser reaches every hosted service
+through the same-origin `/ai`, so the address the request actually goes to is
+your reverse proxy's, not this one's — see
+[Production](/guide/production). Moving a hosted provider is not a thing this
+setting can do; the `*_BASE_URL` variables above are for the self-hosted three.
 
 ### chat.models
 
@@ -423,6 +565,15 @@ embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' 
 `model` **must** be the model that built the index. `baseURL` is read only for a
 local provider; a hosted embedder goes through the same proxy the chat does.
 
+**Naming the provider and not the model is a complete sentence.** The provider's
+own default is used — the same table row `chat.model` reads — and then
+`npx docpilot index` asks the service what it actually serves and lines those
+candidates up behind it. See [Asking the provider](#asking-the-provider).
+
+```js
+embed: { provider: 'openai' }   // → text-embedding-3-small, or whatever openai serves
+```
+
 `'auto'` on a chat provider with no embeddings endpoint — `anthropic`,
 `deepseek`, `groq`, `xai`, `cerebras` — **borrows OpenRouter's free embedding
 pool** rather than stopping the build. Set `OPENROUTER_API_KEY`; the borrow is
@@ -434,6 +585,44 @@ stops the build.
 The choice does not read the environment: a machine without the key resolves the
 same embedder as the one that built the index, so the two cannot disagree about
 which vector space the index is in. A missing key is reported as a missing key.
+
+### Asking the provider
+
+`npx docpilot index` does not simply trust the name in the table. When the model
+was **not written down by you** — you named a provider and stopped, or you named
+neither — the build asks the service which embedding models it serves and walks
+the answers in order, starting with the configured name.
+
+```
+  embedders 2 to try — custom offers 1, and BAAI/bge-m3 is configured
+  warn  BAAI/bge-m3 is not answering (HTTP 404); trying the next embedder
+  embedder  acme/gte-large-v2 · 1024d — chosen from 2 candidate(s)
+```
+
+Three reasons it exists, all the same defect:
+
+- **`custom` and `llamacpp` name a host, not a service.** `BAAI/bge-m3` and
+  `local` are this package guessing what you loaded onto your own gateway.
+- **Catalogue names age.** The table above says of itself that its names are
+  defaults rather than guarantees, and a stale one used to mean the build dying
+  on its first chunk with a 404 naming a model you never typed.
+- **A provider named without a model** used to stop the build on the embed half
+  while the same shape was a complete sentence on the chat half.
+
+**A name you wrote is never walked past.** `embed: {provider: 'x', model: 'y'}`
+is a sentence: it is used as given, no catalogue is read, and a wrong one fails
+loudly rather than being quietly replaced with something this package preferred.
+
+**Discovery changes the model, never the provider.** The reverse proxy that
+carries `/ai/v1/embeddings` is written from your config at build time,
+synchronously, with no network — so a build that moved itself to another service
+mid-flight would leave every reader's query vector posted to the wrong upstream.
+Where a chat-only provider turns out to serve embeddings after all,
+[`npx docpilot doctor --models`](/reference/cli#doctor) says so and you write the
+one line.
+
+It costs at most one extra request per build, and none at all when you named the
+model or when a free pool already stands behind the provider.
 
 ### An unnamed embedder, and why it does not rotate
 

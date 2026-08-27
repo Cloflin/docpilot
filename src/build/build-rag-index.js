@@ -20,6 +20,7 @@ import { chunkMarkdown } from './lib/chunker.js'
 import { chunkOpenapi } from './lib/openapi-chunker.js'
 import { resolveSections, orphanPages, tailFor } from './lib/sections.js'
 import { parseAllowlist, checkSource } from './lib/sources.js'
+import { discoverEmbedModels, embedPoolOf } from './lib/embed-discovery.js'
 import { providerFor } from '../theme/docpilot/providers.js'
 import { routeOf } from '../theme/docpilot/route.js'
 import { LEVER_NAMES } from '../theme/docpilot/retriever.js'
@@ -308,7 +309,7 @@ export function createEmbedder({
       onSkip(candidate, out.error)
     }
     fail(
-      `no free embedder answered. Tried ${pool.length}:\n        ` +
+      `no embedder answered. Tried ${pool.length}:\n        ` +
         refused.join('\n        ') +
         '\n        Name one explicitly with embed: {provider: …, model: …} if this persists.',
     )
@@ -366,10 +367,60 @@ export function createEmbedder({
  */
 class LexicalFallback extends Error {}
 
+/**
+ * The candidates this build may embed with, in the order to try them.
+ *
+ * THREE CASES, and only the middle one is new.
+ *
+ * An AUTHOR'S name is used as given: `embed: {provider: …, model: …}` is a
+ * sentence, `createEmbedder` returns it without walking anything, and one
+ * request is spent on the corpus rather than on asking questions.
+ *
+ * A STATIC POOL — OpenRouter's free tier — is walked as it always was. Which
+ * free embedder is serving right now is exactly what that list exists to
+ * discover, and the catalogue behind it is already read by `fetchFreePool`.
+ *
+ * A NAME FROM THE PROVIDER TABLE becomes the HEAD OF A POOL instead of a fixed
+ * model. That table says of itself that its names are defaults rather than
+ * guarantees — catalogues change — and the cost of a stale one is this build
+ * dying on its first chunk with a 404 naming a model nobody typed. So the
+ * provider is asked what it actually serves and its answer lines up behind the
+ * table's, which means the ordinary build picks exactly what it always picked
+ * and pays one extra request for the case where it could not have.
+ *
+ * Discovery never moves the PROVIDER — see the header of embed-discovery.js for
+ * why the proxy makes that a config-time decision and nothing else.
+ */
+async function embedCandidatesFor() {
+  if (!EMBED.modelAuto || EMBED_POOL.length) {
+    return { model: EMBED_MODEL, pool: EMBED_POOL }
+  }
+  const discovered = await discoverEmbedModels({
+    provider: EMBED_PROVIDER,
+    baseURL: EMBED_URL,
+    apiKey: EMBED_KEY,
+  })
+  const pool = embedPoolOf(EMBED_MODEL, discovered)
+  // Silent when the catalogue added nothing — a line saying "1 candidate" on
+  // every ordinary build is noise, and the `embedder` line below already names
+  // what was chosen. Loud when it did, because "chosen from 4" is otherwise a
+  // number from nowhere.
+  if (pool.length > 1) {
+    console.log(
+      `  embedders ${pool.length} to try — ${EMBED.id} offers ` +
+        `${discovered.length}, and ${EMBED_MODEL || 'no model'} is configured`,
+    )
+  }
+  // A pool of one is a pool: `createEmbedder` probes its single member and
+  // reports the refusal through the same path a longer walk would.
+  return { model: null, pool }
+}
+
 async function embedAll(texts) {
+  const { model, pool } = await embedCandidatesFor()
   const run = createEmbedder({
-    model: EMBED_MODEL,
-    pool: EMBED_POOL,
+    model,
+    pool,
     batch: embedBatchWithWaits,
     /**
      * THE ONE PLACE THE FALLBACK LIVES. Every way the embedding half can give up
@@ -391,9 +442,13 @@ async function embedAll(texts) {
       )
       throw new LexicalFallback(m)
     },
+    // Not "free model(s)" any more: a pool is no longer only OpenRouter's free
+    // tier — it is also the provider's own catalogue standing behind a name from
+    // the table — and calling a paid embedder free is the kind of small lie a
+    // build log gets quoted for.
     onChoose: (model, dims, size) =>
-      console.log(`  embedder  ${model} · ${dims}d — chosen from ${size} free model(s)`),
-    onSkip: (model, why) => warn(`${model} is not answering (${why}); trying the next free embedder`),
+      console.log(`  embedder  ${model} · ${dims}d — chosen from ${size} candidate(s)`),
+    onSkip: (model, why) => warn(`${model} is not answering (${why}); trying the next embedder`),
     onRestart: (from, to, why) => {
       process.stdout.write('\n')
       warn(
@@ -739,8 +794,23 @@ async function main() {
   //
   // No sidebar means no section grouping: every chunk keeps its page and its
   // headings, and only the "which part of the docs is this" label goes.
+  //
+  // AND THE FILE MAY NOT BE THERE AT ALL. `CONFIG` falls back to VitePress's
+  // default path when the CLI found no config to point at, which is the whole
+  // zero-config case — settings from the environment, no file to read. That is
+  // a build with no sidebar, exactly as above, and not a build that stops: the
+  // corpus is markdown either way and the section label is the only loss.
   const configUrl = pathToFileURL(CONFIG).href
-  const config = (await import(configUrl)).default ?? {}
+  let config = {}
+  try {
+    config = (await import(configUrl)).default ?? {}
+  } catch (e) {
+    // A config that EXISTS and throws is a different fault and has to stay
+    // loud — a syntax error reported as "no sections" is an hour of looking in
+    // the wrong place.
+    if (fs.existsSync(CONFIG)) throw e
+    console.warn(`  no config at ${CONFIG} — indexing without sidebar sections`)
+  }
   const sidebar = config.themeConfig?.sidebar || {}
 
   // ── markdown ───────────────────────────────────────────────────────────────

@@ -46,6 +46,21 @@ The paths come from the **adapter the browser will use**, not from a list in the
 
 A fully local setup (Ollama for both halves) prints `none needed`: the browser calls it directly and there is nothing to proxy.
 
+### Re-read it when the environment changes
+
+`chat.provider` ships as `'auto'`, so **which upstream these routes point at can be decided by a key in your environment** rather than by a line in your config. That resolution happens once, at build time, and the proxy above is written from its answer — which means a deployment that adds, removes or swaps a provider key has changed its proxy contract and does not know it yet.
+
+Two rules follow, and they are the same rule:
+
+- **Run `npx docpilot doctor --proxy` on the machine that builds**, with the environment that build will have. A contract printed from your laptop describes your laptop.
+- **Rebuild the index after the key changes.** The embedder is resolved from the same decision, and an index in one vector space queried through a proxy pointing at another is not a worse answer — it is no answer, and the calibrated gate starts refusing questions your docs can answer.
+
+`npx docpilot doctor` names the chosen provider and, when the environment was what chose it, prints the whole chain with the member that answered marked. Pin the provider in your config if you would rather the environment had no say:
+
+```js
+chat: { provider: 'openai', model: 'gpt-4o-mini' }
+```
+
 ## Why each rule is there
 
 **Exact paths.** A `location /ai` prefix match turns your docs host into an open proxy for every path under it, on a credential you attached. Two exact matches, embeddings first.

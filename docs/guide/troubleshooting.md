@@ -39,6 +39,61 @@ would embed every question and have nothing to score it against — so the panel
 is switched off until the config says [`embed: false`](/reference/config#embed-false)
 as well.
 
+### It is talking to a provider I never chose
+
+`chat.provider` ships as `'auto'`, which reads your environment and takes the
+first service in [the provider chain](./providers#name-nothing-the-provider-chain)
+that a key is set for. A key sitting there for something else — a CI secret, a
+sibling service — is a key it will use.
+
+`npx docpilot doctor` prints the whole list with the member that answered marked,
+so the answer is one command away:
+
+```
+[docpilot] chain     auto → openai
+                     ✓ openai      OPENAI_API_KEY         ←
+                     · gemini      GEMINI_API_KEY
+                     …
+```
+
+The build says the same thing, but **only when the environment chose** — a line
+restating your own config file is noise in a block people read at every start:
+
+```
+[docpilot] chain  auto → openai
+[docpilot]        openai ✓ · gemini — · mistral — · … · ollama —
+```
+
+To settle it, name the provider. A provider you write down is never overridden,
+whatever keys are set:
+
+```js
+chat: { provider: 'ollama' }
+```
+
+### It fell through to openrouter and I have no key there
+
+The chain matched nothing, which is what an environment with no provider key
+looks like. It lands on OpenRouter's free tier because that is the one member
+whose remaining setup is a single free key — no model to choose on either half,
+no card — so the fix is one variable rather than a decision.
+
+It used to land on a local Ollama, and that is why it no longer does: from inside
+a build there is no way to tell a laptop running one from a CI box that has never
+heard of it, so most of the projects that reached the end of the chain got a
+connection refused per question with the config naming neither the service nor
+the port.
+
+Running Ollama? Say so, in either place — `OLLAMA_BASE_URL` also moves it:
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+```js
+chat: { provider: 'ollama' }
+```
+
 ### `embed: "openrouter" needs a key and none is set` — on a provider you never named
 
 Not a bug. The chat provider answers but does not retrieve — `anthropic`,
@@ -69,6 +124,21 @@ export const docPilot = {
 Then rebuild the index. A project-scoped key limited to chat models hits the same
 wall with a provider that *does* embed, and the split is the fix there too. See
 [Choosing providers](./providers).
+
+**Check whether the borrow is still necessary.** That list is a claim this
+package wrote down, and claims age — it once said OpenRouter served no embeddings
+endpoint for months after it started. `npx docpilot doctor --models` asks your
+chat provider directly, and says so when the answer has changed:
+
+```
+[docpilot] embed?    groq answers /v1/embeddings after all — nomic-embed-text-v1.5
+                     embed: {provider: 'groq'} drops the borrowed openrouter key
+```
+
+It reports rather than switches, and that is deliberate: the reverse proxy
+carrying `/ai/v1/embeddings` is written from your config at build time, so a
+build that moved itself would send every reader's query vector to the wrong
+upstream. You write the line.
 
 ### `embed.provider "…" has no embeddings endpoint`
 

@@ -40,17 +40,14 @@ Every entry point ships TypeScript declarations. The full matrix is in the docs 
 
 ## Add it
 
+Two files and one environment variable. There are no settings to write.
+
 ```js
 // docs/.vitepress/config.mjs
 import { defineConfig, loadEnv } from 'vitepress'
 import { defineDocPilot } from '@cloflin/docpilot'
 
-export const docPilot = {
-  product: 'Acme Editor',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
-}
-
-const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
+const ai = defineDocPilot({}, loadEnv('', process.cwd(), ''))
 
 export default defineConfig({
   vite: { plugins: [ai.plugin()] },
@@ -67,11 +64,35 @@ export default withDocPilot(DefaultTheme)
 ```
 
 ```bash
-npx docpilot index        # build the retrieval index from your docs
-npx docpilot calibrate    # measure the refusal thresholds against your corpus
+echo 'OPENAI_API_KEY=sk-…' >> .env.local   # or any one of fifteen — see below
+npx docpilot index                          # build the retrieval index from your docs
+npx docpilot calibrate                      # measure the refusal thresholds against your corpus
 ```
 
-The `docPilot` **named export** is the contract between the build and the CLI: both read the same object, so there is no second place to state which model embeds or where the docs live.
+**One key is the whole configuration.** `chat.provider` ships as `'auto'`, which walks an ordered list of services and stops at the first one your environment holds a key for. That service's default model comes with it, and so does its embedder — so a single key covers both the answering and the retrieval half:
+
+| | | | |
+|---|---|---|---|
+| **embeds too** | `openai` · `gemini` · `mistral` | `together` · `fireworks` · `nebius` | `openrouter` |
+| **answers only** | `anthropic` · `groq` | `deepseek` · `xai` | `cerebras` |
+| **self-hosted** *(by address)* | `custom` | `llamacpp` | `ollama` |
+
+Providers that embed come first, and that is the ordering argument rather than a ranking of answer quality: the alternative needs a *second* key and posts the text of your whole corpus to a third party at build time. The self-hosted three have no credential to be found by, so `OLLAMA_BASE_URL` and `LLAMACPP_BASE_URL` select them and say where they are.
+
+**With nothing set at all, the chain falls through to OpenRouter's free tier** — one free key, no model to choose on either half, no card. `npx docpilot doctor` prints the list and marks the member that answered.
+
+To pin a provider, pass settings — and then export them **by name**:
+
+```js
+export const docPilot = {
+  product: 'Acme Editor',
+  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+}
+
+const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
+```
+
+The `docPilot` **named export** is the contract between the build and the CLI: both read the same object, so there is no second place to state which model embeds or where the docs live. A provider you name is never overridden by the environment, and naming a provider without a model is a complete sentence — every one carries its own default.
 
 `product` is optional. It is what the assistant says it answers questions about — in the instruction, in the composer placeholder, and when a reader says hello. Left out, all three read "this documentation".
 
@@ -84,10 +105,13 @@ The site still builds. The panel switches itself off and the build prints one bl
 ```
 [docpilot] the panel is OFF — 2 things to set up:
 
-  · chat: "openai" needs a key and none is set
-      export OPENAI_API_KEY=…
+  · chat and embed: "openrouter" needs a key and none is set
+      export OPENROUTER_API_KEY=…
   · no index at docs/public/rag
       npx docpilot index
+  · chat.provider is 'auto' and no provider key was found in the environment,
+    so both halves fell through to openrouter — its free tier needs no model
+    named on either side and no card, so one free key finishes the install.
 
   The site builds and every other feature is untouched.
   Run `npx docpilot doctor` to re-check without a full build.
