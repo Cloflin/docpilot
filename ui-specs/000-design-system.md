@@ -146,8 +146,23 @@ silently fallen through to its fallback. The real name is
 
 | token | core | adapter |
 |---|---|---|
-| `--dp-font` | system sans stack | `var(--vp-font-family-base)` |
+| `--dp-font` | `inherit` — the host page's own face | `var(--vp-font-family-base)` |
 | `--dp-font-mono` | system mono stack | `var(--vp-font-family-mono)` |
+
+`--dp-font` used to be a system sans stack, which made it the one token that
+*overwrote* something the host had already decided. The panel is mounted into
+`<body>`, so `inherit` is not a fallback here — it is the panel taking the face
+the page is set in, which the navbar trigger and the article call to action had
+been doing all along. `ui.font` names one for a site the panel cannot inherit
+from, and is written onto `<html>` so it outranks an adapter's mapping.
+
+The mono token stays a real stack: a page has no monospace of its own to lend.
+
+**A nested rule may not ask for `--dp-font`.** `inherit` resolves against the
+element that uses it, so `var(--dp-font)` inside a monospaced block returns the
+monospace. The prompt disclosure therefore carries the panel's face on its
+container and marks its monospaced *blocks*, rather than the reverse with one
+declaration climbing back out.
 
 **Geometry** — no dark variants; only `--dp-top` is mapped
 

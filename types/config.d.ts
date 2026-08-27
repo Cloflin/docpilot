@@ -243,6 +243,16 @@ export interface UiSettings {
   layout?: 'overlay' | 'push'
   prefetch?: 'hover' | 'idle' | false
   firstRunHint?: boolean
+  /**
+   * The panel's face, for a site the panel cannot inherit one from. A family
+   * list — `'Inter, system-ui, sans-serif'` — or the name of the custom
+   * property the site already keeps it in — `'--brand-font'`, which is wrapped
+   * into `var(--brand-font)` for you. Unset, the panel wears the page's own
+   * font: `--dp-font` is `inherit`.
+   */
+  font?: string | false | null
+  /** The same, for the code blocks and the prompt disclosure. */
+  fontMono?: string | false | null
 }
 
 /**
@@ -264,6 +274,9 @@ export interface ResolvedUi {
   layout: 'overlay' | 'push'
   prefetch: 'hover' | 'idle' | false
   firstRunHint: boolean
+  /** A CSS value, ready to write — a family list or a `var(--…)`. */
+  font: string | null
+  fontMono: string | null
 }
 
 /**

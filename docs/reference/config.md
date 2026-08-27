@@ -58,7 +58,7 @@ export const docPilot = {
   scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
   history: { enabled: true, maxConversations: 20, exportThread: true },
   prompt: { show: false, allowAppend: false, appendMaxChars: 500, override: null, extend: '' },
-  ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false },
+  ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, font: null, fontMono: null },
   host: { base: null, ragBase: null, article: null, search: null, content: null },
   i18n: { translations: {}, locales: {} },
 }
@@ -170,6 +170,8 @@ written by hand; only the values are mechanical.
 | [`ui.layout`](#ui-layout) | `'overlay' \| 'push'` | `'overlay'` | How the panel treats the page beneath it — `'push'` pads the content aside so docs and answer sit side by side — *does nothing below 960px, where the panel is already edge to edge* |
 | [`ui.prefetch`](#ui-prefetch) | `'hover' \| 'idle' \| false` | `'hover'` | When the retrieval index is downloaded — `'idle'` pays up front, `false` waits until the panel is opened — *skipped entirely when the browser reports `saveData` or a 2G-class connection* |
 | [`ui.firstRunHint`](#ui-firstrunhint) | `boolean` | `false` | Shows one dismissible line on a first visit, naming the gesture nobody discovers: selecting a passage to ask about it — *withheld when both `quote` switches are off* |
+| [`ui.font`](#ui-font-ui-fontmono) | `string \| false \| null` | `null` | The panel's face, for a site it cannot inherit one from — a family list, or the name of the custom property your site already keeps it in — *unset the panel wears the page's own font; a value here outranks a host adapter's mapping* |
+| [`ui.fontMono`](#ui-font-ui-fontmono) | `string \| false \| null` | `null` | The same for code blocks, the reasoning trace and the prompt disclosure — *unset they keep a system monospace stack, because a page has no monospace to inherit* |
 | [`host.base`](#host-base) | `string \| null` | `null` | Path the site is served from, e.g. `/docs/` for a subdirectory install — neutral fallback `/` — *applied only at the index fetch and citation navigation — manifest paths and answer hrefs stay base-less* |
 | [`host.ragBase`](#host-ragbase) | `string \| null` | `null` | Where the built index is served from — set it when the index lives on a CDN or a separate origin — *unset resolves to `${host.base}rag`, not to nothing* |
 | [`host.article`](#host-article) | `string \| null` | `null` | Bounds the selection-to-quote offer to real documentation text — falls back to the binding's selector, then `main` |
@@ -1303,7 +1305,7 @@ privacy review leaves nothing behind.
 ## ui
 
 - **Type:** `object`
-- **Default:** `{ trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false }`
+- **Default:** `{ trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, font: null, fontMono: null }`
 - **Related:** [Appearance](/guide/appearance)
 
 Where the buttons live, what shape the panel takes, what the floating button is
@@ -1322,6 +1324,8 @@ ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true }
 | `layout` | `'overlay'` — the panel covers the page · `'push'` — the page moves aside | `'overlay'` |
 | `prefetch` | `'hover'` · `'idle'` · `false` | `'hover'` |
 | `firstRunHint` | `true` shows one dismissible line on a first visit | `false` |
+| `font` | a family list, or the name of a custom property — [see below](#ui-font-ui-fontmono) | `null` — the page's own font |
+| `fontMono` | the same, for code — `null` keeps a system monospace stack | `null` |
 
 A value outside either enum is reported on stdout during the build and falls back
 to the default; nothing throws, because a typo in a cosmetic setting must not be
@@ -1412,6 +1416,44 @@ passage offers to ask about it.
 **Off by default** — it paints something nobody asked for on a first visit. It is
 also withheld when both [`quote`](#quote) switches are off, because a hint naming
 a gesture the panel does not answer is worse than no hint.
+
+### ui.font, ui.fontMono
+
+**The panel ships no font of its own.** `--dp-font` is `inherit`, and the panel
+is mounted into `<body>`, so with nothing configured it already wears whatever
+face the page is set in — the same thing the navbar trigger and the article call
+to action have always done. On VitePress and Docusaurus the adapter maps the
+token to the host's own family, so the panel follows a theme change with the
+rest of the site.
+
+These two settings are for the site the panel cannot inherit from: a `<body>`
+that names no font, a theme that sets one on its article container alone, or a
+design system that keeps it in a variable.
+
+```js
+ui: { font: 'Inter, system-ui, sans-serif' }   // the family list itself
+ui: { font: '--brand-font' }                   // the variable you already have
+ui: { font: 'var(--brand-font, Inter)' }       // the same, fallback and all
+```
+
+A bare `--name` is wrapped into `var(--name)` for you — that wrapper is the one
+part of the value with no decision in it.
+
+`fontMono` is the same setting for the code blocks, the reasoning trace and the
+prompt disclosure. It has no `inherit` default and should not be given one: a
+page has no monospace face for the panel to borrow, so unset it keeps a system
+monospace stack.
+
+Both are written onto `<html>` as `--dp-font` and `--dp-font-mono`, which is
+**the only layer that outranks a host adapter** — a value here reaches the panel
+on VitePress and Docusaurus too, where a `:root` rule of your own in a stylesheet
+loaded before the adapter would not. A value that could end the declaration or
+open another — `;` `{` `}` `<` `>` `@` `*` `\` or `url()` — is reported on stdout
+during the build and dropped, and the panel keeps the page's font.
+
+Overriding the token in CSS instead is still supported and is the right move when
+the value depends on something only a stylesheet knows — a media query, a
+`[data-theme]`, a container. See [Appearance](/guide/appearance#the-tokens).
 
 ### ui.panel
 

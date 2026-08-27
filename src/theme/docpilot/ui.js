@@ -10,6 +10,8 @@
  *     layout:       'overlay' | 'push',         // ui-specs/009
  *     prefetch:     'hover' | 'idle' | false,   // ui-specs/009
  *     firstRunHint: true | false,               // ui-specs/009
+ *     font:         string | null,              // a family list, or `--your-var`
+ *     fontMono:     string | null,
  *   }
  *
  * `trigger` IS A LIST, and a bare word is shorthand for one. A site is allowed
@@ -123,6 +125,25 @@ export const UI_LAYOUTS = ['overlay', 'push']
  */
 export const UI_PREFETCH = ['hover', 'idle', false]
 
+/**
+ * WHAT MAY REACH `style.setProperty`, stated as what may not.
+ *
+ * The resolved value is written onto `<html>` as a custom property and is read
+ * by exactly one declaration, `font-family`. A denylist rather than an allowlist
+ * because the legitimate input is every family name in every script — `思源黑体`
+ * is a font, `--police-de-caractères` is a variable someone will write — and an
+ * allowlist of Latin letters would reject the authors this setting is for.
+ *
+ * What is refused is the punctuation that could end this declaration or open
+ * another: `;` `{` `}` `<` `>` `@` `\`, the `*` that starts a comment, a control
+ * character, and `url(` — which `font-family` cannot use and which is the one
+ * function in a value that fetches.
+ */
+const FONT_UNSAFE = /[;{}<>@*\\\u0000-\u001f]|url\s*\(/i
+
+/** A custom property NAME, which is the shorthand `var()` is grown around. */
+const CSS_VAR_NAME = /^--[A-Za-z0-9_-]+$/
+
 export const UI_DEFAULTS = {
   trigger: 'nav',
   panel: 'auto',
@@ -131,6 +152,18 @@ export const UI_DEFAULTS = {
   layout: 'overlay',
   prefetch: 'hover',
   firstRunHint: false,
+  /**
+   * `null` — and the default lives in the STYLESHEET, not here.
+   *
+   * `--dp-font` is `inherit`, so a panel nobody configured already wears the
+   * face of the page it opens on: this pair is for the site whose font the
+   * panel cannot inherit — a `<body>` that names none, a host that sets one on
+   * its article container alone, a design system that keeps it in a variable
+   * the panel has no reason to know the name of. Null means *nobody said*, and
+   * nothing is written to the document.
+   */
+  font: null,
+  fontMono: null,
 }
 
 function pick(value, allowed, fallback, key, err) {
@@ -174,6 +207,59 @@ function label(value, err) {
     value,
   )
   return true
+}
+
+/**
+ * `ui.font` / `ui.fontMono` — the site's own face, named rather than inherited.
+ *
+ * TWO SPELLINGS, because a site holds the value in one of two forms and neither
+ * is the more correct one:
+ *
+ *   'Inter, system-ui, sans-serif'   the family list itself
+ *   '--brand-font'                   the custom property it already lives in
+ *   'var(--brand-font, Inter)'       the same, written out, fallback and all
+ *
+ * A bare `--name` is WRAPPED, not rejected. `var(--brand-font)` is what it has
+ * to become before it can be written, and asking an author to type the wrapper
+ * is asking them to type the one part of it with no decision in it. Anything
+ * else is passed through as written, because a family list is not a grammar
+ * this file has any business re-deriving.
+ *
+ * Dropped with a message, never thrown, on the same terms as every other value
+ * here: this resolves during a docs build, and a typo in a cosmetic setting must
+ * not be able to fail one. The panel then wears the page's face, which is the
+ * default and a perfectly good answer.
+ *
+ * IDEMPOTENT like the rest — `var(--x)` in gives `var(--x)` out, and `null`
+ * survives a second pass — so the build may resolve it and the browser resolve
+ * that again.
+ */
+function family(value, key, err) {
+  // Absent is not wrong — it is the default, and the overwhelmingly common case.
+  // `false` is the same sentence written by an author who thinks in switches.
+  if (value == null || value === false) return null
+  if (typeof value !== 'string') {
+    err(
+      `[docpilot] ui.${key} accepts a font family list, a custom property name, or null — ` +
+        'using the page\'s own font',
+      value,
+    )
+    return null
+  }
+  const raw = value.trim()
+  // A value made of spaces is a value the author deleted without saying so —
+  // the same reading `fabLabel` gives it.
+  if (!raw) return null
+  const out = CSS_VAR_NAME.test(raw) ? `var(${raw})` : raw
+  if (FONT_UNSAFE.test(out)) {
+    err(
+      `[docpilot] ui.${key} may not contain ; { } < > @ * \\ or url() — ` +
+        'using the page\'s own font',
+      value,
+    )
+    return null
+  }
+  return out
 }
 
 /** In `UI_TRIGGERS` order, deduped — see why the order is fixed up there. */
@@ -321,5 +407,13 @@ export function resolveUi(docPilot, err = console.error) {
     // otherwise resolve silently to the default and the author would be looking
     // for a hint that never renders and never complained.
     firstRunHint: pick(ui.firstRunHint, [true, false], UI_DEFAULTS.firstRunHint, 'firstRunHint', err),
+    /**
+     * The two that do not reach a component at all — `session.configure` writes
+     * them onto `<html>` as `--dp-font` and `--dp-font-mono`. Resolved here
+     * anyway, and not in the browser, so that a bad value is reported where a
+     * build can print it rather than in a console nobody has open.
+     */
+    font: family(ui.font, 'font', err),
+    fontMono: family(ui.fontMono, 'fontMono', err),
   }
 }

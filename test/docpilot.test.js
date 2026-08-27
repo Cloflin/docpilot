@@ -2760,6 +2760,8 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      font: null,
+      fontMono: null,
     }
     // Every shape a caller can hand it: absent settings, absent `ui`, an
     // explicit null. `session.configure` sees all three, because the
@@ -2937,6 +2939,8 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      font: null,
+      fontMono: null,
     })
     expect(resolveUi({ ui: { trigger: 'fab', panel: 'drawer' } }, err)).toEqual({
       trigger: ['fab'],
@@ -2949,6 +2953,8 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      font: null,
+      fontMono: null,
     })
     expect(err.messages).toEqual([])
   })
@@ -3039,6 +3045,72 @@ describe('resolveUi — trigger placement and panel shape', () => {
           }
         }
       }
+    }
+  })
+
+  /**
+   * `ui.font` / `ui.fontMono` — the face, for a site the panel cannot inherit
+   * one from.
+   *
+   * THE DEFAULT IS NOT IN THIS RESOLVER and the null cases below are what says
+   * so: `--dp-font` is `inherit` in the stylesheet, so an unconfigured panel
+   * already wears the page's own font and nothing is written to the document.
+   */
+  it('takes a family list, and grows a var() around a bare property name', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { font: 'Inter, system-ui, sans-serif' } }, err).font).toBe(
+      'Inter, system-ui, sans-serif',
+    )
+    // The spelling a site that already keeps the value in a variable reaches
+    // for. The wrapper is the one part of it with no decision in it.
+    expect(resolveUi({ ui: { font: '--brand-font' } }, err).font).toBe('var(--brand-font)')
+    // Written out, fallback and all, and passed through untouched.
+    expect(resolveUi({ ui: { font: 'var(--brand-font, Inter)' } }, err).font).toBe(
+      'var(--brand-font, Inter)',
+    )
+    expect(resolveUi({ ui: { fontMono: '--brand-mono' } }, err).fontMono).toBe('var(--brand-mono)')
+    expect(err.messages).toEqual([])
+  })
+
+  it('reads absent, false and a blank string as the page\'s own font', () => {
+    const err = collect()
+    for (const font of [undefined, null, false, '', '   ']) {
+      expect(resolveUi({ ui: { font, fontMono: font } }, err), String(font)).toMatchObject({
+        font: null,
+        fontMono: null,
+      })
+    }
+    // None of those is a mistake, so none of them is reported.
+    expect(err.messages).toEqual([])
+  })
+
+  /**
+   * The value is written onto `<html>` with `setProperty`, so what is refused is
+   * the punctuation that could end that declaration or open another. Dropped
+   * with a message rather than thrown, like every other value here: a typo in a
+   * cosmetic setting must not be able to fail a docs build.
+   */
+  it('drops a value that could end the declaration, and says so', () => {
+    const err = collect()
+    for (const bad of [
+      'Inter; position: fixed',
+      'Inter } .docpilot { display: none',
+      'url(https://example.com/f.woff2)',
+      'Inter /* x */',
+      '@import "x"',
+      42,
+      {},
+    ]) {
+      expect(resolveUi({ ui: { font: bad } }, err).font, String(bad)).toBe(null)
+    }
+    expect(err.messages.length).toBe(7)
+    for (const m of err.messages) expect(m).toContain('ui.font')
+  })
+
+  it('is idempotent for the two faces too', () => {
+    for (const font of [undefined, '--brand-font', 'var(--x, Inter)', 'Inter, sans-serif', 'bad;x']) {
+      const once = resolveUi({ ui: { font, fontMono: font } }, () => {})
+      expect(resolveUi({ ui: once }, () => {}), String(font)).toEqual(once)
     }
   })
 })
@@ -3141,6 +3213,8 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      font: null,
+      fontMono: null,
     })
   })
 
@@ -3156,6 +3230,8 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      font: null,
+      fontMono: null,
     })
     expect(themeDocPilot(resolveDocPilot({ ui: { trigger: 'fab', fabLabel: 'Ask AI' } })).ui).toEqual({
       trigger: ['fab'],
@@ -3168,6 +3244,8 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      font: null,
+      fontMono: null,
     })
     // The combination this whole change exists for, end to end: both buttons on
     // the page, the popup chosen by the one placement with a geometric opinion.
@@ -3184,6 +3262,8 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      font: null,
+      fontMono: null,
     })
   })
 
@@ -3200,6 +3280,8 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      font: null,
+      fontMono: null,
     })
   })
 

@@ -124,8 +124,30 @@
     0 2px 8px rgba(0, 0, 0, 0.12);
   --dp-scrim: rgba(0, 0, 0, 0.6);
 
-  --dp-font:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /**
+   * ── Type — THE HOST'S FACE, NOT ONE OF OURS ─────────────────────────────────
+   *
+   * `inherit`, and that IS the value. The panel teleports to `<body>`, so with
+   * no declaration at all it would already wear the page's own font; the system
+   * stack that used to sit here was the one thing overwriting it, and a widget
+   * that arrives in a face the site never chose reads as somebody else's
+   * software parked on the page. The navbar trigger and the article call to
+   * action have always inherited — they are buttons inside the host's own
+   * chrome — so this is the panel joining them, not a new idea.
+   *
+   * A site whose font is somewhere the panel cannot inherit from names it:
+   * `ui.font` in the settings, or this token in a stylesheet of its own. Both
+   * land here, and an adapter maps it to the host framework's own family.
+   *
+   * NOTHING NESTED MAY ASK FOR IT. `inherit` resolves against the element that
+   * uses it, so `var(--dp-font)` inside a monospaced block returns the
+   * monospace. That is why the prompt panel carries the face and marks its
+   * monospaced BLOCKS instead of the other way round — see that rule below.
+   *
+   * `--dp-font-mono` stays a real stack: a page has no monospace of its own to
+   * borrow, and `inherit` there would set a code block in the body face.
+   */
+  --dp-font: inherit;
   --dp-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 
   // ── Structure ───────────────────────────────────────────────────────────────
@@ -207,7 +229,18 @@
   }
 }
 
-.docpilot {
+/**
+ * The face, on all three roots this package owns.
+ *
+ * Two of them inherited it already; the panel is the one that teleports out of
+ * the host's tree into `<body>`, and the one a configured `ui.font` has to
+ * reach. Naming all three means the trigger beside the host's search box and
+ * the call to action under its articles take that setting too — one decision
+ * rather than three.
+ */
+.docpilot,
+.docpilot-nav-trigger,
+.docpilot-cta {
   font-family: var(--dp-font);
 }
 
@@ -1223,7 +1256,6 @@
 
 .docpilot__thoughts,
 .docpilot__prompt {
-  font-family: var(--dp-font-mono);
   font-size: 13px;
   line-height: 1.6;
   color: var(--dp-text-dim);
@@ -1237,6 +1269,7 @@
   border-radius: 0;
 }
 .docpilot__thoughts {
+  font-family: var(--dp-font-mono);
   max-block-size: 240px;
 }
 .docpilot__prompt {
@@ -1248,8 +1281,21 @@
     outline-offset: 2px;
   }
 }
+/**
+ * THE PROMPT PANEL CARRIES THE FACE; ONLY ITS BLOCKS ARE MONOSPACED.
+ *
+ * It used to be the other way round — monospace on the container, one
+ * `font-family: var(--dp-font)` on the heading to climb back out of it — and
+ * that stopped being expressible the moment `--dp-font` became `inherit`: a
+ * heading inside a monospaced box that asks to inherit is handed the
+ * monospace. So the exception is written where the exception is. The headings
+ * between the blocks, and the two text buttons under them, are the panel's own
+ * face; the instruction text and the reader's editable copy of it are the code.
+ */
+.docpilot__prompt p:not(.docpilot__prompt-h):not(.docpilot__row) {
+  font-family: var(--dp-font-mono);
+}
 .docpilot__prompt-h {
-  font-family: var(--dp-font);
   font-size: 13px;
   color: var(--dp-text-dim);
   margin: 12px 0 4px;
@@ -1264,6 +1310,11 @@
   outline: none;
   resize: none;
   font: inherit;
+  // AFTER the shorthand, which resets the family along with everything else.
+  // The block this field replaces is monospaced by the rule above, and a
+  // textarea that swapped face on entering edit mode would reflow the text
+  // under the cursor.
+  font-family: var(--dp-font-mono);
   inline-size: 100%;
 
   &:focus-visible {
@@ -1273,7 +1324,7 @@
 
   // THE ONLY iOS ZOOM GUARD LEFT, and the only field that ever needed one that
   // did not have it. Both composers are 16px at every width now, so the two
-  // overrides that used to force it there are gone. This one inherits 13px mono
+  // overrides that used to force it there are gone. This one inherits 13px
   // from `.docpilot__prompt` — so it zoomed the viewport on focus, silently,
   // for as long as the prompt disclosure has existed.
   @media (max-width: #{bp.$sheet - 1px}) {
@@ -2061,7 +2112,9 @@
   // The chip fill, not the panel fill: this button sits beside the host's own
   // search box and has to match THAT, not the surface inside the panel.
   background: var(--dp-chip);
-  font-family: var(--dp-font);
+  // The face comes from the grouped rule at the top of this file, which names
+  // this selector. A second declaration of the same value here was harmless and
+  // is still a second place to change it.
   color: var(--dp-text-dim);
   cursor: pointer;
   // The old shape duration and the bare `ease` keyword used to sit on this one

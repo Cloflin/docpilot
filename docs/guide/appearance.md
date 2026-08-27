@@ -63,7 +63,8 @@ Everything the panel paints goes through one of these. The second column is what
 | `--dp-code-bg` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-code-block-bg)` | `var(--ifm-code-background)` |
 | `--dp-shadow` | two-layer black alpha | `var(--vp-shadow-3)` | `var(--ifm-global-shadow-lw)` |
 | `--dp-scrim` | `rgba(0,0,0,.6)` | `var(--vp-backdrop-bg-color)` | the same literal — Infima has no token |
-| `--dp-font`, `--dp-font-mono` | system stacks | the host's two families | the host's two families |
+| `--dp-font` | `inherit` — the page's own face | `var(--vp-font-family-base)` | `var(--ifm-font-family-base)` |
+| `--dp-font-mono` | a system monospace stack | `var(--vp-font-family-mono)` | `var(--ifm-font-family-monospace)` |
 | `--dp-top` | `0px` | `var(--vp-nav-height)` | `var(--ifm-navbar-height)` |
 
 `--dp-wash` is **derived rather than mapped**, and deliberately: substitution resolves it against whatever `--dp-text` ends up being, so it follows the host's theme — and your override of it — without a second declaration. It has no dark variant and must not be given one; the suite requires every token that darkens to be re-declared unconditionally by an adapter, and no host token expresses "7% in light, 15% in dark" as one value.
@@ -107,6 +108,48 @@ re-declares those fifteen names in your tokens' terms, loaded after the core. It
 must introduce no `--dp-*` of its own — a token that exists only in an adapter is
 a token the core cannot render without it, which is the failure the split exists
 to prevent.
+
+## The panel wears your font
+
+**It ships none of its own.** `--dp-font` is `inherit`, and the panel is mounted
+into `<body>`, so with nothing configured it is set in whatever face the page is
+— the same thing the navbar trigger and the call to action under each article
+have always done. On VitePress and Docusaurus the adapter maps the token to the
+host's own family, so a theme that changes its type changes the panel's with it.
+
+`--dp-font-mono` is a real stack and not `inherit`: a page has no monospace face
+for the panel to borrow, so the code blocks, the reasoning trace and the prompt
+disclosure keep a system one until you name another.
+
+Two ways to name one, and they are for different situations:
+
+```css
+/* CSS — when the value depends on something only a stylesheet knows:
+   a media query, a [data-theme], a container. */
+:root {
+  --dp-font: var(--my-font);
+}
+```
+
+```js
+// settings — when it is one value for the whole site. A family list, or the
+// name of the custom property you already keep it in.
+docPilot: {
+  ui: { font: '--brand-font', fontMono: 'JetBrains Mono, monospace' },
+}
+```
+
+[`ui.font`](/reference/config#ui-font-ui-fontmono) is written onto `<html>` as an
+inline custom property, which is **the only layer that outranks an adapter** — so
+it reaches the panel on VitePress and Docusaurus too, where the host's own family
+would otherwise win. A `:root` rule of your own has to be loaded after the
+adapter to beat it, which is the ordering rule the top of this page is about.
+
+**Nothing nested may ask for `--dp-font`.** `inherit` is resolved against the
+element that uses it, so `var(--dp-font)` written inside a monospaced block
+returns the monospace. The one place that used to do it — the heading between
+the prompt disclosure's blocks — is why the prompt panel now carries the face and
+marks its monospaced *blocks* instead of the other way round.
 
 ## Two shapes, two placements
 

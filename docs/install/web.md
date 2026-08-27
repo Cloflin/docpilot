@@ -158,11 +158,25 @@ tokens, override the `--dp-*` set after it:
   --dp-surface: var(--my-bg);
   --dp-text: var(--my-fg);
   --dp-line: var(--my-border);
-  --dp-font: var(--my-font);
 }
 ```
 
 The full table is on [Appearance](/guide/appearance).
+
+**The font is already yours.** `--dp-font` is `inherit` and the panel is mounted
+into `<body>`, so it is set in whatever face your page is — there is nothing to
+override for the common case. Name one only where the panel cannot inherit it:
+
+```js
+mountDocPilot({
+  config: {
+    ...window.__DOCPILOT__,
+    ui: { font: '--brand-font' },   // or 'Inter, system-ui, sans-serif'
+  },
+})
+```
+
+See [`ui.font`](/reference/config#ui-font-ui-fontmono).
 
 ## The key
 

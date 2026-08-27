@@ -110,6 +110,53 @@ describe('stylesheet split', () => {
     }
   })
 
+  /**
+   * `--dp-font` is `inherit`, which makes WHERE it is asked for load-bearing.
+   *
+   * `inherit` resolves against the element that uses it, so `var(--dp-font)`
+   * written inside a monospaced block returns the MONOSPACE — the heading
+   * between the prompt disclosure's blocks did exactly that, and is why the
+   * prompt panel now carries the face and marks its monospaced blocks instead.
+   * Nothing in a diff says a selector has moved under a monospaced ancestor, so
+   * the whole list of places that ask for the face is pinned here.
+   */
+  it('asks for the face only where inherit still means the page', () => {
+    const core = stripComments(CORE)
+    expect(core, "--dp-font is the host page's own face").toMatch(/--dp-font:\s*inherit\s*;/)
+
+    // The enclosing selector chain of every `font-family: var(--dp-font)`, by
+    // walking the braces — this file nests, so the line above a declaration is
+    // not the rule it belongs to.
+    const stack = []
+    const asked = []
+    // A selector list spans lines — `.docpilot,` / `.docpilot-nav-trigger,` /
+    // `.docpilot-cta {` is one rule, and reading only the line the brace is on
+    // would check a third of it.
+    let pending = []
+    for (const line of core.split('\n')) {
+      const text = line.trim()
+      if (text.endsWith('{')) {
+        stack.push([...pending, text.slice(0, -1).trim()].filter(Boolean).join(' '))
+        pending = []
+      } else if (text === '}') {
+        stack.pop()
+        pending = []
+      } else if (/font-family:\s*var\(--dp-font\)/.test(text)) asked.push(stack.join(' '))
+      else if (text.endsWith(',')) pending.push(text)
+      else pending = []
+    }
+
+    /**
+     * The three roots this package owns — two of which inherited the page's
+     * face already — and the one button inside a root that needs the family
+     * back after a `<button>`'s user-agent font.
+     */
+    expect(asked).toEqual([
+      '.docpilot, .docpilot-nav-trigger, .docpilot-cta',
+      '.docpilot-cta button',
+    ])
+  })
+
   it('leaves the bundle entry with nothing but @use', () => {
     const body = stripComments(ENTRY)
       .split('\n')

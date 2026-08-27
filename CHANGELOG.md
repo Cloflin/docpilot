@@ -7,6 +7,62 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## Unreleased
+
+### Changed
+
+**The panel wears your font. It no longer ships one of its own.**
+
+`--dp-font` was a system sans stack — `ui-sans-serif, system-ui, -apple-system,
+…` — which made it the one token that *overwrote* something the host had already
+decided. It is `inherit` now. The panel is mounted into `<body>`, so the stack
+was the only thing standing between it and the page's own face; the navbar
+trigger and the article call to action had been inheriting all along, and this
+is the panel joining them rather than a new idea.
+
+Nothing changes on VitePress or Docusaurus: both adapters already map the token
+to the host framework's own family. What changes is the `<script>`-tag and
+`mountDocPilot` install, where the panel now matches the site it is mounted on
+instead of arriving in a face nobody chose.
+
+`--dp-font-mono` stays a real stack. A page has no monospace for the panel to
+borrow, and `inherit` there would set a code block in the body face.
+
+**A nested rule may no longer ask for `--dp-font`.** `inherit` resolves against
+the element that uses it, so `var(--dp-font)` inside a monospaced block returns
+the monospace. One rule did exactly that — the heading between the prompt
+disclosure's blocks — so the prompt panel now carries the face and marks its
+monospaced *blocks* instead of the reverse. The two text buttons under those
+blocks were monospaced by the same inheritance and are not any more.
+`test/styles.test.js` pins the whole list of places that ask for the face.
+
+### Added
+
+**`ui.font` and `ui.fontMono`** — the face for a site the panel cannot inherit
+one from: a `<body>` that names no font, a theme that sets one on its article
+container alone, a design system that keeps it in a variable.
+
+```js
+ui: { font: 'Inter, system-ui, sans-serif' }   // the family list itself
+ui: { font: '--brand-font' }                   // the variable you already have
+ui: { font: 'var(--brand-font, Inter)' }       // the same, fallback and all
+```
+
+A bare `--name` is wrapped into `var(--name)` — that wrapper is the one part of
+the value with no decision in it.
+
+Both are written onto `<html>` as inline custom properties, which is **the only
+layer that outranks a host adapter**: `vitepress.scss` maps `--dp-font` to the
+site's own family on `:root`, so a rule of ours at the same specificity would
+lose on the host where naming a face is most likely to be the point. Overriding
+the token in CSS is unchanged and stays the right move when the value depends on
+something only a stylesheet knows — a media query, a `[data-theme]`, a container.
+
+A value that could end the declaration or open another — `;` `{` `}` `<` `>` `@`
+`*` `\` or `url()` — is reported on stdout during the build and dropped, on the
+same terms as every other cosmetic setting: a typo must not be able to fail a
+docs build.
+
 ## 0.3.3 — 2026-08-27
 
 ### Removed

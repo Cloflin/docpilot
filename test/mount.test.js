@@ -252,6 +252,70 @@ describe('the handle it returns', () => {
   })
 })
 
+/**
+ * `ui.font` — the one setting that lands on the DOCUMENT rather than on a
+ * component, and the only reason this suite needs a DOM to check it.
+ *
+ * Written as an inline custom property on `<html>` because that is the one layer
+ * above a host adapter: `vitepress.scss` maps `--dp-font` to the site's own
+ * family on `:root`, so a rule of ours at the same specificity would lose on the
+ * host where naming a face is most likely to be the point.
+ */
+describe('ui.font', () => {
+  const face = () => document.documentElement.style.getPropertyValue('--dp-font')
+  const mono = () => document.documentElement.style.getPropertyValue('--dp-font-mono')
+
+  afterEach(() => {
+    document.documentElement.style.removeProperty('--dp-font')
+    document.documentElement.style.removeProperty('--dp-font-mono')
+  })
+
+  // Nothing is written, and that is the feature: `--dp-font` is `inherit` in the
+  // stylesheet, so an unconfigured panel already wears the page's own face and
+  // an inline property here would be the one thing overriding a site's CSS.
+  it('writes nothing when nobody named a font', () => {
+    panel = mountDocPilot({ config: CONFIG })
+    expect(face()).toBe('')
+    expect(mono()).toBe('')
+  })
+
+  it('writes the family it was given', () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, font: 'Inter, sans-serif' } } })
+    expect(face()).toBe('Inter, sans-serif')
+  })
+
+  // The spelling a site that already has the value reaches for. The wrapper is
+  // the one part of it with no decision in it, so the resolver supplies it.
+  it('grows a var() around a bare custom property name', () => {
+    panel = mountDocPilot({
+      config: { ...CONFIG, ui: { ...CONFIG.ui, font: '--brand-font', fontMono: '--brand-mono' } },
+    })
+    expect(face()).toBe('var(--brand-font)')
+    expect(mono()).toBe('var(--brand-mono)')
+  })
+
+  /**
+   * REMOVED, not skipped. `configure` runs once per mounted panel and a page
+   * outlives one — an SPA route that unmounts and remounts it, a second panel,
+   * a build whose settings changed — so a face taken out of the config has to
+   * leave the document with it rather than surviving as an inline property
+   * nothing can now explain.
+   */
+  it('takes the property away again when the config no longer names one', () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, font: 'Inter, sans-serif' } } })
+    expect(face()).toBe('Inter, sans-serif')
+    session.configure({ docPilot: CONFIG })
+    expect(face()).toBe('')
+  })
+
+  it('drops a value that could end the declaration', () => {
+    panel = mountDocPilot({
+      config: { ...CONFIG, ui: { ...CONFIG.ui, font: 'Inter; position: fixed' } },
+    })
+    expect(face()).toBe('')
+  })
+})
+
 describe('the highlighter option', () => {
   it('installs nothing by default', () => {
     panel = mountDocPilot({ config: CONFIG })

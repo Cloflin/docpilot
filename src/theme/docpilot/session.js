@@ -318,6 +318,38 @@ function refreshBudget() {
   state.budgetMode = budgetPlan(snapshot, planSettings()).mode
 }
 
+/**
+ * `ui.font` and `ui.fontMono` — the two settings that reach the STYLESHEET.
+ *
+ * Written as inline custom properties on `<html>`, which is the only layer that
+ * outranks both the core and a host adapter. `vitepress.scss` and
+ * `docusaurus.scss` re-declare `--dp-font` on `:root` in the host framework's
+ * own terms, and they win over the core by loading second — so a value of ours
+ * written into a `:root` block would lose on exactly the two hosts where an
+ * author is most likely to be naming a face the host's token does not carry.
+ *
+ * REMOVED, not skipped, when nothing is set. `setConfig` runs again on a live
+ * page — the standalone handle exposes it — and a face taken out of the
+ * settings has to leave the document with it, or the panel keeps wearing a font
+ * nothing can now explain.
+ *
+ * NOTHING IS WRITTEN BY DEFAULT, which is the point of the pair being null:
+ * `--dp-font` is `inherit` in the stylesheet, so an unconfigured panel already
+ * wears the page's own face and this function leaves `<html>` untouched.
+ */
+function applyFont(ui) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (!root) return
+  for (const [key, token] of [
+    ['font', '--dp-font'],
+    ['fontMono', '--dp-font-mono'],
+  ]) {
+    if (ui?.[key]) root.style.setProperty(token, ui[key])
+    else root.style.removeProperty(token)
+  }
+}
+
 export function configure(themeConfig, path, lang) {
   const cfg = themeConfig?.docPilot || {}
   state.config = {
@@ -389,6 +421,10 @@ export function configure(themeConfig, path, lang) {
   // this morning is a line the panel can show while the composer is still empty.
   ensureBudget()
   if (typeof window !== 'undefined') {
+    // After the config is settled, and every time it is: the panel's face is a
+    // property of the document, not of a component, so it is applied here
+    // rather than left to whichever of the four mounted roots renders first.
+    applyFont(state.config.ui)
     state.debug = new URLSearchParams(location.search).has('dpdebug')
     feedback.installConsoleHelper()
   }

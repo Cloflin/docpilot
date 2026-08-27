@@ -1779,6 +1779,11 @@ export const DEFAULTS = {
      * crossed pairs are legal and are carried out in silence. `fabLabel` / `fabIcon` describe the floating
      * placement only: `true` takes the shipped words through i18n, a string
      * takes those words verbatim, `false` drops that half. See
+     * `font` / `fontMono` are the one pair here that reaches the STYLESHEET
+     * rather than a component: `session.configure` writes them onto `<html>`
+     * as `--dp-font` and `--dp-font-mono`, which is the only layer that
+     * outranks a host adapter's own mapping.
+     *
      * `src/theme/docpilot/ui.js` for the resolver and ui-specs/005 for why;
      * this is the only place the shipped set is stated.
      */
@@ -1790,6 +1795,14 @@ export const DEFAULTS = {
         layout: 'overlay',
         prefetch: 'hover',
         firstRunHint: false,
+        /**
+         * The panel wears the page's own font and ships none of its own —
+         * `--dp-font` is `inherit`. These two are for the site whose face the
+         * panel cannot inherit: a family list, or the name of the custom
+         * property the site already keeps it in. Null means nobody said.
+         */
+        font: null,
+        fontMono: null,
     },
     /**
      * The site the panel is mounted on — the four things it cannot infer.
