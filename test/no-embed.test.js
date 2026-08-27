@@ -67,7 +67,17 @@ const WITH_VECTORS = {
 
 describe('embed: false — one mode, two spellings', () => {
   it('resolves both to the same object', () => {
-    const want = { provider: null, model: null, baseURL: null, auto: false, lexicalOnly: true }
+    // `fallback` is stated even here, and null: `embed: false` is the mode
+    // itself, so there is nothing for a fallback to fall back FROM — and the key
+    // has to survive the JSON round trip the test below asserts.
+    const want = {
+      provider: null,
+      model: null,
+      baseURL: null,
+      auto: false,
+      lexicalOnly: true,
+      fallback: null,
+    }
     expect(resolveEmbed(cfg({ embed: false }))).toEqual(want)
     expect(resolveEmbed(cfg({ embed: 'none' }))).toEqual(want)
   })
@@ -927,11 +937,24 @@ describe('the build — what a lexical-only index writes', () => {
     expect(src).toContain('if (!DRY && !NO_EMBED && !EMBED_URL)')
   })
 
+  /**
+   * `vectorless`, not `NO_EMBED` — and the difference is the whole of
+   * `embed.fallback`.
+   *
+   * `NO_EMBED` is what the build was TOLD: `embed: false`, or `--no-embed`.
+   * Since the fallback landed there is a second way to arrive here — an embedder
+   * was configured, refused, and the config said a vectorless index was
+   * preferred to no index — and the three writes below must read the mode the
+   * build ARRIVED AT. A manifest that named an embedder the build never reached
+   * is a manifest the browser believes.
+   */
   it('names no blob, writes none, and records the mode in the manifest', () => {
-    expect(src).toContain('const vecName = NO_EMBED ? null : `vectors.${hash}.bin`')
+    expect(src).toContain('const vecName = vectorless ? null : `vectors.${hash}.bin`')
     expect(src).toContain('if (vecName) fs.writeFileSync(path.join(OUT, vecName)')
-    expect(src).toContain('embedModel: NO_EMBED ? null : EMBED_MODEL,')
+    expect(src).toContain('embedModel: vectorless ? null : EMBED_MODEL,')
     expect(src).toContain('vectors: vecName,')
+    // The declared mode still seeds it, so `embed: false` never embeds at all.
+    expect(src).toContain('let vectorless = NO_EMBED')
   })
 
   // A build log that merely omits the quantisation error and the vector file
@@ -1056,5 +1079,170 @@ describe('embed: false — the panel may say so under the composer', () => {
     expect(shipped).toContain(
       "noEmbedder: 'No embedding model — search matches words only.',",
     )
+  })
+})
+
+/**
+ * `embed.fallback: 'lexical'` — a vectorless index PREFERRED TO NO INDEX.
+ *
+ * Without it `npx docpilot index` dies when the embedder will not answer, and
+ * that stays the default: an index quietly missing its vectors is a site whose
+ * retrieval got materially worse with nothing said. The fallback is the author
+ * answering that question in advance, and everything below exists to make sure
+ * it is answered ONCE — in the config — rather than arriving as a surprise.
+ *
+ * It is the same mode `embed: false` already ships. That is the whole argument
+ * for it: no second vector space, nothing new for the browser to reach, and the
+ * ~1000 lines above already cover what a vectorless index does.
+ */
+describe("embed.fallback: 'lexical' — when the embedder will not answer", () => {
+  const src = readFileSync(
+    new URL('../src/build/build-rag-index.js', import.meta.url),
+    'utf8',
+  )
+
+  /**
+   * The key describes WHAT TO DO, not WHICH embedder — so it must not decide
+   * which arm of the resolver runs. Left in the object it would take the
+   * explicit-split arm and produce a provider of `undefined`, which
+   * `assertProviders` then reports as a broken config for a key used correctly.
+   */
+  it('is lifted out of the arm dispatch, so it can ride on `auto`', () => {
+    const auto = resolveEmbed(cfg({}))
+    const withFb = resolveEmbed(cfg({ embed: { fallback: 'lexical' } }))
+    expect(withFb.provider).toBe(auto.provider)
+    expect(withFb.model).toBe(auto.model)
+    expect(withFb.fallback).toBe('lexical')
+    expect(auto.fallback).toBe(null)
+  })
+
+  it('rides on an explicit split too, without disturbing it', () => {
+    const plain = resolveEmbed(cfg({ embed: { provider: 'openrouter' } }))
+    const withFb = resolveEmbed(cfg({ embed: { provider: 'openrouter', fallback: 'lexical' } }))
+    expect(withFb).toEqual({ ...plain, fallback: 'lexical' })
+  })
+
+  // A borrowed embedder is still an embedder that can refuse.
+  it('rides on the borrowed pool a chat-only provider falls back to', () => {
+    const e = resolveEmbed(cfg({ chat: { provider: 'anthropic' }, embed: { fallback: 'lexical' } }))
+    expect(e.borrowed).toBe('anthropic')
+    expect(e.fallback).toBe('lexical')
+  })
+
+  it('accepts only the one word, and states the key on every arm', () => {
+    for (const embed of [undefined, false, 'none', 'auto', { provider: 'ollama' }]) {
+      const e = resolveEmbed(cfg(embed === undefined ? {} : { embed }))
+      expect(Object.hasOwn(e, 'fallback'), JSON.stringify(embed)).toBe(true)
+      expect(e.fallback).toBe(null)
+    }
+    // Anything else is not the fallback, and does not silently become one.
+    expect(resolveEmbed(cfg({ embed: { fallback: 'ollama' } })).fallback).toBe(null)
+    expect(resolveEmbed(cfg({ embed: { fallback: true } })).fallback).toBe(null)
+  })
+
+  /**
+   * ONE EXIT. `createEmbedder` was built with a single `fail` — no model and no
+   * pool, every pool member refusing the probe, the chosen model dying mid-pass
+   * with nothing left to restart on — so the fallback needs exactly one place to
+   * live, and the sentinel is how it leaves a function whose contract says
+   * `fail` never returns.
+   */
+  it('takes over at the indexer’s single point of failure', () => {
+    expect(src).toContain('class LexicalFallback extends Error {}')
+    expect(src).toContain('if (!EMBED_FALLBACK_LEXICAL) die(m)')
+    expect(src).toContain('throw new LexicalFallback(m)')
+    expect(src).toContain('if (!(e instanceof LexicalFallback)) throw e')
+    // Only ours is swallowed; a real failure still belongs to the caller.
+    expect(src).toContain('    return null')
+  })
+
+  // The size of what was given up, at the moment it is given up. A build log
+  // that merely stopped mentioning vectors would be indistinguishable from one
+  // where embedding was skipped by accident.
+  it('says on the build log what it cost', () => {
+    expect(src).toContain('FELL BACK')
+    expect(src).toContain('recall@8 0.97 → 0.41')
+    expect(src).toContain('WITHOUT VECTORS')
+  })
+
+  /**
+   * The deployment is running the mode it declared for this case, so this is a
+   * NOTE — and it carries the measurement, because nothing about the site
+   * changed to cause it.
+   */
+  it('is a note, not a missing, when the config declared it', () => {
+    const dir = indexDir(VECTORLESS)
+    const settings = resolveDocPilot({
+      chat: { provider: 'ollama' },
+      embed: { provider: 'ollama', model: 'bge-m3', fallback: 'lexical' },
+      indexDir: dir,
+    })
+    const r = readiness(settings, {})
+    expect(r.ok).toBe(true)
+    expect(r.missing).toEqual([])
+    expect(r.notes.join(' ')).toContain('WITHOUT VECTORS')
+    expect(r.notes.join(' ')).toContain('recall@8 0.97 → 0.41')
+  })
+
+  // Undeclared, it is exactly as fatal as it was: a site paying for semantic
+  // retrieval and getting BM25 is the failure this branch was written for.
+  it('stays fatal when the config declared nothing', () => {
+    const dir = indexDir(VECTORLESS)
+    const settings = resolveDocPilot({
+      chat: { provider: 'ollama' },
+      embed: { provider: 'ollama', model: 'bge-m3' },
+      indexDir: dir,
+    })
+    const r = readiness(settings, {})
+    expect(r.ok).toBe(false)
+    expect(r.missing.map((m) => m.what).join(' ')).toContain('without vectors')
+    // And the message now offers the fallback as one of the ways out.
+    expect(r.missing.map((m) => m.fix).join(' ')).toContain("fallback: 'lexical'")
+  })
+
+  /**
+   * THE INDEX GETS A VOTE. Without this the browser embeds every question and
+   * the retriever drops the vector on the floor — a request per turn for a
+   * channel that cannot score — and the panel never tells the reader why the
+   * answers got worse.
+   */
+  it('makes the browser stop embedding into an index with nothing to score', () => {
+    const dir = indexDir(VECTORLESS)
+    const client = themeDocPilot(
+      resolveDocPilot({
+        chat: { provider: 'ollama' },
+        embed: { provider: 'ollama', model: 'bge-m3', fallback: 'lexical' },
+        indexDir: dir,
+      }),
+    )
+    expect(client.embed).toEqual({ provider: null, baseURL: null, model: null, lexicalOnly: true })
+  })
+
+  // A statement about the INDEX, not the config — so an index WITH vectors is
+  // untouched however the fallback is set.
+  it('leaves a normal index alone', () => {
+    const dir = indexDir({ ...VECTORLESS, embedModel: 'bge-m3', dims: 1024, vectors: 'vectors.h.bin' })
+    const client = themeDocPilot(
+      resolveDocPilot({
+        chat: { provider: 'ollama' },
+        embed: { provider: 'ollama', model: 'bge-m3', fallback: 'lexical' },
+        indexDir: dir,
+      }),
+    )
+    expect(client.embed.lexicalOnly).toBe(false)
+    expect(client.embed.model).toBe('bge-m3')
+  })
+
+  // No index on disk is UNKNOWN, not vectorless. A project that has not run the
+  // indexer yet must emit exactly what it emitted before this feature existed.
+  it('treats a missing index as unknown rather than vectorless', () => {
+    const client = themeDocPilot(
+      resolveDocPilot({
+        chat: { provider: 'ollama' },
+        embed: { provider: 'ollama', model: 'bge-m3', fallback: 'lexical' },
+        indexDir: path.join(tmpdir(), 'docpilot-no-such-index-dir'),
+      }),
+    )
+    expect(client.embed.lexicalOnly).toBe(false)
   })
 })

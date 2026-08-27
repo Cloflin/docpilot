@@ -7,6 +7,43 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## Unreleased
+
+### Added
+
+**`embed: { fallback: 'lexical' }` — a vectorless index preferred to no index.**
+`npx docpilot index` dies when the embedder will not answer, and that stays the
+default: an index quietly missing its vectors is a site whose retrieval got
+materially worse with nothing said. Declaring the fallback says what to do
+instead — build without vectors, which is the mode [`embed: false`](https://docpilot-nine.vercel.app/reference/config#embed-false)
+already ships, reached by refusal rather than by declaration.
+
+```js
+embed: { fallback: 'lexical' }                          // 'auto', plus a fallback
+embed: { provider: 'openrouter', fallback: 'lexical' }  // an explicit split, plus one
+```
+
+It rides on any arm of `embed`, including the automatic one and the pool a
+chat-only provider borrows: the key says what to do, not which embedder, so it is
+lifted out before the resolver picks an arm.
+
+The build shouts what it cost, `readiness` reports it as a **note** rather than a
+failure, and the browser follows the index rather than the config — a vectorless
+index emits `lexicalOnly: true` to the client, so no request is spent embedding a
+question there is nothing to score, and the panel's own *No embedding model —
+search matches words only* line tells the reader why the answers changed.
+
+**Read the numbers before setting it:** recall@8 0.97 → 0.41, retrieval F1
+0.35 → 0.18, 11 of 44 answerable questions refused, and zero retrieval for a
+question asked in a language the corpus is not written in. A regression that size
+arriving because somebody else's free tier was busy has to be a decision.
+
+**A second embedder as the fallback is deliberately not offered.** The index and
+every query must land in one vector space, so a second embedder is a second index
+— and its address would have to reach every reader's browser. A local Ollama
+solves the build and breaks the site. `'lexical'` needs no address, because there
+is nothing left to call.
+
 ## 0.3.1 — 2026-08-27
 
 ### Added

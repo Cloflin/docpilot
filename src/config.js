@@ -279,7 +279,35 @@ export const noEmbed = (docPilot) => docPilot.embed === false || docPilot.embed 
  * Reproduce with `npx docpilot eval --gate-only --lexical`.
  */
 export function resolveEmbed(docPilot) {
-    const e = docPilot.embed
+    const raw = docPilot.embed
+
+    /**
+     * `fallback` is lifted out BEFORE the arms, and that is what makes
+     * `embed: {fallback: 'lexical'}` mean "the automatic embedder, with a
+     * fallback" rather than an object with no provider in it.
+     *
+     * It is not a statement about WHICH embedder — it is what to do when that
+     * one refuses — so it must not decide which arm runs. Left in place it would
+     * take the object arm below and return a provider of `undefined`, which
+     * `assertProviders` then reports as a broken config for a key the author
+     * used correctly.
+     *
+     * The only accepted value is `'lexical'`. A second EMBEDDER as a fallback is
+     * deliberately not offered: the index and every query must land in one
+     * vector space, so a second embedder is a second index, and the address of
+     * it would have to reach every reader's browser. `'lexical'` needs no
+     * address, because there is nothing left to call.
+     */
+    const fallback = raw && typeof raw === 'object' && raw.fallback === 'lexical' ? 'lexical' : null
+    let e = raw
+    if (raw && typeof raw === 'object' && 'fallback' in raw) {
+        const rest = {...raw}
+        delete rest.fallback
+        // An object that was ONLY a fallback is the automatic embedder plus a
+        // fallback, so it falls through to the resolution below rather than
+        // describing an embedder nobody named.
+        e = Object.keys(rest).length ? rest : 'auto'
+    }
 
     // Every key stated and every absent one an EXPLICIT null, for the reason
     // written out on the object arm below: this value is JSON round-tripped into
@@ -288,7 +316,7 @@ export function resolveEmbed(docPilot) {
     // other layer reads; `manifest.vectors === null` is the index's half of the
     // same statement.
     if (noEmbed(docPilot)) {
-        return {provider: null, model: null, baseURL: null, auto: false, lexicalOnly: true}
+        return {provider: null, model: null, baseURL: null, auto: false, lexicalOnly: true, fallback: null}
     }
 
     if (e && typeof e === 'object') {
@@ -302,7 +330,7 @@ export function resolveEmbed(docPilot) {
         // manifest on every turn, and runs lexical-only for the life of the
         // deployment with nothing failing anywhere. An explicit `null` survives
         // the round trip; `undefined` does not.
-        return {...e, model: isAutoModel(e.model) ? null : e.model}
+        return {...e, model: isAutoModel(e.model) ? null : e.model, fallback}
     }
 
     const id = docPilot.chat.provider
@@ -341,6 +369,10 @@ export function resolveEmbed(docPilot) {
             baseURL: PROVIDERS[EMBED_FALLBACK].directBase,
             auto: true,
             borrowed: id,
+            // NOT `EMBED_FALLBACK`, which is the provider borrowed a few lines
+            // up when the chat half cannot embed. This is the author's answer to
+            // "and if that one refuses too".
+            fallback,
         }
     }
 
@@ -364,6 +396,7 @@ export function resolveEmbed(docPilot) {
         // a different server than the one that answers against it.
         baseURL: docPilot.chat.baseURL || LOCAL_BASE_URL,
         auto: true,
+        fallback,
     }
 }
 
@@ -580,7 +613,17 @@ export function themeDocPilot(docPilot, env = {}) {
         // embed the question at all, and an omitted key is an undefined one that
         // JSON.stringify deletes on the way into themeConfig — leaving the
         // browser to read the absence as "not chosen" only by luck.
-        embed: embedCfg.lexicalOnly
+        //
+        // THE INDEX GETS A VOTE, and it is the second half of `embed.fallback`.
+        // A vectorless index under a named embedder means the fallback fired;
+        // without this the browser would spend a request embedding every
+        // question and the retriever would then drop the vector on the floor,
+        // paying per turn for a channel that cannot score. It also lights the
+        // panel's own "no embedding model" line, which is the reader's only
+        // signal that this is not the retrieval the site usually gives.
+        // `indexInfo` returns null with no index on disk, so nothing here
+        // changes for a build that has not run the indexer yet.
+        embed: embedCfg.lexicalOnly || lexicalIndex(docPilot)
             ? {provider: null, baseURL: null, model: null, lexicalOnly: true}
             : {
                   provider: embed.provider,
@@ -823,6 +866,23 @@ function indexInfo(docPilot) {
     } catch {
         return null
     }
+}
+
+/**
+ * Does the index on disk have a vector space at all?
+ *
+ * A statement about the INDEX, deliberately, and not about the config — which is
+ * why it does not consult `embed.fallback`. Whatever the settings say, a
+ * vectorless index is one the browser cannot score a query against, so embedding
+ * the question spends a request to produce a number that is then dropped. The
+ * `=== null` is strict for the reason `indexInfo` gives above: a manifest with
+ * no `vectors` key at all is a broken manifest, not a declared mode.
+ *
+ * `null` — no index yet — is not vectorless. It is unknown, and the build that
+ * has never run the indexer must emit exactly what it emitted before.
+ */
+function lexicalIndex(docPilot) {
+    return indexInfo(docPilot)?.vectors === null
 }
 
 /**
@@ -1696,13 +1756,37 @@ export function readiness(docPilot, env = {}) {
          * a working mode: nothing errors, the answers are merely worse than the
          * ones being paid for.
          */
-        missing.push({
-            what:
-                `the index at ${indexDirOf(docPilot)} was built without vectors, but ` +
-                `embed names "${embed.provider}" — every question would be embedded and ` +
-                'nothing would be scored against it',
-            fix: 'npx docpilot index   (or set `embed: false` to declare lexical-only retrieval)',
-        })
+        /**
+         * UNLESS THE SITE SAID WHAT TO DO ABOUT IT. `embed.fallback: 'lexical'`
+         * is the author answering this question in advance: an embedder was
+         * configured, it refused, and a vectorless index was preferred to no
+         * index. That is a note — the deployment is running exactly the mode it
+         * declared for this case — and it carries the size of what was given up,
+         * because the reason it happened was somebody else's free tier being
+         * busy and nothing about this site changed to cause it.
+         */
+        if (embed.fallback === 'lexical') {
+            notes.push(
+                `the index at ${indexDirOf(docPilot)} was built WITHOUT VECTORS — the embedder ` +
+                    `"${embed.provider}" refused and \`embed.fallback: 'lexical'\` took over. ` +
+                    'Retrieval is BM25 over the chunk text alone. Measured once, on a ' +
+                    '1191-chunk corpus: recall@8 0.97 → 0.41, retrieval F1 0.35 → 0.18, and ' +
+                    '11 of 44 answerable questions refused outright. A question asked in a ' +
+                    'language the corpus is not written in scores zero. Rebuild with ' +
+                    '`npx docpilot index` once the embedder is answering again.',
+            )
+        } else {
+            missing.push({
+                what:
+                    `the index at ${indexDirOf(docPilot)} was built without vectors, but ` +
+                    `embed names "${embed.provider}" — every question would be embedded and ` +
+                    'nothing would be scored against it',
+                fix:
+                    'npx docpilot index   (or set `embed: false` to declare lexical-only ' +
+                    "retrieval, or `embed: {fallback: 'lexical'}` to allow it when the " +
+                    'embedder refuses)',
+            })
+        }
     } else if (embed.model && idx.embedModel !== embed.model) {
         // Not fatal to the build, but fatal to retrieval: a query scored
         // against a foreign vector space is not a worse answer, it is no

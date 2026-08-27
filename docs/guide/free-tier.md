@@ -122,3 +122,41 @@ failed, and a service that told you exactly when to come back has not failed.
 Nothing is refused pre-emptively off the local count. A count that says zero can
 be wrong in the direction that costs a reader an answer the service would have
 given, so DocPilot asks and lets the service decide.
+
+## When the BUILD runs out
+
+Everything above is about the reader's question. The other half of the free tier
+is `npx docpilot index`, and it is the half that surprises people: the embedding
+pool draws on the same daily allowance, so a day spent answering questions is a
+day the index cannot be rebuilt.
+
+The pool is two models deep. When both refuse, the build says so and stops:
+
+```
+  warn  nvidia/nemotron-3-embed-1b:free is not answering (HTTP 429); trying the next free embedder
+  FAIL  no free embedder answered. Tried 2:
+```
+
+**Stopping is the default and it is deliberate.** You still have the index you
+had, and the site keeps working exactly as it did. What you do not get is a
+half-built one, or a vectorless one nobody chose.
+
+Three ways out, in the order they cost you something:
+
+- **Wait.** The allowance is a UTC day, and the service tells you when it resets:
+  the `429` carries `X-RateLimit-Reset`. Indexing a 300-chunk corpus is about ten
+  requests of the next fifty.
+- **Raise the ceiling.** Ten credits on OpenRouter take the daily limit from 50
+  to 1000 requests. Set [`budget.dailyLimit`](/reference/config#budget-dailylimit)
+  to `1000` afterwards so the rationing rules know.
+- **Declare a fallback.** [`embed.fallback: 'lexical'`](/reference/config#embed-fallback)
+  builds a vectorless index instead of dying — BM25 over the chunk text, the same
+  mode [`embed: false`](/reference/config#embed-false) declares. Read the cost
+  first: recall@8 0.97 → 0.41. It is the right answer when a stale index is worse
+  than a weaker one — a corpus that changed materially, and a deploy that has to
+  go out today — and the wrong one as a standing setting you forget about.
+
+Naming a **second embedder** as the fallback is not offered, and the reason is
+worth knowing: the index and every query have to land in one vector space, so a
+second embedder is a second index — and its address would have to reach every
+reader's browser. A local Ollama solves the build and breaks the site.

@@ -23,7 +23,7 @@ import { parseAllowlist, checkSource } from './lib/sources.js'
 import { providerFor } from '../theme/docpilot/providers.js'
 import { routeOf } from '../theme/docpilot/route.js'
 import { LEVER_NAMES } from '../theme/docpilot/retriever.js'
-import { nodeEmbedTarget, noEmbed } from '../config.js'
+import { nodeEmbedTarget, noEmbed, resolveEmbed } from '../config.js'
 import {
   settings as docPilot,
   ROOT,
@@ -57,6 +57,23 @@ const DRY = process.argv.includes('--dry')
  * instead of a second copy here that drifts from it.
  */
 const NO_EMBED = process.argv.includes('--no-embed') || noEmbed(docPilot)
+
+/**
+ * `embed.fallback: 'lexical'` — what to do when the embedder will not answer.
+ *
+ * WITHOUT IT this build dies and there is no index, which is the right default:
+ * an index quietly missing its vectors is a site whose retrieval got materially
+ * worse with nothing said. With it, a refusal produces the mode this package
+ * already ships and tests — `embed: false`, BM25 over the chunk text — instead
+ * of nothing at all.
+ *
+ * It is OPT-IN for the reason the numbers below say. Measured on this corpus:
+ * recall@8 0.97 → 0.41, retrieval F1 0.35 → 0.18, 11 of 44 answerable questions
+ * refused outright, and zero retrieval for a question asked in a language the
+ * corpus is not written in. A regression that size must be a decision, never a
+ * consequence of somebody else's free tier being busy.
+ */
+const EMBED_FALLBACK_LEXICAL = resolveEmbed(docPilot).fallback === 'lexical'
 /**
  * The embedder is declared ONCE, as `docPilot.embed` in docs/.vitepress/config.mjs,
  * and read here rather than restated: the index and the runtime must agree, and
@@ -341,12 +358,39 @@ export function createEmbedder({
   return { all, choose, chosen: () => chosen }
 }
 
+/**
+ * Thrown by `fail` when the fallback is what happens next, and caught two lines
+ * below. A sentinel rather than a return value because `createEmbedder`'s
+ * contract for `fail` is "throws or exits; it never returns", and every one of
+ * its call sites is written on that promise.
+ */
+class LexicalFallback extends Error {}
+
 async function embedAll(texts) {
   const run = createEmbedder({
     model: EMBED_MODEL,
     pool: EMBED_POOL,
     batch: embedBatchWithWaits,
-    fail: (m) => die(m),
+    /**
+     * THE ONE PLACE THE FALLBACK LIVES. Every way the embedding half can give up
+     * — no model named and no pool, every pool member refusing the probe, the
+     * chosen model dying mid-pass with nothing left to restart on — arrives
+     * here, because `createEmbedder` was built with exactly one exit.
+     */
+    fail: (m) => {
+      if (!EMBED_FALLBACK_LEXICAL) die(m)
+      process.stdout.write('\n')
+      console.log(
+        `\n  FELL BACK  no embedder answered, and embed.fallback is "lexical".\n` +
+          `             ${m.split('\n')[0]}\n` +
+          `             This index ships WITHOUT VECTORS: retrieval is BM25 over the\n` +
+          `             chunk text alone. Measured on a 1191-chunk corpus, that is\n` +
+          `             recall@8 0.97 → 0.41 and 11 of 44 answerable questions refused,\n` +
+          `             and a question asked in another language than the corpus scores\n` +
+          `             zero. Rebuild when the embedder is answering again.\n`,
+      )
+      throw new LexicalFallback(m)
+    },
     onChoose: (model, dims, size) =>
       console.log(`  embedder  ${model} · ${dims}d — chosen from ${size} free model(s)`),
     onSkip: (model, why) => warn(`${model} is not answering (${why}); trying the next free embedder`),
@@ -359,7 +403,14 @@ async function embedAll(texts) {
     },
     onProgress: (done, total) => process.stdout.write(`\r  embedding ${done}/${total}`),
   })
-  const out = await run.all(texts)
+  let out
+  try {
+    out = await run.all(texts)
+  } catch (e) {
+    // Only ours. Anything else is a real failure and belongs to the caller.
+    if (!(e instanceof LexicalFallback)) throw e
+    return null
+  }
   // The manifest, the guard and the nomic prefix all read this, and until now it
   // was a guess made in the config file rather than the answer the pool gave.
   EMBED_MODEL = out.model
@@ -958,19 +1009,35 @@ async function main() {
    */
   let dims = 0
   let flat = null
-  if (NO_EMBED) {
-    console.log('  retrieval        lexical-only (BM25) — no embedder, no vectors')
-  } else {
+  /**
+   * THE MODE THIS BUILD ARRIVED AT, which is not always the mode it was told.
+   *
+   * `NO_EMBED` is the declaration — `embed: false`, or `--no-embed`. This is
+   * that, plus the case where an embedder was configured, refused, and
+   * `embed.fallback: 'lexical'` said what to do about it. Everything written
+   * below reads THIS: a manifest that named an embedder it never reached would
+   * be a manifest the browser believes.
+   */
+  let vectorless = NO_EMBED
+  if (!NO_EMBED) {
     const vectors = await embedAll(chunks.map((c) => c.text))
-    if (vectors.length !== chunks.length) die('embedding count does not match chunk count')
+    // `null`, not an empty array: the fallback fired and there is nothing to
+    // check the length of. `embedAll` has already said so, loudly.
+    if (vectors === null) vectorless = true
+    else if (vectors.length !== chunks.length) die('embedding count does not match chunk count')
+    else {
 
-    const qErr = quantisationError(vectors)
-    console.log(`  quantisation err ${qErr.toFixed(5)} mean |Δcos|`)
-    if (qErr > 0.01) die(`int8 quantisation error ${qErr.toFixed(4)} exceeds 0.01`)
+      const qErr = quantisationError(vectors)
+      console.log(`  quantisation err ${qErr.toFixed(5)} mean |Δcos|`)
+      if (qErr > 0.01) die(`int8 quantisation error ${qErr.toFixed(4)} exceeds 0.01`)
 
-    dims = vectors[0].length
-    flat = new Int8Array(dims * vectors.length)
-    vectors.forEach((v, i) => flat.set(toInt8(v), i * dims))
+      dims = vectors[0].length
+      flat = new Int8Array(dims * vectors.length)
+      vectors.forEach((v, i) => flat.set(toInt8(v), i * dims))
+    }
+  }
+  if (vectorless) {
+    console.log('  retrieval        lexical-only (BM25) — no embedder, no vectors')
   }
 
   // ── write ──────────────────────────────────────────────────────────────────
@@ -989,14 +1056,14 @@ async function main() {
     fs.writeFileSync(path.join(OUT, name), JSON.stringify(chunks.slice(i, i + SHARD_SIZE)))
     shards.push(name)
   }
-  const vecName = NO_EMBED ? null : `vectors.${hash}.bin`
+  const vecName = vectorless ? null : `vectors.${hash}.bin`
   if (vecName) fs.writeFileSync(path.join(OUT, vecName), Buffer.from(flat.buffer))
   fs.writeFileSync(path.join(OUT, `df.${hash}.json`), JSON.stringify({ n: chunks.length, df: dfTop }))
 
   const manifest = {
     version: 3,
     hash,
-    embedModel: NO_EMBED ? null : EMBED_MODEL,
+    embedModel: vectorless ? null : EMBED_MODEL,
     dims,
     chunkCount: chunks.length,
     shards,

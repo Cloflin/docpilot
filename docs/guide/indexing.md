@@ -8,7 +8,7 @@ npx docpilot index --no-embed   # a real index with no vectors in it
 
 Output goes to `docs/public/rag/` — a manifest, sharded chunk text, a quantised vector blob, and a document-frequency table. The browser fetches these on first use.
 
-`--no-embed` writes the same set minus the vector blob, for a site that retrieves lexically by declaration. It is the one-off form of [`embed: false`](/reference/config#embed-false), which is what a deployment sets — the flag on its own leaves the config naming an embedder the index does not have, and `readiness` refuses that pairing outright. Read what the mode costs before choosing it.
+`--no-embed` writes the same set minus the vector blob, for a site that retrieves lexically by declaration. It is the one-off form of [`embed: false`](/reference/config#embed-false), which is what a deployment sets — the flag on its own leaves the config naming an embedder the index does not have, and `readiness` refuses that pairing unless the config also declared [`embed.fallback: 'lexical'`](/reference/config#embed-fallback). Read what the mode costs before choosing it.
 
 **Idempotent by construction.** Identical input produces byte-identical output: no timestamp appears in any artefact and the version is a content hash. Commit the result, or build it in CI — either way it diffs cleanly and a rebuild that changes nothing changes nothing.
 

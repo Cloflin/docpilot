@@ -75,6 +75,26 @@ export interface EmbedSettings {
    */
   model?: string
   baseURL?: string
+  /**
+   * What to do when the embedder above will not answer.
+   *
+   * Absent, `npx docpilot index` dies and there is no index — the right default,
+   * because an index quietly missing its vectors is a site whose retrieval got
+   * materially worse with nothing said. `'lexical'` prefers a vectorless index
+   * to no index: BM25 over the chunk text alone, the same mode `embed: false`
+   * declares, with `readiness` reporting it as a note rather than a failure.
+   *
+   * Opt-in, and the reason is the measurement: recall@8 0.97 → 0.41, and a
+   * question asked in a language the corpus is not written in scores zero.
+   *
+   * A second EMBEDDER is deliberately not offered. The index and every query
+   * must land in one vector space, so a second embedder is a second index — and
+   * its address would have to reach every reader's browser.
+   *
+   * It describes what to do, not which embedder, so it rides on the automatic
+   * one too: `embed: { fallback: 'lexical' }` is `'auto'` plus a fallback.
+   */
+  fallback?: 'lexical'
 }
 
 /**

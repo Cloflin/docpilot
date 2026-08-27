@@ -507,7 +507,58 @@ under a named embedder is a **failure**: the deployment would embed every
 question and have nothing to score it against, so `readiness` refuses it and the
 build emits `{enabled: false}` — the panel is not rendered at all. That is the
 one to know about if you reach for `--no-embed` on its own: the flag alone
-switches the panel off until the config says `embed: false` too.
+switches the panel off until the config says `embed: false` too, or declares
+[`embed.fallback: 'lexical'`](#embed-fallback).
+
+### embed.fallback
+
+- **Type:** `'lexical'`
+- **Default:** absent — the build dies when the embedder will not answer
+
+What to do when the embedder you named refuses. It rides on any of the arms
+above, including the automatic one:
+
+```js
+embed: { fallback: 'lexical' }                          // 'auto', plus a fallback
+embed: { provider: 'openrouter', fallback: 'lexical' }  // an explicit split, plus one
+```
+
+**Absent is the right default.** `npx docpilot index` dies, loudly, and you still
+have the index you had. An index quietly missing its vectors is a site whose
+retrieval got materially worse with nothing said, and the build is the only
+moment anyone is looking.
+
+`'lexical'` prefers a vectorless index to no index. It is not a new mode — it is
+[`embed: false`](#embed-false), reached by refusal rather than by declaration —
+so everything that mode already does applies: no vector blob, BM25 over the chunk
+text, and the panel's own *No embedding model — search matches words only* line
+under the composer, which is how the reader learns this is not the retrieval the
+site usually gives. `readiness` reports it as a **note** rather than a failure,
+because the deployment is running exactly the mode it declared for this case.
+
+The build says what it cost, at the moment it costs it:
+
+```
+  FELL BACK  no embedder answered, and embed.fallback is "lexical".
+             This index ships WITHOUT VECTORS: retrieval is BM25 over the
+             chunk text alone.
+```
+
+**Read the numbers before you set it.** Measured on a 1191-chunk corpus:
+recall@8 0.97 → 0.41, retrieval F1 0.35 → 0.18, 11 of 44 answerable questions
+refused outright, and a question asked in a language the corpus is not written in
+scores zero. Reproduce with `npx docpilot eval --gate-only --lexical`. A
+regression that size arriving because somebody else's free tier was busy has to
+be a decision, which is why this is opt-in and why the build shouts.
+
+Rebuild when the embedder is answering again; nothing about the fallback is
+sticky.
+
+**A second embedder is deliberately not offered here.** The index and every query
+must land in one vector space — see [why it does not rotate](#embed) — so a
+second embedder is a second index, and its address would have to reach every
+reader's browser. `'lexical'` needs no address, because there is nothing left to
+call.
 
 ## topK
 
