@@ -292,26 +292,90 @@ describe('publish metadata', () => {
   })
 
   /**
-   * `vitepress` and `vue` are OPTIONAL peers.
+   * NO PEER DEPENDENCIES AT ALL, and that is the conclusion three releases of
+   * evidence argued for.
    *
-   * Eight of the ten peers already were; these two were not, and they are the
-   * two that told every non-VitePress consumer it needed VitePress. `/web`,
-   * `/react` and `/docusaurus` all resolve `dist/docpilot.web.mjs`, which has
-   * Vue compiled into it — so a Docusaurus site installing this package was
-   * warned about, and on strict installers blocked by, two dependencies it must
-   * not have. The widened `vitepress` range is asserted for the other half of
-   * the same defect: the package pinned a peer its own devDependencies did not
-   * satisfy, which is ERESOLVE on any host that runs `npm install`.
+   * Every peer this package ever declared was `optional: true`, which means npm
+   * never installs one. So the block had exactly one mechanical effect: it
+   * REFUSED TO INSTALL when a consumer already carried a version outside the
+   * range it happened to state. Three of eleven ranges did that or came within
+   * one release of it —
+   *
+   *   · `vitepress: '^1.6.4'` pinned a peer this repo's own devDependencies did
+   *     not satisfy — ERESOLVE on any host running `npm install` (fixed 0.3.1)
+   *   · `@scalar/openapi-parser: '^0.22.0'` was a guessed number against a
+   *     package at 0.28, and `^0.x` matches ONE minor — so 0.3.2 could not be
+   *     installed beside a current `@scalar/api-reference` at all
+   *   · `linkedom: '^0.18.0'` was the same defect waiting on linkedom 0.19
+   *
+   * — for a block that installed nothing and warned nobody who was not already
+   * about to hit a runtime error. The guidance it was supposed to carry lives
+   * where people actually meet the requirement: `docpilot import` and the
+   * OpenAPI chunker name their install command in the thrown message, and the
+   * highlighters are reached through an explicit subpath documented in
+   * `/reference/highlighting`.
+   *
+   * What is lost is real and small: a consumer on a FUTURE major — Vue 4, React
+   * 20, Prism 2 — now meets a runtime error rather than an install warning. What
+   * is gained is that this package cannot make somebody else's `npm install`
+   * fail, which it has now done once for real.
    */
-  it('marks vitepress and vue optional', () => {
-    for (const name of ['vitepress', 'vue']) {
-      expect(pubPkg.peerDependencies?.[name], `${name} is not a peer at all`).toBeTruthy()
-      expect(pubPkg.peerDependenciesMeta?.[name]?.optional, `${name} is not optional`).toBe(true)
+  it('declares no peer dependencies', () => {
+    expect(pubPkg.peerDependencies, 'peerDependencies is back').toBeUndefined()
+    expect(pubPkg.peerDependenciesMeta, 'peerDependenciesMeta is back').toBeUndefined()
+  })
+
+  /**
+   * The runtime half of the same decision: with no peer block, a module that is
+   * missing has to say so ITSELF. These two are build-time and are the ones a
+   * consumer meets by accident — an OpenAPI file appears in `public/`, or
+   * somebody runs `docpilot import` — so each names its install command in the
+   * error it throws rather than failing on an unresolved import three frames up.
+   */
+  it('names the install command where an optional module is actually needed', () => {
+    const cases = [
+      ['src/build/lib/openapi-chunker.js', '@scalar/openapi-parser'],
+      ['src/build/import.js', 'linkedom'],
+    ]
+    for (const [file, mod] of cases) {
+      const src = fs.readFileSync(abs(file), 'utf8')
+      expect(src, `${file} does not import ${mod} lazily`).toContain(`await import('${mod}')`)
+      expect(src, `${file} does not name an install command for ${mod}`).toMatch(
+        new RegExp(`npm i[^\\n]*${mod.replace('/', '\\/')}`),
+      )
     }
-    const dev = pubPkg.devDependencies?.vitepress || ''
-    const peer = pubPkg.peerDependencies?.vitepress || ''
-    // Not a semver solve — just the assertion that the alpha line this repo
-    // develops against appears in the range it publishes.
-    if (/^\^?2\.0\.0-alpha/.test(dev)) expect(peer, 'the peer range excludes the devDependency').toMatch(/2\.0\.0-alpha/)
+  })
+
+  /**
+   * NO CARET ON A `0.x` PEER, and this rule was written by a released defect.
+   *
+   * `^1.29.0` admits everything up to 2.0. `^0.22.0` admits `0.22.x` and nothing
+   * else — npm treats every `0.x` minor as its own major line — so a caret there
+   * is not a floor, it is a pin on one minor of somebody else's release train.
+   * For an OPTIONAL peer that is worse than useless: the package does not
+   * install it, cannot use it unless the consumer has it, and yet refuses to
+   * install *at all* beside a newer copy the consumer already has.
+   *
+   * 0.3.2 shipped `@scalar/openapi-parser: '^0.22.0'` — a number nobody checked,
+   * against a package that was at 0.28 — and became uninstallable in any project
+   * carrying a current `@scalar/api-reference`:
+   *
+   *     npm error ERESOLVE could not resolve
+   *       peerOptional @scalar/openapi-parser@"^0.22.0" from @cloflin/docpilot@0.3.2
+   *       Found: @scalar/openapi-parser@0.28.16
+   *
+   * `linkedom: '^0.18.0'` was the same defect one release from firing: linkedom
+   * is at 0.18.13 today and 0.19 would have done it again.
+   *
+   * The rule this pins is a FLOOR, not a version: state the oldest release the
+   * code was verified against and let the consumer bring anything newer. That is
+   * what `>=2` on the four `@shikijs/*` peers already says, for the reason 0.3.1
+   * recorded when it widened them.
+   */
+  it('states a floor rather than a pin, if a peer block ever returns', () => {
+    const pinned = Object.entries(pubPkg.peerDependencies || {})
+      .filter(([, range]) => /^\^\s*0\./.test(range))
+      .map(([name, range]) => `${name}: "${range}" — use ">=0.x" instead`)
+    expect(pinned, 'a caret on a 0.x peer pins one minor of somebody else\'s releases').toEqual([])
   })
 })

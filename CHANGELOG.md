@@ -7,6 +7,49 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 0.3.3 — 2026-08-27
+
+### Removed
+
+**`peerDependencies` is gone — all eleven of them.**
+
+Every one was `optional: true`, which means npm never installed any of them. So
+the block had exactly one mechanical effect: it **refused to install** when a
+consumer already carried a version outside the range it happened to state. Three
+of eleven ranges did that, or came within one release of it:
+
+- `vitepress: '^1.6.4'` pinned a peer this repo's own devDependencies did not
+  satisfy — ERESOLVE on any host running `npm install`. Fixed in 0.3.1.
+- `@scalar/openapi-parser: '^0.22.0'` — a number nobody checked, against a
+  package that was at 0.28. `^0.x` matches ONE minor, so 0.3.2 could not be
+  installed at all beside a current `@scalar/api-reference`:
+
+  ```
+  npm error ERESOLVE could not resolve
+  npm error   peerOptional @scalar/openapi-parser@"^0.22.0" from @cloflin/docpilot@0.3.2
+  npm error   Found: @scalar/openapi-parser@0.28.16
+  ```
+
+- `linkedom: '^0.18.0'` was the same defect waiting on linkedom 0.19.
+
+A block that installs nothing, warns nobody who is not already about to hit a
+runtime error, and has broken a real install once is not carrying its weight. The
+guidance it was meant to hold lives where people actually meet the requirement:
+`docpilot import` and the OpenAPI chunker each name their install command in the
+error they throw, and the highlighters are reached through an explicit subpath
+documented in [Syntax highlighting](https://docpilot-nine.vercel.app/reference/highlighting).
+
+**What this costs, stated plainly:** a consumer on a future major — Vue 4, React
+20, Prism 2 — now meets a runtime error rather than an install-time warning.
+What it buys is that this package can no longer make somebody else's
+`npm install` fail. Two tests in `packaging.test.js` hold the line: one asserts
+the block stays absent, one asserts that the two build-time modules still name
+their install command in the error they throw.
+
+**Nothing else changed.** 0.3.2's provider chain, embedder discovery and
+`doctor --models` probe ship unaltered; this release exists because that peer
+range made 0.3.2 uninstallable beside a current `@scalar/api-reference`.
+
 ## 0.3.2 — 2026-08-27
 
 ### Migration

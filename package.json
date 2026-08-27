@@ -1,6 +1,6 @@
 {
   "name": "@cloflin/docpilot",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "A grounded Ask AI panel for any page of any website — VitePress, Docusaurus, Vue, React, or a plain script tag. Hybrid search runs in the browser against a static index you build; a calibrated gate refuses before the model is called.",
   "keywords": [
@@ -148,54 +148,6 @@
   "dependencies": {
     "markdown-it": "^15.0.0",
     "minisearch": "^7.2.0"
-  },
-  "peerDependencies": {
-    "@shikijs/core": ">=2",
-    "@shikijs/engine-javascript": ">=2",
-    "@shikijs/langs": ">=2",
-    "@shikijs/themes": ">=2",
-    "highlight.js": "^11.0.0",
-    "linkedom": "^0.18.0",
-    "@scalar/openapi-parser": "^0.22.0",
-    "prismjs": "^1.29.0",
-    "vitepress": ">=1.2 || >=2.0.0-alpha.16",
-    "vue": "^3.5.41",
-    "react": "^18.0.0 || ^19.0.0"
-  },
-  "peerDependenciesMeta": {
-    "linkedom": {
-      "optional": true
-    },
-    "@scalar/openapi-parser": {
-      "optional": true
-    },
-    "@shikijs/core": {
-      "optional": true
-    },
-    "@shikijs/engine-javascript": {
-      "optional": true
-    },
-    "@shikijs/langs": {
-      "optional": true
-    },
-    "@shikijs/themes": {
-      "optional": true
-    },
-    "prismjs": {
-      "optional": true
-    },
-    "highlight.js": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    },
-    "vitepress": {
-      "optional": true
-    },
-    "vue": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

@@ -41,7 +41,9 @@ is a shape the panel is designed around rather than a broken state.
 
 ## What each one needs
 
-Every highlighter is an **optional peer dependency**. Install the one you chose.
+Every highlighter is **yours to install** — this package declares no peer
+dependencies at all, so nothing is pulled in for you and nothing this package
+says can conflict with a version you already have. Install the one you chose.
 
 ::: code-group
 
@@ -95,8 +97,9 @@ npm hoists 4.4.3 to the root for the panel and leaves VitePress's own 2.5.0 unde
 its pages at build time in Node, the panel highlights answers in the browser, and
 the two never share a module graph.
 
-**What not to do is `overrides` — or yarn's `resolutions`.** A scoped override on
-an *optional peer* installs nothing. It rewrites the range that edge asks for, the
+**What not to do is `overrides` — or yarn's `resolutions`.** An override installs
+nothing; it rewrites the range some existing edge asks for. Here the only edge
+naming Shiki is VitePress's own, so an override retargets *that*, the
 already-hoisted copy then fails to satisfy the rewritten range, and every `npm i`
 and `npm ls` ends the same way:
 

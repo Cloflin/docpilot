@@ -42,7 +42,9 @@ export async function chunkOpenapi(yamlText, name) {
   } catch {
     throw new Error(
       `[docpilot] found an OpenAPI file (${name}) but @scalar/openapi-parser is not installed.\n` +
-        '  npm i -D @scalar/openapi-parser   — or remove the YAML from your public/ directory.',
+        '  npm i -D @scalar/openapi-parser   — or remove the YAML from your public/ directory.\n' +
+        '  Any version from 0.18 up: this file uses `dereference(yaml) → {schema}` and\n' +
+        '  nothing else, and that contract is unchanged across 0.18, 0.22 and 0.28.',
     )
   }
   const { schema } = await dereference(yamlText)
