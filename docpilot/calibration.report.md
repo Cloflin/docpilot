@@ -1,11 +1,11 @@
-# Gate calibration — `ab3c2e14`
+# Gate calibration — `6d0e6a78`
 
 Produced by `npx docpilot calibrate` (RAG-SPEC 5.6). Embed endpoint only — no chat model,
 no LLM judge, no unseeded randomness. Same corpus + same probes ⇒ same output.
 
 | | |
 |---|---|
-| index | `ab3c2e14`, 460 chunks, bge-m3 |
+| index | `6d0e6a78`, 460 chunks, bge-m3 |
 | probes | 597 from `docpilot/calibration.jsonl` |
 | **tau** | **0.63** |
 | **tauLexical** | **0.51** |
@@ -106,7 +106,7 @@ The separability question, before any threshold is chosen.
 | U | 0.644 | 1.000 | 1.000 |
 | S | 0.596 | 0.948 | 1.000 |
 | F | 0.719 | 0.958 | 1.000 |
-| N1 | 0.343 | 0.710 | 0.950 |
+| N1 | 0.343 | 0.726 | 0.950 |
 | N2 | 0.519 | 0.804 | 0.938 |
 | N3 | 0.329 | 0.571 | 0.730 |
 | N4 | 0.000 | 0.326 | 0.719 |

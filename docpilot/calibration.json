@@ -2,7 +2,7 @@
   "ok": true,
   "fails": [],
   "version": 1,
-  "calibratedAt": "ab3c2e14",
+  "calibratedAt": "6d0e6a78",
   "embedModel": "bge-m3",
   "vocabHash": null,
   "lexicalOnly": false,
@@ -44,7 +44,7 @@
     "cosFloor": 0.3,
     "cosCeil": 0.6,
     "source": "calibrated-reduced",
-    "calibratedAt": "ab3c2e14",
+    "calibratedAt": "6d0e6a78",
     "zexp": [
       {
         "n": 7,
@@ -4179,7 +4179,7 @@
     {
       "tau": 0.57,
       "feasible": true,
-      "gatePrecision": 0.425,
+      "gatePrecision": 0.42916666666666664,
       "blatantRefusalRate": 0.9333333333333333,
       "byStratum": {
         "U": {
@@ -4198,9 +4198,9 @@
           "ub95": 0.043149126509472266
         },
         "N1": {
-          "failures": 27,
+          "failures": 26,
           "n": 30,
-          "ub95": 0.9593240177879228
+          "ub95": 0.9387041763385039
         },
         "N2": {
           "failures": 26,
@@ -5061,7 +5061,7 @@
     {
       "tau": 0.71,
       "feasible": false,
-      "gatePrecision": 0.6375,
+      "gatePrecision": 0.6333333333333333,
       "blatantRefusalRate": 0.9666666666666667,
       "byStratum": {
         "U": {
@@ -5080,9 +5080,9 @@
           "ub95": 0.043149126509472266
         },
         "N1": {
-          "failures": 15,
+          "failures": 16,
           "n": 30,
-          "ub95": 0.6438128877767635
+          "ub95": 0.6740951567234802
         },
         "N2": {
           "failures": 23,
@@ -5124,7 +5124,7 @@
     {
       "tau": 0.72,
       "feasible": false,
-      "gatePrecision": 0.6625,
+      "gatePrecision": 0.6583333333333333,
       "blatantRefusalRate": 1,
       "byStratum": {
         "U": {
@@ -5143,9 +5143,9 @@
           "ub95": 0.07131726111016963
         },
         "N1": {
-          "failures": 14,
+          "failures": 15,
           "n": 30,
-          "ub95": 0.6129437291743314
+          "ub95": 0.6438128877767635
         },
         "N2": {
           "failures": 22,
@@ -5250,7 +5250,7 @@
     {
       "tau": 0.74,
       "feasible": false,
-      "gatePrecision": 0.6958333333333333,
+      "gatePrecision": 0.7,
       "blatantRefusalRate": 1,
       "byStratum": {
         "U": {
@@ -5269,9 +5269,9 @@
           "ub95": 0.0958468229450464
         },
         "N1": {
-          "failures": 13,
+          "failures": 12,
           "n": 30,
-          "ub95": 0.5814840587275169
+          "ub95": 0.5494227825648215
         },
         "N2": {
           "failures": 19,
@@ -5880,7 +5880,7 @@
     {
       "tau": 0.84,
       "feasible": false,
-      "gatePrecision": 0.8208333333333333,
+      "gatePrecision": 0.825,
       "blatantRefusalRate": 1,
       "byStratum": {
         "U": {
@@ -5934,9 +5934,9 @@
           "ub95": 0.082728586762768
         },
         "P": {
-          "failures": 10,
+          "failures": 9,
           "n": 30,
-          "ub95": 0.4834087820900749
+          "ub95": 0.44938684043908833
         }
       }
     },

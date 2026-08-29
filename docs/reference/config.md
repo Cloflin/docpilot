@@ -1940,7 +1940,7 @@ default changes it rather than preserving it.
 | `false` | abandoned on close | nothing — the pre-0.4 behaviour, refusal included |
 
 `'notify'` ships because the panel's own position is that
-[the docs stay readable beside the answer](/concepts/the-panel), and a reader who
+[the docs stay readable beside the answer](/guide/panel), and a reader who
 closed the panel was reading something. A panel that reopens itself over that page
 is the one behaviour this package has always declined to have; `'open'` is for a
 site that has decided otherwise, and it is a single word away.
