@@ -60,4 +60,6 @@ Three question–answer pairs travel verbatim; earlier questions collapse into o
 
 The summary line is built from prior **questions only**, never from answer text. A memory slot the model authors itself, outliving the window, is a multi-turn injection channel the gate cannot see.
 
+The gate keeps the same rule one step earlier. Its [composed channel](/concepts/the-gate#follow-ups) composes the follow-up against the last question that was **answered**, not the last one that was asked — a refused turn is a question this corpus retrieved nothing for, and putting it in front of the follow-up anchors the one channel that could have recovered the turn to a known dead end. That is the same turn the window above drops, measured for the same reason.
+
 Truncation to 300 characters is why a reader can **quote**. Select a passage in an answer and it is attached to the next question as its own field — labelled as quoted text rather than as an instruction, and carried with that question one turn later, clamped shorter. Without it, a question about the fourth paragraph of a long answer arrives with that paragraph nowhere in context.

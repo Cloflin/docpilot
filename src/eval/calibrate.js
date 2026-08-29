@@ -212,10 +212,14 @@ function levers(manifest) {
   return resolveLevers(manifest?.tuning)
 }
 
-// Bump when a row gains a field the sweep READS. A cache line written before
-// the bump is missing that field, and `regate` would hand it back unswept —
-// a silent half-swept run is worse than a re-embed that costs a cent.
-const RAW_SCHEMA = 2 // 2: per-channel z/L for the window sweep
+// Bump when a row gains a field the sweep READS, or when one it reads CHANGES
+// MEANING. A cache line written before the bump is missing that field, and
+// `regate` would hand it back unswept — a silent half-swept run is worse than a
+// re-embed that costs a cent. Schema 3 is the second case: `admissible` stopped
+// being "a tail term appears in the evidence" and became that OR "the tail is
+// not written in this corpus's script", so every cached follow-up row scores
+// the composed channel under a rule the retriever no longer runs.
+const RAW_SCHEMA = 3 // 3: `admissible` abstains on a foreign tail; 2: per-channel z/L for the window sweep
 
 /**
  * The cache key for one probe's raw measurement.
@@ -410,6 +414,11 @@ async function probeOne({ rec, index, guard, ladderPages }) {
     mode: hybrid.mode,
     channel: hybrid.channel,
     admissible: hybrid.admissible,
+    // Not read by the sweep — `regate` needs the boolean and nothing else. It is
+    // recorded because a stratum that moves between two calibrations should say
+    // whether the composed channel was admitted on a term match or on a script
+    // abstention, which the boolean alone cannot.
+    admissibleBy: hybrid.admissibleBy,
     unscopedG: hybrid.unscopedG,
     G_lex: lexical.G,
     channel_lex: lexical.channel,
@@ -477,6 +486,7 @@ async function probeLexicalOnly({ rec, retrieval, scope }) {
     mode: lexical.mode,
     channel: lexical.channel,
     admissible: lexical.admissible,
+    admissibleBy: lexical.admissibleBy,
     unscopedG: null,
     G_lex: lexical.G,
     channel_lex: lexical.channel,

@@ -15,7 +15,7 @@ import {
 } from '../src/config.js'
 import { assembleIndex, loadIndex, __setIndex } from '../src/theme/docpilot/store.js'
 import { setVocabulary } from '../src/theme/docpilot/text.js'
-import { enforces } from '../src/theme/docpilot/gate.js'
+import { enforces, foreignTail } from '../src/theme/docpilot/gate.js'
 import { createRetrieval } from '../src/theme/docpilot/retriever.js'
 import { aggregate } from '../src/feedback/aggregate.js'
 import { resolveEmbed as resolveClientEmbed } from '../src/theme/docpilot/switches.js'
@@ -397,7 +397,7 @@ describe('retrieval over an index with no vector space', () => {
    * second search the first's chunks.
    */
   let fixtureCount = 0
-  const makeIndex = () => {
+  const makeIndex = (df = {}) => {
     const chunks = ROWS()
     return assembleIndex({
       manifest: {
@@ -412,7 +412,7 @@ describe('retrieval over an index with no vector space', () => {
       },
       shards: [chunks],
       vectorBuffer: null,
-      dfDoc: { df: {} },
+      dfDoc: { df },
     })
   }
 
@@ -513,6 +513,38 @@ describe('retrieval over an index with no vector space', () => {
     expect(r.evaluate({ ...asked, queryVec: STRAY, composedVec: STRAY }).admissible).not.toBe(null)
     // Genuinely absent stays absent: no second query was offered, so none ran.
     expect(r.evaluate({ ...asked, queryVec: STRAY }).admissible).toBe(null)
+  })
+
+  /**
+   * The abstention for a tail in another script does NOT travel to this mode,
+   * and the reason is arithmetic rather than caution.
+   *
+   * What replaces the term veto everywhere else is the dense floor: `wLexical <
+   * tau` is asserted at init, so a composed channel that gets past an
+   * abstention still has to carry dense evidence of its own. Here G is L and
+   * there is no second channel behind it, so abstaining would hand a foreign
+   * tail the antecedent's coverage with nothing at all standing behind it. The
+   * remedy on this deployment shape is `vocabulary`, which makes the reader's
+   * terms corpus terms and the veto measurable again.
+   *
+   * The first assertion is the control: the predicate WOULD fire on this
+   * corpus, so what stops it below is the mode and not the fixture.
+   */
+  it('keeps the term veto for a foreign tail, having no dense floor to replace it', () => {
+    const df = { alpha: 2, widget: 3, configured: 1, manifest: 1, token: 2, beta: 1, gizmo: 1 }
+    expect(foreignTail('а я могу его стилизировать?', df)).toBe(true)
+
+    const r = createRetrieval({ index: makeIndex(df), scope: ALL, guard: GUARD })
+    const g = r.evaluate({
+      question: 'а я могу его стилизировать?',
+      previousQuestion: 'how is the alpha widget configured?',
+      queryVec: STRAY,
+      composedVec: STRAY,
+    })
+    expect(g.mode).toBe('lexical-only')
+    expect(g.admissible).toBe(false)
+    expect(g.admissibleBy).toBe(null)
+    expect(g.channel).toBe('raw')
   })
 
   it('offers the closest pages for a refusal, by either entry point', () => {

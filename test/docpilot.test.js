@@ -17,6 +17,7 @@ import {
   assertWeights,
   composeQuery,
   admissible,
+  foreignTail,
 } from '../src/theme/docpilot/gate.js'
 import { chat, detectTools, parseFallback, splitOpenThink, splitThink, streamingAnswerText } from '../src/theme/docpilot/llm.js'
 import { providerFor } from '../src/theme/docpilot/providers.js'
@@ -565,6 +566,89 @@ describe('gate', () => {
     // A topic change wearing a quote: none of them is, so the composed channel
     // is inadmissible and the turn is judged on the raw one, where it refuses.
     expect(admissible('what is the weather in paris', evidence)).toBe(false)
+  })
+
+  /**
+   * ── the tail the term test cannot measure — RAG-SPEC 3.4.5
+   *
+   * `admissible` asks whether a term of the tail is in the evidence. Over a
+   * corpus in another script the answer is no for every question a reader in
+   * that language could ask, on topic or off, so the veto stops measuring topic
+   * and starts measuring alphabet. `foreignTail` is the test for that, and the
+   * cases below are the boundary: it must fire for the follow-up and NOT for
+   * either documented topic switch, which are the veto's reason to exist.
+   */
+  it('separates a tail in another script from a tail that changed the subject', () => {
+    const evidence = 'the widget style is set with tokens the theme declares'
+    const df = { widget: 30, style: 12, token: 40, theme: 20, declare: 8 }
+
+    // The reported follow-up. The term test refuses it and cannot do otherwise:
+    // no Russian term appears in English prose, whatever it asked about.
+    expect(admissible('а я могу его стилизировать?', evidence)).toBe(false)
+    expect(foreignTail('а я могу его стилизировать?', df)).toBe(true)
+
+    // The two documented topic switches are written in the corpus's own script.
+    // The veto keeps them, which is the property this must not trade away.
+    expect(foreignTail('what is the weather in paris', df)).toBe(false)
+    expect(foreignTail('and for AWS S3 buckets?', df)).toBe(false)
+
+    // One corpus term is enough to make the term test measurable again — the
+    // same question, asked with the word the docs use.
+    expect(foreignTail('а могу я поменять style?', df)).toBe(false)
+
+    // Nothing to judge: no tail, no letters, no corpus profile.
+    expect(foreignTail('', df)).toBe(false)
+    expect(foreignTail('42 / 7', df)).toBe(false)
+    expect(foreignTail('а я могу его стилизировать?', null)).toBe(false)
+    expect(foreignTail('а я могу его стилизировать?', {})).toBe(false)
+  })
+
+  /**
+   * WHY A MASS SHARE AND NOT A CHARACTER SET.
+   *
+   * Five words of a Russian UI sample on one i18n page put twenty Cyrillic
+   * letters into this package's own shipped vocabulary — measured, not
+   * supposed. A predicate that asked "does the corpus use this letter" would
+   * call a wholly Russian question native on the strength of them and refuse
+   * it, which is the reported bug restored by the fix meant to remove it.
+   *
+   * The second half is the same five words in a corpus that IS written in that
+   * language, where the term test works and the veto is owed its say. What
+   * separates the two is the share of the vocabulary, which is why that is what
+   * gets measured.
+   */
+  const withSamples = (types) => {
+    const df = { привет: 1, спросите: 1, документацию: 1, помочь: 1, спрашивайте: 1 }
+    for (let i = 0; i < 400; i++) df[`${types}${i}`] = 1
+    return df
+  }
+
+  it('is not fooled by a handful of foreign sample words in a corpus of thousands', () => {
+    expect(foreignTail('а я могу его стилизировать?', withSamples('configuration'))).toBe(true)
+    expect(foreignTail('а я могу его стилизировать?', withSamples('конфигурация'))).toBe(false)
+  })
+})
+
+describe('the antecedent of a follow-up', () => {
+  const turn = (question, answerText = '') => ({ question, answerText })
+
+  /**
+   * A refused turn is dropped from the model's history and was never dropped
+   * from the gate's. Composing against it embeds the reader's dead end into the
+   * one channel that could have recovered the follow-up.
+   */
+  it('composes against the last question that was answered', () => {
+    expect(session.priorAntecedent([turn('q1', 'a1'), turn('q2'), turn('q3')])).toBe('q1')
+    expect(session.priorAntecedent([turn('q1', 'a1'), turn('q2', '   '), turn('q3')])).toBe('q1')
+  })
+
+  /**
+   * The shipped behaviour where there is nothing better — including search-only,
+   * which never sets `answerText` on any turn at all.
+   */
+  it('falls back to the previous question when nothing has answered', () => {
+    expect(session.priorAntecedent([turn('q1'), turn('q2'), turn('q3')])).toBe('q2')
+    expect(session.priorAntecedent([turn('q1')])).toBe(null)
   })
 })
 
@@ -6246,7 +6330,7 @@ describe('createRetrieval', () => {
    * exactly why the omission has to be spelled out rather than noticed.
    */
   let fixtureCount = 0
-  const makeIndex = (rows, guard = GUARD) => {
+  const makeIndex = (rows, guard = GUARD, df = {}) => {
     const hash = `test-${++fixtureCount}`
     const vectors = new Int8Array(rows.length * DIMS)
     rows.forEach((r, i) => vectors.set(r.vec, i * DIMS))
@@ -6265,7 +6349,7 @@ describe('createRetrieval', () => {
       },
       shards: [chunks],
       vectorBuffer: vectors.buffer,
-      dfDoc: { df: {} },
+      dfDoc: { df },
     })
   }
 
@@ -6454,6 +6538,90 @@ describe('createRetrieval', () => {
     const miss = r.evaluate({ question: 'quarterly hiring headcount', queryVec: axis(3) })
     expect(miss.pass).toBe(false)
     expect(miss.G).toBeLessThan(GUARD.tau)
+  })
+
+  /**
+   * ── the follow-up asked in another language — RAG-SPEC 3.4.5
+   *
+   * The reported failure end to end: turn one is answered, turn two says "and
+   * can I style it?" in Russian, and the pronoun makes the raw question
+   * retrieve nothing. The composed channel is what resolves it, and the term
+   * veto used to discard the composed channel for every question in this
+   * language — so the reader was told the docs do not cover styling by a gate
+   * that had the styling chunk in hand.
+   */
+  const ENGLISH_DF = { alpha: 2, widget: 3, configured: 1, manifest: 1, token: 2, beta: 1 }
+
+  it('admits the composed channel when the tail is in another script', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS(), GUARD, ENGLISH_DF),
+      scope: ALL,
+      guard: GUARD,
+    })
+    // The pronoun on its own lands on no axis and overlaps no term.
+    const alone = r.evaluate({ question: 'а я могу его стилизировать?', queryVec: axis(3) })
+    expect(alone.pass).toBe(false)
+
+    const withPrevious = r.evaluate({
+      question: 'а я могу его стилизировать?',
+      previousQuestion: 'для чего нужен этот виджет?',
+      queryVec: axis(3),
+      composedVec: axis(0),
+    })
+    expect(withPrevious.channel).toBe('composed')
+    expect(withPrevious.admissible).toBe(true)
+    expect(withPrevious.admissibleBy).toBe('foreign-tail')
+    expect(withPrevious.pass).toBe(true)
+    // The chunk the model is primed with is the composed channel's, not the
+    // raw channel's — abstaining decides what the model reads, not only whether
+    // it is called.
+    expect(withPrevious.chunks[0].id).toBe('a#one')
+  })
+
+  /**
+   * ABSTAINING IS NOT PASSING, and these two are the whole safety argument.
+   *
+   * The first: the same foreign tail with nothing behind it. Admissibility no
+   * longer stands in the way and the turn still refuses, because the dense
+   * floor is what replaced it.
+   *
+   * The second: a topic switch in the corpus's own script, with the antecedent's
+   * evidence sitting right there to inherit. The veto is measurable there, so it
+   * applies, and the composed channel is dropped however high it scores.
+   */
+  it('refuses a foreign tail the composed channel cannot support either', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS(), GUARD, ENGLISH_DF),
+      scope: ALL,
+      guard: GUARD,
+    })
+    const g = r.evaluate({
+      question: 'а где купить пиццу?',
+      previousQuestion: 'для чего нужен этот виджет?',
+      queryVec: axis(3),
+      composedVec: axis(3),
+    })
+    expect(g.admissible).toBe(true)
+    expect(g.channel).toBe('raw')
+    expect(g.pass).toBe(false)
+  })
+
+  it('still vetoes a topic switch written in the corpus’s own script', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS(), GUARD, ENGLISH_DF),
+      scope: ALL,
+      guard: GUARD,
+    })
+    const g = r.evaluate({
+      question: 'what is the weather in paris',
+      previousQuestion: 'how is the alpha widget configured?',
+      queryVec: axis(3),
+      composedVec: axis(0),
+    })
+    expect(g.admissible).toBe(false)
+    expect(g.admissibleBy).toBe(null)
+    expect(g.channel).toBe('raw')
+    expect(g.pass).toBe(false)
   })
 
   it('an empty corpus refuses instead of throwing', () => {

@@ -1203,6 +1203,34 @@ function makeTurn(question, frozen, quote = '') {
 }
 
 /**
+ * The question the composed channel composes against — the last one that was
+ * ANSWERED, not the last one that was asked.
+ *
+ * A refused turn is invisible to the model (`buildMessages` drops history turns
+ * that produced no answer, for a measured reason) and was visible to the gate
+ * anyway, which is the asymmetry this closes. The question of a turn that
+ * refused is a question this corpus demonstrably retrieved nothing for; putting
+ * it in front of the follow-up embeds the reader's dead end into the composed
+ * query and anchors the one channel that could have recovered the turn to the
+ * one question known not to work. Two refusals in a row made the third
+ * unanswerable that way, and the reader who rephrases after a refusal is
+ * exactly the reader this channel exists for.
+ *
+ * `answerText` is the same field the prompt's history filter tests and it is
+ * persisted, so a restored thread composes against the same question as the
+ * live one did. Falling back to the immediately previous question keeps the
+ * shipped behaviour for a thread where nothing has answered yet — including
+ * search-only, which never sets `answerText` at all.
+ */
+export function priorAntecedent(turns) {
+  const prior = turns.slice(0, -1)
+  for (let i = prior.length - 1; i >= 0; i--) {
+    if (prior[i].answerText && prior[i].answerText.trim()) return prior[i].question
+  }
+  return prior.length ? prior[prior.length - 1].question : null
+}
+
+/**
  * One turn. The gate runs FIRST and can end it before any model call — on a
  * refusal buildMessages() is never invoked and no token is ever sent.
  *
@@ -1462,7 +1490,7 @@ export async function submit(question, { quote = '' } = {}) {
      * can only raise G through a channel `admissible()` still polices against the
      * reader's OWN words, and G is a maximum, so refusals can only decrease.
      */
-    const previous = state.turns.length > 1 ? state.turns[state.turns.length - 2].question : null
+    const previous = priorAntecedent(state.turns)
     const antecedent = selected || previous
     /**
      * `null` is not `undefined` here, and `evaluate()` reads the difference:
@@ -1584,6 +1612,29 @@ export async function submit(question, { quote = '' } = {}) {
         closestAreOutside: cause === 'out-of-scope',
       }
       turn.gate = g
+      /**
+       * WHICH refusal this is, on the one path that leaves no other trace.
+       *
+       * Both refusals reach the reader as the same sentence, and they are
+       * opposite bugs: this one never called the model and the one after
+       * validation spent the whole turn's budget. That one already prints
+       * `low-confidence or untraceable`; without the line below, a report of
+       * "it says it can't find something the docs cover" cannot be told apart
+       * from a console the reader has already screenshotted. `admissibleBy`
+       * is here because a follow-up refused with the composed channel dropped
+       * and one refused with it scored and beaten are also different bugs.
+       */
+      if (state.debug) {
+        console.debug('[docpilot] refusal', cause, {
+          channel: g.channel,
+          antecedent: g.antecedent,
+          admissible: g.admissible,
+          admissibleBy: g.admissibleBy,
+          G: g.G,
+          threshold: g.threshold,
+          mode: g.mode,
+        })
+      }
       finishTurn(turn, started)
       return
     }

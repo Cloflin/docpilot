@@ -16,6 +16,7 @@ import {
   verdict,
   composeQuery,
   admissible,
+  foreignTail,
   assertWeights,
 } from './gate.js'
 
@@ -847,10 +848,23 @@ export function createRetrieval({
       // inside an && is a boolean nothing can measure. Evaluating it eagerly costs
       // one set intersection on turns after the first and changes no verdict.
       let admissibleTail = null
+      let admissibleBy = null
       const composed = composeQuery(question, previousQuestion)
       if (composed && composedVec !== undefined) {
         const c = run(composed, composedVec)
-        admissibleTail = admissible(question, c.evidence)
+        const byTerm = admissible(question, c.evidence)
+        /**
+         * `foreignTail` abstains where the term test has nothing to measure, and
+         * it is restricted to a scored dense channel on purpose: what replaces
+         * the veto is the dense floor, and in lexical-only there is no dense
+         * floor to replace it with — G is L there, and abstaining would hand a
+         * foreign tail the antecedent's L with nothing at all standing behind
+         * it. The remedy on that deployment shape is `vocabulary`, which makes
+         * the tail's terms corpus terms and the veto measurable again.
+         */
+        const byScript = !byTerm && mode !== 'lexical-only' && foreignTail(question, index.df)
+        admissibleTail = byTerm || byScript
+        admissibleBy = byTerm ? 'lexical' : byScript ? 'foreign-tail' : null
         if (admissibleTail && c.G > best.G) best = { ...c, channel: 'composed' }
       }
 
@@ -927,6 +941,11 @@ export function createRetrieval({
         threshold: best.threshold,
         mode,
         admissible: admissibleTail,
+        // WHICH test admitted the channel, not merely that one did: `admissible`
+        // is now the disjunction of a term match and a script abstention, and a
+        // calibration record that cannot tell them apart cannot tell whether a
+        // stratum moved because the corpus matched or because nothing could.
+        admissibleBy,
         wouldPassUnscoped,
         unscopedG,
         chunks: best.chunks,
