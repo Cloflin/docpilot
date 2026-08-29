@@ -116,9 +116,33 @@ The status line says which of six things is happening rather than spinning:
 *Reading `guide/indexing`*, *Thinking*, *Writing the answer*.
 
 - **Reasoning** collapses behind *Thought for 4s* on providers that emit it.
-  It is never written to history — it is a scratchpad, not an answer.
+  It opens itself while thinking is the only thing happening, and pressing it
+  overrules that for the rest of the answer — collapsed stays collapsed while
+  the model keeps thinking, open stays open once the answer starts. The next
+  question decides for itself again. It is never written to history — it is a
+  scratchpad, not an answer.
 - **Stop** ends the turn and keeps what arrived.
-- **Jump to latest** appears when the reader has scrolled up mid-answer.
+- **Scrolling up stops the chase.** The thread follows a streaming answer only
+  while the reader is at its foot; scroll up to re-read something — with a
+  wheel, a finger, the scrollbar or `PageUp` — and it stands still until you
+  come back down. The reasoning box behaves the same way inside itself.
+- **Jump to latest** appears when the reader has scrolled up mid-answer, and
+  resumes the chase.
+
+**Closing the panel is not stopping.** A reader who puts the panel away while a
+turn is running — the `×`, `Escape`, the floating button again, the scrim — keeps
+the turn: it finishes in the background, and the button they opened it from takes
+a small dot when it settles. Opening the panel again clears the dot and shows the
+answer already in place. The turn survives moving to another page of your site,
+because the thread always has; it does not survive a full page load.
+
+**Stop is still Stop.** The button above, and the `Escape` that stands in for it
+while a turn is running, end the turn as they always did. The two gestures were
+one abort until [`ui.background`](/reference/config#ui-background) separated them,
+and the symptom of their being one was a reader who closed the panel mid-search
+and reopened it to *I couldn't find this in the docs.* — the gate's refusal, for a
+turn the gate never ran. Set `ui: { background: 'open' }` to have the panel come
+back by itself instead of waiting, or `false` to abandon the turn on close.
 
 ## Reading the answer
 
@@ -251,7 +275,7 @@ Panel chrome follows the page's locale. The credential warning and the greeting
 reply follow the language the **reader typed in**, which is not always the same
 thing.
 
-All 170 reader-facing strings are replaceable one at a time, in 25 groups, in the
+All 171 reader-facing strings are replaceable one at a time, in 25 groups, in the
 same shape as VitePress's own local-search i18n:
 
 ```js

@@ -71,7 +71,7 @@ const COPY_BUTTON =
   `<use class="docpilot__glyph-done" href="#${symbolId('check')}"/>` +
   '</svg></button>'
 
-md.renderer.rules.fence = (tokens, idx) => {
+md.renderer.rules.fence = (tokens, idx, options, env) => {
   const token = tokens[idx]
   const code = token.content.replace(/\n$/, '')
   // `resolveLang`, not a lookup written here. The info string is model output
@@ -84,7 +84,13 @@ md.renderer.rules.fence = (tokens, idx) => {
   const body =
     (lang && highlight(code, lang)) ||
     `<pre tabindex="0"><code>${md.utils.escapeHtml(code)}</code></pre>`
-  return `<div class="docpilot__code"${lang ? ` data-lang="${lang}"` : ''}>${COPY_BUTTON}${body}</div>\n`
+  // `env.copy === false` is the passage — a retrieved chunk shown as evidence.
+  // The button is dropped there rather than everywhere: a copy control inside a
+  // 240px quotation box sits under the turn's own copy button and adds a tab
+  // stop to a scroller that already is one, and nobody copies a citation's code
+  // out of the citation when the page it came from is one click away.
+  const copy = env?.copy === false ? '' : COPY_BUTTON
+  return `<div class="docpilot__code"${lang ? ` data-lang="${lang}"` : ''}>${copy}${body}</div>\n`
 }
 
 /**
@@ -209,13 +215,17 @@ function linkMarkers(tokens, sources) {
 }
 
 /**
- * @param {string} text     answer markdown
+ * Every link in the stream, tested against the manifest — UI-SPEC 11.
+ *
+ * Shared by both renderers below, and shared rather than copied on purpose:
+ * citation integrity is the product's one non-negotiable promise, and a second
+ * copy of this walk is a second thing to keep in step with it.
+ *
+ * @param {import('markdown-it').Token[]} tokens  parsed, mutated in place
  * @param {Set<string>} known  manifest.pages[].path
- * @param {Array<{n:number, href:string, title:string}>} sources  validated citations, in order
- * @returns {{ html: string, delinked: string[] }}
+ * @returns {string[]}  the hrefs that were de-linked
  */
-export function renderAnswer(text, known, sources = []) {
-  const tokens = md.parse(String(text || ''), {})
+function filterLinks(tokens, known) {
   const delinked = []
 
   const walk = (list) => {
@@ -240,7 +250,6 @@ export function renderAnswer(text, known, sources = []) {
 
   // A link_close is only rewritten when its opener was; walk() above is too
   // blunt, so re-pair by scanning depth.
-  let depth = 0
   const stack = []
   const repair = (list) => {
     for (const token of list) {
@@ -250,11 +259,107 @@ export function renderAnswer(text, known, sources = []) {
     }
   }
   repair(tokens)
-  void depth
+
+  return delinked
+}
+
+/**
+ * @param {string} text     answer markdown
+ * @param {Set<string>} known  manifest.pages[].path
+ * @param {Array<{n:number, href:string, title:string}>} sources  validated citations, in order
+ * @returns {{ html: string, delinked: string[] }}
+ */
+export function renderAnswer(text, known, sources = []) {
+  const tokens = md.parse(String(text || ''), {})
+  const delinked = filterLinks(tokens, known)
 
   if (sources.length) linkMarkers(tokens, sources)
 
   return { html: md.renderer.render(tokens, md.options, {}), delinked }
+}
+
+/**
+ * The retrieved chunk behind a citation, as the page reads it — ui-specs/009.
+ *
+ * The passage is CORPUS MARKDOWN, not prose about it: `## Heading`, `**bold**`,
+ * a fence, a table. Shown as a text node it was the one surface in the panel
+ * that made a reader parse markdown themselves, next to an answer that never
+ * asks them to. Rendering it changes nothing about *what* is shown — the whole
+ * chunk, still uncut, which is the invariant 009 argues for — only whether the
+ * syntax is in front of the text or behind it.
+ *
+ * The same link filter as the answer, and NOT because a chunk can lie: it can't,
+ * it is what the site's own author wrote. It is because a corpus link is written
+ * relative to the page it sits on (`./config.md`, `../guide/`), and resolved
+ * against a panel teleported to `body` it points at nothing. `isKnownPath`
+ * already answers exactly that question, so a link that survives it is one the
+ * reader can follow and every other one degrades to the text it wrapped.
+ *
+ * No `sources`, so no `linkMarkers`: a literal `[1]` in the corpus is prose
+ * about a footnote on that page, not a citation into this turn's list.
+ *
+ * @param {string} text  the chunk, verbatim
+ * @param {Set<string>} known  manifest.pages[].path
+ * @returns {string}  html
+ */
+export function renderPassage(text, known) {
+  const tokens = md.parse(String(text || ''), {})
+  filterLinks(tokens, known)
+  return md.renderer.render(tokens, md.options, { copy: false })
+}
+
+/**
+ * Markdown as the text under it — the search-only snippet.
+ *
+ * A result row shows a 220-character window of a chunk so a reader can tell
+ * whether it is the one they want, and 220 characters spent on `**`, `##` and
+ * `](/guide/config#tokens)` are characters that do not help them decide.
+ *
+ * Over the TOKEN STREAM rather than a set of regexes, for the reason at the top
+ * of this file: a regex here would be a second parser that one day disagrees
+ * with the first, and this one runs on text a reader then searches by eye.
+ *
+ * Blocks are separated by a single newline and inline breaks become spaces, so
+ * the result survives being cut mid-sentence — which is what `excerptWindow`
+ * does to it next.
+ *
+ * @param {string} text  markdown
+ * @returns {string}  plain text
+ */
+export function toPlainText(text) {
+  const out = []
+
+  const walk = (list) => {
+    for (const token of list) {
+      if (token.children) {
+        walk(token.children)
+        continue
+      }
+      if (token.type === 'text' || token.type === 'code_inline') out.push(token.content)
+      // A fence is content the reader is looking for as much as any sentence —
+      // half the answers in a documentation corpus ARE the code block.
+      else if (token.type === 'fence' || token.type === 'code_block')
+        out.push(`${token.content.trim()}\n`)
+      else if (token.type === 'softbreak' || token.type === 'hardbreak') out.push(' ')
+      else if (token.type === 'hr') out.push('\n')
+      // A row of cells is one line, so the cells need a separator of their own;
+      // every other block close ends the line.
+      else if (token.type === 'th_close' || token.type === 'td_close') out.push(' ')
+      // `token.block` is the whole test: an `em_close` or a `link_close` sits
+      // INSIDE a sentence, and ending the line there would cut every emphasised
+      // phrase in the corpus in half.
+      else if (token.block && token.nesting === -1) out.push('\n')
+    }
+  }
+
+  walk(md.parse(String(text || ''), {}))
+
+  return out
+    .join('')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
 }
 
 /** Inline citation markers `[1]` → a placeholder the component turns into buttons. */

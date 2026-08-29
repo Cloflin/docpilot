@@ -80,6 +80,64 @@ try {
   process.exit(0)
 }
 
+/**
+ * `@layer docpilot` — and ONLY on this artifact.
+ *
+ * The four stylesheets `build-css.js` writes go to hosts that opted into a
+ * framework — VitePress, Docusaurus — whose own CSS the panel is mapped onto.
+ * This one goes to a `<script>` tag on a site nobody here has seen, and that is
+ * the case a cascade layer is for: everything below is declared in `docpilot`,
+ * so the site's own rules win over the panel's without a specificity fight and
+ * without `!important` (this package writes none — see core.scss rule 1).
+ *
+ * THE TRADE IS REAL AND IT POINTS THE OTHER WAY TOO. An unlayered rule beats
+ * every layered one whatever its specificity, so a host reset now outranks the
+ * panel. The two that bite in practice: Tailwind v3's preflight sets
+ * `border: 0 solid` on `*`, which erases the hairline the design system is
+ * built on, and a bare `a`/`button`/`ul` rule repaints the answer body. A site
+ * that hits either restores it by declaring the same properties itself — which
+ * is exactly the control the layer exists to hand over.
+ *
+ * Written here rather than over the file afterwards so the size this script
+ * reports is the size that ships.
+ */
+const LAYER_OPEN = '@layer docpilot{'
+
+const cssLayer = {
+  name: 'docpilot:css-layer',
+  // `vite:css-post` is the plugin that emits the stylesheet, and it sits after
+  // the normal plugins in Vite's pipeline — a plugin without this runs its
+  // `generateBundle` before the asset it means to rewrite exists, finds
+  // nothing, and silently ships an unlayered file.
+  enforce: 'post',
+  generateBundle: { order: 'post', handler: wrapCssAssets },
+}
+
+function wrapCssAssets(_options, bundle) {
+  for (const asset of Object.values(bundle)) {
+    if (asset.type !== 'asset' || !asset.fileName.endsWith('.css')) continue
+    const css = String(asset.source)
+    // Two formats come out of one rollup build and each output bundle carries
+    // its own entry for the same emitted stylesheet — which may be the same
+    // object seen twice. Wrapping it twice nests `docpilot` inside itself and
+    // still parses, so nothing would fail; it would just be wrong.
+    if (css.startsWith(LAYER_OPEN)) continue
+    // `@charset` is the one rule that may not move inside the block, and the
+    // minifier emits it the moment a declaration carries a non-ASCII byte —
+    // a `content: "→"` added to a component a year from now. Lift it back
+    // out rather than produce a stylesheet whose first rule is ignored.
+    const charset = css.match(/^@charset\s+[^;]+;/)
+    const body = charset ? css.slice(charset[0].length) : css
+    // `@import` inside a layer block is invalid and drops silently. Vite
+    // inlines every import in library mode, so reaching this is a change in
+    // how the bundle is built, not a stylesheet someone wrote — fail loudly.
+    if (/^\s*@import\b/.test(body)) {
+      this.error(`${asset.fileName} starts with @import — it cannot be wrapped in @layer`)
+    }
+    asset.source = `${charset ? charset[0] : ''}${LAYER_OPEN}${body}}`
+  }
+}
+
 mkdirSync(outDir, { recursive: true })
 
 const output = await build({
@@ -89,7 +147,7 @@ const output = await build({
   configFile: false,
   root,
   logLevel: 'warn',
-  plugins: [vue()],
+  plugins: [vue(), cssLayer],
   define: {
     // Vue reads it at module scope and ships its whole dev-warning apparatus
     // without it. Not `import.meta.env` — this artifact runs in hosts that

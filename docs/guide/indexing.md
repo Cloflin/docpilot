@@ -171,12 +171,12 @@ The blob is a single file, `vectors.<hash>.bin`, exactly `chunkCount × dims` by
 **The error is measured, not assumed.** Every build samples up to 200 vector pairs, compares the exact float cosine against the int8 round trip, and prints the mean absolute difference:
 
 ```
-quantisation err 0.00286 mean |Δcos|
+quantisation err 0.00262 mean |Δcos|
 ```
 
 Above `0.01` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.
 
-For scale: this documentation site indexes 405 chunks at 2048 dimensions, so its vector blob is 829,440 bytes — 810 KB, where float32 would have been 3.2 MB.
+For scale: this documentation site indexes 460 chunks at 1024 dimensions, so its vector blob is 471,040 bytes — 460 KB, where float32 would have been 1.8 MB.
 
 ## Scale
 

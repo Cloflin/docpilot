@@ -13,7 +13,7 @@ import { resultRows } from './results.js'
 import { embedQuery } from './embed.js'
 import { runTurn } from './harness.js'
 import { detectTools } from './llm.js'
-import { renderAnswer } from './markdown.js'
+import { renderAnswer, renderPassage } from './markdown.js'
 import { ensureHighlighter, onReady } from './highlight.js'
 import * as scopeApi from './scope.js'
 import * as instruction from './prompt-store.js'
@@ -224,6 +224,7 @@ const DEFAULTS = {
     layout: 'overlay',
     prefetch: 'hover',
     firstRunHint: false,
+    background: 'notify',
   },
   // All null, and they stay null here: "nobody said" is a distinct answer from
   // any value, and it is what lets the host binding supply one. `hostConfig()`
@@ -233,6 +234,16 @@ const DEFAULTS = {
 
 export const state = reactive({
   open: false,
+  /**
+   * A turn that settled while the panel was shut — ui-specs/010.
+   *
+   * BOOLEAN, not a count. The badge says "there is something in there"; how
+   * much is a question the thread answers, and a number on a 10px dot is a
+   * number nobody reads. It is set in `finishTurn` and cleared in `open()`,
+   * which is the only place it can be cleared from: every path that shows the
+   * panel goes through that one function.
+   */
+  unread: false,
   ready: false,
   degraded: false,
   degradedReason: '',
@@ -390,6 +401,33 @@ function applyFont(ui) {
   }
 }
 
+/**
+ * `ui.theme` — the other setting that reaches the STYLESHEET.
+ *
+ * A class on `<html>`, not an inline property, because a pin is twelve tokens
+ * and one `color-scheme`, and the values belong in `core.scss` beside the light
+ * and dark sets they are made of. `html.docpilot-dark` is one class more
+ * specific than the `:root` an adapter maps on, which is what lets a pin beat a
+ * host that wins over the core by load order alone.
+ *
+ * THE ROOT, not the panel: `:root` is where the tokens live, because the nav
+ * trigger, the floating button and the CTA render outside the panel and outlive
+ * it — a class on `.docpilot` would leave the button on the page's scheme while
+ * the panel it opens wore another.
+ *
+ * REMOVED, not skipped, on `'auto'` — the same rule as `applyFont` directly
+ * above. `setConfig` runs on a live page, and a pin taken out of the settings
+ * has to leave the document with it or the panel keeps a scheme nothing can now
+ * explain.
+ */
+function applyTheme(ui) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (!root) return
+  root.classList.toggle('docpilot-light', ui?.theme === 'light')
+  root.classList.toggle('docpilot-dark', ui?.theme === 'dark')
+}
+
 export function configure(themeConfig, path, lang) {
   const cfg = themeConfig?.docPilot || {}
   state.config = {
@@ -470,6 +508,7 @@ export function configure(themeConfig, path, lang) {
     // property of the document, not of a component, so it is applied here
     // rather than left to whichever of the four mounted roots renders first.
     applyFont(state.config.ui)
+    applyTheme(state.config.ui)
     state.debug = new URLSearchParams(location.search).has('dpdebug')
     feedback.installConsoleHelper()
   }
@@ -766,6 +805,11 @@ export function applyDeepLink(search, replace = null) {
 
 export function open() {
   state.open = true
+  // The badge is cleared HERE and nowhere else, because every path that shows
+  // the panel arrives through this function — the trigger, the hotkey, the
+  // article call to action, the deep link and the host's own handle. A reader
+  // who is looking at the thread has read it.
+  state.unread = false
   ensureIndex()
   // Fetched here, not at the first code fence: the answer highlights live, so
   // the grammars have to be resident before the first code token arrives. It is
@@ -776,7 +820,19 @@ export function open() {
 export function close() {
   state.open = false
   state.dockPanel = null
-  stop()
+  /**
+   * CLOSING THE PANEL IS NOT STOPPING THE TURN — ui-specs/010.
+   *
+   * One `abort()` used to serve two different intentions. "Stop" is the
+   * composer's button and the `Esc` rung above it, and it still reaches
+   * `stop()` directly. "Get off my screen" is this, and it never asked for
+   * anything to end: a reader who shuts the panel while the gate is still
+   * retrieving used to be handed `I couldn't find this in the docs.` — a claim
+   * about the corpus, for a turn the corpus had not yet refused.
+   *
+   * `ui.background: false` is a project keeping the old behaviour.
+   */
+  if (state.config.ui.background === false) stop()
 }
 
 export function toggle() {
@@ -923,6 +979,7 @@ function rehydrate(row) {
     // turn. A restored turn simply has no reasoning disclosure.
     thought: '',
     thoughtOpen: false,
+    thoughtChoice: null,
     thoughtSeconds: 0,
     streaming: false,
     reasonOpen: false,
@@ -1071,6 +1128,32 @@ export function passageFor(turn, src) {
 }
 
 /**
+ * The same passage as markdown, for the disclosure that is open.
+ *
+ * SEPARATE FROM `passageFor` rather than replacing it, because the text answers
+ * a different question three times over: whether the row gets a chevron at all,
+ * whether it gets the `has-passage` column, and what the disclosure contains.
+ * Only the third one wants html.
+ *
+ * A ONE-ENTRY MEMO, and it is not premature. At most one passage is open across
+ * the whole thread — `openPassage` is a single id — but the panel re-renders
+ * every 90ms while a later turn streams, and each of those frames would
+ * otherwise re-parse and re-highlight a 1200-character chunk that has not
+ * changed. Keyed on the chunk id and dropped when the highlighter arrives, on
+ * the same tick the settled answers are re-rendered in colour.
+ */
+let passageMemo = null
+
+export function passageHtml(turn, src) {
+  const text = passageFor(turn, src)
+  if (!text) return ''
+  if (passageMemo?.id === src.id && passageMemo.text === text) return passageMemo.html
+  const html = renderPassage(text, knownPaths.value)
+  passageMemo = { id: src.id, text, html }
+  return html
+}
+
+/**
  * A turn that settled before the highlighter arrived gets its colour late.
  *
  * `renderAnswer` is a pure function of (text, knownPaths, cited) and the turn
@@ -1080,6 +1163,7 @@ export function passageFor(turn, src) {
  * outranks syntax colour.
  */
 onReady(() => {
+  passageMemo = null
   for (const turn of state.turns) {
     if (!turn.answerText) continue
     if (turn.sources?.length && !turn.cited) continue
@@ -1115,18 +1199,48 @@ function onStream(turn, ev, started) {
     // Opened for the reader the moment there is something to read, and closed
     // again by the first answer token: reasoning is a progress indicator while
     // it is the only thing happening and a footnote once it is not.
-    if (!turn.answerText) turn.thoughtOpen = true
+    //
+    // Through `autoThought`, and this is the whole of the fix it carries: this
+    // line runs on EVERY thinking delta, so a reader who pressed the toggle to
+    // collapse the box had their press undone within a frame, forever, for as
+    // long as the model kept thinking. The rule is now stated once, in one
+    // place: the automatic disclosure is a default, and a default yields.
+    if (!turn.answerText) autoThought(turn, true)
     turn.thoughtSeconds = Math.max(1, Math.round((performance.now() - started) / 1000))
   }
 
   if (ev.text) {
-    turn.thoughtOpen = false
+    autoThought(turn, false)
     turn.answerText = ev.text
     const now = performance.now()
     if (now - lastRender < RENDER_FLOOR_MS) return
     lastRender = now
     turn.answerHtml = renderAnswer(ev.text, knownPaths.value).html
   }
+}
+
+/**
+ * THE READER'S CHOICE ABOUT THE REASONING BOX OUTRANKS THE STREAM'S.
+ *
+ * `thoughtOpen` has two authors. The stream opens the box while reasoning is
+ * the only thing happening and closes it once an answer is being written; the
+ * reader opens and closes it by pressing the toggle. They disagree, and per
+ * token, so the loser has to be named rather than left to the last writer —
+ * which was the stream, at 60 presses a second.
+ *
+ * `turn.thoughtChoice` is that name: `null` while nobody has said anything, and
+ * the reader's own boolean once they have. It lives on the TURN and dies with
+ * it — the next question reasons out loud again, because the press was about
+ * this answer's scratchpad and not about reasoning as a feature.
+ */
+export function autoThought(turn, open) {
+  if (turn.thoughtChoice === null) turn.thoughtOpen = open
+}
+
+/** The toggle under `Thinking for 4s`. A press is an intent, so it is recorded. */
+export function toggleThought(turn) {
+  turn.thoughtOpen = !turn.thoughtOpen
+  turn.thoughtChoice = turn.thoughtOpen
 }
 
 function makeTurn(question, frozen, quote = '') {
@@ -1184,6 +1298,8 @@ function makeTurn(question, frozen, quote = '') {
     refusal: null,
     thought: '',
     thoughtOpen: false,
+    // `null` until the reader presses the reasoning toggle — see `autoThought`.
+    thoughtChoice: null,
     thoughtSeconds: 0,
     streaming: false,
     verdict: null,
@@ -1792,7 +1908,11 @@ export async function submit(question, { quote = '' } = {}) {
       turn.thoughtSeconds = Math.max(1, Math.round((performance.now() - started) / 1000))
     } else {
       turn.thoughtSeconds = 0
-      turn.thoughtOpen = false
+      // Through `autoThought` like every other write to this flag, though the
+      // reader cannot see the difference: with no reasoning there is no box —
+      // the disclosure renders under `v-if="turn.thought"` — so this closes a
+      // thing that is not on screen. One writer is the point.
+      autoThought(turn, false)
     }
 
     /**
@@ -2050,7 +2170,7 @@ export function resetLine(turn) {
 function finishTurn(turn, started) {
   turn.latencyMs = Math.round(performance.now() - started)
   turn.streaming = false
-  turn.thoughtOpen = false
+  autoThought(turn, false)
   // THE TURN'S OWN CONTEXT, frozen at the moment it settled.
   //
   // `writeFeedback` used to read all six of these from live session state, which
@@ -2091,6 +2211,24 @@ function finishTurn(turn, started) {
   // touched.
   if (!state.turns.includes(turn)) return
   saveCurrent()
+  /**
+   * IT SETTLED WHILE NOBODY WAS LOOKING — ui-specs/010.
+   *
+   * Below the `includes` check on purpose: a turn that settled into a thread
+   * the reader has since left is not something to point at, for the same
+   * reason it is not something to save. Every settled state counts, refusals
+   * included — a refusal is still an answer to a question that was asked, and
+   * a badge that only lit for successes would be a badge that goes dark
+   * exactly when the reader most wants to know what happened.
+   *
+   * `open()` clears the flag, so the order here is what makes `'open'` mean
+   * "the panel came back": the badge is left burning only where the opening
+   * did not happen.
+   */
+  if (!state.open && state.config.ui.background !== false) {
+    state.unread = true
+    if (state.config.ui.background === 'open') open()
+  }
   if (turn.state === 'complete') say(T('announce.answerReady', { n: turn.sources.length }))
   // Search-only settles as `results`, and the count is the announcement: there
   // is no answer to read out, so what a screen reader needs is how many links

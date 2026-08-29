@@ -5,7 +5,7 @@ title: Theme tokens
 # Theme tokens
 
 Every value the panel paints, sizes or times goes through one custom property on
-`:root`. This page is the complete list — 33 of them — with the value the core
+`:root`. This page is the complete list — 34 of them — with the value the core
 stylesheet declares when there is no host.
 
 Nothing here is a class you have to target and no component is patched: override
@@ -43,6 +43,14 @@ Copy this, delete what you are not changing, load it **after** the package's CSS
      scope picker, the composer, the feedback textarea, the code card, the FAB. */
   --dp-line: rgba(101, 117, 133, 0.24);
 
+  /* The package's second and last border colour, and a different job: the lip
+     under the jump pill's glass. A boundary reads the same on both faces of an
+     edge; an underside cannot. DERIVED from --dp-text like --dp-wash, so it is
+     a near-white rim in dark and a grounded dark edge in light, and it must
+     never be given a dark variant. --dp-line still draws the other three
+     sides. */
+  --dp-lip: color-mix(in srgb, var(--dp-text, #0d0d0d) 15%, transparent);
+
   /* ── Text — two readable levels, no third ───────────────────────────────── */
 
   --dp-text: #1f2328;      /* the answer, the question, titles, labels */
@@ -61,6 +69,16 @@ Copy this, delete what you are not changing, load it **after** the package's CSS
   /* Declared once and used once — the cited-source highlight. Alpha, so one
      value reads on a light panel and a dark one. */
   --dp-accent-soft: rgba(100, 108, 255, 0.18);
+
+  /* ── The one signal colour ──────────────────────────────────────────────── */
+
+  /* The dot on the trigger when an answer arrived behind a closed panel. It has
+     no dark variant and no adapter mapping, on purpose: "there is something
+     waiting" is not a statement in anybody's brand, and it has to read the same
+     on every host. Repoint it if your site already owns a colour for this —
+     it is never text and never a border, so the floor it is held to is the
+     3:1 non-text one, against BOTH surfaces. */
+  --dp-alert: #e34c1e;
 
   /* ── Surfaces that sit outside the panel ────────────────────────────────── */
 
@@ -178,8 +196,18 @@ durations, `z` — is declared once, because it does not vary with appearance.
 }
 ```
 
-`--dp-wash` is absent on purpose: it is derived from `--dp-text`, so it follows
-the branch above without being in it.
+`--dp-wash` and `--dp-lip` are absent on purpose: both are derived from
+`--dp-text`, so they follow the branch above without being in it.
+
+The same nine are what [`ui.theme`](/reference/config#ui-theme) pins. `'light'`
+and `'dark'` put `docpilot-light` or `docpilot-dark` on `<html>`, and the core
+declares these values again there — one class deeper than `:root`, which is what
+lets a pin beat an adapter that wins by load order rather than specificity. Those
+blocks also set `color-scheme` on the panel and the trigger, so the caret, the
+scrollbar and any native control follow; never on `<html>`, because the page's
+own scrollbars belong to the page. `--dp-accent-soft`, `--dp-shadow` and
+`--dp-scrim` are left out of the pin for the reason they are absent from the
+block above: one value serves both schemes, so on a host they stay the site's.
 
 An **adapter** — the VitePress and Docusaurus mappings, or one you write — must
 re-declare the whole colour set *unconditionally* instead of copying this block.
@@ -232,12 +260,14 @@ export default withDocPilot(DefaultTheme)
 }
 ```
 
-The one exception is [`ui.font` / `ui.fontMono`](/reference/config#ui): those are
-written onto `<html>` as inline custom properties, the only layer that outranks
-an adapter, so they reach the panel on VitePress and Docusaurus without any
-ordering on your part.
+Two settings are exceptions and reach the panel without any ordering on your
+part. [`ui.font` / `ui.fontMono`](/reference/config#ui) are written onto `<html>`
+as inline custom properties, which outranks an adapter outright.
+[`ui.theme`](/reference/config#ui-theme) gets there the other way, by declaring
+the dark set on a selector one class more specific than the `:root` an adapter
+maps on.
 
 A token declared here and nowhere in the core is a token nothing reads. The
 suite checks that pairing in both directions — the published table and
-`core.scss` are asserted to name exactly the same 33 properties — so a token
+`core.scss` are asserted to name exactly the same 34 properties — so a token
 added to one and forgotten in the other fails the build rather than shipping.

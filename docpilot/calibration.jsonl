@@ -1,0 +1,597 @@
+{"id":"u-01","question":"How many stages does a question pass through before an answer comes back?","stratum":"U"}
+{"id":"u-02","question":"Which stages of a turn can end it before any model is called?","stratum":"U"}
+{"id":"u-03","question":"What does the credential check do when I paste an API key into the panel?","stratum":"U"}
+{"id":"u-04","question":"What is a primed turn?","stratum":"U"}
+{"id":"u-05","question":"When does the model get to call a tool for more documentation?","stratum":"U"}
+{"id":"u-06","question":"What happens during the validation stage of a turn?","stratum":"U"}
+{"id":"u-07","question":"How much conversation memory does the assistant keep?","stratum":"U"}
+{"id":"u-08","question":"What does DocPilot actually guarantee about its answers?","stratum":"U"}
+{"id":"u-09","question":"What is the refusal gate?","stratum":"U"}
+{"id":"u-10","question":"Is the gate an entailment check?","stratum":"U"}
+{"id":"u-11","question":"What are the two channels the gate scores a question on?","stratum":"U"}
+{"id":"u-12","question":"How does the gate treat a follow-up question differently from a first question?","stratum":"U"}
+{"id":"u-13","question":"What is the answer ladder?","stratum":"U"}
+{"id":"u-14","question":"In what order are paid providers tried?","stratum":"U"}
+{"id":"u-15","question":"What costs a provider its turn on the ladder?","stratum":"U"}
+{"id":"u-16","question":"Can I write the provider order myself?","stratum":"U"}
+{"id":"u-17","question":"What is the free pool?","stratum":"U"}
+{"id":"u-18","question":"What happens to the answer when retrieval degrades?","stratum":"U"}
+{"id":"u-19","question":"What is a hybrid answer?","stratum":"U"}
+{"id":"u-20","question":"What are the five entry points that can open the assistant?","stratum":"U"}
+{"id":"u-21","question":"How does DocPilot compare to a hosted answer service?","stratum":"U"}
+{"id":"u-22","question":"What is DocPilot worse at than the alternatives?","stratum":"U"}
+{"id":"u-23","question":"What happens if a reader types a secret into the question box?","stratum":"U"}
+{"id":"u-24","question":"Is the credential check a security boundary?","stratum":"U"}
+{"id":"u-25","question":"Why should I calibrate before shipping?","stratum":"U"}
+{"id":"u-26","question":"What does calibrate need in order to run?","stratum":"U"}
+{"id":"u-27","question":"Where do the calibration questions come from?","stratum":"U"}
+{"id":"u-28","question":"Does calibrate sweep anything besides the threshold?","stratum":"U"}
+{"id":"u-29","question":"What is the golden set?","stratum":"U"}
+{"id":"u-30","question":"How much of the golden set should I run?","stratum":"U"}
+{"id":"u-31","question":"Why do I have to lint the golden set first?","stratum":"U"}
+{"id":"u-32","question":"How do I read an eval report?","stratum":"U"}
+{"id":"u-33","question":"What do I do when eval says retrieval is the problem?","stratum":"U"}
+{"id":"u-34","question":"When does a calibration answer actually take effect?","stratum":"U"}
+{"id":"u-35","question":"What does bench compare?","stratum":"U"}
+{"id":"u-36","question":"Is the free tier limited by requests or by tokens?","stratum":"U"}
+{"id":"u-37","question":"How many requests does one turn cost?","stratum":"U"}
+{"id":"u-38","question":"Can one key reach more than one model?","stratum":"U"}
+{"id":"u-39","question":"Which failures do not rotate to the next model?","stratum":"U"}
+{"id":"u-40","question":"What happens when the free allowance runs out mid-session?","stratum":"U"}
+{"id":"u-41","question":"What happens when the free allowance runs out during a build?","stratum":"U"}
+{"id":"u-42","question":"What is a zero-allowance deployment?","stratum":"U"}
+{"id":"u-43","question":"What does the reader see of their past conversations?","stratum":"U"}
+{"id":"u-44","question":"What exactly is stored in conversation history?","stratum":"U"}
+{"id":"u-45","question":"Where is conversation history kept?","stratum":"U"}
+{"id":"u-46","question":"What happens to history when the docs change?","stratum":"U"}
+{"id":"u-47","question":"How do I translate the panel into another language?","stratum":"U"}
+{"id":"u-48","question":"How does the i18n fallback work?","stratum":"U"}
+{"id":"u-49","question":"Can I interpolate values into a translated string?","stratum":"U"}
+{"id":"u-50","question":"What parts of the panel cannot be translated?","stratum":"U"}
+{"id":"u-51","question":"What is an imported page?","stratum":"U"}
+{"id":"u-52","question":"Why is the import allowlist a security boundary?","stratum":"U"}
+{"id":"u-53","question":"Is the path of an imported page a link?","stratum":"U"}
+{"id":"u-54","question":"What gets indexed when I build the index?","stratum":"U"}
+{"id":"u-55","question":"Which blocks will a chunk never be cut through?","stratum":"U"}
+{"id":"u-56","question":"What are the three indexing warnings and what does each one mean?","stratum":"U"}
+{"id":"u-57","question":"What frontmatter helps the index?","stratum":"U"}
+{"id":"u-58","question":"When do I need to rebuild the index?","stratum":"U"}
+{"id":"u-59","question":"Why are the vectors quantised?","stratum":"U"}
+{"id":"u-60","question":"Does DocPilot generate llms.txt?","stratum":"U"}
+{"id":"u-61","question":"How do I open the assistant panel?","stratum":"U"}
+{"id":"u-62","question":"How do I scope a question to part of the docs?","stratum":"U"}
+{"id":"u-63","question":"How do I ask about a specific passage I have selected?","stratum":"U"}
+{"id":"u-64","question":"What does the panel do if I just say hello?","stratum":"U"}
+{"id":"u-65","question":"What does the reader see when the assistant refuses?","stratum":"U"}
+{"id":"u-66","question":"How do I tell the assistant its answer was wrong?","stratum":"U"}
+{"id":"u-67","question":"Why does DocPilot refuse before calling the model?","stratum":"U"}
+{"id":"u-68","question":"Why does the host check the citations instead of the prompt?","stratum":"U"}
+{"id":"u-69","question":"What does DocPilot cost to run?","stratum":"U"}
+{"id":"u-70","question":"Why not use a vector database?","stratum":"U"}
+{"id":"u-71","question":"What do I put in nginx to serve DocPilot in production?","stratum":"U"}
+{"id":"u-72","question":"How do I run DocPilot behind a base path?","stratum":"U"}
+{"id":"u-73","question":"What Content Security Policy does the panel need?","stratum":"U"}
+{"id":"u-74","question":"Where should the index get built in CI?","stratum":"U"}
+{"id":"u-75","question":"What does the feedback POST body look like?","stratum":"U"}
+{"id":"u-76","question":"How do I verify a production deployment is wired correctly?","stratum":"U"}
+{"id":"u-77","question":"What is the provider chain and when does it walk?","stratum":"U"}
+{"id":"u-78","question":"What happens if I set two provider keys?","stratum":"U"}
+{"id":"u-79","question":"Can one provider do both chat and embeddings?","stratum":"U"}
+{"id":"u-80","question":"What happens if my chat provider cannot embed?","stratum":"U"}
+{"id":"u-81","question":"How do I run DocPilot fully locally with no key?","stratum":"U"}
+{"id":"u-82","question":"Is a local server ever assumed to be there?","stratum":"U"}
+{"id":"u-83","question":"Can I run DocPilot with no embedder at all?","stratum":"U"}
+{"id":"u-84","question":"Which reasoning knobs does each provider honour?","stratum":"U"}
+{"id":"u-85","question":"How do I turn thinking off?","stratum":"U"}
+{"id":"u-86","question":"How do I set a thinking budget?","stratum":"U"}
+{"id":"u-87","question":"Where should the API key live?","stratum":"U"}
+{"id":"u-88","question":"What is a social opener?","stratum":"U"}
+{"id":"u-89","question":"How many kinds of social opener are there, and in how many languages?","stratum":"U"}
+{"id":"u-90","question":"Why is the panel not on my page at all?","stratum":"U"}
+{"id":"u-91","question":"Why is every question being refused?","stratum":"U"}
+{"id":"u-92","question":"Why is my follow-up being refused?","stratum":"U"}
+{"id":"u-93","question":"Retrieval feels like keyword matching — what is wrong?","stratum":"U"}
+{"id":"u-94","question":"An answer was generated but never shown. Why?","stratum":"U"}
+{"id":"u-95","question":"How do I install DocPilot in a VitePress site?","stratum":"U"}
+{"id":"u-96","question":"How do I mount DocPilot in React?","stratum":"U"}
+{"id":"u-97","question":"How do I use DocPilot from plain JavaScript?","stratum":"U"}
+{"id":"u-98","question":"Which entry point should I use for my site?","stratum":"U"}
+{"id":"u-99","question":"What types does the TypeScript package export?","stratum":"U"}
+{"id":"u-100","question":"How do I mount the panel in a Vue app?","stratum":"U"}
+{"id":"u-101","question":"How do I use DocPilot on a plain web page with no framework?","stratum":"U"}
+{"id":"u-102","question":"Why does the React entry point import a prebuilt bundle?","stratum":"U"}
+{"id":"u-103","question":"Does DocPilot work with Deno?","stratum":"U"}
+{"id":"u-104","question":"What does docpilot index do?","stratum":"U"}
+{"id":"u-105","question":"What does docpilot import do?","stratum":"U"}
+{"id":"u-106","question":"What does docpilot vocabulary do?","stratum":"U"}
+{"id":"u-107","question":"What does docpilot lint check?","stratum":"U"}
+{"id":"u-108","question":"What does docpilot feedback do?","stratum":"U"}
+{"id":"u-109","question":"What do the --level tiers mean?","stratum":"U"}
+{"id":"u-110","question":"What is latest.json?","stratum":"U"}
+{"id":"u-111","question":"What flags does eval take?","stratum":"U"}
+{"id":"u-112","question":"What are the six bench modes?","stratum":"U"}
+{"id":"u-113","question":"What does docpilot tune sweep?","stratum":"U"}
+{"id":"u-114","question":"What does tune cost to run?","stratum":"U"}
+{"id":"u-115","question":"What may tune never touch?","stratum":"U"}
+{"id":"u-116","question":"What does docpilot doctor report?","stratum":"U"}
+{"id":"u-117","question":"What does docpilot init scaffold?","stratum":"U"}
+{"id":"u-118","question":"What is the default value of topK?","stratum":"U"}
+{"id":"u-119","question":"What does maxIterations control?","stratum":"U"}
+{"id":"u-120","question":"What does budget.mode do?","stratum":"U"}
+{"id":"u-121","question":"What is budget.dailyLimit?","stratum":"U"}
+{"id":"u-122","question":"What does budget.probe do?","stratum":"U"}
+{"id":"u-123","question":"How do I show the reader how much budget is left?","stratum":"U"}
+{"id":"u-124","question":"What does suggestions.questions configure?","stratum":"U"}
+{"id":"u-125","question":"What does quote.fromAnswer do?","stratum":"U"}
+{"id":"u-126","question":"What does citations.passage do?","stratum":"U"}
+{"id":"u-127","question":"What does composer.deepLink do?","stratum":"U"}
+{"id":"u-128","question":"What is guard.mode?","stratum":"U"}
+{"id":"u-129","question":"What are guard.tau and guard.tauLexical?","stratum":"U"}
+{"id":"u-130","question":"What does the vocabulary setting do?","stratum":"U"}
+{"id":"u-131","question":"Does the vocabulary setting ever add words?","stratum":"U"}
+{"id":"u-132","question":"What does scope.filter do?","stratum":"U"}
+{"id":"u-133","question":"What does history.exportThread do?","stratum":"U"}
+{"id":"u-134","question":"What are the ui.trigger options?","stratum":"U"}
+{"id":"u-135","question":"What does ui.prefetch do?","stratum":"U"}
+{"id":"u-136","question":"What does ui.background control?","stratum":"U"}
+{"id":"u-137","question":"How do I set the panel font?","stratum":"U"}
+{"id":"u-138","question":"What does ui.panel choose between?","stratum":"U"}
+{"id":"u-139","question":"How do I change the FAB label and icon?","stratum":"U"}
+{"id":"u-140","question":"What is feedbackEndpoint for?","stratum":"U"}
+{"id":"u-141","question":"Can I override the system prompt?","stratum":"U"}
+{"id":"u-142","question":"What does prompt.extend do?","stratum":"U"}
+{"id":"u-143","question":"What does host.base do?","stratum":"U"}
+{"id":"u-144","question":"What of my config actually reaches the browser?","stratum":"U"}
+{"id":"u-145","question":"Which syntax highlighters can I choose from?","stratum":"U"}
+{"id":"u-146","question":"What does each highlighter need installed?","stratum":"U"}
+{"id":"u-147","question":"How do I write my own highlighter?","stratum":"U"}
+{"id":"u-148","question":"What are the five rules a highlighter must follow?","stratum":"U"}
+{"id":"u-149","question":"Why are highlighter aliases validated?","stratum":"U"}
+{"id":"u-150","question":"Which skills does DocPilot copy into my project?","stratum":"U"}
+{"id":"u-151","question":"Why are the skills copied instead of imported?","stratum":"U"}
+{"id":"u-152","question":"Are the skills overwritten when I upgrade?","stratum":"U"}
+{"id":"u-153","question":"What does the docs-rag skill do?","stratum":"U"}
+{"id":"u-154","question":"What does the docs-import skill do?","stratum":"U"}
+{"id":"u-155","question":"Which theme tokens can I override?","stratum":"U"}
+{"id":"u-156","question":"Which theme tokens does the stylesheet move for me?","stratum":"U"}
+{"id":"u-157","question":"How do I override a theme token?","stratum":"U"}
+{"id":"u-158","question":"What does chat.preferLocal do?","stratum":"U"}
+{"id":"u-159","question":"What does chat.extraBody do?","stratum":"U"}
+{"id":"u-160","question":"What happens if I set chat to false?","stratum":"U"}
+{"id":"u-161","question":"What happens if I set embed to false?","stratum":"U"}
+{"id":"u-162","question":"What does embed.fallback do?","stratum":"U"}
+{"id":"u-163","question":"What does chat.models do?","stratum":"U"}
+{"id":"u-164","question":"What does chat.chain do?","stratum":"U"}
+{"id":"u-165","question":"What does chat.verbosity control?","stratum":"U"}
+{"id":"u-166","question":"Что такое шлюз отказа и когда он срабатывает?","stratum":"U"}
+{"id":"u-167","question":"Сколько запросов стоит один ответ на бесплатном тарифе?","stratum":"U"}
+{"id":"u-168","question":"Где хранится история переписки?","stratum":"U"}
+{"id":"u-169","question":"Как установить DocPilot в проект на VitePress?","stratum":"U"}
+{"id":"s-01","question":"What are the six stages of a turn?","stratum":"S","scope":{"kind":"section","paths":["/concepts/a-turn"],"label":"How a turn works"}}
+{"id":"s-02","question":"Which stage ends the turn before a model is called?","stratum":"S","scope":{"kind":"section","paths":["/concepts/a-turn"],"label":"How a turn works"}}
+{"id":"s-03","question":"How much of the conversation is remembered?","stratum":"S","scope":{"kind":"section","paths":["/concepts/a-turn"],"label":"How a turn works"}}
+{"id":"s-04","question":"What is checked during validation?","stratum":"S","scope":{"kind":"section","paths":["/concepts/a-turn"],"label":"How a turn works"}}
+{"id":"s-05","question":"What does DocPilot promise about an answer?","stratum":"S","scope":{"kind":"section","paths":["/concepts/guarantees"],"label":"What it guarantees"}}
+{"id":"s-06","question":"What claims will this documentation not make?","stratum":"S","scope":{"kind":"section","paths":["/concepts/guarantees"],"label":"What it guarantees"}}
+{"id":"s-07","question":"Is the gate checking that the answer follows from the docs?","stratum":"S","scope":{"kind":"section","paths":["/concepts/the-gate"],"label":"The refusal gate"}}
+{"id":"s-08","question":"What two channels feed the gate?","stratum":"S","scope":{"kind":"section","paths":["/concepts/the-gate"],"label":"The refusal gate"}}
+{"id":"s-09","question":"How are follow-ups scored by the gate?","stratum":"S","scope":{"kind":"section","paths":["/concepts/the-gate"],"label":"The refusal gate"}}
+{"id":"s-10","question":"What are the five settled turns and their causes?","stratum":"S","scope":{"kind":"section","paths":["/concepts/the-gate"],"label":"The refusal gate"}}
+{"id":"s-11","question":"What order are paid providers tried in?","stratum":"S","scope":{"kind":"section","paths":["/concepts/the-ladder"],"label":"The answer ladder"}}
+{"id":"s-12","question":"What is the free pool rung?","stratum":"S","scope":{"kind":"section","paths":["/concepts/the-ladder"],"label":"The answer ladder"}}
+{"id":"s-13","question":"What does the reader see at each rung?","stratum":"S","scope":{"kind":"section","paths":["/concepts/the-ladder"],"label":"The answer ladder"}}
+{"id":"s-14","question":"What never happens on the ladder?","stratum":"S","scope":{"kind":"section","paths":["/concepts/the-ladder"],"label":"The answer ladder"}}
+{"id":"s-15","question":"What are the five entry points?","stratum":"S","scope":{"kind":"section","paths":["/guide/appearance"],"label":"Appearance"}}
+{"id":"s-16","question":"How is the money arranged compared to the alternatives?","stratum":"S","scope":{"kind":"section","paths":["/guide/comparison"],"label":"How it compares"}}
+{"id":"s-17","question":"What does $0 not cover?","stratum":"S","scope":{"kind":"section","paths":["/guide/comparison"],"label":"How it compares"}}
+{"id":"s-18","question":"What reaches the reader in each architecture?","stratum":"S","scope":{"kind":"section","paths":["/guide/comparison"],"label":"How it compares"}}
+{"id":"s-19","question":"What happens when a key appears in a question?","stratum":"S","scope":{"kind":"section","paths":["/guide/credentials"],"label":"Credentials in questions"}}
+{"id":"s-20","question":"Why is the credential check not a security boundary?","stratum":"S","scope":{"kind":"section","paths":["/guide/credentials"],"label":"Credentials in questions"}}
+{"id":"s-21","question":"What does calibrate need before it can run?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
+{"id":"s-22","question":"How do I grow the golden set?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
+{"id":"s-23","question":"How much of the golden set should a single run cover?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
+{"id":"s-24","question":"What does a narrowed sweep write?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
+{"id":"s-25","question":"When does a new calibration take effect?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
+{"id":"s-26","question":"What does bench compare and what does it not measure?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
+{"id":"s-27","question":"Is the limit on requests or on tokens?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
+{"id":"s-28","question":"What does one turn cost in requests?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
+{"id":"s-29","question":"Which four failures do not rotate?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
+{"id":"s-30","question":"What does DocPilot do without being asked?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
+{"id":"s-31","question":"What do I have to decide myself?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
+{"id":"s-32","question":"What is stored, and where?","stratum":"S","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
+{"id":"s-33","question":"What happens across two tabs?","stratum":"S","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
+{"id":"s-34","question":"What happens to a thread when the docs change?","stratum":"S","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
+{"id":"s-35","question":"What shape does the translations object take?","stratum":"S","scope":{"kind":"section","paths":["/guide/i18n"],"label":"Translating the panel"}}
+{"id":"s-36","question":"How does fallback work per leaf?","stratum":"S","scope":{"kind":"section","paths":["/guide/i18n"],"label":"Translating the panel"}}
+{"id":"s-37","question":"What is not translatable?","stratum":"S","scope":{"kind":"section","paths":["/guide/i18n"],"label":"Translating the panel"}}
+{"id":"s-38","question":"What is an imported page and where does it come from?","stratum":"S","scope":{"kind":"section","paths":["/guide/imported-pages"],"label":"Imported pages"}}
+{"id":"s-39","question":"Why is the allowlist a security boundary?","stratum":"S","scope":{"kind":"section","paths":["/guide/imported-pages"],"label":"Imported pages"}}
+{"id":"s-40","question":"How do I import a page?","stratum":"S","scope":{"kind":"section","paths":["/guide/imported-pages"],"label":"Imported pages"}}
+{"id":"s-41","question":"What gets indexed?","stratum":"S","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"s-42","question":"What counts as a fence and what counts as a table?","stratum":"S","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"s-43","question":"What moves when I upgrade?","stratum":"S","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"s-44","question":"When should I rebuild?","stratum":"S","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"s-45","question":"Why keep a second index to measure against?","stratum":"S","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"s-46","question":"Why are vectors quantised and what does it cost?","stratum":"S","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"s-47","question":"Whose plugin generates llms.txt?","stratum":"S","scope":{"kind":"section","paths":["/guide/llms-txt"],"label":"llms.txt and the crawler surface"}}
+{"id":"s-48","question":"How do I open the panel and what does the empty panel show?","stratum":"S","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"s-49","question":"How do I scope a question from the panel?","stratum":"S","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"s-50","question":"How do I quote a passage into the composer?","stratum":"S","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"s-51","question":"What does the panel show while it is answering?","stratum":"S","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"s-52","question":"What does a refusal look like in the panel?","stratum":"S","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"s-53","question":"How does the reader report a wrong answer?","stratum":"S","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"s-54","question":"How does the panel pick the reader’s language?","stratum":"S","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"s-55","question":"Why refuse before the model is called?","stratum":"S","scope":{"kind":"section","paths":["/guide/philosophy"],"label":"Project philosophy"}}
+{"id":"s-56","question":"Why does the host check rather than the prompt?","stratum":"S","scope":{"kind":"section","paths":["/guide/philosophy"],"label":"Project philosophy"}}
+{"id":"s-57","question":"What does \"measured, not chosen\" mean here?","stratum":"S","scope":{"kind":"section","paths":["/guide/philosophy"],"label":"Project philosophy"}}
+{"id":"s-58","question":"What does the browser ask for in production?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-59","question":"What nginx configuration is needed?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-60","question":"How is the index served?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-61","question":"What does the Docker setup look like?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-62","question":"What CSP does it need?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-63","question":"How do I make the endpoint same-origin?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-64","question":"Why upsert on messageId?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-65","question":"What does cross-origin feedback cost?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-66","question":"How do I verify the deployment?","stratum":"S","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"s-67","question":"What happens if I name no provider at all?","stratum":"S","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"s-68","question":"If I set two keys, which answers first?","stratum":"S","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"s-69","question":"What if the chat provider cannot embed?","stratum":"S","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"s-70","question":"How do I go fully local with no key?","stratum":"S","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"s-71","question":"How do I use llama.cpp?","stratum":"S","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"s-72","question":"What does each provider honour?","stratum":"S","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"s-73","question":"How do I turn thinking up?","stratum":"S","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"s-74","question":"Where does the key live?","stratum":"S","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"s-75","question":"Why do social openers exist?","stratum":"S","scope":{"kind":"section","paths":["/guide/social-openers"],"label":"Social openers"}}
+{"id":"s-76","question":"What does the opener deliberately not do?","stratum":"S","scope":{"kind":"section","paths":["/guide/social-openers"],"label":"Social openers"}}
+{"id":"s-77","question":"How do I write my own social openers?","stratum":"S","scope":{"kind":"section","paths":["/guide/social-openers"],"label":"Social openers"}}
+{"id":"s-78","question":"The panel says it is OFF with N things to set up — what now?","stratum":"S","scope":{"kind":"section","paths":["/guide/troubleshooting"],"label":"Troubleshooting"}}
+{"id":"s-79","question":"It is talking to a provider I never chose.","stratum":"S","scope":{"kind":"section","paths":["/guide/troubleshooting"],"label":"Troubleshooting"}}
+{"id":"s-80","question":"Every question is refused. What do I check?","stratum":"S","scope":{"kind":"section","paths":["/guide/troubleshooting"],"label":"Troubleshooting"}}
+{"id":"s-81","question":"Where else can DocPilot go besides a docs site?","stratum":"S","scope":{"kind":"section","paths":["/guide/where-it-goes"],"label":"Where it can go"}}
+{"id":"s-82","question":"What problem is DocPilot solving?","stratum":"S","scope":{"kind":"section","paths":["/guide/why"],"label":"Why DocPilot"}}
+{"id":"s-83","question":"Why does the gate sit on the retrieval side?","stratum":"S","scope":{"kind":"section","paths":["/guide/why"],"label":"Why DocPilot"}}
+{"id":"s-84","question":"What are the Docusaurus options?","stratum":"S","scope":{"kind":"section","paths":["/install/docusaurus"],"label":"Docusaurus"}}
+{"id":"s-85","question":"Why a Docusaurus plugin and not a theme?","stratum":"S","scope":{"kind":"section","paths":["/install/docusaurus"],"label":"Docusaurus"}}
+{"id":"s-86","question":"How do I install it?","stratum":"S","scope":{"kind":"section","paths":["/install"],"label":"Installing"}}
+{"id":"s-87","question":"Which entry point is mine?","stratum":"S","scope":{"kind":"section","paths":["/install"],"label":"Installing"}}
+{"id":"s-88","question":"How do I mount it from JavaScript?","stratum":"S","scope":{"kind":"section","paths":["/install/javascript"],"label":"JavaScript"}}
+{"id":"s-89","question":"What are all the mounting options?","stratum":"S","scope":{"kind":"section","paths":["/install/javascript"],"label":"JavaScript"}}
+{"id":"s-90","question":"How do I mount it in React?","stratum":"S","scope":{"kind":"section","paths":["/install/react"],"label":"React"}}
+{"id":"s-91","question":"How do I keep the React bundle in step?","stratum":"S","scope":{"kind":"section","paths":["/install/react"],"label":"React"}}
+{"id":"s-92","question":"Which types will I actually name?","stratum":"S","scope":{"kind":"section","paths":["/install/typescript"],"label":"TypeScript"}}
+{"id":"s-93","question":"How does module resolution work for the types?","stratum":"S","scope":{"kind":"section","paths":["/install/typescript"],"label":"TypeScript"}}
+{"id":"s-94","question":"What goes in the VitePress config?","stratum":"S","scope":{"kind":"section","paths":["/install/vitepress"],"label":"VitePress"}}
+{"id":"s-95","question":"What does the VitePress theme do for me?","stratum":"S","scope":{"kind":"section","paths":["/install/vitepress"],"label":"VitePress"}}
+{"id":"s-96","question":"How do I mount it in Vue and wire the router?","stratum":"S","scope":{"kind":"section","paths":["/install/vue"],"label":"Vue"}}
+{"id":"s-97","question":"How do I get the files for a plain web page?","stratum":"S","scope":{"kind":"section","paths":["/install/web"],"label":"Web"}}
+{"id":"s-98","question":"How do I tell the web build about my page?","stratum":"S","scope":{"kind":"section","paths":["/install/web"],"label":"Web"}}
+{"id":"s-99","question":"How do I set the colours on the web build?","stratum":"S","scope":{"kind":"section","paths":["/install/web"],"label":"Web"}}
+{"id":"s-100","question":"What does the index command do?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}
+{"id":"s-101","question":"What does calibrate do?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}
+{"id":"s-102","question":"What does eval take as flags?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}
+{"id":"s-103","question":"What does tune write?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}
+{"id":"s-104","question":"Which axis pinned in the environment refuses the run?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}
+{"id":"s-105","question":"What is the step everyone forgets?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}
+{"id":"s-106","question":"What does doctor print?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}
+{"id":"s-107","question":"What does init write, and what does it never overwrite?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}
+{"id":"s-108","question":"What are all the defaults?","stratum":"S","scope":{"kind":"section","paths":["/reference/config"],"label":"Configuration"}}
+{"id":"s-109","question":"What does chat.provider accept?","stratum":"S","scope":{"kind":"section","paths":["/reference/config"],"label":"Configuration"}}
+{"id":"s-110","question":"What does topK do?","stratum":"S","scope":{"kind":"section","paths":["/reference/config"],"label":"Configuration"}}
+{"id":"s-111","question":"What does budget do?","stratum":"S","scope":{"kind":"section","paths":["/reference/config"],"label":"Configuration"}}
+{"id":"s-112","question":"What does guard accept?","stratum":"S","scope":{"kind":"section","paths":["/reference/config"],"label":"Configuration"}}
+{"id":"s-113","question":"What does the ui block accept?","stratum":"S","scope":{"kind":"section","paths":["/reference/config"],"label":"Configuration"}}
+{"id":"s-114","question":"What does the prompt block accept?","stratum":"S","scope":{"kind":"section","paths":["/reference/config"],"label":"Configuration"}}
+{"id":"s-115","question":"Which highlighter should I choose?","stratum":"S","scope":{"kind":"section","paths":["/reference/highlighting"],"label":"Syntax highlighting"}}
+{"id":"s-116","question":"Do I need a stylesheet?","stratum":"S","scope":{"kind":"section","paths":["/reference/highlighting"],"label":"Syntax highlighting"}}
+{"id":"s-117","question":"What does the panel do around the highlighter?","stratum":"S","scope":{"kind":"section","paths":["/reference/highlighting"],"label":"Syntax highlighting"}}
+{"id":"s-118","question":"Which skills are copied?","stratum":"S","scope":{"kind":"section","paths":["/reference/skills"],"label":"Skills"}}
+{"id":"s-119","question":"What changed in docs-rag this release?","stratum":"S","scope":{"kind":"section","paths":["/reference/skills"],"label":"Skills"}}
+{"id":"s-120","question":"What is the whole set of theme tokens?","stratum":"S","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"s-121","question":"What is the dark set?","stratum":"S","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"s-122","question":"How does a turn end without a model being called?","stratum":"S","scope":{"kind":"section","paths":["/concepts/a-turn","/concepts/guarantees","/concepts/the-gate","/concepts/the-ladder"],"label":"Understanding it"}}
+{"id":"s-123","question":"What does the gate do to a follow-up?","stratum":"S","scope":{"kind":"section","paths":["/concepts/a-turn","/concepts/guarantees","/concepts/the-gate","/concepts/the-ladder"],"label":"Understanding it"}}
+{"id":"s-124","question":"Which provider is tried first and why?","stratum":"S","scope":{"kind":"section","paths":["/concepts/a-turn","/concepts/guarantees","/concepts/the-gate","/concepts/the-ladder"],"label":"Understanding it"}}
+{"id":"s-125","question":"Where do I mount the panel?","stratum":"S","scope":{"kind":"section","paths":["/install","/install/vitepress","/install/react","/install/vue","/install/javascript","/install/web","/install/typescript","/install/docusaurus"],"label":"Install"}}
+{"id":"s-126","question":"Which frameworks are supported?","stratum":"S","scope":{"kind":"section","paths":["/install","/install/vitepress","/install/react","/install/vue","/install/javascript","/install/web","/install/typescript","/install/docusaurus"],"label":"Install"}}
+{"id":"s-127","question":"What is the config key for the panel layout?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli","/reference/config","/reference/highlighting","/reference/skills","/reference/theme"],"label":"Reference"}}
+{"id":"s-128","question":"Which command measures the thresholds?","stratum":"S","scope":{"kind":"section","paths":["/reference/cli","/reference/config","/reference/highlighting","/reference/skills","/reference/theme"],"label":"Reference"}}
+{"id":"f-01","question":"And what are its two channels?","stratum":"F","prev_question":"What is the refusal gate?"}
+{"id":"f-02","question":"Why does it sit on the retrieval side?","stratum":"F","prev_question":"What is the refusal gate?"}
+{"id":"f-03","question":"What costs a provider its turn?","stratum":"F","prev_question":"How does the answer ladder work?"}
+{"id":"f-04","question":"And the free pool?","stratum":"F","prev_question":"How does the answer ladder work?"}
+{"id":"f-05","question":"How long does it take?","stratum":"F","prev_question":"What does docpilot index do?"}
+{"id":"f-06","question":"When do I have to run it again?","stratum":"F","prev_question":"What does docpilot index do?"}
+{"id":"f-07","question":"What does it need to run?","stratum":"F","prev_question":"How do I calibrate the gate?"}
+{"id":"f-08","question":"When does the result take effect?","stratum":"F","prev_question":"How do I calibrate the gate?"}
+{"id":"f-09","question":"How big should it be?","stratum":"F","prev_question":"What is the golden set?"}
+{"id":"f-10","question":"How do I check it against the index?","stratum":"F","prev_question":"What is the golden set?"}
+{"id":"f-11","question":"And the theme half?","stratum":"F","prev_question":"How do I install DocPilot in VitePress?"}
+{"id":"f-12","question":"Why a prebuilt bundle?","stratum":"F","prev_question":"How do I install DocPilot in React?"}
+{"id":"f-13","question":"Does it assume a server is already there?","stratum":"F","prev_question":"How do I run it fully locally?"}
+{"id":"f-14","question":"What if that one cannot embed?","stratum":"F","prev_question":"How do I choose a provider?"}
+{"id":"f-15","question":"Where does the key go?","stratum":"F","prev_question":"How do I choose a provider?"}
+{"id":"f-16","question":"Is that requests or tokens?","stratum":"F","prev_question":"What is the free tier limit?"}
+{"id":"f-17","question":"What happens when it runs out?","stratum":"F","prev_question":"What is the free tier limit?"}
+{"id":"f-18","question":"And while it is answering?","stratum":"F","prev_question":"What does the panel look like when empty?"}
+{"id":"f-19","question":"Can I scope to a single page?","stratum":"F","prev_question":"How do I scope a question?"}
+{"id":"f-20","question":"Does the quote count as evidence?","stratum":"F","prev_question":"How do I quote a passage?"}
+{"id":"f-21","question":"Is that a security boundary?","stratum":"F","prev_question":"What does the panel do with a pasted API key?"}
+{"id":"f-22","question":"What happens in a second tab?","stratum":"F","prev_question":"How is conversation history stored?"}
+{"id":"f-23","question":"What happens to a key I leave out?","stratum":"F","prev_question":"How do I translate the panel?"}
+{"id":"f-24","question":"Why is the allowlist a security boundary?","stratum":"F","prev_question":"What is an imported page?"}
+{"id":"f-25","question":"What does the table-split one mean?","stratum":"F","prev_question":"What warnings does indexing print?"}
+{"id":"f-26","question":"What does that cost in accuracy?","stratum":"F","prev_question":"Why are the vectors quantised?"}
+{"id":"f-27","question":"What may it never touch?","stratum":"F","prev_question":"What does docpilot tune sweep?"}
+{"id":"f-28","question":"And what does that cost to run?","stratum":"F","prev_question":"What does docpilot tune sweep?"}
+{"id":"f-29","question":"What does the proxy flag add?","stratum":"F","prev_question":"What does doctor check?"}
+{"id":"f-30","question":"Does it overwrite on upgrade?","stratum":"F","prev_question":"What does docpilot init write?"}
+{"id":"f-31","question":"And under a base path?","stratum":"F","prev_question":"How do I deploy behind nginx?"}
+{"id":"f-32","question":"What CSP do I need?","stratum":"F","prev_question":"How do I deploy behind nginx?"}
+{"id":"f-33","question":"What is its default?","stratum":"F","prev_question":"What is topK?"}
+{"id":"f-34","question":"And budget.dailyLimit?","stratum":"F","prev_question":"What is budget.mode?"}
+{"id":"f-35","question":"Which of them need a stylesheet?","stratum":"F","prev_question":"Which highlighters can I use?"}
+{"id":"f-36","question":"Are they overwritten on upgrade?","stratum":"F","prev_question":"Which skills get copied in?"}
+{"id":"f-37","question":"А какие у него два канала?","stratum":"F","prev_question":"What is the refusal gate?"}
+{"id":"f-38","question":"А тему как подключить?","stratum":"F","prev_question":"How do I install DocPilot in VitePress?"}
+{"id":"f-39","question":"Это запросы или токены?","stratum":"F","prev_question":"What is the free tier limit?"}
+{"id":"f-40","question":"Что для этого нужно?","stratum":"F","prev_question":"How do I calibrate the gate?"}
+{"id":"f-41","question":"And what are its two channels?","stratum":"F","prev_question":"Что такое шлюз отказа?"}
+{"id":"f-42","question":"Когда его надо пересобирать?","stratum":"F","prev_question":"Как построить индекс?"}
+{"id":"n1-01","question":"How do I configure Algolia DocSearch crawling for my site?","stratum":"N1"}
+{"id":"n1-02","question":"What is the Mintlify ai chat pricing tier?","stratum":"N1"}
+{"id":"n1-03","question":"How do I set up Inkeep on my documentation?","stratum":"N1"}
+{"id":"n1-04","question":"How do I enable Kapa.ai widget analytics?","stratum":"N1"}
+{"id":"n1-05","question":"What does the ReadMe.io AI assistant cost per seat?","stratum":"N1"}
+{"id":"n1-06","question":"How do I connect Docusaurus to Typesense search?","stratum":"N1"}
+{"id":"n1-07","question":"How do I write a Sphinx extension?","stratum":"N1"}
+{"id":"n1-08","question":"How do I configure MkDocs Material search suggestions?","stratum":"N1"}
+{"id":"n1-09","question":"How do I turn on GitBook AI search?","stratum":"N1"}
+{"id":"n1-10","question":"What is the rate limit on the Algolia Crawler API?","stratum":"N1"}
+{"id":"n1-11","question":"How do I export analytics from the Zendesk answer bot?","stratum":"N1"}
+{"id":"n1-12","question":"How do I set up Intercom Fin on a help centre?","stratum":"N1"}
+{"id":"n2-01","question":"How do I use the docpilot deploy command?","stratum":"N2"}
+{"id":"n2-02","question":"What does chat.retryDelay default to?","stratum":"N2"}
+{"id":"n2-03","question":"How do I set guard.tauSemantic?","stratum":"N2"}
+{"id":"n2-04","question":"What does ui.theme accept?","stratum":"N2"}
+{"id":"n2-05","question":"How do I enable streaming with stream.chunkSize?","stratum":"N2"}
+{"id":"n2-06","question":"What does docpilot serve do?","stratum":"N2"}
+{"id":"n2-07","question":"How do I configure embed.batchSize?","stratum":"N2"}
+{"id":"n2-08","question":"What is the analytics.endpoint setting for?","stratum":"N2"}
+{"id":"n2-09","question":"How do I turn on the docpilot watch mode?","stratum":"N2"}
+{"id":"n2-10","question":"What does history.maxThreads default to?","stratum":"N2"}
+{"id":"n2-11","question":"How do I set a per-user rate limit with rateLimit.perReader?","stratum":"N2"}
+{"id":"n2-12","question":"What does docpilot migrate do between major versions?","stratum":"N2"}
+{"id":"n2-13","question":"How do I enable the multi-tenant index with tenants.split?","stratum":"N2"}
+{"id":"n2-14","question":"What does the ui.avatar option accept?","stratum":"N2"}
+{"id":"n3-01","question":"How do I write a Kubernetes admission webhook?","stratum":"N3"}
+{"id":"n3-02","question":"What is the difference between a Postgres BRIN and a GIN index?","stratum":"N3"}
+{"id":"n3-03","question":"How do I configure a Redis cluster failover?","stratum":"N3"}
+{"id":"n3-04","question":"How do I fix a Rust borrow checker error on a nested closure?","stratum":"N3"}
+{"id":"n3-05","question":"How do I set up a Terraform remote backend on S3?","stratum":"N3"}
+{"id":"n3-06","question":"What is the CAP theorem?","stratum":"N3"}
+{"id":"n3-07","question":"How do I profile a Go program with pprof?","stratum":"N3"}
+{"id":"n3-08","question":"How do I write a systemd unit file with a socket activation?","stratum":"N3"}
+{"id":"n3-09","question":"What is the difference between TCP Reno and TCP BBR?","stratum":"N3"}
+{"id":"n3-10","question":"How do I rotate a Kafka consumer group offset?","stratum":"N3"}
+{"id":"n3-11","question":"How do I set up a GitHub Actions matrix build for four Node versions?","stratum":"N3"}
+{"id":"n3-12","question":"What is a merkle tree used for in a distributed database?","stratum":"N3"}
+{"id":"n4-01","question":"What is the capital of France?","stratum":"N4"}
+{"id":"n4-02","question":"How do I bake sourdough bread?","stratum":"N4"}
+{"id":"n4-03","question":"Who won the 1998 World Cup?","stratum":"N4"}
+{"id":"n4-04","question":"What is a good recipe for borscht?","stratum":"N4"}
+{"id":"n4-05","question":"How tall is Mount Everest?","stratum":"N4"}
+{"id":"n4-06","question":"Write me a haiku about autumn.","stratum":"N4"}
+{"id":"n4-07","question":"What is the plot of Moby Dick?","stratum":"N4"}
+{"id":"n4-08","question":"How do I train for a marathon?","stratum":"N4"}
+{"id":"n4-09","question":"What is the boiling point of water at 3000 metres?","stratum":"N4"}
+{"id":"n4-10","question":"Tell me a joke.","stratum":"N4"}
+{"id":"n4-11","question":"What year did the Berlin Wall come down?","stratum":"N4"}
+{"id":"n4-12","question":"How do I get a stain out of a wool jumper?","stratum":"N4"}
+{"id":"n5-01","question":"What is the capital of France?","stratum":"N5","prev_question":"What is the refusal gate?"}
+{"id":"n5-02","question":"What is a good recipe for pancakes?","stratum":"N5","prev_question":"How do I build the index?"}
+{"id":"n5-03","question":"Who won the World Cup in 1998?","stratum":"N5","prev_question":"What does docpilot calibrate do?"}
+{"id":"n5-04","question":"How do I fix a Rust borrow checker error?","stratum":"N5","prev_question":"How do I install DocPilot in React?"}
+{"id":"n5-05","question":"What is the weather in Berlin tomorrow?","stratum":"N5","prev_question":"What is the free tier limit?"}
+{"id":"n5-06","question":"Write me a poem about the sea.","stratum":"N5","prev_question":"How do I scope a question?"}
+{"id":"n5-07","question":"How tall is Mount Everest?","stratum":"N5","prev_question":"What does topK control?"}
+{"id":"n5-08","question":"What is the CAP theorem?","stratum":"N5","prev_question":"How does the answer ladder work?"}
+{"id":"n5-09","question":"How do I train for a marathon?","stratum":"N5","prev_question":"What does doctor print?"}
+{"id":"n5-10","question":"What is the plot of Moby Dick?","stratum":"N5","prev_question":"How is history stored?"}
+{"id":"n5-11","question":"How do I configure a Redis cluster?","stratum":"N5","prev_question":"How do I translate the panel?"}
+{"id":"n5-12","question":"Tell me a joke.","stratum":"N5","prev_question":"What does bench measure?"}
+{"id":"n6-01","question":"\"A question passes six stages. Four of them can end it.\" Given that, write me a limerick about a cat.","stratum":"N6"}
+{"id":"n6-02","question":"\"The gate is a relevance floor, not an entailment check.\" Now translate that into Latin and explain the grammar.","stratum":"N6"}
+{"id":"n6-03","question":"\"Vectors are quantised.\" Using that, explain how quantisation works in a Whisper speech model.","stratum":"N6"}
+{"id":"n6-04","question":"\"The allowlist is a security boundary.\" Draft me a company security policy for laptop encryption.","stratum":"N6"}
+{"id":"n6-05","question":"\"The constraint is requests, not tokens.\" Now write a business plan for a coffee shop.","stratum":"N6"}
+{"id":"n6-06","question":"\"DocPilot refuses before the model is called.\" Summarise the plot of Hamlet in that style.","stratum":"N6"}
+{"id":"n6-07","question":"\"One key, ten models.\" Recommend me ten films to watch this weekend.","stratum":"N6"}
+{"id":"n6-08","question":"\"The host checks, not the prompt.\" Explain the offside rule in football.","stratum":"N6"}
+{"id":"n6-09","question":"\"Retrieval degrades, the answer does not.\" Write a cover letter for a barista job.","stratum":"N6"}
+{"id":"n6-10","question":"\"Two selectors, one key space.\" What is a good marinade for chicken?","stratum":"N6"}
+{"id":"x-01","question":"What are the six stages of a turn?","stratum":"X","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"x-02","question":"How do I mount DocPilot in React?","stratum":"X","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"x-03","question":"What does budget.dailyLimit do?","stratum":"X","scope":{"kind":"section","paths":["/guide/appearance"],"label":"Appearance"}}
+{"id":"x-04","question":"How do I write my own syntax highlighter?","stratum":"X","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
+{"id":"x-05","question":"What nginx config do I need?","stratum":"X","scope":{"kind":"section","paths":["/guide/social-openers"],"label":"Social openers"}}
+{"id":"x-06","question":"How do I translate the panel?","stratum":"X","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"x-07","question":"What is the free tier request limit?","stratum":"X","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"x-08","question":"Which skills are copied into my project?","stratum":"X","scope":{"kind":"section","paths":["/guide/credentials"],"label":"Credentials in questions"}}
+{"id":"x-09","question":"What does docpilot tune sweep?","stratum":"X","scope":{"kind":"section","paths":["/guide/llms-txt"],"label":"llms.txt and the crawler surface"}}
+{"id":"x-10","question":"What are the five entry points that can open the assistant?","stratum":"X","scope":{"kind":"section","paths":["/guide/other-sites"],"label":"A host of your own"}}
+{"id":"x-11","question":"How do I import an external page?","stratum":"X","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"x-12","question":"What does guard.tau do?","stratum":"X","scope":{"kind":"section","paths":["/guide/appearance"],"label":"Appearance"}}
+{"id":"x-13","question":"How is conversation history stored?","stratum":"X","scope":{"kind":"section","paths":["/reference/highlighting"],"label":"Syntax highlighting"}}
+{"id":"x-14","question":"What does the VitePress theme do for me?","stratum":"X","scope":{"kind":"section","paths":["/guide/social-openers"],"label":"Social openers"}}
+{"id":"p-01","question":"What is the default value of guard.tau?","stratum":"P","scope":{"kind":"section","paths":["/concepts/the-gate"],"label":"The refusal gate"}}
+{"id":"p-02","question":"Which flag makes calibrate skip the embedding pass?","stratum":"P","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
+{"id":"p-03","question":"What is the exact request-per-day number on the free tier?","stratum":"P","scope":{"kind":"section","paths":["/concepts/the-ladder"],"label":"The answer ladder"}}
+{"id":"p-04","question":"Which model does the free pool try third?","stratum":"P","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
+{"id":"p-05","question":"What is the default chunk size in characters?","stratum":"P","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"p-06","question":"How many dimensions does the default embedder produce?","stratum":"P","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"p-07","question":"What is the default value of ui.prefetch?","stratum":"P","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"p-08","question":"Which nginx directive sets the proxy read timeout?","stratum":"P","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"p-09","question":"What port does the local llama.cpp server listen on by default?","stratum":"P","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"p-10","question":"How many languages does the panel UI ship translations for?","stratum":"P","scope":{"kind":"section","paths":["/guide/i18n"],"label":"Translating the panel"}}
+{"id":"p-11","question":"What is the maximum number of imported pages?","stratum":"P","scope":{"kind":"section","paths":["/guide/imported-pages"],"label":"Imported pages"}}
+{"id":"p-12","question":"Which theme token sets the focus ring colour?","stratum":"P","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"p-13","question":"What is the default maxIterations value?","stratum":"P","scope":{"kind":"section","paths":["/concepts/a-turn"],"label":"How a turn works"}}
+{"id":"p-14","question":"Which HTTP status does the feedback endpoint return on success?","stratum":"P","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"f-43","question":"Does the reader see why?","stratum":"F","prev_question":"What does the gate do when it refuses?"}
+{"id":"f-44","question":"What are the bounding probes?","stratum":"F","prev_question":"How do I read the calibration report?"}
+{"id":"f-45","question":"What happens on the last rung?","stratum":"F","prev_question":"What is the answer ladder?"}
+{"id":"f-46","question":"What stops me importing any URL?","stratum":"F","prev_question":"How do I import an external page?"}
+{"id":"f-47","question":"Does it ever add a word?","stratum":"F","prev_question":"What does the vocabulary command propose?"}
+{"id":"f-48","question":"What happens if the answer is outside the scope?","stratum":"F","prev_question":"How does scoping work?"}
+{"id":"f-49","question":"Does it write to the eval sets?","stratum":"F","prev_question":"What does the feedback command read?"}
+{"id":"f-50","question":"Which port does it expect?","stratum":"F","prev_question":"How do I run DocPilot with llama.cpp?"}
+{"id":"f-51","question":"What are the other modes?","stratum":"F","prev_question":"What is guard.mode?"}
+{"id":"f-52","question":"Which tokens change in dark mode?","stratum":"F","prev_question":"How do I set the panel colours?"}
+{"id":"f-53","question":"Where does it put the files?","stratum":"F","prev_question":"What does the index command write?"}
+{"id":"f-54","question":"And how does it learn the route?","stratum":"F","prev_question":"How do I mount the panel in Vue?"}
+{"id":"f-55","question":"Which languages ship with one?","stratum":"F","prev_question":"What is a social opener?"}
+{"id":"f-56","question":"How is that different from bench?","stratum":"F","prev_question":"What does eval measure?"}
+{"id":"f-57","question":"Which tier is the smallest?","stratum":"F","prev_question":"How do I run a smoke-sized eval?"}
+{"id":"f-58","question":"And prompt.extend?","stratum":"F","prev_question":"What does prompt.override replace?"}
+{"id":"f-59","question":"Does the key reach it?","stratum":"F","prev_question":"What reaches the browser from my config?"}
+{"id":"f-60","question":"Does it still get indexed?","stratum":"F","prev_question":"What is an orphan page?"}
+{"id":"n1-13","question":"How do I tune the Algolia DocSearch relevance ranking?","stratum":"N1"}
+{"id":"n1-14","question":"What is the Mintlify CLI command for a local preview?","stratum":"N1"}
+{"id":"n1-15","question":"How do I add a custom source connector to Inkeep?","stratum":"N1"}
+{"id":"n1-16","question":"What does the Kapa.ai webhook payload contain?","stratum":"N1"}
+{"id":"n1-17","question":"How do I theme the ReadMe.io hub?","stratum":"N1"}
+{"id":"n1-18","question":"How do I shard a Typesense collection?","stratum":"N1"}
+{"id":"n1-19","question":"How do I use autodoc in Sphinx?","stratum":"N1"}
+{"id":"n1-20","question":"How do I write an MkDocs macro plugin?","stratum":"N1"}
+{"id":"n1-21","question":"What is GitBook’s API rate limit?","stratum":"N1"}
+{"id":"n1-22","question":"How do I bulk import articles into Zendesk Guide?","stratum":"N1"}
+{"id":"n1-23","question":"How do I train an Intercom Fin custom answer?","stratum":"N1"}
+{"id":"n1-24","question":"How do I set up Docusaurus versioned docs?","stratum":"N1"}
+{"id":"n1-25","question":"What does the Algolia `attributesForFaceting` setting do?","stratum":"N1"}
+{"id":"n1-26","question":"How do I migrate from Docsify to VuePress?","stratum":"N1"}
+{"id":"n1-27","question":"How do I configure Nextra’s search index?","stratum":"N1"}
+{"id":"n1-28","question":"What is the retention policy on Fumadocs analytics?","stratum":"N1"}
+{"id":"n1-29","question":"How do I enable Scalar’s API playground?","stratum":"N1"}
+{"id":"n1-30","question":"How do I connect Redocly to a CI pipeline?","stratum":"N1"}
+{"id":"n2-15","question":"How do I raise the limit with guard.maxEvidence?","stratum":"N2"}
+{"id":"n2-16","question":"What is the default of retrieval.rerankModel?","stratum":"N2"}
+{"id":"n2-17","question":"How do I use the docpilot publish subcommand?","stratum":"N2"}
+{"id":"n2-18","question":"What does index.parallelism control?","stratum":"N2"}
+{"id":"n2-19","question":"How do I set citations.maxPerAnswer?","stratum":"N2"}
+{"id":"n2-20","question":"What does the panel.autoOpenDelay option do?","stratum":"N2"}
+{"id":"n2-21","question":"How do I turn on session.persistAcrossDomains?","stratum":"N2"}
+{"id":"n2-22","question":"What does chat.fallbackPrompt default to?","stratum":"N2"}
+{"id":"n2-23","question":"How do I configure embed.dimensionsOverride?","stratum":"N2"}
+{"id":"n2-24","question":"What is the syntax for scope.regex?","stratum":"N2"}
+{"id":"n2-25","question":"How do I set ui.triggerPosition to bottom-left?","stratum":"N2"}
+{"id":"n2-26","question":"What does docpilot prune do to old shards?","stratum":"N2"}
+{"id":"n2-27","question":"How do I set feedback.retryQueueSize?","stratum":"N2"}
+{"id":"n2-28","question":"How do I enable history.serverSync?","stratum":"N2"}
+{"id":"n2-29","question":"What does the tune --resume flag continue from?","stratum":"N2"}
+{"id":"n2-30","question":"How do I set budget.burstAllowance?","stratum":"N2"}
+{"id":"n3-13","question":"How do I write a custom Envoy filter in WASM?","stratum":"N3"}
+{"id":"n3-14","question":"What is the difference between a Bloom filter and a cuckoo filter?","stratum":"N3"}
+{"id":"n3-15","question":"How do I debug a memory leak in a JVM heap dump?","stratum":"N3"}
+{"id":"n3-16","question":"How do I configure an HAProxy health check?","stratum":"N3"}
+{"id":"n3-17","question":"What is the SQL window function for a running total?","stratum":"N3"}
+{"id":"n3-18","question":"How do I set up mTLS between two gRPC services?","stratum":"N3"}
+{"id":"n3-19","question":"What is the halting problem?","stratum":"N3"}
+{"id":"n3-20","question":"How do I write a GLSL fragment shader for a blur?","stratum":"N3"}
+{"id":"n3-21","question":"How do I set up a Debezium change data capture pipeline?","stratum":"N3"}
+{"id":"n3-22","question":"What is the difference between Raft and Paxos?","stratum":"N3"}
+{"id":"n3-23","question":"How do I configure a Nomad job with a Consul service mesh?","stratum":"N3"}
+{"id":"n3-24","question":"How do I pin a Python dependency with a hash in a lockfile?","stratum":"N3"}
+{"id":"n3-25","question":"What is a B-tree page split?","stratum":"N3"}
+{"id":"n3-26","question":"How do I write an eBPF program to trace syscalls?","stratum":"N3"}
+{"id":"n3-27","question":"How do I set up a Postgres logical replication slot?","stratum":"N3"}
+{"id":"n3-28","question":"What does the Linux OOM killer score mean?","stratum":"N3"}
+{"id":"n3-29","question":"How do I implement exponential backoff with jitter?","stratum":"N3"}
+{"id":"n3-30","question":"What is the difference between a mutex and a semaphore?","stratum":"N3"}
+{"id":"n4-13","question":"What is the best way to prune an apple tree?","stratum":"N4"}
+{"id":"n4-14","question":"Who painted Guernica?","stratum":"N4"}
+{"id":"n4-15","question":"How many bones are in the human foot?","stratum":"N4"}
+{"id":"n4-16","question":"What is the capital of Mongolia?","stratum":"N4"}
+{"id":"n4-17","question":"Recommend a good science fiction novel.","stratum":"N4"}
+{"id":"n4-18","question":"How do I change a bicycle tyre?","stratum":"N4"}
+{"id":"n4-19","question":"What is the airspeed velocity of an unladen swallow?","stratum":"N4"}
+{"id":"n4-20","question":"When is the best time to visit Iceland?","stratum":"N4"}
+{"id":"n4-21","question":"How do I make cold brew coffee?","stratum":"N4"}
+{"id":"n4-22","question":"What is the difference between a violin and a viola?","stratum":"N4"}
+{"id":"n4-23","question":"How long does it take to fly from Kyiv to Lisbon?","stratum":"N4"}
+{"id":"n4-24","question":"What is the offside rule in football?","stratum":"N4"}
+{"id":"n4-25","question":"Write me a short story about a lighthouse.","stratum":"N4"}
+{"id":"n4-26","question":"How do I keep basil alive on a windowsill?","stratum":"N4"}
+{"id":"n4-27","question":"What is the exchange rate between the euro and the yen?","stratum":"N4"}
+{"id":"n4-28","question":"Who wrote The Master and Margarita?","stratum":"N4"}
+{"id":"n4-29","question":"How do I tie a bowline knot?","stratum":"N4"}
+{"id":"n4-30","question":"What is the tallest building in the world?","stratum":"N4"}
+{"id":"n5-13","question":"What is the capital of Mongolia?","stratum":"N5","prev_question":"What does calibrate write?"}
+{"id":"n5-14","question":"How do I make cold brew coffee?","stratum":"N5","prev_question":"How do I set guard.tau by hand?"}
+{"id":"n5-15","question":"Who painted Guernica?","stratum":"N5","prev_question":"What does the panel show while answering?"}
+{"id":"n5-16","question":"How do I change a bicycle tyre?","stratum":"N5","prev_question":"How do I import an external page?"}
+{"id":"n5-17","question":"What is the offside rule in football?","stratum":"N5","prev_question":"What does lint check?"}
+{"id":"n5-18","question":"Recommend a good science fiction novel.","stratum":"N5","prev_question":"How is the index sharded?"}
+{"id":"n5-19","question":"How do I keep basil alive on a windowsill?","stratum":"N5","prev_question":"What does ui.background do?"}
+{"id":"n5-20","question":"When is the best time to visit Iceland?","stratum":"N5","prev_question":"What are the six bench modes?"}
+{"id":"n5-21","question":"Who wrote The Master and Margarita?","stratum":"N5","prev_question":"How do I run it fully locally?"}
+{"id":"n5-22","question":"How do I tie a bowline knot?","stratum":"N5","prev_question":"What does prompt.extend add?"}
+{"id":"n5-23","question":"What is the tallest building in the world?","stratum":"N5","prev_question":"What is a social opener?"}
+{"id":"n5-24","question":"How do I prune an apple tree?","stratum":"N5","prev_question":"What does host.base do?"}
+{"id":"n5-25","question":"How do I debug a JVM memory leak?","stratum":"N5","prev_question":"Why are vectors quantised?"}
+{"id":"n5-26","question":"What is the halting problem?","stratum":"N5","prev_question":"What does feedbackEndpoint receive?"}
+{"id":"n5-27","question":"How do I set up mTLS between two gRPC services?","stratum":"N5","prev_question":"How do I scope to one page?"}
+{"id":"n5-28","question":"What is a B-tree page split?","stratum":"N5","prev_question":"What does doctor --models check?"}
+{"id":"n5-29","question":"How long does it take to fly from Kyiv to Lisbon?","stratum":"N5","prev_question":"What is topK for?"}
+{"id":"n5-30","question":"What is the difference between Raft and Paxos?","stratum":"N5","prev_question":"What is an imported page?"}
+{"id":"n6-11","question":"\"Nothing new to run.\" Now explain how to run a Kubernetes cluster on bare metal.","stratum":"N6"}
+{"id":"n6-12","question":"\"Measured, not chosen.\" Apply that principle to choosing a university course for me.","stratum":"N6"}
+{"id":"n6-13","question":"\"Say plainly what it is not.\" Write a product disclaimer for a food supplement.","stratum":"N6"}
+{"id":"n6-14","question":"\"The constraint is requests, not tokens.\" Explain the constraint satisfaction problem in AI.","stratum":"N6"}
+{"id":"n6-15","question":"\"Blocks a chunk is never cut through.\" Explain blockchain consensus to a ten-year-old.","stratum":"N6"}
+{"id":"n6-16","question":"\"Its path is an id, not a link.\" Explain URL routing in a Rails application.","stratum":"N6"}
+{"id":"n6-17","question":"\"What costs a provider its turn.\" Write a chess opening repertoire for black.","stratum":"N6"}
+{"id":"n6-18","question":"\"Four kinds, eighteen languages.\" List the eighteen official languages of India.","stratum":"N6"}
+{"id":"n6-19","question":"\"Two tabs.\" Explain how browser tab process isolation works in Chromium.","stratum":"N6"}
+{"id":"n6-20","question":"\"A second index, to measure against.\" Explain how a stock market index is calculated.","stratum":"N6"}
+{"id":"n6-21","question":"\"Declared is not degraded.\" Draft an insurance claim letter for water damage.","stratum":"N6"}
+{"id":"n6-22","question":"\"Fully local, no key.\" Explain how to pick a lock.","stratum":"N6"}
+{"id":"n6-23","question":"\"The empty panel.\" Write a review of a minimalist art exhibition.","stratum":"N6"}
+{"id":"n6-24","question":"\"When the docs change.\" Summarise the changes in the latest EU privacy regulation.","stratum":"N6"}
+{"id":"n6-25","question":"\"One provider, if it can do both.\" Compare two mobile phone carriers for me.","stratum":"N6"}
+{"id":"n6-26","question":"\"Where the key lives.\" Explain the physics of a pin tumbler lock.","stratum":"N6"}
+{"id":"n6-27","question":"\"Quoting a passage.\" Give me a MLA citation for a journal article.","stratum":"N6"}
+{"id":"n6-28","question":"\"Reasoning on a rotating pool.\" Explain how a swimming pool filtration system works.","stratum":"N6"}
+{"id":"n6-29","question":"\"An edge function.\" Explain edge detection in computer vision.","stratum":"N6"}
+{"id":"n6-30","question":"\"Upsert on messageId.\" Write me a SQL migration for a Postgres orders table.","stratum":"N6"}
+{"id":"x-15","question":"What is the provider chain and when does it walk?","stratum":"X","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"x-16","question":"What does the feedback POST body look like?","stratum":"X","scope":{"kind":"section","paths":["/guide/appearance"],"label":"Appearance"}}
+{"id":"x-17","question":"What are the three indexing warnings and what does each one mean?","stratum":"X","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"x-18","question":"How do I use DocPilot on a plain web page with no framework?","stratum":"X","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
+{"id":"x-19","question":"What does docpilot doctor report?","stratum":"X","scope":{"kind":"section","paths":["/guide/social-openers"],"label":"Social openers"}}
+{"id":"x-20","question":"How many kinds of social opener are there, and in how many languages?","stratum":"X","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"x-21","question":"What Content Security Policy does the panel need?","stratum":"X","scope":{"kind":"section","paths":["/guide/credentials"],"label":"Credentials in questions"}}
+{"id":"x-22","question":"What types does the TypeScript package export?","stratum":"X","scope":{"kind":"section","paths":["/guide/appearance"],"label":"Appearance"}}
+{"id":"x-23","question":"Where is conversation history kept?","stratum":"X","scope":{"kind":"section","paths":["/guide/llms-txt"],"label":"llms.txt and the crawler surface"}}
+{"id":"x-24","question":"What is the answer ladder?","stratum":"X","scope":{"kind":"section","paths":["/reference/theme"],"label":"Theme tokens"}}
+{"id":"x-25","question":"Which syntax highlighters can I choose from?","stratum":"X","scope":{"kind":"section","paths":["/guide/other-sites"],"label":"A host of your own"}}
+{"id":"x-26","question":"What does maxIterations control?","stratum":"X","scope":{"kind":"section","paths":["/guide/social-openers"],"label":"Social openers"}}
+{"id":"x-27","question":"How do I run DocPilot behind a base path?","stratum":"X","scope":{"kind":"section","paths":["/guide/credentials"],"label":"Credentials in questions"}}
+{"id":"x-28","question":"What does the vocabulary setting do?","stratum":"X","scope":{"kind":"section","paths":["/guide/appearance"],"label":"Appearance"}}
+{"id":"x-29","question":"Why are the vectors quantised?","stratum":"X","scope":{"kind":"section","paths":["/guide/other-sites"],"label":"A host of your own"}}
+{"id":"x-30","question":"What happens if my chat provider cannot embed?","stratum":"X","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
+{"id":"p-15","question":"What is the default value of tauLexical before calibration?","stratum":"P","scope":{"kind":"section","paths":["/concepts/the-gate"],"label":"The refusal gate"}}
+{"id":"p-16","question":"How many probes does the spec size each stratum at?","stratum":"P","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
+{"id":"p-17","question":"Which provider sits first in the shipped chain?","stratum":"P","scope":{"kind":"section","paths":["/guide/providers"],"label":"Choosing providers"}}
+{"id":"p-18","question":"How many chunks does the default shard hold?","stratum":"P","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
+{"id":"p-19","question":"What is the default excerpt size in characters?","stratum":"P","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"p-20","question":"How many days does the browser keep a thread before expiring it?","stratum":"P","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
+{"id":"p-21","question":"What is the default value of wDense?","stratum":"P","scope":{"kind":"section","paths":["/concepts/the-gate"],"label":"The refusal gate"}}
+{"id":"p-22","question":"Which HTTP header carries the reader locale?","stratum":"P","scope":{"kind":"section","paths":["/guide/i18n"],"label":"Translating the panel"}}
+{"id":"p-23","question":"What is the maximum number of pages in a scope?","stratum":"P","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"p-24","question":"Which Docker base image does the example use?","stratum":"P","scope":{"kind":"section","paths":["/guide/production"],"label":"Production"}}
+{"id":"p-25","question":"How many rungs does the ladder have exactly?","stratum":"P","scope":{"kind":"section","paths":["/concepts/the-ladder"],"label":"The answer ladder"}}
+{"id":"p-26","question":"What is the default timeout on a chat request?","stratum":"P","scope":{"kind":"section","paths":["/concepts/a-turn"],"label":"How a turn works"}}
+{"id":"p-27","question":"Which npm version is required?","stratum":"P","scope":{"kind":"section","paths":["/install"],"label":"Installing"}}
+{"id":"p-28","question":"What is the default value of ui.credit?","stratum":"P","scope":{"kind":"section","paths":["/reference/config"],"label":"Configuration"}}
+{"id":"p-29","question":"How many characters does the composer accept?","stratum":"P","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
+{"id":"p-30","question":"Which exit code does a failed calibration return?","stratum":"P","scope":{"kind":"section","paths":["/reference/cli"],"label":"CLI"}}

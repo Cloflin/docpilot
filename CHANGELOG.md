@@ -7,6 +7,49 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 0.5.0 — 2026-08-29
+
+### Added
+
+**The panel can be pinned to a scheme — `ui.theme`.**
+
+Which scheme the panel wore was never a setting. With no adapter loaded the core
+reads `prefers-color-scheme`, which is the only signal an embed has; with one, the
+adapter maps every colour token to the host's own and the panel follows the site's
+toggle. Both are right for the case they were written for, and neither could be
+told it was wrong — a marketing page that is dark by construction handed a
+light-OS reader a white panel, and a product that wanted its assistant to read as
+one thing everywhere had to override nine tokens in a stylesheet loaded after the
+adapter, which means knowing that the adapter wins by load order rather than by
+specificity.
+
+```js
+ui: { theme: 'auto' }    // the shipped value — the page decides, as before
+ui: { theme: 'light' }   // always light, whatever the site and the OS say
+ui: { theme: 'dark' }    // always dark, on the same terms
+```
+
+`'system'` is accepted as a spelling of `'auto'`. **The default changes nothing:**
+`'auto'` is exactly the behaviour that shipped, under both mechanisms.
+
+A pin is a class on `<html>`, and the core re-declares the nine tokens that differ
+between its own light and dark sets on `html.docpilot-light` / `html.docpilot-dark`
+— one class deeper than the `:root` an adapter maps on, which is how it wins over
+a stylesheet that beats the core by loading second. It also sets `color-scheme` on
+the panel and the trigger, so the caret, the scrollbar and any native control
+follow; never on `<html>`, because the page's own scrollbars belong to the page.
+Shiki gets the same pair as a rule in all three stylesheets, since its colours are
+per-token inline properties that no token can reach.
+
+**A pinned panel wears DocPilot's own palette, not your site's**, and it cannot be
+otherwise: `--vp-c-bg` only holds a dark value while VitePress is in dark mode.
+`--dp-accent-soft`, `--dp-shadow` and `--dp-scrim` are deliberately left to the
+host even under a pin — one value serves both schemes, so they stay your brand
+tint, your elevation and your backdrop. ui-specs/011 carries the research.
+
+**There is no toggle inside the panel.** A reader who wants it to follow them
+already has one — the site's own theme switch, under `'auto'`.
+
 ## 0.4.0 — 2026-08-28
 
 ### Breaking
@@ -33,6 +76,41 @@ value always wins.
   **Changed** below.
 
 ### Added
+
+**A turn outlives the panel it was asked in — `ui.background`.**
+
+Closing the panel called `stop()`, `stop()` aborted the controller, and an abort
+with nothing painted yet has no terminal state of its own: it fell into
+`'no-answer'` with `cause: 'not-answerable'`, which renders as *I couldn't find
+this in the docs.* A reader who put the panel away during retrieval — which is
+most of a turn's latency, before the first token — was handed the gate's refusal
+for a turn the gate had never run.
+
+One `abort()` was serving two intentions. **Stop** is the composer's button and
+the `Escape` rung above it, and it still reaches the abort at every value of this
+setting. **Close** is the `×`, the scrim, the floating button and the hotkey, and
+none of those ever asked for anything to end.
+
+```js
+ui: { background: 'notify' }   // the shipped value — a dot on the trigger
+ui: { background: 'open' }     // the panel returns by itself, answer in place
+ui: { background: false }      // the turn is abandoned on close, as before
+```
+
+The turn survives moving to another page of the site, because the store always
+has. When it settles behind a closed panel the trigger takes a 10px dot in a new
+`--dp-alert`, which bounces three times and then rests; `prefers-reduced-motion`
+keeps the dot and drops the bounce. Opening the panel clears it.
+
+**The default changes a shipped behaviour, and the reason it may is that what it
+replaces was a falsehood rather than a preference** — there is no value of this
+setting under which that sentence was right. ui-specs/010 carries the research.
+
+**The polite live region moved out of the panel's `v-if`.** It was destroyed with
+the panel, so `announce.answerReady` had nowhere to land once a turn could settle
+behind a closed one. Being resident also removes a race the open path always had:
+a live region inserted in the same frame as its text is one several screen readers
+never announce.
 
 **The vocabulary — the documentation's own name for what readers call something
 else.**
@@ -157,6 +235,23 @@ setting that silently does what it would have done anyway is the failure this
 whole area exists to refuse.
 
 ### Fixed
+
+**Corpus text is rendered, not printed.** Two surfaces showed a reader the
+markdown *source* of a chunk while the answer above them showed rendered prose:
+the passage behind a citation (`citations.passage`) and the result rows in
+search-only mode. Both read `## Heading`, `**bold**` and `](/guide/config)` as
+literal characters.
+
+- **The passage runs through the same renderer the answer does** — lists, code
+  cards with syntax colour, tables, emphasis, and links filtered against the
+  manifest exactly as an answer's are. Two departures, both because the box is a
+  240px quotation and not a page: no copy button on a fence, and the chunk's own
+  headings demoted to a bold line. What is shown is unchanged — the whole chunk,
+  still uncut.
+- **A search-only snippet is stripped to its text before the 220-character
+  window is taken**, so the budget goes on words instead of on punctuation, a cut
+  no longer lands inside a link, and the query highlight marks an emphasised word
+  the same as a plain one.
 
 **Four knobs that were documented and unenforced, and four sentences that were
 documented and untrue.**
@@ -468,6 +563,42 @@ disclosure's blocks — so the prompt panel now carries the face and marks its
 monospaced *blocks* instead of the reverse. The two text buttons under those
 blocks were monospaced by the same inheritance and are not any more.
 `test/styles.test.js` pins the whole list of places that ask for the face.
+
+**`docpilot.web.css` ships inside `@layer docpilot`.** Only that one build. The
+four stylesheets `build-css.js` writes are loaded by a host this package has an
+adapter for — VitePress, Docusaurus — and are unchanged; the web bundle is the
+one that lands on a site nobody mapped, next to CSS nobody here has seen.
+
+A layer settles the cascade question in that install without either side writing
+`!important` (this package writes none, and the panel's own selectors are no
+longer something a site has to out-specify):
+
+```css
+/* unlayered, one class — this wins over the panel now */
+.docpilot__send { border-radius: 4px; }
+```
+
+A site whose own styles are layered decides the order by naming it first, rather
+than by which `<link>` the browser reached first:
+
+```css
+@layer docpilot, site;
+```
+
+**It points the other way too, and that is the part to read before upgrading.**
+An unlayered rule beats a layered one whatever its specificity, so a reset the
+page already loads now outranks the panel. Two are known to bite: Tailwind v3's
+preflight sets `border: 0 solid` on `*`, which erases every hairline the design
+system is built on, and a bare `a`, `button` or `ul` rule repaints the answer
+body. Both are answered by declaring the property back — which is the control
+the layer exists to hand over.
+
+The wrapper is a Vite plugin in `bin/build-web.js` and it carries the ordering
+that makes it work — `vite:css-post` emits the stylesheet, so a plugin that runs
+before it rewrites nothing and ships an unlayered file with no error. That
+failure has no local symptom, so `test/packaging.test.js` asserts the built file
+opens with the layer exactly once and that the other four carry no `@layer` at
+all.
 
 ### Fixed
 

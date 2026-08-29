@@ -260,6 +260,24 @@ describe('resultRows', () => {
     expect(row.snippet.length).toBeLessThan(300)
   })
 
+  // A chunk is markdown, and a row that printed it raw asked the reader to parse
+  // `**` and `##` in a two-line snippet. Stripped BEFORE the 220-character
+  // window, so the budget goes on words rather than on punctuation.
+  it('shows the text under the markdown, not the markdown', () => {
+    const [row] = resultRows(
+      [
+        chunk({
+          text: 'Getting started — Authentication\n## The token\n\nSet the **token** in [config](/guide/config) first.',
+        }),
+      ],
+      { index },
+    )
+    expect(row.snippet).not.toMatch(/[*#[\]]/)
+    expect(row.snippet).not.toContain('/guide/config')
+    expect(row.snippet).toContain('The token')
+    expect(row.snippet).toContain('Set the token in config first.')
+  })
+
   it('survives a page the corpus no longer has', () => {
     const [row] = resultRows([chunk({ path: '/gone' })], { index })
     expect(row.title).toBe('Authentication')

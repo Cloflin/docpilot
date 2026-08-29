@@ -42,10 +42,30 @@
          name, which is why `aria-label` steps aside above when it is present:
          voice control can only address a control by what is written on it. -->
     <span v-if="kind === 'fab' && fabLabel" class="docpilot-nav-trigger__label">{{ fabLabel }}</span>
+    <!--
+      Something settled while the panel was shut — ui-specs/010.
+
+      The words go where the accessible name actually comes from. With a visible
+      label there is content for them to join, so they are a hidden span inside
+      the button and the name reads "Ask AI Answer ready."; with the icon-only
+      circle there is nothing to join, so `ariaLabel` below carries them instead.
+      Writing both would be writing it twice: an `aria-label` silently replaces
+      the content it sits on.
+
+      The dot itself is decoration and says so — it repeats what the name has
+      already said, and a screen reader that read out an empty box would be
+      reading out the wrong half of the pair.
+    -->
+    <span v-if="unread && fabLabel" class="docpilot__sr">{{ T('trigger.unread') }}</span>
     <template v-if="kind === 'screen'">
       <span class="docpilot-nav-trigger__label">{{ T('trigger.label') }}</span>
       <span class="docpilot-nav-trigger__hint">{{ hint }}</span>
     </template>
+    <!-- LAST in every variant. On the two that are targets it is positioned out
+         of flow and the order is immaterial; on the mobile nav row it is an
+         inline dot at the end of the line, and that only works if it is the
+         last thing in the line. -->
+    <span v-if="unread" class="docpilot-nav-trigger__badge" aria-hidden="true"></span>
   </button>
 </template>
 
@@ -131,10 +151,27 @@ const showGlyph = computed(() =>
   kind.value === 'screen' ? false : kind.value === 'fab' ? ui.value.fabIcon : true,
 )
 
+/**
+ * A turn settled while the panel was shut — ui-specs/010.
+ *
+ * `!s.open` as well as the flag, so the badge cannot be on screen beside the
+ * thread it is pointing at. `open()` clears the flag anyway; this is the
+ * ordering guard, for the frame between a settle and the clear.
+ */
+const unread = computed(() => s.unread && !s.open)
+
 // Absent when the button carries visible text, so the two cannot disagree — an
 // aria-label silently replaces the name a sighted reader is looking at, and a
 // speech-input user who says the words on the button would then miss it.
-const ariaLabel = computed(() => (fabLabel.value ? undefined : T('trigger.label')))
+//
+// When there IS no visible text the label is the only place the waiting answer
+// can be named, so it carries that too — the hidden span in the template stands
+// down in exactly the case this branch runs.
+const ariaLabel = computed(() =>
+  fabLabel.value
+    ? undefined
+    : [T('trigger.label'), unread.value && T('trigger.unread')].filter(Boolean).join(' '),
+)
 
 // Same reason as the CTA: this button is in the nav bar of every page, long
 // before `configure()` has run, so the override comes from themeConfig direct.

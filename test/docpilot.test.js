@@ -38,7 +38,12 @@ import {
   CORE,
   LEXICAL_DOC,
 } from '../src/theme/docpilot/prompt.js'
-import { isKnownPath, renderAnswer } from '../src/theme/docpilot/markdown.js'
+import {
+  isKnownPath,
+  renderAnswer,
+  renderPassage,
+  toPlainText,
+} from '../src/theme/docpilot/markdown.js'
 import { GLYPHS, SYMBOLS, symbolId } from '../src/theme/docpilot/glyphs.js'
 import { highlight, __setHighlighterForTests } from '../src/theme/docpilot/highlight.js'
 import { identifiers, computeSupport } from '../src/theme/docpilot/support.js'
@@ -70,6 +75,9 @@ import {
   dOf,
   regate,
   chooseWindow,
+  STRATA,
+  fitWindowAtTau,
+  pickAnchors,
   WINDOWS,
 } from '../src/eval/calibrate.js'
 import { guardFor, tuningFor } from '../src/build/build-rag-index.js'
@@ -1669,6 +1677,162 @@ describe('009 — the passage behind a citation', () => {
     sessionState.index = { byId: new Map([[SRC.id, chunk('still here')]]) }
     expect(session.passageFor({ gate: { chunks: [chunk('still here')] } }, SRC)).toBe('')
   })
+
+  // `passageHtml` is the same three resolutions with a renderer on the end, and
+  // it stays SEPARATE from `passageFor` because the text still answers two
+  // questions that want nothing to do with html: whether the row gets a chevron
+  // at all, and whether it gets the `has-passage` column.
+  describe('as html', () => {
+    const withIndex = (text) => {
+      sessionState.index = {
+        byId: new Map([[SRC.id, chunk(text)]]),
+        manifest: { pages: [{ path: '/guide' }] },
+      }
+    }
+
+    it('renders the chunk rather than handing over its syntax', () => {
+      withIndex('## Auth\n\nSet the **token** first.')
+      const html = session.passageHtml({}, SRC)
+      expect(html).toContain('<h2>Auth</h2>')
+      expect(html).toContain('<strong>token</strong>')
+    })
+
+    // The renderer is shared, so the manifest has to reach it: a chunk's own
+    // cross-references are exactly the links a reader following provenance
+    // presses, and the ones that resolve to nothing must not look pressable.
+    it("filters the chunk's links against the manifest", () => {
+      withIndex('See [guide](/guide) and [gone](/gone).')
+      const html = session.passageHtml({}, SRC)
+      expect(html).toContain('<a href="/guide">guide</a>')
+      expect(html).toContain('<span>gone</span>')
+    })
+
+    it('is empty wherever the text is', () => {
+      sessionState.index = { byId: new Map(), manifest: { pages: [] } }
+      expect(session.passageHtml({}, SRC)).toBe('')
+    })
+  })
+})
+
+/**
+ * The passage, RENDERED — the same markdown pipeline the answer runs on.
+ *
+ * A chunk is corpus markdown, so shown as a text node it was the one surface in
+ * the panel that asked the reader to parse `##` and `**` themselves, directly
+ * under an answer that never does. Nothing about what is shown changes here:
+ * the whole chunk, still uncut, which is the invariant 009 argues for.
+ */
+describe('009 — the passage renders as markdown', () => {
+  const known = new Set(['/guide/config'])
+  const html = (src) => renderPassage(src, known)
+
+  it('renders the block constructs a documentation chunk is made of', () => {
+    const out = html('## Setting up\n\nA **token** and `a value`.\n\n- one\n- two')
+    expect(out).toContain('<h2>Setting up</h2>')
+    expect(out).toContain('<strong>token</strong>')
+    expect(out).toContain('<code>a value</code>')
+    expect(out).toContain('<li>one</li>')
+    expect(out).not.toContain('##')
+    expect(out).not.toContain('**')
+  })
+
+  // The fence card, minus its button. A copy control inside a 240px quotation
+  // sits under the turn's own copy button and adds a tab stop to a scroller
+  // that already is one.
+  it('renders a fence as a card with no copy button', () => {
+    const out = html('```js\nconst a = 1\n```')
+    expect(out).toContain('class="docpilot__code"')
+    expect(out).toContain('const a = 1')
+    expect(out).not.toContain('docpilot__code-copy')
+  })
+
+  // The other half of that switch: the answer is the reason the button exists.
+  it('leaves the answer its copy button', () => {
+    expect(renderAnswer('```js\nconst a = 1\n```', known).html).toContain('docpilot__code-copy')
+  })
+
+  // Not because a chunk can lie — it is what the site's own author wrote. A
+  // corpus link is written relative to the page it sits on, and resolved against
+  // a panel teleported to `body` it points at nothing.
+  it('keeps a link the manifest knows and de-links one it does not', () => {
+    const out = html('See [config](/guide/config) and [next](../guide/next.md).')
+    expect(out).toContain('<a href="/guide/config">config</a>')
+    expect(out).toContain('<span>next</span>')
+    expect(out).not.toContain('href="../guide/next.md"')
+  })
+
+  // A literal `[1]` in a chunk is prose about a footnote on that page, not a
+  // citation into this turn's source list.
+  it('does not turn a bracketed digit into a citation marker', () => {
+    const out = html('See note [1] below.')
+    expect(out).toContain('[1]')
+    expect(out).not.toContain('docpilot__cite')
+  })
+
+  // `html: false` on the shared instance, which is what makes this the second
+  // v-html in the panel that needs no escaping of its own.
+  it('escapes an author\'s raw HTML rather than passing it through', () => {
+    expect(html('Use <script>alert(1)</script> nowhere.')).not.toContain('<script>')
+  })
+
+  // The panel has no DOM here, so the binding is asserted the way 008's row
+  // placement is: by reading the source and stating the contract it keeps.
+  describe('the disclosure that shows it', () => {
+    const panel = fs.readFileSync(
+      new URL('../src/theme/components/DocPilot.vue', import.meta.url),
+      'utf8',
+    )
+    const region = panel.slice(panel.indexOf('class="docpilot__passage"'))
+
+    it('renders the html and not the interpolated source', () => {
+      expect(region).toContain('v-html="passageHtml(turn, src)"')
+      expect(panel).not.toContain('>{{ passage(turn, src) }}<')
+    })
+
+    // A link inside v-html has no Vue handler of its own, and a chunk's own
+    // cross-references are exactly the links a reader following provenance
+    // presses: without this it is a full page load out of the SPA, which below
+    // 960px also drops the panel it was opened from.
+    it('delegates its clicks the way the answer does', () => {
+      expect(region.slice(0, region.indexOf('</div>'))).toContain('@click="onAnswerClick"')
+    })
+  })
+})
+
+/**
+ * `toPlainText` — markdown as the text under it, for the search-only snippet.
+ *
+ * A row shows a 220-character window so a reader can tell whether it is the one
+ * they want, and characters spent on `**` and `](/guide/config#tokens)` buy them
+ * nothing.
+ */
+describe('toPlainText', () => {
+  it('drops the syntax and keeps the words', () => {
+    expect(toPlainText('## Heading\n\nA **bold** and [linked](/x) line.')).toBe(
+      'Heading\nA bold and linked line.',
+    )
+  })
+
+  // Half the answers in a documentation corpus ARE the code block.
+  it('keeps the body of a fence', () => {
+    expect(toPlainText('```js\nconst a = 1\n```')).toBe('const a = 1')
+  })
+
+  // A cell separator of its own: a row of cells is one line, not four.
+  it('flattens a table to a line per row', () => {
+    expect(toPlainText('| a | b |\n| - | - |\n| 1 | 2 |')).toBe('a b\n1 2')
+  })
+
+  // The one thing it must not do: an emphasis close is INSIDE a sentence, and
+  // ending the line there would cut every emphasised phrase in the corpus.
+  it('does not break the sentence an emphasis sits in', () => {
+    expect(toPlainText('Set **token** before you start.')).toBe('Set token before you start.')
+  })
+
+  it('is empty for nothing at all', () => {
+    expect(toPlainText('')).toBe('')
+    expect(toPlainText(null)).toBe('')
+  })
 })
 
 describe('009 — a copied answer carries its sources', () => {
@@ -2164,6 +2328,8 @@ describe('009 — the panel beside the docs', () => {
   it('is off by default', () => {
     expect(themeDocPilot(resolveDocPilot({})).ui.layout).toBe('overlay')
     expect(themeDocPilot(resolveDocPilot({ ui: { layout: 'push' } })).ui.layout).toBe('push')
+    expect(themeDocPilot(resolveDocPilot({})).ui.theme).toBe('auto')
+    expect(themeDocPilot(resolveDocPilot({ ui: { theme: 'dark' } })).ui.theme).toBe('dark')
   })
 
   // Below the sheet breakpoint the panel is edge to edge; there is nothing to
@@ -2837,6 +3003,94 @@ describe('calibration — the cosine window sweep', () => {
     ...many('N2', 20, 0.42),
   ]
 
+  /**
+   * The transfer's half of the sweep: the window is re-fitted against a new
+   * embedder while tau is inherited. These pin the two properties that make
+   * that legal — it recovers the joint search's own answer, and it cannot be
+   * talked into buying negative-catch with over-refusal.
+   */
+  describe('with tau inherited rather than chosen', () => {
+    const sourceRate = { U: 0, S: 0, F: 0 }
+
+    it('recovers the jointly-searched window when handed the tau that search chose', () => {
+      const joint = chooseWindow(rows, guard)
+      expect(joint).not.toBeNull()
+      const pinned = fitWindowAtTau(rows, guard, joint.best.tau, sourceRate)
+      expect(pinned).not.toBeNull()
+      // Self-consistency: applied to the embedder it was measured on, the
+      // pinned fit is the joint search. Without this the mode is a new
+      // estimator rather than the same one with a coordinate fixed.
+      expect(pinned.window).toEqual(joint.window)
+    })
+
+    it('refuses the window that buys negative-catch by over-refusing', () => {
+      const tau = 0.63
+      // The unconstrained argmax: right-shift the window until D collapses for
+      // everything, and precision reads 100% because every negative is refused
+      // — along with most of the positives. Measured on this package's own
+      // corpus, [0.44, 0.84] scores exactly that at 77.5% over-refusal on U.
+      const greedy = WINDOWS.map((w) => ({ w, row: sweepRow(regate(rows, w, guard), tau, 'G') }))
+        .filter((c) => c.row.gatePrecision === 1)
+        .sort((a, b) => b.row.byStratum.U.rate - a.row.byStratum.U.rate)[0]
+      expect(greedy).toBeDefined()
+      expect(greedy.row.byStratum.U.rate).toBeGreaterThan(0.5)
+
+      const pinned = fitWindowAtTau(rows, guard, tau, sourceRate)
+      if (pinned) expect(pinned.window).not.toEqual(greedy.w)
+    })
+
+    it('returns null rather than a window when no candidate makes the inherited tau feasible', () => {
+      // Nothing in the grid can lift a corpus this flat to tau 0.95.
+      expect(fitWindowAtTau(rows, guard, 0.95, sourceRate)).toBeNull()
+    })
+
+    it('refuses an inherited tau at or below wLexical, which gate.js throws on', () => {
+      expect(fitWindowAtTau(rows, guard, guard.wLexical, sourceRate)).toBeNull()
+      expect(fitWindowAtTau(rows, guard, 0.1, sourceRate)).toBeNull()
+    })
+
+    it('never exceeds the over-refusal the source measured', () => {
+      const pinned = fitWindowAtTau(rows, guard, 0.63, { U: 0, S: 0, F: 0 })
+      if (pinned) {
+        for (const k of ['U', 'S', 'F']) expect(pinned.row.byStratum[k].rate).toBe(0)
+      }
+    })
+  })
+
+  /**
+   * The anchor draw. Its size is not a preference: below the n at which UB95 at
+   * zero failures fits inside a stratum's own bound, `feasible` is unreachable
+   * and every window in the grid is filtered out — a run that refuses always.
+   */
+  describe('anchor selection for a transfer', () => {
+    const probes = [
+      ...Array.from({ length: 169 }, (_, i) => ({ id: `u-${i}`, question: 'q', stratum: 'U' })),
+      ...Array.from({ length: 128 }, (_, i) => ({ id: `s-${i}`, question: 'q', stratum: 'S' })),
+      ...Array.from({ length: 60 }, (_, i) => ({ id: `f-${i}`, question: 'q', stratum: 'F' })),
+      ...Array.from({ length: 30 }, (_, i) => ({ id: `n4-${i}`, question: 'q', stratum: 'N4' })),
+      ...Array.from({ length: 30 }, (_, i) => ({ id: `p-${i}`, question: 'q', stratum: 'P' })),
+    ]
+
+    it('is deterministic, so one calibration onto one index is one window', () => {
+      const a = pickAnchors(probes, 'bounded').map((p) => p.id)
+      const b = pickAnchors(probes, 'bounded').map((p) => p.id)
+      expect(a).toEqual(b)
+    })
+
+    it('gives every bounded stratum an n its own ceiling can reach at zero failures', () => {
+      const picked = pickAnchors(probes, 'bounded')
+      for (const [k, v] of Object.entries(STRATA)) {
+        if (!v.positive) continue
+        const n = picked.filter((p) => p.stratum === k).length
+        expect(wilsonUpper95(0, n)).toBeLessThanOrEqual(v.bound)
+      }
+    })
+
+    it('takes the whole set under "full"', () => {
+      expect(pickAnchors(probes, 'full')).toHaveLength(probes.length)
+    })
+  })
+
   it('maps a cosine onto D linearly inside the window and clamps outside it', () => {
     const w = { cosFloor: 0.16, cosCeil: 0.24 }
     expect(dOf(0.2, w)).toBeCloseTo(0.5, 10)
@@ -3116,7 +3370,9 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
       credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     }
@@ -3296,7 +3552,9 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
       credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3311,7 +3569,9 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
       credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3376,6 +3636,42 @@ describe('resolveUi — trigger placement and panel shape', () => {
     expect(err.messages[1]).toContain('ui.trigger')
   })
 
+  /**
+   * `ui.theme` — the one key where `'auto'` comes back out.
+   *
+   * `panel: 'auto'` names a SHAPE and the build settles it from the trigger
+   * list, which is why nothing downstream may re-derive it. This names a
+   * SIGNAL, and the signal is the reader's browser: there is nothing to settle
+   * at build time, and a resolver that settled it anyway would pin every reader
+   * to whichever scheme the machine that ran the build happened to prefer.
+   */
+  it('leaves the scheme unsettled, and pins the two that are settled', () => {
+    const err = collect()
+    expect(resolveUi({}, err).theme).toBe('auto')
+    expect(resolveUi({ ui: { theme: 'auto' } }, err).theme).toBe('auto')
+    expect(resolveUi({ ui: { theme: 'light' } }, err).theme).toBe('light')
+    expect(resolveUi({ ui: { theme: 'dark' } }, err).theme).toBe('dark')
+    expect(err.messages).toEqual([])
+  })
+
+  // The same thing said twice. Folded BEFORE the enum check, so the word never
+  // reaches `pick` and the message it would have printed never fires — and so
+  // the resolved value is one `UI_THEMES` names, which is what keeps the
+  // browser's second pass a no-op.
+  it('reads `system` as the word `auto`', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { theme: 'system' } }, err).theme).toBe('auto')
+    expect(err.messages).toEqual([])
+  })
+
+  it('reports a scheme outside the enum and falls back to the page', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { theme: 'darkk' } }, err).theme).toBe('auto')
+    expect(err.messages).toHaveLength(1)
+    expect(err.messages[0]).toContain('ui.theme')
+    expect(err.messages[0]).toContain('"darkk"')
+  })
+
   // The property the two-sided call depends on: the build resolves and emits
   // under the same key, the browser resolves what it received. If a resolved
   // member were not itself legal input, the second pass would rewrite it.
@@ -3399,8 +3695,16 @@ describe('resolveUi — trigger placement and panel shape', () => {
         // makes the second pass a no-op rather than a rewrite.
         for (const fabLabel of [undefined, true, false, 'Ask AI']) {
           for (const fabIcon of [undefined, true, false]) {
-            const once = resolveUi({ ui: { trigger, panel, fabLabel, fabIcon } }, () => {})
-            expect(resolveUi({ ui: once }), `${trigger}/${panel}/${fabLabel}/${fabIcon}`).toEqual(once)
+            // `'system'` is the one input in this suite whose resolved form is a
+            // DIFFERENT word, so it is the one that would break the round trip
+            // if the fold ever moved after the enum check instead of before it.
+            for (const theme of [undefined, 'auto', 'light', 'dark', 'system']) {
+              const once = resolveUi({ ui: { trigger, panel, fabLabel, fabIcon, theme } }, () => {})
+              expect(
+                resolveUi({ ui: once }),
+                `${trigger}/${panel}/${fabLabel}/${fabIcon}/${theme}`,
+              ).toEqual(once)
+            }
           }
         }
       }
@@ -3572,7 +3876,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
       credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3590,7 +3896,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
       credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3605,7 +3913,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
       credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3624,7 +3934,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
       credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3643,7 +3955,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
       credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })

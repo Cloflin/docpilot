@@ -26,6 +26,31 @@ describe('packaging', () => {
   // `dist/` is built by `prepare`, so it may legitimately be absent here.
   const built = (rel) => rel.startsWith('dist/')
 
+  /**
+   * The one build output whose CSS is wrapped in a cascade layer, asserted
+   * because the failure is silent: the wrapper is a Vite plugin that has to run
+   * after `vite:css-post` emits the asset, and a plugin ordered wrong finds no
+   * stylesheet, rewrites nothing and ships an unlayered file that looks fine
+   * until a host's reset outranks it — or, the other way, until a site that
+   * overrode the panel from an unlayered rule stops being able to.
+   *
+   * Skipped when `dist/` is absent, the way every other check here treats a
+   * tree whose `prepare` has not run.
+   */
+  it('wraps only the web stylesheet in @layer docpilot', () => {
+    const layered = 'dist/docpilot.web.css'
+    const plain = ['dist/docpilot.css', 'dist/docpilot-core.css', 'dist/docpilot-vitepress.css', 'dist/docpilot-docusaurus.css']
+    if (!fs.existsSync(abs(layered))) return
+    const css = fs.readFileSync(abs(layered), 'utf8')
+    expect(css.startsWith('@layer docpilot{'), `${layered} is not wrapped in @layer docpilot`).toBe(true)
+    // Nested once over itself still parses, so only a count catches it.
+    expect(css.split('@layer docpilot{').length - 1, `${layered} is wrapped more than once`).toBe(1)
+    for (const f of plain) {
+      if (!fs.existsSync(abs(f))) continue
+      expect(fs.readFileSync(abs(f), 'utf8').includes('@layer'), `${f} must not be layered — its host loads an adapter over it`).toBe(false)
+    }
+  })
+
   it('ships every file the CLI reads at runtime', () => {
     for (const file of fs.readdirSync(abs('bin'))) {
       const src = fs.readFileSync(abs(`bin/${file}`), 'utf8')

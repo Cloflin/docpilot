@@ -108,7 +108,7 @@ corpus rather than someone else's.
 | | DocPilot | Algolia Ask AI | kapa.ai | Inkeep | Mintlify AI | Orama Cloud |
 |---|---|---|---|---|---|---|
 | **Where retrieval runs** | the reader's browser | Algolia's cloud | kapa's cloud | their cloud, or your infra | Mintlify's cloud | Orama's cloud — or the browser, with the OSS library |
-| **Index the reader downloads** | int8 vectors, one byte per dimension — 810 KB for this site's 405 chunks at 2048 dimensions | n/a — the index is theirs | n/a — the index is theirs | n/a — the index is theirs | n/a — the index is theirs | n/a, unless you ship an OSS bundle |
+| **Index the reader downloads** | int8 vectors, one byte per dimension — 460 KB for this site's 460 chunks at 1024 dimensions | n/a — the index is theirs | n/a — the index is theirs | n/a — the index is theirs | n/a — the index is theirs | n/a, unless you ship an OSS bundle |
 | **Retrieval model** | hybrid — BM25 over the chunk text and cosine over the vectors, fused by Reciprocal Rank Fusion | keyword; NeuralSearch is listed on Elevate | not documented | not documented | not documented | full-text, vector and hybrid |
 | **Where the index lives** | a static file on the host already serving your site | an Algolia index | kapa's platform | their platform, or self-hosted | the Mintlify platform | Orama Cloud, or a bundle you ship |
 | **Server you must run** | one reverse-proxy route that attaches the model key | none | none | none, unless you self-host | none | none — Secure Proxy fronts the model call |
@@ -149,7 +149,7 @@ Every product here renders a chat. What differs is how much of it is yours.
 | **Let the reader add their own instruction for a turn** | yes — `prompt.allowAppend`, never merged into the system prompt | no |
 | **Conversation history** | in the reader's own `localStorage`; nothing is sent anywhere | typically vendor-side, and therefore also an analytics surface |
 | **Reader feedback** | posted to an endpoint **you** own, or kept on the device | vendor dashboard |
-| **Reader-facing strings replaceable** | all 170 of them, one at a time, in 25 groups | vendor's locales |
+| **Reader-facing strings replaceable** | all 171 of them, one at a time, in 25 groups | vendor's locales |
 | **Question containing an API key** | redacted in the browser, before the embedding call | not documented |
 
 Everything in that first column is described, one feature at a time, in
@@ -228,6 +228,6 @@ Checked August 2026.
 DocPilot's own column is not sourced to a marketing page; every claim in it is
 either a documented setting, a measured artefact of this site's own index, or
 one of the four [guarantees](/concepts/guarantees), each of which is covered by
-a test in this repository. The index figures — 405 chunks, 2048 dimensions,
-810 KB of int8 vectors, under 0.003 mean |Δcos| — describe the files this page
+a test in this repository. The index figures — 460 chunks, 1024 dimensions,
+460 KB of int8 vectors, under 0.003 mean |Δcos| — describe the files this page
 is served alongside and can be checked with `ls -l docs/public/rag/`.

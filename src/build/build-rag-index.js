@@ -537,6 +537,27 @@ export function vocabularyFor(opts = {}) {
 }
 
 /**
+ * WHICH calibration belongs to THIS index.
+ *
+ * `${evalDir}/calibration.json` is one path per project and an index directory
+ * is not. A repository that commits a second index of one corpus — the floor
+ * described in the indexing guide, or the target of a `calibrate --transfer` —
+ * has two guards and one filename to keep them in, so whichever build ran last
+ * would decide what the other one inlines.
+ *
+ * A per-index name is tried FIRST and the shared one is the fallback, which
+ * leaves every single-index project reading exactly the file it always read
+ * while giving a second index somewhere of its own to be measured into.
+ */
+export function calibrationPathFor(indexDir = OUT) {
+  const named = path.join(
+    path.dirname(CALIBRATION_OUT),
+    `calibration.${path.basename(indexDir)}.json`,
+  )
+  return fs.existsSync(named) ? named : CALIBRATION_OUT
+}
+
+/**
  * The guard the manifest ships — RAG-SPEC 5.6.
  *
  * `tau`, `tauLexical`, `wDense` and `wLexical` are set ONLY by `docpilot calibrate`
@@ -565,7 +586,7 @@ export function guardFor(hash, opts = {}) {
    * every subsequent `index` reported "no calibration" and inlined the
    * provisional guard anyway. One name, one place.
    */
-  const file = opts.file ?? CALIBRATION_OUT
+  const file = opts.file ?? calibrationPathFor()
   const shown = path.relative(ROOT, file)
   const log = opts.warn ?? warn
   const note = opts.note ?? ((m) => console.log(`  ${m}`))

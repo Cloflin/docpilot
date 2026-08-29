@@ -95,3 +95,30 @@ html:not([data-theme='dark']) .docpilot__answer {
     color: var(--shiki-light, inherit);
   }
 }
+
+/**
+ * The same pair under `ui.theme` — ui-specs/011.
+ *
+ * A site that pinned the panel has overruled this host's toggle for every
+ * colour token, and the highlighter has to follow or the code block is the one
+ * thing left painted for the scheme the reader is no longer in.
+ *
+ * AFTER the two branches above, and that placement is the rule: `html.dark` and
+ * `html.docpilot-dark` are the same specificity, so order is the only thing
+ * that decides between them. `core.scss` states this pair too, for the host
+ * that loads no adapter at all — but it loads first, so its copy would lose
+ * here.
+ */
+html.docpilot-dark .docpilot__answer {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark, inherit);
+  }
+}
+
+html.docpilot-light .docpilot__answer {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-light, inherit);
+  }
+}

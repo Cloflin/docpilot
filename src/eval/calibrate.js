@@ -50,7 +50,7 @@ import {
 const EVAL = path.dirname(CALIBRATION_SET)
 const PROBES = path.join(EVAL, 'calibration.jsonl')
 const RAW = path.join(EVAL, 'calibration.raw.jsonl')
-const OUT_JSON = path.join(EVAL, 'calibration.json')
+const OUT_JSON_DEFAULT = path.join(EVAL, 'calibration.json')
 const OUT_MD = path.join(EVAL, 'calibration.report.md')
 
 /** `.env.local` through the loader config.mjs uses. Existing environment wins. */
@@ -67,6 +67,61 @@ const has = (name) => process.argv.includes(`--${name}`)
 const REFRESH = has('refresh')
 const SWEEP_ONLY = has('sweep-only')
 const LIMIT = Number(arg('limit', '0'))
+/**
+ * `--transfer=<calibration.json>` — carry a calibration measured with ANOTHER
+ * embedder onto this index, by keeping its thresholds and re-fitting only the
+ * cosine window.
+ *
+ * The split is what makes this legal rather than the thing every other check in
+ * this package exists to stop. `denseFromCosine` maps a raw cosine affinely into
+ * [0,1], so `tau`, `tauLexical`, `wDense` and `wLexical` are expressed in
+ * NORMALISED units and describe the corpus; `cosFloor` and `cosCeil` are the
+ * only two numbers that describe where an embedder puts its cosines. Inheriting
+ * the window is the failure this package already documents. Inheriting the
+ * threshold and re-fitting the window is the opposite operation.
+ *
+ * What it does NOT do is re-establish the three UB95 bounds: the anchor set is
+ * far below the n they need, and a transferred guard is a bounded bet rather
+ * than a measurement. Everything downstream of that sentence — the nulled
+ * fields in `buildDoc`, `source: 'transferred'` — exists to keep it true.
+ */
+const TRANSFER = arg('transfer', '')
+/**
+ * `bounded` — the quota `anchorQuota()` derives from the strata's own ceilings —
+ * or `full`, the whole probe set. Not a count: a count below the quota buys a
+ * run that refuses every window, and one above it is `full` spelled less
+ * clearly.
+ */
+const ANCHORS = arg('anchors', 'bounded')
+/** Where a transfer writes. Never the file it read — see the check below. */
+const OUT_ARG = arg('out', '')
+/**
+ * A transfer defaults to the per-index name the build looks for FIRST
+ * (`calibrationPathFor` in build-rag-index.js), so the two agree by
+ * construction rather than by the operator remembering to pass `--out`. A full
+ * run keeps writing the shared file, which is what every existing project reads.
+ */
+const OUT_JSON = OUT_ARG
+  ? path.resolve(ROOT, OUT_ARG)
+  : TRANSFER
+    ? path.join(EVAL, `calibration.${path.basename(RAG)}.json`)
+    : OUT_JSON_DEFAULT
+
+/**
+ * A transfer that wrote over its own source would consume the calibration it
+ * was derived from, and `${evalDir}/calibration.json` is one path per project
+ * while an index directory is not. Refused rather than resolved for you: which
+ * of the two files the build should read is a decision, and guessing it here
+ * would make the wrong one arrive silently.
+ */
+if (TRANSFER && path.resolve(ROOT, TRANSFER) === OUT_JSON) {
+  console.error(
+    `\n  FAIL  --transfer would overwrite the calibration it reads ` +
+      `(${path.relative(ROOT, OUT_JSON)}).\n` +
+      `        Name the target: --out=docpilot/calibration.<index>.json\n`,
+  )
+  process.exit(1)
+}
 /**
  * The embedder, from the project's own settings.
  *
@@ -186,6 +241,151 @@ function loadProbes() {
     seen.add(r.id)
   }
   return LIMIT ? recs.slice(0, LIMIT) : recs
+}
+
+/**
+ * The calibration a transfer inherits from, and every reason to refuse it.
+ *
+ * Each refusal here is a case where the two numbers that DO carry across —
+ * `tau` and `tauLexical` — would not mean the same thing on the target, so
+ * carrying them would be the silent inlining this whole file exists to prevent.
+ */
+function loadTransferSource(file, index) {
+  if (!fs.existsSync(file)) die(`no calibration to transfer at ${file}`)
+  let doc
+  try {
+    doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (e) {
+    die(`${file} is unreadable — ${e.message}`)
+  }
+  const g = doc?.guard
+  if (!g || typeof g.tau !== 'number' || typeof g.tauLexical !== 'number') {
+    die(`${file} carries no usable pair of thresholds to transfer`)
+  }
+  if (doc.lexicalOnly) {
+    die(`${file} was measured on an index with no vectors — it has no window to re-fit and no tau to carry`)
+  }
+  // A window is a statement about cosines. Under `zscore` D comes off the z
+  // ladder instead, so there is nothing here to re-fit and the two tau are not
+  // in the same units either.
+  if (g.denseMode !== 'cosine' || index.manifest.guard.denseMode !== 'cosine') {
+    die(
+      `transfer needs both sides in denseMode "cosine" — source is "${g.denseMode}", ` +
+        `this index is "${index.manifest.guard.denseMode}"`,
+    )
+  }
+  // THE ASSERTION THAT LICENSES THE WHOLE OPERATION.
+  //
+  // `manifest.hash` is sha256 over chunk id and text — it does NOT move with the
+  // embedder, so two indexes of one corpus embedded differently carry the SAME
+  // hash. That is what makes this an equality to assert rather than a stamp to
+  // write: under it, `L_raw`, `L_composed`, `admissible` and `n` are identical
+  // between the two runs and only the cosines moved. Re-stamping instead would
+  // be the silent inline the hash check exists to prevent.
+  if (doc.calibratedAt !== index.manifest.hash) {
+    die(
+      `${file} was measured on corpus ${doc.calibratedAt}, this index is ${index.manifest.hash}.\n` +
+        `        A transfer re-anchors the embedder, not the corpus: tau is a statement about how\n` +
+        `        well retrieval separates THIS text, and across two corpora it is a different\n` +
+        `        question's answer. Rebuild the source's index, or calibrate this one.`,
+    )
+  }
+  if (doc.embedModel && doc.embedModel === index.manifest.embedModel) {
+    die(
+      `${file} was already measured with "${doc.embedModel}" — this index embeds with the same model, ` +
+        `so run \`npx docpilot calibrate\` and measure it rather than transferring it`,
+    )
+  }
+  // The corpus is the one thing a transfer may NOT differ on. tau is a statement
+  // about how well retrieval separates THIS corpus; carried onto another one it
+  // is not a weaker measurement, it is a different question's answer.
+  if ((doc.vocabHash ?? null) !== (index.manifest.vocabHash ?? null)) {
+    die(
+      `${file} was measured with vocabulary ${doc.vocabHash ?? 'none'}, this index tokenises with ` +
+        `${index.manifest.vocabHash ?? 'none'} — every lexical score moved and tau rides on those too`,
+    )
+  }
+  if (!(g.wLexical < g.tau)) {
+    die(`${file} has wLexical ${g.wLexical} >= tau ${g.tau}, which gate.js rejects at init`)
+  }
+  return doc
+}
+
+/**
+ * The anchors: a stratified, deterministic subset of the probe set.
+ *
+ * Stratified because the constraint is per-stratum and a uniform sample would
+ * leave some stratum with nothing to constrain. Deterministic because two
+ * transfers of the same calibration onto the same index must produce the same
+ * window — `rng` is the same seeded generator the ladder uses, for the same
+ * reason `Math.random` is not.
+ */
+function anchorQuota() {
+  // Derived from the bounds, never written down: the smallest n at which a
+  // stratum's UB95 at ZERO failures is still inside its own ceiling. Below it
+  // the stratum is infeasible before a single probe is scored, so a run at that
+  // size does not produce weak evidence — it produces a refusal, every time.
+  const quota = {}
+  for (const [k, v] of Object.entries(STRATA)) {
+    if (v.positive) {
+      let n = 2
+      while (n < 4096 && wilsonUpper95(0, n) > v.bound) n++
+      quota[k] = n
+    } else {
+      // Negatives carry no bound. N4 is the blatant floor and is kept whole;
+      // the rest only have to make `gatePrecision` a number over enough probes
+      // to be worth printing.
+      quota[k] = k === 'N4' ? 30 : 15
+    }
+  }
+  return quota
+}
+
+/**
+ * The anchors: a stratified, deterministic subset sized by the bounds.
+ *
+ * Stratified because the constraint is per-stratum. Deterministic because two
+ * transfers of one calibration onto one index must produce one window — `rng`
+ * is the seeded generator the ladder already uses, for the reason `Math.random`
+ * is not. Sized by `anchorQuota` because a proportional draw at any convenient
+ * N puts the bounded strata below their own floor: a 120-probe draw of this set
+ * gives U ≈ 34, and `UB95(0, 34) = 0.074` against a 0.05 ceiling.
+ */
+function pickAnchors(probes, mode) {
+  const quota = anchorQuota()
+  const rand = rng(20260829)
+  const byStratum = new Map()
+  for (const p of probes) {
+    if (!byStratum.has(p.stratum)) byStratum.set(p.stratum, [])
+    byStratum.get(p.stratum).push(p)
+  }
+
+  const short = []
+  for (const [k, want] of Object.entries(quota)) {
+    const have = byStratum.get(k)?.length ?? 0
+    if (have && have < want) short.push(`${k} has ${have}, needs ${want}`)
+  }
+  if (short.length && mode !== 'full') {
+    die(
+      `the probe set is too small to anchor a transfer: ${short.join('; ')}.\n` +
+        `        These are not preferences — they are the n at which UB95 at zero failures first\n` +
+        `        fits inside each stratum's own bound, so a smaller draw refuses every window in\n` +
+        `        the grid before scoring one. Grow the set, or run \`npx docpilot calibrate\` and\n` +
+        `        measure this embedder outright.`,
+    )
+  }
+
+  const out = []
+  for (const [stratum, pool] of [...byStratum].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    const want = mode === 'full' ? pool.length : Math.min(pool.length, quota[stratum] ?? 15)
+    const shuffled = pool
+      .map((p) => ({ p, k: rand() }))
+      .sort((a, b) => a.k - b.k)
+      .map(({ p }) => p)
+    out.push(...shuffled.slice(0, want))
+  }
+  const order = new Map(probes.map((p, i) => [p.id, i]))
+  return out.sort((a, b) => order.get(a.id) - order.get(b.id))
 }
 
 /**
@@ -637,6 +837,98 @@ function chooseWindow(scored, guard) {
 }
 
 /**
+ * `chooseWindow`'s sibling for a TRANSFER: the same grid, the same viability
+ * rules, but tau is inherited rather than re-derived.
+ *
+ * WHY THE OBJECTIVE IS NOT THE SAME ONE. `chooseWindow` can afford a bare
+ * `gatePrecision` objective because it re-derives tau inside every window, and
+ * `chooseTau` will not hand back a cell whose positives break their bounds — so
+ * a window that buys precision by refusing everything is discarded before it is
+ * ranked. Pinned, that brake is gone. A window that pushes every D down refuses
+ * more of EVERYTHING, which reads as better negative-catch while the positives
+ * go down with them, and precision-alone would rank it first.
+ *
+ * So over-refusal becomes a hard CONSTRAINT here rather than something a free
+ * tau absorbs: no positive stratum may refuse a larger share of the anchors
+ * than the source measured on the full set. What is left to maximise is the
+ * thing the source could not measure for this embedder.
+ *
+ * `sourceRate` is the source calibration's per-stratum refusal rate at its own
+ * chosen tau, which is both the constraint and — as an L1 distance — the
+ * tie-break: among windows that catch negatives equally well, prefer the one
+ * whose behaviour sits closest to the guard that was actually calibrated. That
+ * last clause mirrors `tune`'s "proximity to the levers already in force"
+ * rather than inventing a second idiom for the same idea.
+ */
+function fitWindowAtTau(scored, guard, tau, sourceRate) {
+  // Not a search failure: `assertWeights` throws on this pair at every retriever
+  // init, so no window in the grid could rescue it.
+  if (!(tau > guard.wLexical)) return null
+  const positives = scored.filter((r) => STRATA[r.stratum].positive && r.z_raw != null)
+
+  const drift = (row) =>
+    POSITIVE_STRATA.reduce(
+      (sum, k) => (row.byStratum[k].n > 0 ? sum + Math.abs(row.byStratum[k].rate - sourceRate[k]) : sum),
+      0,
+    )
+
+  const viable = []
+  for (const w of WINDOWS) {
+    const rw = regate(scored, w, guard)
+    const row = sweepRow(rw, tau, 'G')
+    // `feasible` is `sweepRow`'s own predicate — every bounded positive stratum
+    // inside its UB95 ceiling — and it is what `chooseTau` applies before
+    // `gatePrecision` is ever consulted. Reusing it here is what stops the
+    // pinned fit degenerating: measured on this corpus's 597 rows, the
+    // unfiltered argmax is [0.44, 0.84] at gatePrecision 100% and 77.5%
+    // over-refusal on U. With this line, one window of 272 survives and it is
+    // the one the joint search chose.
+    if (!row.feasible) continue
+    if (row.blatantRefusalRate === null || row.blatantRefusalRate < 0.8) continue
+    // Second, tighter: never worse than the source measured. At the anchor
+    // quota the two coincide wherever the source scored zero, and they diverge
+    // only where it did not — in which case the source's own rate is the
+    // honest ceiling rather than the stratum's bound.
+    if (POSITIVE_STRATA.some((k) => row.byStratum[k].n > 0 && row.byStratum[k].rate > sourceRate[k])) continue
+
+    const inside = positives.filter((r) => {
+      const d = dOf(r.z_raw, w)
+      return d > 0 && d < 1
+    }).length
+    viable.push({
+      window: w,
+      row,
+      rows: rw,
+      span: Number((w.cosCeil - w.cosFloor).toFixed(2)),
+      rampShare: positives.length ? inside / positives.length : 0,
+      drift: drift(row),
+    })
+  }
+  if (!viable.length) return null
+
+  // `chooseWindow` ranks gatePrecision -> larger tau -> wider span. The middle
+  // key is CONSTANT here, so it is replaced rather than kept as decoration.
+  const rank = (a, b) =>
+    b.row.gatePrecision - a.row.gatePrecision || a.drift - b.drift || b.span - a.span || a.window.cosFloor - b.window.cosFloor
+  const graded = viable.filter((v) => v.rampShare >= 0.33).sort(rank)
+  const pool = graded.length ? graded : viable.slice().sort(rank)
+
+  return {
+    ...pool[0],
+    viableCount: viable.length,
+    gradedCount: graded.length,
+    shortlist: pool.slice(0, 6).map((v) => ({
+      window: v.window,
+      tau,
+      gatePrecision: v.row.gatePrecision,
+      blatant: v.row.blatantRefusalRate,
+      rampShare: v.rampShare,
+      drift: v.drift,
+    })),
+  }
+}
+
+/**
  * One row of the sweep at a candidate threshold.
  *
  * Positives are scored on PASSING, negatives on REFUSING, and `X` is scored on
@@ -740,7 +1032,17 @@ async function main() {
     index.manifest.guard?.denseMode ?? null,
   ]
   const lev = levers(index.manifest)
-  const probes = loadProbes()
+  const allProbes = loadProbes()
+
+  /**
+   * A transfer measures ANCHORS, not the set. The cache cannot help it — `sigOf`
+   * carries `embedIdentity`, so a different embedder misses every row, which is
+   * the check that stopped an embedder swap from publishing the old model's
+   * cosines as the new space's calibration. Every anchor is therefore a live
+   * embedding call, and the count is the whole cost of the command.
+   */
+  const source = TRANSFER ? loadTransferSource(path.resolve(ROOT, TRANSFER), index) : null
+  const probes = source ? pickAnchors(allProbes, ANCHORS) : allProbes
 
   console.log(`\nDocPilot gate calibration — RAG-SPEC 5.6`)
   console.log(
@@ -751,7 +1053,22 @@ async function main() {
     `  guard in: mode=${guard.denseMode} tau=${guard.tau} tauLexical=${guard.tauLexical} ` +
       `wDense=${guard.wDense} wLexical=${guard.wLexical} source=${guard.source}`,
   )
-  console.log(`  probes ${probes.length} from ${path.relative(ROOT, PROBES)}\n`)
+  console.log(`  probes ${probes.length} from ${path.relative(ROOT, PROBES)}`)
+  if (source) {
+    console.log(
+      `  TRANSFER from ${path.relative(ROOT, path.resolve(ROOT, TRANSFER))} — ` +
+        `measured with "${source.embedModel ?? 'an unnamed embedder'}" on index ${source.calibratedAt}`,
+    )
+    console.log(
+      `    inheriting tau ${source.guard.tau} / tauLexical ${source.guard.tauLexical}; ` +
+        `re-fitting the window against "${index.manifest.embedModel}"`,
+    )
+    console.log(
+      `    ${probes.length} anchors of ${allProbes.length} — the UB95 bounds are NOT re-established at this n\n`,
+    )
+  } else {
+    console.log('')
+  }
 
   // ── cache ──────────────────────────────────────────────────────────────────
   const cache = new Map()
@@ -829,9 +1146,53 @@ async function main() {
   // list, `scored`, which shares these objects) sees one consistent G. The RAW
   // cache is already on disk by this point and keeps the values as MEASURED,
   // which is what makes `--sweep-only` able to try a different window for free.
-  const searched = !LEXICAL_ONLY && guard.denseMode === 'cosine' ? chooseWindow(scored, guard) : null
+  /**
+   * The source's per-stratum over-refusal at its own chosen tau — the ceiling a
+   * transferred window may not raise. `sweepDoc` persists failures and n rather
+   * than the rate, so it is recomputed here from the pair rather than assumed.
+   * A stratum the source never measured constrains nothing and is left at 0,
+   * which is the strict reading: no evidence is not permission.
+   */
+  const sourceRate = source
+    ? Object.fromEntries(
+        POSITIVE_STRATA.map((k) => {
+          const s = source.chosen?.byStratum?.[k]
+          return [k, s && s.n > 0 ? s.failures / s.n : 0]
+        }),
+      )
+    : null
+
+  const transferred = source ? fitWindowAtTau(scored, guard, source.guard.tau, sourceRate) : null
+  const searched = source
+    ? transferred
+    : !LEXICAL_ONLY && guard.denseMode === 'cosine'
+      ? chooseWindow(scored, guard)
+      : null
   const win = searched ? searched.window : { cosFloor: guard.cosFloor, cosCeil: guard.cosCeil }
-  if (searched) {
+  if (source && !transferred) {
+    die(
+      `no window of ${WINDOWS.length} carries tau ${source.guard.tau} onto "${index.manifest.embedModel}" ` +
+        `without over-refusing past what the source measured.\n` +
+        `        That is an answer about the embedder, not a failure to search: this one does not\n` +
+        `        separate the corpus the way the source's did. Measure it — \`npx docpilot calibrate\`.`,
+    )
+  }
+  if (source) {
+    regate(rows, win, guard).forEach((r, i) => Object.assign(rows[i], r))
+    console.log(
+      `  window: [${win.cosFloor}, ${win.cosCeil}] from ${WINDOWS.length} candidates — ` +
+        `${transferred.viableCount} viable, ${transferred.gradedCount} non-degenerate  ` +
+        `(source measured [${source.guard.cosFloor}, ${source.guard.cosCeil}] on "${source.embedModel}")`,
+    )
+    console.log('           window        tau   gatePrec  blatant  ramp  drift')
+    for (const s of transferred.shortlist) {
+      console.log(
+        `           [${s.window.cosFloor}, ${s.window.cosCeil}]  ${s.tau.toFixed(2)}   ` +
+          `${(100 * s.gatePrecision).toFixed(1)}%     ${(100 * s.blatant).toFixed(0)}%     ` +
+          `${(100 * s.rampShare).toFixed(0)}%   ${s.drift.toFixed(3)}`,
+      )
+    }
+  } else if (searched) {
     regate(rows, win, guard).forEach((r, i) => Object.assign(rows[i], r))
     console.log(
       `  window: [${win.cosFloor}, ${win.cosCeil}] from ${WINDOWS.length} candidates — ` +
@@ -860,13 +1221,49 @@ async function main() {
   // `G` is null on every row here — `null < tau` is `0 < tau`, so the sweep would
   // run to completion reporting every probe refused, and `chooseTau` would hand
   // back a row that reads exactly like a measurement of a real distribution.
-  const sweep = LEXICAL_ONLY ? [] : searched ? searched.sweep : TAU_STEPS.map((t) => sweepRow(scored, t, 'G'))
-  const best = LEXICAL_ONLY ? null : searched ? searched.best : chooseTau(sweep)
-  const tau = best ? best.tau : null
+  /**
+   * A transfer derives NO threshold. `best` stays null because `chooseTau` was
+   * never asked, and every field downstream that reads it — `doc.chosen`, the
+   * two UB95 numbers on the guard — is nulled in `buildDoc` for exactly that
+   * reason. What the anchors produce instead is `transferCheck`, which carries
+   * its own n so a small-sample rate can never be read as the corpus's.
+   */
+  const sweep = source ? [] : LEXICAL_ONLY ? [] : searched ? searched.sweep : TAU_STEPS.map((t) => sweepRow(scored, t, 'G'))
+  const best = source ? null : LEXICAL_ONLY ? null : searched ? searched.best : chooseTau(sweep)
+  const tau = source ? source.guard.tau : best ? best.tau : null
 
-  const sweepLex = TAU_STEPS.map((t) => sweepRow(scored, t, 'G_lex'))
-  const bestLex = chooseTauLexical(sweepLex)
-  const tauLexical = bestLex ? bestLex.tau : null
+  const sweepLex = source ? [] : TAU_STEPS.map((t) => sweepRow(scored, t, 'G_lex'))
+  const bestLex = source ? null : chooseTauLexical(sweepLex)
+  const tauLexical = source ? source.guard.tauLexical : bestLex ? bestLex.tau : null
+
+  // The anchors, scored at the pair that is about to ship. `fitWindowAtTau` has
+  // already refused anything over the source's rates, so this is a report rather
+  // than a second gate — but it is the number the artefact publishes about
+  // itself, and the docs quote it rather than the source's.
+  const transferCheck = source
+    ? {
+        anchorCount: probes.length,
+        probeCount: allProbes.length,
+        window: win,
+        byStratum: Object.fromEntries(
+          Object.keys(STRATA)
+            .filter((k) => transferred.row.byStratum[k].n > 0)
+            .map((k) => [
+              k,
+              {
+                n: transferred.row.byStratum[k].n,
+                failures: transferred.row.byStratum[k].failures,
+                rate: transferred.row.byStratum[k].rate,
+                sourceRate: sourceRate[k] ?? null,
+              },
+            ]),
+        ),
+        gatePrecision: transferred.row.gatePrecision,
+        blatantRefusalRate: transferred.row.blatantRefusalRate,
+        rampShare: transferred.rampShare,
+        drift: transferred.drift,
+      }
+    : null
 
   const fails = []
   // `no-feasible-tau` diagnoses a score function that cannot separate this corpus.
@@ -915,7 +1312,12 @@ async function main() {
   // the one from step 5's third bullet, applied to the degraded threshold: a
   // tauLexical that cannot refuse a blatantly off-domain question is a gate that
   // is off, and `lexical-only` is precisely the mode nobody can see is on.
-  if (bestLex === null) {
+  // Not run for a transfer: `tauLexical` is inherited rather than swept, so
+  // `bestLex` is null by construction and failing on it would report the absence
+  // of a search as the failure of one. The source earned that threshold against
+  // the full set, and the lexical channel is BM25 over text — the one half of
+  // the score an embedder swap does not move.
+  if (!source && bestLex === null) {
     fails.push({
       name: 'lexical-blatant-refusal-below-floor',
       detail:
@@ -972,6 +1374,8 @@ async function main() {
     bounding,
     withoutBounding,
     probeFile: path.relative(ROOT, PROBES),
+    source,
+    transferCheck,
   }
 
   report(ctx)
@@ -1101,7 +1505,7 @@ function nForFailures(bound, f) {
 }
 
 function buildDoc(ctx) {
-  const { rows, scored, sweep, sweepLex, best, bestLex, tau, tauLexical, lexicalOnly, guard, index, zexp, retrievalMissRate, withGold, misses, probeFile, fails, bounding, withoutBounding } = ctx
+  const { rows, scored, sweep, sweepLex, best, bestLex, tau, tauLexical, lexicalOnly, guard, index, zexp, retrievalMissRate, withGold, misses, probeFile, fails, bounding, withoutBounding, source, transferCheck } = ctx
   const byStratumN = {}
   for (const k of Object.keys(STRATA)) {
     const n = rows.filter((r) => r.stratum === k).length
@@ -1163,13 +1567,39 @@ function buildDoc(ctx) {
       // of it — `tau`, `cosFloor`, `cosCeil`, `zexp` — is not stale here, it was
       // never measurable, and a `source` that did not distinguish the two would
       // make an untouched provisional value read as a calibrated one.
-      source: lexicalOnly ? 'calibrated-reduced-lexical' : 'calibrated-reduced',
+      //
+      // `transferred-window` is the third case and the weakest claim of the three: the
+      // window under it was fitted against this embedder, the thresholds beside
+      // it were measured against another one, and the UB95 bounds were not
+      // re-established at anchor size. It is stamped into every record of the
+      // session for the same reason `provisional` is.
+      source: source ? 'transferred-window' : lexicalOnly ? 'calibrated-reduced-lexical' : 'calibrated-reduced',
       calibratedAt: index.manifest.hash,
       zexp,
       zexpSource: zexp.length >= 2 ? 'measured' : 'closed-form',
-      overRefusalUB95: measured ? measured.byStratum.U.ub95 : null,
-      gatePrecision: measured ? measured.gatePrecision : null,
+      // Null on a transfer, and not for want of a number to put here: both come
+      // off the winning sweep row, there is no winning sweep row when tau was
+      // inherited, and an anchor-scale figure in these two fields would ride
+      // into the manifest and every feedback record reading as the corpus's.
+      // `transferCheck` carries the anchor numbers WITH their n instead.
+      overRefusalUB95: source ? null : measured ? measured.byStratum.U.ub95 : null,
+      gatePrecision: source ? null : measured ? measured.gatePrecision : null,
     },
+    ...(source
+      ? {
+          transferredFrom: {
+            embedModel: source.embedModel ?? null,
+            calibratedAt: source.calibratedAt ?? null,
+            source: source.guard.source ?? null,
+            probeCount: source.probeCount ?? null,
+            tau: source.guard.tau,
+            tauLexical: source.guard.tauLexical,
+            cosFloor: source.guard.cosFloor,
+            cosCeil: source.guard.cosCeil,
+          },
+          transferCheck,
+        }
+      : {}),
     // Each bound with the arithmetic that decides whether it can bind at all.
     // `tolerates` is the number of failures the stratum's own n can absorb —
     // when it is 0, tau is decided by a single probe and UB95 has stopped doing
@@ -1620,7 +2050,7 @@ export { sweepRow, chooseTau, contiguousScope, TAU_STEPS }
 // The window search, exported for the same reason the tau sweep is: it decides
 // a shipped threshold and is a pure function of the cache, so it is testable
 // without an embedder.
-export { dOf, regate, chooseWindow, WINDOWS }
+export { dOf, regate, chooseWindow, fitWindowAtTau, pickAnchors, WINDOWS }
 
 // `pathToFileURL`, not a template literal: a path with a space or a non-ASCII
 // segment does not survive plain concatenation, and the failure mode is this

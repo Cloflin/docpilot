@@ -378,6 +378,11 @@ const UI_EN = {
     // its own wording sets `ui.fabLabel` and skips this lookup entirely — see
     // ui-specs/005.
     fabLabel: 'Ask AI',
+    // The dot on the button, in words — ui-specs/010. Read out either as part
+    // of the button's name or from a hidden span beside its label, depending on
+    // which half of the pair the button is wearing. Deliberately not a count:
+    // the dot is not one either, and the thread is where the number lives.
+    unread: 'Answer ready.',
   },
   cta: {
     label: "Didn't find it? Ask DocPilot",

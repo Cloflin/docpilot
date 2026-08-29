@@ -15,6 +15,7 @@
  */
 
 import { excerptWindow } from './excerpt.js'
+import { toPlainText } from './markdown.js'
 
 /**
  * How much of a passage a row shows.
@@ -72,7 +73,12 @@ export function resultRows(chunks, { index } = {}) {
   const pages = index?.manifest?.pages || []
   return (chunks || []).map((c) => {
     const page = pages.find((p) => p.path === c.path) || null
-    const { text, truncated } = excerptWindow(body(c.text), { max: SNIPPET_CHARS })
+    // STRIPPED BEFORE THE WINDOW, not after. A chunk is markdown, and 220
+    // characters are a budget: spent on `**`, `##` and `](/guide/config#tokens)`
+    // they buy the reader nothing, and a cut that lands inside a link leaves the
+    // half of it that is punctuation. Cleaning first also means `markQuery` marks
+    // a word the author emphasised the same as one they did not.
+    const { text, truncated } = excerptWindow(toPlainText(body(c.text)), { max: SNIPPET_CHARS })
     return {
       id: c.id,
       path: c.path,

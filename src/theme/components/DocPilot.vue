@@ -303,7 +303,7 @@
                 class="docpilot__thoughts-toggle"
                 :aria-expanded="String(!!turn.thoughtOpen)"
                 :aria-controls="`dp-thoughts-${turn.id}`"
-                @click="turn.thoughtOpen = !turn.thoughtOpen"
+                @click="toggleThought(turn)"
               >
                 {{ thoughtLabel(turn) }}
               </button>
@@ -313,6 +313,7 @@
                 class="docpilot__thoughts"
                 role="region"
                 :aria-label="T('panel.reasoning')"
+                @scroll.passive="onThoughtScroll(turn, $event)"
               >{{ turn.thought }}</div>
             </template>
 
@@ -676,6 +677,17 @@
                 >
                   <Icon name="chevronDown" :class="openPassage === src.id ? 'is-open' : null" />
                 </button>
+                <!--
+                  Rendered markdown, not the chunk's source. It is corpus text
+                  either way; the only question is whether the reader parses the
+                  `##` and the `**` or the panel does — and the answer above it
+                  never asks them to.
+
+                  `onAnswerClick` for the same reason the answer carries it: a
+                  link inside v-html has no Vue handler of its own, and a chunk's
+                  own cross-references are exactly the links a reader following
+                  provenance will press.
+                -->
                 <div
                   v-if="openPassage === src.id"
                   :id="`dp-passage-${turn.id}-${src.n}`"
@@ -683,7 +695,9 @@
                   tabindex="0"
                   role="region"
                   :aria-label="T('citation.passageLabel')"
-                >{{ passage(turn, src) }}</div>
+                  v-html="passageHtml(turn, src)"
+                  @click="onAnswerClick"
+                ></div>
               </li>
             </ol>
 
@@ -1170,9 +1184,21 @@
         </div>
 
         <span id="dp-hint" class="docpilot__sr">{{ T('composer.hint', { scope: scopeLabel }) }}</span>
-        <div class="docpilot__sr" aria-live="polite">{{ announced }}</div>
       </section>
     </div>
+    <!--
+      OUTSIDE the `v-if`, and that is the whole point of it being down here.
+
+      It used to live in the composer, which meant it was destroyed with the
+      panel — so a turn that settled while the panel was shut announced into
+      nothing, and ui-specs/010 made that the normal case rather than an edge
+      one. It also means the region is now RESIDENT: a live region inserted in
+      the same frame as its text is a region some screen readers do not
+      announce, which is a race this used to run on every open.
+
+      This component is mounted on every page; only its subtree is conditional.
+    -->
+    <div class="docpilot__sr" aria-live="polite">{{ announced }}</div>
   </Teleport>
 </template>
 
@@ -1190,6 +1216,7 @@ import { createSelectionAsk } from '../docpilot/selection.js'
 import { FILTER_AUTO_ABOVE } from '../docpilot/switches.js'
 import { hasDailyAllowance } from '../docpilot/budget.js'
 import { terms } from '../docpilot/text.js'
+import { atBottom as isAtBottom, createFollower } from '../docpilot/follow.js'
 
 const s = session.state
 const { theme, route, lang, router } = useHost()
@@ -1233,24 +1260,35 @@ const scrolled = ref(false)
 /**
  * Is the reader at the foot of the thread? — the predicate behind the jump pill.
  *
- * A SECOND, independent signal, and `pinned` below is deliberately left alone.
- * That one answers "keep chasing the answer?", and it answers from INTENT —
- * a wheel, a finger — because smooth scrolling makes a `scroll` event
- * indistinguishable from user input, which is what its own comment says. This
- * answers "where is the reader now", and position is exactly what it should read.
- * Folding the two together would put the scroll event back into the autoscroll
- * decision, which is the thing that rule forbids.
+ * A SECOND signal, next to `threadFollow.pinned`, and the two are kept apart
+ * because they are read at different MOMENTS rather than from different facts.
+ * This one is "where is the reader now", written on every scroll and on every
+ * path that swaps the conversation, and it drives a control. The pin is "was
+ * the reader at the foot the last time the box moved", and it is consulted
+ * inside the frame that writes — where a streaming answer has already grown the
+ * scroller and this one is briefly, correctly, false. Folding them together
+ * would flash the pill in for the one frame between "taller" and "scrolled to
+ * the new bottom", which is the flash the write order below already avoids.
  */
 const atBottom = ref(true)
+// One per scroller that gets written to. See follow.js: the pin is read from
+// the scroll event, and both of these are handed their element per call because
+// the reasoning box is unmounted every time a reader collapses one.
+const threadFollow = createFollower()
+const thoughtFollow = createFollower()
 const syncAtBottom = () => {
   const el = thread.value
-  // The same 40px slack `onIntent` uses, so the pill cannot appear while the
+  // The same slack the follower pins on, so the pill cannot appear while the
   // autoscroll still considers itself pinned.
-  if (el) atBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+  if (el) atBottom.value = isAtBottom(el)
 }
 
 const onThreadScroll = (e) => {
   scrolled.value = e.target.scrollTop > 0
+  // Whatever moved the thread — a wheel, a finger, a scrollbar, PageUp, a
+  // screen reader — this is where the follower hears about it. An autoscroll
+  // write lands at the foot, so its own event can only re-pin: follow.js.
+  threadFollow.read(e.target)
   syncAtBottom()
   // The selection popover is placed against the viewport, so a scrolling thread
   // moves the passage out from under it. `reposition` is a no-op when it is
@@ -1543,17 +1581,24 @@ function visibleTrigger() {
   return document.querySelector(hostConfig(s.config).content)
 }
 
-// Autoscroll: written inside one coalesced rAF, and disengaged by pointer or
-// keyboard intent — never by a `scroll` event, which smooth scrolling makes
-// indistinguishable from user input.
-let pinned = true
+// Autoscroll: one coalesced rAF per frame, and it stops the moment the reader
+// moves the thread themselves — `onThreadScroll` above is where that is heard.
+let queued = false
 watch(
   () => s.turns.map((t) => t.answerHtml + (t.thought || '').length + t.state).join('|'),
   () => {
-    if (!pinned) return
+    // A token per frame is common and a token per millisecond is not unheard
+    // of; without this the frame is requested once per token and writes the
+    // same number to the same property N times before the browser paints once.
+    if (queued) return
+    queued = true
     requestAnimationFrame(() => {
-      const el = thread.value
-      if (el) el.scrollTop = el.scrollHeight
+      queued = false
+      // The pin is tested HERE, inside the frame, and not at the top of this
+      // watcher: a reader who scrolls up in the gap between the token and the
+      // frame it asked for would otherwise be dragged back down by a frame that
+      // was queued while they were still at the foot. `follow` makes the test.
+      threadFollow.follow(thread.value)
       // After the write, not before: a streaming answer grows the scroller on
       // every frame, and the pill would otherwise flash in for the one frame
       // between "taller" and "scrolled to the new bottom".
@@ -1561,22 +1606,6 @@ watch(
     })
   },
 )
-function onIntent() {
-  const el = thread.value
-  if (!el) return
-  pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-}
-onMounted(() => {
-  const el = () => thread.value
-  const h2 = () => onIntent()
-  document.addEventListener('wheel', h2, { passive: true })
-  document.addEventListener('touchmove', h2, { passive: true })
-  onBeforeUnmount(() => {
-    document.removeEventListener('wheel', h2)
-    document.removeEventListener('touchmove', h2)
-  })
-  void el
-})
 
 const close = () => session.close()
 // `scrolled` is written by a scroll EVENT, and replacing the thread's contents
@@ -1595,6 +1624,8 @@ const newChat = () => {
 }
 const vote = session.vote
 const toggleReason = session.toggleReason
+// A press outranks the stream for the rest of the turn — session.js/autoThought.
+const toggleThought = session.toggleThought
 const widen = session.widen
 const askWithoutSecret = session.askWithoutSecret
 
@@ -1970,7 +2001,7 @@ function removeInstruction() {
 /**
  * Back to the newest answer.
  *
- * `pinned` as well as the scroll write: pressing this says "chase it again",
+ * The pin as well as the scroll write: pressing this says "chase it again",
  * and without that a reader who jumps down mid-answer would watch the stream
  * run off the bottom of the box they just came back to.
  *
@@ -1980,7 +2011,7 @@ function removeInstruction() {
 function jumpToLatest() {
   const el = thread.value
   if (!el) return
-  pinned = true
+  threadFollow.repin()
   el.scrollTop = el.scrollHeight
   atBottom.value = true
   // The button is about to disappear from under the pointer, so focus goes to
@@ -2020,7 +2051,7 @@ function send() {
  * and then abandoned. Only the two sites that mean it name a quote.
  */
 function submitText(q, quoted = '') {
-  pinned = true
+  threadFollow.repin()
   closeAsk()
   session.submit(q, { quote: quoted })
 }
@@ -2160,6 +2191,7 @@ function dropQuote() {
  */
 const openPassage = ref(null)
 const passage = (turn, src) => session.passageFor(turn, src)
+const passageHtml = (turn, src) => session.passageHtml(turn, src)
 const togglePassage = (id) => (openPassage.value = openPassage.value === id ? null : id)
 
 /**
@@ -2291,7 +2323,7 @@ function saveTurnEdit(turn) {
   // Unchanged text is a cancel, not an ask: re-running it would destroy an
   // answer that is already on screen to get another one to the same question.
   if (next === turn.question) return cancelTurnEdit()
-  pinned = true
+  threadFollow.repin()
   closeAsk()
   // Left open on a refusal — busy, degraded, or a conversation swapped out from
   // under the click — so a draft is never dropped into a thread it never reached.
@@ -2324,7 +2356,7 @@ const canRetry = (turn) =>
 
 function retryTurn(turn) {
   if (s.busy) return
-  pinned = true
+  threadFollow.repin()
   closeAsk()
   session.retryTurn(turn)
 }
@@ -2612,17 +2644,39 @@ function thoughtLabel(turn) {
   })
 }
 
-// The reasoning box is a fixed-height scroller, so live text has to be followed
-// the same way the thread is.
+/**
+ * The reasoning box is a fixed-height scroller, so live text has to be followed
+ * the same way the thread is — and STOPPED the same way, which is what
+ * `thoughtFollow` is for. A reader who scrolls up inside it is re-reading a
+ * line the model has already moved past; dragging them back to the foot on the
+ * next token makes the box unreadable while it is the only thing on screen.
+ *
+ * The box is found BY THE LAST TURN'S ID, not as the last `.docpilot__thoughts`
+ * in the panel. Those were the same node only while the disclosure was the
+ * stream's to control: now that a reader can collapse the live one and open an
+ * older one, "the last box in the document" is somebody else's reasoning.
+ */
+const thoughtBox = () => {
+  const last = s.turns[s.turns.length - 1]
+  return last ? panel.value?.querySelector(`#dp-thoughts-${last.id}`) : null
+}
+const onThoughtScroll = (turn, e) => {
+  // Only the live box follows anything, so only the live box can unfollow.
+  if (turn === s.turns[s.turns.length - 1]) thoughtFollow.read(e.target)
+}
+let thoughtQueued = false
 watch(
   () => s.turns[s.turns.length - 1]?.thought,
-  () => {
+  (now, before) => {
+    // The box was emptied — a new turn, or a second model call inside this one,
+    // which `onStream`'s `start` clears it for. Nothing the reader scrolled up
+    // to read is in there any more, so the hold on it is released with the text.
+    if (!now || (before && now.length < before.length)) thoughtFollow.repin()
+    if (thoughtQueued) return
+    thoughtQueued = true
     requestAnimationFrame(() => {
-      // The last one in the thread, not the first: a reader who reopened an
-      // earlier turn's reasoning must not have it yanked to the bottom.
-      const boxes = panel.value?.querySelectorAll('.docpilot__thoughts')
-      const el = boxes?.[boxes.length - 1]
-      if (el) el.scrollTop = el.scrollHeight
+      thoughtQueued = false
+      thoughtFollow.follow(thoughtBox())
     })
   },
 )
@@ -2713,12 +2767,15 @@ function onSourceClick(e, src) {
 /**
  * The reader's own words, marked inside a search-only snippet.
  *
- * ESCAPED FIRST, ALWAYS. The snippet is corpus text — markdown a page author
- * wrote, which can contain angle brackets and does on any page documenting HTML —
- * and this is the one place in the panel where corpus text becomes `v-html`.
+ * ESCAPED FIRST, ALWAYS. The snippet is corpus text — a page author's prose,
+ * which can contain angle brackets and does on any page documenting HTML.
  * Escaping and then inserting our own `<mark>` is the order that makes the marks
  * the only markup in the string; matching first and escaping after would escape
  * the marks too, and escaping neither is an injection.
+ *
+ * The passage disclosure is the other place corpus text becomes `v-html`, and it
+ * arrives already parsed: markdown-it runs with `html: false`, so an author's
+ * angle bracket is escaped there by the renderer rather than by this function.
  *
  * COMPUTED AT RENDER, NEVER STORED. A results turn is persisted to the archive,
  * and marked-up HTML in a stored record is a hazard that outlives the render it

@@ -129,7 +129,20 @@ export const docPilot = {
          * about a spent quota describes, arrived at by the flag that exists to
          * avoid it.
          */
-        indexDir: 'docs/public/rag-local',
+        /**
+         * A THIRD index, and the reason it is a variable rather than an edit:
+         * `calibrate --transfer` has to be measured against ground truth, and
+         * ground truth means a genuinely different vector space over the SAME
+         * corpus. `qwen3-embedding` at 4096 dimensions against `bge-m3` at 1024
+         * is that, on one machine, for nothing.
+         *
+         *   DOCPILOT_EMBED_MODEL=qwen3-embedding npx docpilot index
+         *
+         * `indexDir` moves with it for the reason the block below states: two
+         * builds writing one directory is the local one overwriting the
+         * deployed index with a manifest the browser cannot use.
+         */
+        indexDir: env.DOCPILOT_EMBED_MODEL ? `docs/public/rag-${env.DOCPILOT_EMBED_MODEL.replace(/[^a-z0-9]+/gi, '-')}` : 'docs/public/rag-local',
         /**
          * The BROWSER's half of the same statement, and it has to move with
          * `indexDir` or the two disagree in the one place nobody looks.
@@ -140,8 +153,50 @@ export const docPilot = {
          * exactly the artefact it was supposed to be replacing.
          */
         host: { ragBase: '/rag-local' },
-        chat: { provider: 'ollama', model: 'qwen3:8b' },
-        embed: { provider: 'ollama', model: 'bge-m3' },
+        /**
+         * The CHAT half is switchable between the two ways the same server can
+         * be reached, so an A/B against a gateway is a variable rather than an
+         * edit — `DOCPILOT_CHAT_ADAPTER=custom npx docpilot eval`.
+         *
+         * `ollama` is the default and stays the default. The native adapter is
+         * the only one that maps `numCtx` onto `options.num_ctx`, and the eight
+         * excerpts a primed turn carries do not fit the server's own default
+         * context. `custom` is `openaiCompatible` with `caps: {unknown: true}`,
+         * so that knob has nowhere to go and the window is truncated by the
+         * server without a word in any report — which is the failure mode this
+         * comment exists to keep out of the numbers.
+         *
+         * `CUSTOM_BASE_URL` is the BARE host — no `/v1` on the end. Each adapter
+         * composes the path itself (`providers.js`): the openai one asks for
+         * `${baseURL}/v1/embeddings` and the native one for `${baseURL}/api/embed`,
+         * so a suffix here produces `…:11434/v1/v1/embeddings` and a 404 that
+         * reads as an unreachable endpoint rather than as a doubled path.
+         *
+         *   CUSTOM_BASE_URL=http://192.168.50.146:11434
+         *
+         * Moving the EMBED half across is safe against this index: both routes
+         * are the same bge-m3 on the same server, and the two vectors compare at
+         * cosine 1.000000 — measured, not assumed.
+         */
+        chat:
+          env.DOCPILOT_CHAT_ADAPTER === 'custom'
+            ? { provider: 'custom', model: 'qwen3:8b' }
+            : { provider: 'ollama', model: 'qwen3:8b' },
+        /**
+         * `baseURL` is stated rather than left to the environment, because for a
+         * NON-HOSTED provider `nodeEmbedTarget` reads `embed.baseURL ||
+         * LOCAL_BASE_URL` and never consults `OLLAMA_BASE_URL` — that variable
+         * selects the provider in the chain, it does not relocate one already
+         * named here. Left out, every `docpilot index` and `calibrate` silently
+         * embeds against `http://localhost:11434` whatever the variable says,
+         * which is only invisible while both hosts happen to serve the same
+         * model.
+         */
+        embed: {
+          provider: env.DOCPILOT_CHAT_ADAPTER === 'custom' ? 'custom' : 'ollama',
+          model: env.DOCPILOT_EMBED_MODEL || 'bge-m3',
+          baseURL: env.OLLAMA_BASE_URL || 'http://localhost:11434',
+        },
       }
     : {
         chat: { provider: 'openrouter' },

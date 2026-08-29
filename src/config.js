@@ -2868,9 +2868,14 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
         // the one state worth naming in words, because a build log that said
         // ` trigger` with nothing before it reads as a bug in the log.
         const where = ui.trigger.length ? `${ui.trigger.join(' + ')} trigger` : 'no trigger'
+        // Named only when it is a PIN. `auto` is what the panel has always done,
+        // and a log line that said it would be describing the absence of a
+        // setting — while `dark` on a site whose own toggle says otherwise is
+        // exactly the line somebody will be looking for.
+        const scheme = ui.theme === 'auto' ? '' : ` · ${ui.theme}`
         console.log(
             `[docpilot] ui     ${where} · ${ui.panel} panel` +
-                `${docPilot.ui?.panel === 'auto' ? '   (auto)' : ''}${fab}`,
+                `${docPilot.ui?.panel === 'auto' ? '   (auto)' : ''}${fab}${scheme}`,
         )
     }
     // Same silence rule again. Loud when the archive is off, because "off" also
@@ -3334,7 +3339,27 @@ export const DEFAULTS = {
         layout: 'overlay',
         prefetch: 'hover',
         firstRunHint: false,
+        /**
+         * Whether a turn outlives the panel it was asked in, and how the
+         * reader is told — ui-specs/010. `'notify'` · `'open'` · `false`.
+         *
+         * The one default in this block that changes a shipped behaviour, and
+         * the reason is in `UI_DEFAULTS`: what it replaces was a sentence the
+         * panel had no grounds to say.
+         */
+        background: 'notify',
         credit: true,
+        /**
+         * Which colour scheme the panel wears — ui-specs/011.
+         * `'auto'` · `'light'` · `'dark'`, and `'system'` reads as `'auto'`.
+         *
+         * `'auto'` is what the panel has always done and changes nothing: the
+         * host's own toggle where there is an adapter, `prefers-color-scheme`
+         * where there is not. The other two are for the site neither signal can
+         * answer for, and they reach the STYLESHEET the same way `font` does —
+         * `session.configure` writes a class onto `<html>`.
+         */
+        theme: 'auto',
         /**
          * The panel wears the page's own font and ships none of its own —
          * `--dp-font` is `inherit`. These two are for the site whose face the

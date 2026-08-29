@@ -88,7 +88,7 @@ const features = [
     href: '/guide/social-openers',
   },
   {
-    title: '170 strings, one at a time',
+    title: '171 strings, one at a time',
     body: "Every reader-facing string is replaceable, in 25 groups. Chrome follows the page's locale; the credential warning and the greeting follow the language the reader typed in.",
     chip: 'i18n.locales',
     href: '/guide/i18n',

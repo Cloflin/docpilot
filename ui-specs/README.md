@@ -34,6 +34,8 @@ and a research pass first, and a change that moves a rule updates 000 and
 | [007](007-quote-a-passage.md) | Selecting inside an answer offers **Ask AI**; the passage travels as its own field |
 | [008](008-edit-a-question.md) | A question can be copied, rewritten and asked again — both truncate the thread; a pill leads back down a long one |
 | [009](009-every-action-has-a-switch.md) | **rule 11** — every reader-visible action is removable and documented; sixteen switches, seventeen changes, four defects that get none |
+| [010](010-a-turn-outlives-the-panel.md) | Closing the panel stops looking, not asking — the turn runs on and the trigger takes a dot |
+| [011](011-the-panel-can-be-pinned.md) | `ui.theme` — a site can pin the panel light or dark instead of following the page |
 
 ## The rules
 

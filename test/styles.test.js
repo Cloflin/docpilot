@@ -157,6 +157,87 @@ describe('stylesheet split', () => {
     ])
   })
 
+  /**
+   * `ui.theme` — the pin, asserted against the two sets it is a copy of.
+   *
+   * The pinned blocks restate values that already exist twelve lines above
+   * them, and a copy nobody checks is a copy that goes stale on the first
+   * palette change: a `--dp-text` moved in `:root` and forgotten in
+   * `html.docpilot-light` is a site that pinned light and got last year's text
+   * colour, with nothing in the diff to say so.
+   *
+   * NAMES AND VALUES BOTH. The names are the definition of what a scheme IS —
+   * exactly the tokens that differ between this file's own two sets, no more
+   * (`--dp-accent-soft`, `--dp-shadow` and `--dp-scrim` serve both schemes, so
+   * under a pin they stay the host's) and no fewer.
+   */
+  describe('the ui.theme pin', () => {
+    const core = stripComments(CORE)
+    const values = (css) =>
+      new Map([...css.matchAll(/(--dp-[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].replace(/\s+/g, ' ').trim()]))
+
+    const light = values(blockAfter(core, ':root'))
+    const dark = values(blockAfter(core, '@media (prefers-color-scheme: dark)'))
+    const pinned = {
+      light: values(blockAfter(core, 'html.docpilot-light')),
+      dark: values(blockAfter(core, 'html.docpilot-dark')),
+    }
+
+    it('pins exactly the tokens that differ between the two sets', () => {
+      expect(dark.size).toBeGreaterThan(5)
+      expect([...pinned.light.keys()].sort()).toEqual([...dark.keys()].sort())
+      expect([...pinned.dark.keys()].sort()).toEqual([...dark.keys()].sort())
+    })
+
+    it('pins the values the two sets actually declare', () => {
+      for (const token of dark.keys()) {
+        expect(pinned.light.get(token), `${token} pinned light`).toBe(light.get(token))
+        expect(pinned.dark.get(token), `${token} pinned dark`).toBe(dark.get(token))
+      }
+    })
+
+    /**
+     * The caret, the scrollbar and any native control — the one thing a `--dp-`
+     * token cannot say. Scoped to the three roots this package owns: written on
+     * `<html>` it would repaint the host page's own scrollbars, which a setting
+     * about the panel has no business doing.
+     */
+    it('tells the user agent which palette to draw with, and only inside the panel', () => {
+      // The whole rule, not the declaration: `color-scheme` written one level
+      // out — on `html.docpilot-dark` itself — would reach the host page's own
+      // scrollbars, and the diff between the two would be one indent.
+      const roots = (scheme) =>
+        ['.docpilot,', '.docpilot-nav-trigger,', '.docpilot-cta {', `color-scheme: ${scheme};`]
+          .map((l) => `\\s*${l.replace(/[.{]/g, (c) => '\\' + c)}`)
+          .join('\n')
+      for (const scheme of ['light', 'dark']) {
+        expect(core, `color-scheme: ${scheme} on our roots`).toMatch(new RegExp(roots(scheme)))
+      }
+      // Exactly those two, so a third written anywhere else is a failure here
+      // rather than a repainted scrollbar on somebody else's page.
+      expect([...core.matchAll(/(?<!prefers-)color-scheme:/g)]).toHaveLength(2)
+    })
+
+    /**
+     * Shiki is per-token inline properties, so the pin needs a RULE and the
+     * token blocks cannot reach it. Each adapter states the pair again after
+     * its own two branches — same specificity as `html.dark`, so the core's
+     * copy would lose to a stylesheet that loads second.
+     */
+    it.each(ADAPTERS)('re-states the pinned Shiki pair after the host branches: %s', (name, css) => {
+      const code = stripComments(css)
+      for (const cls of ['docpilot-dark', 'docpilot-light']) {
+        expect(code, `${cls} in ${name}`).toContain(`html.${cls} .docpilot__answer`)
+      }
+      // After the host's own negative branch, which is the last of its two.
+      // Same specificity as `html.dark`, so this ordering IS the override.
+      const host = code.lastIndexOf('html:not(')
+      expect(host, `${name} still states its own light branch`).toBeGreaterThan(-1)
+      expect(code.indexOf('html.docpilot-dark'), 'the pin comes after the host pair').toBeGreaterThan(host)
+      expect(code.indexOf('html.docpilot-light'), 'the pin comes after the host pair').toBeGreaterThan(host)
+    })
+  })
+
   it('leaves the bundle entry with nothing but @use', () => {
     const body = stripComments(ENTRY)
       .split('\n')

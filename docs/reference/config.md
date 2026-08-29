@@ -59,7 +59,7 @@ export const docPilot = {
   scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
   history: { enabled: true, maxConversations: 20, exportThread: true },
   prompt: { show: false, allowAppend: false, appendMaxChars: 500, override: null, extend: '' },
-  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, credit: true, font: null, fontMono: null },
+  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, background: 'notify', credit: true, theme: 'auto', font: null, fontMono: null },
   host: { base: null, ragBase: null, article: null, search: null, content: null },
   i18n: { translations: {}, locales: {} },
 }
@@ -179,7 +179,9 @@ written by hand; only the values are mechanical.
 | [`ui.layout`](#ui-layout) | `'overlay' \| 'push'` | `'overlay'` | How the panel treats the page beneath it — `'push'` pads the content aside so docs and answer sit side by side — *does nothing below 960px, where the panel is already edge to edge* |
 | [`ui.prefetch`](#ui-prefetch) | `'hover' \| 'idle' \| false` | `'hover'` | When the retrieval index is downloaded — `'idle'` pays up front, `false` waits until the panel is opened — *skipped entirely when the browser reports `saveData` or a 2G-class connection* |
 | [`ui.firstRunHint`](#ui-firstrunhint) | `boolean` | `false` | Shows one dismissible line on a first visit, naming the gesture nobody discovers: selecting a passage to ask about it — *withheld when both `quote` switches are off* |
+| [`ui.background`](#ui-background) | `'notify' \| 'open' \| false` | `'notify'` | Whether a turn outlives the panel it was asked in — `'notify'` marks the trigger with a dot when it settles, `'open'` brings the panel back with the answer in place — *`false` abandons it on close; the composer's Stop always ends a turn regardless* |
 | [`ui.credit`](#ui-credit) | `boolean` | `true` | One word at the end of the footnote — `DocPilot`, linked to the project — so a reader can find out what answered them — *`false` removes it; the disclaimer beside it is not affected* |
+| [`ui.theme`](#ui-theme) | `'auto' \| 'light' \| 'dark' \| 'system'` | `'auto'` | Which colour scheme the panel wears — `'auto'` follows the page, `'light'` and `'dark'` pin it against both your site's toggle and the reader's OS — *a pinned panel wears DocPilot's own palette, not your site's, because a host has no dark value to read while it is in light mode* |
 | [`ui.font`](#ui-font-ui-fontmono) | `string \| false \| null` | `null` | The panel's face, for a site it cannot inherit one from — a family list, or the name of the custom property your site already keeps it in — *unset the panel wears the page's own font; a value here outranks a host adapter's mapping* |
 | [`ui.fontMono`](#ui-font-ui-fontmono) | `string \| false \| null` | `null` | The same for code blocks, the reasoning trace and the prompt disclosure — *unset they keep a system monospace stack, because a page has no monospace to inherit* |
 | [`host.base`](#host-base) | `string \| null` | `null` | Path the site is served from, e.g. `/docs/` for a subdirectory install — neutral fallback `/` — *applied only at the index fetch and citation navigation — manifest paths and answer hrefs stay base-less* |
@@ -1784,7 +1786,7 @@ privacy review leaves nothing behind.
 ## ui
 
 - **Type:** `object`
-- **Default:** `{ trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, credit: true, font: null, fontMono: null }`
+- **Default:** `{ trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, background: 'notify', credit: true, theme: 'auto', font: null, fontMono: null }`
 - **Related:** [Appearance](/guide/appearance)
 
 Where the buttons live, what shape the panel takes, what the floating button is
@@ -1803,7 +1805,9 @@ ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true }
 | `layout` | `'overlay'` — the panel covers the page · `'push'` — the page moves aside | `'overlay'` |
 | `prefetch` | `'hover'` · `'idle'` · `false` | `'hover'` |
 | `firstRunHint` | `true` shows one dismissible line on a first visit | `false` |
+| `background` | `'notify'` — a dot on the trigger · `'open'` — the panel returns · `false` — the turn is abandoned on close | `'notify'` |
 | `credit` | `false` removes the `DocPilot` link from the footnote | `true` |
+| `theme` | `'auto'` — the page decides · `'light'` · `'dark'` — pinned, whatever the page says — [see below](#ui-theme) | `'auto'` |
 | `font` | a family list, or the name of a custom property — [see below](#ui-font-ui-fontmono) | `null` — the page's own font |
 | `fontMono` | the same, for code — `null` keeps a system monospace stack | `null` |
 
@@ -1904,6 +1908,63 @@ passage offers to ask about it.
 also withheld when both [`quote`](#quote) switches are off, because a hint naming
 a gesture the panel does not answer is worse than no hint.
 
+### ui.background
+
+What happens to a turn when the reader puts the panel away while it is still
+running.
+
+```js
+ui: { background: 'notify' }   // the shipped value
+ui: { background: 'open' }     // the panel comes back on its own
+ui: { background: false }      // the turn is abandoned, as it was before 0.4
+```
+
+**Closing the panel and stopping the turn are two different intentions, and they
+used to share one `abort()`.** That is the defect this setting is the switch for,
+and it is worth stating plainly because the symptom did not look like a bug: a
+reader who asked a question and put the panel away during retrieval — which is
+most of a turn's latency, before the first token — reopened it to
+
+> I couldn't find this in the docs.
+
+That sentence is the [gate's refusal](/concepts/the-gate), and the gate had never
+run. An abort *after* the first token has always settled honestly as **Stopped.**;
+an abort before it had no state of its own and fell into the refusal. There is no
+value of this setting under which the old behaviour was right, which is why the
+default changes it rather than preserving it.
+
+| value | the turn | the reader |
+|---|---|---|
+| `'notify'` | runs to completion | a dot on the trigger, which the next open clears |
+| `'open'` | runs to completion | the panel returns by itself, answer in place |
+| `false` | abandoned on close | nothing — the pre-0.4 behaviour, refusal included |
+
+`'notify'` ships because the panel's own position is that
+[the docs stay readable beside the answer](/concepts/the-panel), and a reader who
+closed the panel was reading something. A panel that reopens itself over that page
+is the one behaviour this package has always declined to have; `'open'` is for a
+site that has decided otherwise, and it is a single word away.
+
+**Stop is still Stop.** The button in the composer, and the `Escape` that stands
+in for it while a turn is running, reach the abort directly and are not affected
+by any value here. The setting governs the close button, the scrim, the floating
+button and the hotkey — the four ways of saying *get off my screen*, none of which
+ever asked for anything to end.
+
+The turn also survives **navigation**: the store is a module singleton, so a
+reader who moves to another page of your site keeps the turn and finds the dot
+waiting on the trigger there. It does not survive a full page load, because
+nothing in a browser does.
+
+**What the dot is.** A 10px circle in `--dp-alert` — see
+[Appearance](/guide/appearance) — in the corner of whichever
+[trigger placement](#ui-trigger) is on the page, or at the end of the row in the
+mobile navigation menu. It bounces three times on arrival and then rests; it is
+not a count, and it carries `aria-hidden`, because the words that go with it are
+in the button's accessible name and a screen reader is told through the panel's
+live region as the turn settles. `prefers-reduced-motion` keeps the dot and drops
+the bounce.
+
 ### ui.credit
 
 One word at the end of the footnote under the composer — **DocPilot**, linked to
@@ -1926,6 +1987,52 @@ ui: { credit: false }   // no link; the rest of the footnote is unchanged
 **On by default.** A site that would rather word the attribution itself turns it
 off and writes its own line — the [`i18n`](#i18n) key `credit.label` renames it
 in place if all you want is different words.
+
+### ui.theme
+
+**`'auto'` is what the panel has always done, and it is still the default.** With
+no adapter loaded the core reads `prefers-color-scheme`, which is the only signal
+a page without a theme system has. With one, the adapter maps every colour token
+to the host's own — `--vp-c-bg`, `--ifm-background-color` — so the panel follows
+your site's light/dark toggle with the rest of the site.
+
+`'light'` and `'dark'` overrule both.
+
+```js
+ui: { theme: 'auto' }    // the page decides — the shipped value
+ui: { theme: 'light' }   // always light, whatever the site and the OS say
+ui: { theme: 'dark' }    // always dark, on the same terms
+```
+
+`'system'` is accepted as a spelling of `'auto'` and resolves to it, because the
+two words name the same thing everywhere else you have met this setting.
+
+| value | what decides the scheme |
+|---|---|
+| `'auto'` | your site's own toggle where the panel has a host adapter; the reader's OS where it has none |
+| `'light'` | nothing — the panel is light on a dark site, and light for a dark-OS reader |
+| `'dark'` | nothing — the same, the other way round |
+
+**A pinned panel wears DocPilot's own palette, not your site's**, and it cannot be
+otherwise: `--dp-surface` maps to `--vp-c-bg`, and `--vp-c-bg` only holds a dark
+value while VitePress is *in* dark mode — so on a light site there is no host
+value for a dark pin to read. Three tokens are deliberately left to the host even
+under a pin: `--dp-accent-soft`, `--dp-shadow` and `--dp-scrim` have one value for
+both schemes, so they stay your brand tint, your elevation and your backdrop.
+Pinning a scheme is not the same as discarding a palette.
+
+The pin is a class on `<html>` — `docpilot-light` or `docpilot-dark` — and the
+core stylesheet declares the nine tokens that differ between its own light and
+dark sets one class deeper than the `:root` an adapter maps on. That is what lets
+it win: an adapter beats the core by **loading second**, not by specificity, so a
+rule of ours at `:root` would lose on exactly the two hosts with a toggle to
+overrule. It also sets `color-scheme` on the panel and the trigger — the caret,
+the scrollbar and any native control — and never on `<html>`, because your page's
+own scrollbars are not the panel's to repaint.
+
+This is a site-wide setting with no reader-facing switch. A reader who wants the
+panel to follow them already has one: their site's own theme toggle, under
+`'auto'`.
 
 ### ui.font, ui.fontMono
 
@@ -1954,10 +2061,12 @@ prompt disclosure. It has no `inherit` default and should not be given one: a
 page has no monospace face for the panel to borrow, so unset it keeps a system
 monospace stack.
 
-Both are written onto `<html>` as `--dp-font` and `--dp-font-mono`, which is
-**the only layer that outranks a host adapter** — a value here reaches the panel
-on VitePress and Docusaurus too, where a `:root` rule of your own in a stylesheet
-loaded before the adapter would not. A value that could end the declaration or
+Both are written onto `<html>` as `--dp-font` and `--dp-font-mono`, **which
+outranks a host adapter** — a value here reaches the panel on VitePress and
+Docusaurus too, where a `:root` rule of your own in a stylesheet loaded before
+the adapter would not. An inline property on the root is one of the two layers
+that can; [`ui.theme`](#ui-theme) is the other, and it gets there by specificity
+rather than by being inline. A value that could end the declaration or
 open another — `;` `{` `}` `<` `>` `@` `*` `\` or `url()` — is reported on stdout
 during the build and dropped, and the panel keeps the page's font.
 

@@ -316,6 +316,62 @@ describe('ui.font', () => {
   })
 })
 
+/**
+ * `ui.theme` — the other setting that lands on the DOCUMENT.
+ *
+ * A class rather than an inline property, because a pin is nine tokens and a
+ * `color-scheme`, and those values belong in `core.scss` beside the light and
+ * dark sets they are copies of. `html.docpilot-dark` is one class deeper than
+ * the `:root` an adapter maps on, which is what lets it win over a stylesheet
+ * that beats the core by loading second.
+ */
+describe('ui.theme', () => {
+  const pinned = () =>
+    ['docpilot-light', 'docpilot-dark'].filter((c) => document.documentElement.classList.contains(c))
+
+  afterEach(() => document.documentElement.classList.remove('docpilot-light', 'docpilot-dark'))
+
+  // `'auto'` is what the panel has always done — the host's toggle, or the OS —
+  // and both are the stylesheet's business, so there is nothing to write.
+  it('writes no class when nobody pinned a scheme', () => {
+    panel = mountDocPilot({ config: CONFIG })
+    expect(pinned()).toEqual([])
+  })
+
+  it.each(['light', 'dark'])('puts the %s pin on the root', (theme) => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, theme } } })
+    expect(pinned()).toEqual([`docpilot-${theme}`])
+  })
+
+  // The word and what it means are the same setting, so neither reaches the
+  // document as itself: `'system'` is folded into `'auto'` by the resolver and
+  // nothing is written, exactly as if the key had been left alone.
+  it('treats `system` as `auto`', () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, theme: 'system' } } })
+    expect(pinned()).toEqual([])
+  })
+
+  /**
+   * REMOVED, not skipped — the same rule `ui.font` above is held to. `setConfig`
+   * runs on a live page, so a pin taken out of the settings has to leave the
+   * document with it or the panel keeps a scheme nothing can now explain.
+   */
+  it('takes the pin off again when the config stops naming one', () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, theme: 'dark' } } })
+    expect(pinned()).toEqual(['docpilot-dark'])
+    session.configure({ docPilot: CONFIG })
+    expect(pinned()).toEqual([])
+  })
+
+  // One pin at a time: switching schemes must not leave both classes on the
+  // root, where the later block in the stylesheet would silently decide it.
+  it('replaces one pin with the other', () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, theme: 'dark' } } })
+    session.configure({ docPilot: { ...CONFIG, ui: { ...CONFIG.ui, theme: 'light' } } })
+    expect(pinned()).toEqual(['docpilot-light'])
+  })
+})
+
 describe('the highlighter option', () => {
   it('installs nothing by default', () => {
     panel = mountDocPilot({ config: CONFIG })
@@ -326,5 +382,111 @@ describe('the highlighter option', () => {
     const adapter = { id: 'stub', load: async () => {}, loaded: () => [], render: () => null }
     panel = mountDocPilot({ config: CONFIG, highlighter: adapter })
     expect(getHighlighter()).toBe(adapter)
+  })
+})
+
+/**
+ * The unread dot — ui-specs/010.
+ *
+ * The behaviour behind it is held in `background.test.js`, which needs no DOM.
+ * What only a mounted panel can show is the pairing: the dot is `aria-hidden`
+ * decoration, and the words that go with it land on the button's accessible
+ * name — in its content when there is a visible label to join, and in
+ * `aria-label` when the button is the icon-only circle and there is nothing to
+ * join. Both at once would be writing it twice, because an `aria-label`
+ * silently replaces the content it sits on.
+ */
+describe('the unread dot on the trigger', () => {
+  const fab = () => document.querySelector('.docpilot-nav-trigger.is-fab')
+  const dot = () => document.querySelector('.docpilot-nav-trigger__badge')
+
+  // The store is a module singleton and outlives a mount, so a suite that
+  // opened the panel leaves it open for the next one. The dot is defined as
+  // "waiting AND not on screen", which makes that leak the difference between
+  // a dot and no dot — so both halves are stated here rather than assumed.
+  beforeEach(() => {
+    session.state.open = false
+    session.state.unread = false
+  })
+
+  afterEach(() => {
+    session.state.unread = false
+  })
+
+  it('is absent until something settles behind a closed panel', async () => {
+    panel = mountDocPilot({ config: CONFIG })
+    expect(dot()).toBe(null)
+
+    session.state.unread = true
+    await nextTick()
+    expect(dot()).not.toBe(null)
+    expect(dot().getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('goes out when the reader opens the panel', async () => {
+    panel = mountDocPilot({ config: CONFIG })
+    session.state.unread = true
+    await nextTick()
+    expect(dot()).not.toBe(null)
+
+    panel.open()
+    await nextTick()
+    expect(session.state.unread).toBe(false)
+    expect(dot()).toBe(null)
+  })
+
+  /**
+   * With words on the button there IS content to join, so the name is the label
+   * plus the hidden line — and `aria-label` stays away, which is the rule
+   * ui-specs/005 already holds this button to.
+   */
+  it('joins the visible label rather than replacing it', async () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, fabLabel: 'Ask AI' } } })
+    session.state.unread = true
+    await nextTick()
+
+    expect(fab().getAttribute('aria-label')).toBe(null)
+    expect(fab().textContent).toContain('Ask AI')
+    expect(fab().textContent).toContain('Answer ready.')
+  })
+
+  /** And with no words, the name is the only place left for them. */
+  it('goes into the accessible name when the button is icon-only', async () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, fabLabel: false } } })
+    expect(fab().getAttribute('aria-label')).toBe('DocPilot')
+
+    session.state.unread = true
+    await nextTick()
+    expect(fab().getAttribute('aria-label')).toBe('DocPilot Answer ready.')
+  })
+})
+
+/**
+ * The polite live region outlives the panel — ui-specs/010.
+ *
+ * It used to sit in the composer, inside the `v-if`, so a turn that settled
+ * while the panel was shut announced into nothing — and that stopped being an
+ * edge case the moment a turn was allowed to outlive the panel. Being resident
+ * also removes a race the open path always had: a live region inserted in the
+ * same frame as its text is one some screen readers never announce.
+ */
+describe('the live region', () => {
+  const live = () => document.querySelector('.docpilot__sr[aria-live="polite"]')
+
+  beforeEach(() => {
+    session.state.open = false
+  })
+
+  it('is in the document with the panel closed', () => {
+    panel = mountDocPilot({ config: CONFIG })
+    expect(session.state.open).toBe(false)
+    expect(live()).not.toBe(null)
+  })
+
+  it('is still the only one once the panel is open', async () => {
+    panel = mountDocPilot({ config: CONFIG })
+    panel.open()
+    await nextTick()
+    expect(document.querySelectorAll('.docpilot__sr[aria-live="polite"]').length).toBe(1)
   })
 })

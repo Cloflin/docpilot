@@ -32,7 +32,8 @@
  *      named outside a `--dp-*` declaration.
  *   4. Agent progress is one node whose text is replaced in place.
  *   5. Four UI type sizes — 24 / 16 / 14 / 13 — plus 0.9em and 0.75em.
- *   6. Six keyframes; exactly two of them repeat, both on the busy status node.
+ *   6. Seven keyframes; exactly two of them repeat, both on the busy status
+ *      node. The seventh runs a fixed number of times and is not one of them.
  *   7. --vp-c-text-3 never reaches text, by reference or by inheritance.
  *   8. This file names no VitePress token or selector.
  *   9. The adapter is a mapping, never a second design.
@@ -97,6 +98,23 @@
 
   // ── Line — one, and it is the panel boundary ────────────────────────────────
   --dp-line: rgba(101, 117, 133, 0.24);
+  /**
+   * THE SECOND BORDER COLOUR, and the only one — the lip under the jump pill's
+   * glass. The hairline is a boundary and reads the same on both faces of an
+   * edge; a lip is a LIGHT SOURCE, and a translucent pill that has none reads as
+   * a hole in the thread rather than a thing lying over it.
+   *
+   * DERIVED, for `--dp-wash`'s reason exactly: substitution resolves it against
+   * the winning `--dp-text`, so it is a near-white rim on the dark scheme it was
+   * drawn for and a grounded dark edge on the light one, where a white lip would
+   * simply erase the pill's underside. A literal `rgba(255,255,255,.15)` would
+   * have been correct in one scheme and invisible in the other.
+   *
+   * IT MUST NEVER GET A DARK VARIANT — the same contract `--dp-wash` carries:
+   * everything in the `prefers-color-scheme` block below has to be re-declared
+   * unconditionally by an adapter, and this token has nothing for one to say.
+   */
+  --dp-lip: color-mix(in srgb, var(--dp-text, #0d0d0d) 15%, transparent);
 
   // ── Text — two readable levels, no third ────────────────────────────────────
   --dp-text: #1f2328;
@@ -111,6 +129,16 @@
   // Declared ONCE and alpha, so one value reads on both surfaces and the rule
   // "the accent is named in exactly one place" survives having two schemes.
   --dp-accent-soft: rgba(100, 108, 255, 0.18);
+
+  // ── The one signal colour ───────────────────────────────────────────────────
+  // The dot on the trigger when an answer settled behind a shut panel —
+  // ui-specs/010. Deliberately OUTSIDE the theme and outside the dark set: it
+  // is not part of the panel's palette and no host has an opinion about it,
+  // because "there is something waiting" is not a statement in anyone's brand.
+  // One literal that clears 3:1 against both surfaces — 4.8:1 on the light one,
+  // 3.6:1 on the dark — which is the non-text floor this is held to. It is
+  // never text and never a border.
+  --dp-alert: #e34c1e;
 
   // ── Surfaces that sit outside the panel ─────────────────────────────────────
   // `--dp-chip` is the navbar trigger's fill: it has to match whatever the host
@@ -226,6 +254,77 @@
     --dp-focus: #dfdfd6;
     --dp-chip: rgba(101, 117, 133, 0.16);
     --dp-code-bg: rgba(101, 117, 133, 0.16);
+  }
+}
+
+/**
+ * ── THE PIN — `ui.theme: 'light' | 'dark'` ─────────────────────────────────
+ *
+ * Everything above answers a QUESTION — what does the page prefer, what does
+ * the host say. These two blocks answer nobody: they are the site stating a
+ * scheme, and they have to win over both.
+ *
+ * ONE CLASS MORE SPECIFIC THAN `:root`, and that is the whole mechanism. An
+ * adapter beats the core by loading second, not by specificity — `:root` there
+ * and `:root` here are equal — so a pin written at `:root` would lose on
+ * exactly the two hosts that have a toggle of their own to overrule.
+ * `html.docpilot-dark` is `(0,1,1)` against their `(0,1,0)` and wins wherever it
+ * is loaded from. `session.configure` puts the class on `<html>`.
+ *
+ * ON THE ROOT, not on `.docpilot`, for the reason the tokens are on `:root` at
+ * all: the nav trigger, the floating button and the CTA render outside the
+ * panel and outlive it, and a pin they could not see would leave the button
+ * wearing the page while the panel it opens wore something else.
+ *
+ * EXACTLY THE NINE THAT DIFFER between this file's own light and dark sets, and
+ * deliberately not the whole set an adapter re-declares. Those nine ARE the
+ * scheme; `--dp-accent-soft`, `--dp-shadow` and `--dp-scrim` have one value here
+ * for both schemes, so on a host they are the SITE'S — its brand tint, its
+ * elevation, its backdrop — and pinning a scheme is not licence to throw those
+ * away. `--dp-wash` and `--dp-lip` need no line for the reason they never get
+ * one: both are mixed from `--dp-text`, which these blocks move. The suite
+ * asserts the names and the values against the two sets above rather than
+ * trusting a copy nobody would notice going stale.
+ */
+html.docpilot-light {
+  --dp-surface: #ffffff;
+  --dp-surface-2: rgba(101, 117, 133, 0.12);
+  --dp-line: rgba(101, 117, 133, 0.24);
+  --dp-text: #1f2328;
+  --dp-text-dim: #5c6672;
+  --dp-on-text: #ffffff;
+  --dp-focus: #1f2328;
+  --dp-chip: rgba(101, 117, 133, 0.08);
+  --dp-code-bg: rgba(101, 117, 133, 0.08);
+
+  /**
+   * The one thing a token cannot say: which palette the USER AGENT should draw
+   * with — the composer's caret, the thread's scrollbar, a native control's
+   * chrome. Scoped to the three roots this package owns and never written to
+   * `<html>`, because the host page's own scrollbars are not ours to repaint.
+   */
+  .docpilot,
+  .docpilot-nav-trigger,
+  .docpilot-cta {
+    color-scheme: light;
+  }
+}
+
+html.docpilot-dark {
+  --dp-surface: #1b1b1f;
+  --dp-surface-2: rgba(101, 117, 133, 0.16);
+  --dp-line: rgba(130, 130, 140, 0.32);
+  --dp-text: #dfdfd6;
+  --dp-text-dim: #98989f;
+  --dp-on-text: #1b1b1f;
+  --dp-focus: #dfdfd6;
+  --dp-chip: rgba(101, 117, 133, 0.16);
+  --dp-code-bg: rgba(101, 117, 133, 0.16);
+
+  .docpilot,
+  .docpilot-nav-trigger,
+  .docpilot-cta {
+    color-scheme: dark;
   }
 }
 
@@ -832,7 +931,23 @@
   overflow-wrap: anywhere;
   text-wrap: pretty;
   outline: none;
+}
 
+// ── prose — the answer, and the passage behind a citation ───────────────────
+//
+// Two surfaces, one set of rules, because both hold RENDERED MARKDOWN and a
+// list that is a list in the answer and a row of hyphens in the quotation below
+// it would be the panel disagreeing with itself about what a list looks like.
+//
+// A SELECTOR LIST rather than the file's first mixin: nothing here is
+// parameterised, so a mixin would buy an abstraction and pay for it in
+// duplicated output.
+//
+// The two differ only in the four properties above and the ones under
+// `.docpilot__passage` — size, colour and the box. Everything below is what the
+// content is, not how loudly it is said.
+.docpilot__answer,
+.docpilot__passage {
   p + p {
     margin-block-start: 12px;
   }
@@ -1113,9 +1228,38 @@
 // preference is the only signal there is.
 @media (prefers-color-scheme: dark) {
   .docpilot__answer .shiki,
-  .docpilot__answer .shiki span {
+  .docpilot__answer .shiki span,
+  .docpilot__passage .shiki,
+  .docpilot__passage .shiki span {
     color: var(--shiki-dark, inherit);
   }
+}
+
+/**
+ * Shiki under a pin — the one thing the token blocks above cannot reach.
+ *
+ * Shiki writes its colours as per-token inline custom properties, so which of
+ * the two a highlighted span reads is a RULE and not a token, and a scheme the
+ * site pinned has to state both halves for the same reason an adapter does: the
+ * light branch is not decoration, or a dark-OS reader on a panel pinned light
+ * gets the one element in it still painted for a dark background.
+ *
+ * Each adapter carries this pair again, after its own. Not redundancy: its
+ * `html.dark .docpilot__answer .shiki` is the same specificity as ours, so the
+ * copy here would lose to a stylesheet that loads second.
+ */
+html.docpilot-dark .docpilot__answer .shiki,
+html.docpilot-dark .docpilot__answer .shiki span,
+html.docpilot-dark .docpilot__passage .shiki,
+html.docpilot-dark .docpilot__passage .shiki span {
+  color: var(--shiki-dark, inherit);
+}
+
+html.docpilot-light .docpilot__answer .shiki,
+html.docpilot-light .docpilot__answer .shiki span,
+html.docpilot-light .docpilot__passage .shiki,
+html.docpilot-light .docpilot__passage .shiki span {
+  color: var(--shiki-light, inherit);
 }
 
 .docpilot__lead {
@@ -1488,7 +1632,6 @@
   color: var(--dp-text-dim);
   font-size: 13px;
   line-height: 1.5;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-block-size: min(240px, 32dvh);
   overflow-y: auto;
@@ -1498,6 +1641,44 @@
   &:focus-visible {
     outline: 2px solid var(--dp-focus);
     outline-offset: 2px;
+  }
+
+  // The chunk's own headings, DEMOTED to a bold line. A corpus `##` is the
+  // heading of the page it was cut from, not of this box — rendered at the
+  // answer's 16px it would be the largest text in a quotation that is meant to
+  // read one tier quieter than the row above it. Weight is enough to say
+  // "heading" in a 240px column.
+  // 13px is the meta tier, which is the tier this whole box sits on — so a
+  // heading here is the SAME size as the text under it and says "heading" by
+  // weight alone. All six, not the answer's three: h4–h6 are unstyled there and
+  // would land on a browser default inside a quotation.
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--dp-text);
+    margin-block-start: 12px;
+  }
+
+  // The row's own rule — `.docpilot__source a { text-decoration: none }` — is a
+  // class heavier than the prose one and wins inside the disclosure, because
+  // the disclosure is a child of the row. It is right for the row, where the
+  // whole line IS the link; inside a passage it leaves a link indistinguishable
+  // from the sentence around it, which is worse than not linking it at all. Won
+  // back at equal weight, later in the file.
+  a:any-link {
+    color: var(--dp-text);
+    text-decoration: underline;
+  }
+
+  // The padding above is the box's own space; a first block's margin would add
+  // a second helping of it and push the passage off its own top edge.
+  > :first-child {
+    margin-block-start: 0;
   }
 }
 
@@ -1665,9 +1846,15 @@
 /**
  * Flat, and that is a decision. Three things float in this package — the popup,
  * the floating button and the selection popover — and only those three carry a
- * shadow. This one lives INSIDE the panel it belongs to, so it occludes the
- * thread beneath it with the panel's own surface and one hairline, exactly as
- * the code card's copy chip does.
+ * shadow. This one lives INSIDE the panel it belongs to, so it separates from
+ * the thread beneath it with the panel's own surface and one hairline, exactly
+ * as the code card's copy chip does.
+ *
+ * It separates by GLASS where the browser can blur, and by an opaque fill where
+ * it cannot — see the `@supports` block below. The declarations here are the
+ * fallback, so a browser without `backdrop-filter` still gets the occluding pill
+ * the paragraph above describes rather than a translucent one with the thread
+ * legible through it.
  *
  * Hidden by `opacity` and `pointer-events`, never `visibility` or `display`: the
  * fade is the whole point, and without `pointer-events: none` an invisible pill
@@ -1716,6 +1903,37 @@
   @media (pointer: coarse) {
     min-block-size: 44px;
     padding-inline: 20px;
+  }
+
+  /**
+   * ── the glass ─────────────────────────────────────────────────────────────
+   *
+   * The one place in the package that blurs, and it is gated: without
+   * `backdrop-filter` a 65% fill is just a pill you can read the thread
+   * through, which is the failure the rule above exists to prevent. Inside the
+   * query the blur does the occluding the alpha gave up, so the two are one
+   * decision and are written as one block.
+   *
+   * DERIVED FROM THE TOKENS, never named as a literal. `color-mix` against
+   * `--dp-surface` resolves to that surface at 65% in either scheme AND under
+   * an adapter's mapping — in dark it lands on exactly the `#1b1b1f` at 0.65
+   * this was specified as. A hard-coded dark fill would have put a dark pill on
+   * the light panel.
+   *
+   * The bottom edge is `--dp-lip`, the package's second and last border colour —
+   * see the token. `--dp-line` still carries the other three sides, so the ring
+   * survives and the pill gains an underside rather than a second outline.
+   *
+   * 2px, not more: the pill is 32px tall over running text, and a blur wide
+   * enough to smear a paragraph would read as frosted glass parked in a panel
+   * that has no other glass in it. `--dp-r-pill` is already 999px, which is
+   * every clamp a browser applies to a huge radius — the shape needs nothing.
+   */
+  @supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+    background: color-mix(in srgb, var(--dp-surface) 65%, transparent);
+    border-block-end-color: var(--dp-lip);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
   }
 }
 
@@ -2162,6 +2380,10 @@
   align-items: center;
   justify-content: center;
   flex: none;
+  // For the unread dot alone — ui-specs/010. On the base rather than on
+  // `.is-fab`, which is already `fixed` and would not need it: all three
+  // placements can carry the dot, and the nav one is otherwise unpositioned.
+  position: relative;
   width: 40px;
   height: 40px;
   margin-inline-start: 8px;
@@ -2292,6 +2514,56 @@
   }
 }
 
+/**
+ * THE UNREAD DOT — ui-specs/010.
+ *
+ * A turn settled while the panel was shut, and this is the whole of how the
+ * reader is told. It sits on whichever placement is on the page: absolutely
+ * positioned in the corner of the two that are targets, and an inline dot at
+ * the end of the mobile nav row, which is a line of text rather than a button
+ * with corners to hang off.
+ *
+ * The separation from the button underneath is a SHADOW, not a border. Rule 1
+ * knows one border in this package and it is the hairline; cutting a hole in a
+ * surface is a different job, and `box-shadow` is what does it without
+ * claiming to be structure. `forced-colors` erases both the fill and the
+ * shadow, so the dot is given a real edge there and only there.
+ *
+ * The bounce runs a FIXED THREE TIMES. A dot that jumps forever is a dot the
+ * reader has to dismiss, and there is nothing here to dismiss it with — the
+ * panel is shut. Three is the arrival, and what stays afterwards is a mark.
+ */
+.docpilot-nav-trigger__badge {
+  position: absolute;
+  inset-block-start: -2px;
+  inset-inline-end: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--dp-r-pill);
+  background: var(--dp-alert);
+  box-shadow: 0 0 0 2px var(--dp-surface);
+  animation: dp-bounce 500ms var(--dp-ease) 3;
+}
+
+// The mobile nav screen is a list of text rows, not a toolbar: the row is full
+// width, so a corner is nowhere near the words and there is no surface behind
+// the dot to cut a hole in.
+.docpilot-nav-trigger.is-screen .docpilot-nav-trigger__badge {
+  position: static;
+  margin-inline-start: 8px;
+  box-shadow: none;
+}
+
+@keyframes dp-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-4px);
+  }
+}
+
 // A pointer-less device gets the larger target, and the panel below 960px is a
 // full-screen sheet — so the button it came from would be under it either way.
 @media (pointer: coarse) {
@@ -2408,6 +2680,24 @@ body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
     forced-color-adjust: none;
     background: Highlight;
   }
+  // The unread dot — ui-specs/010. Its fill goes to a system colour and its
+  // cut-out shadow is erased outright, which would leave a system-coloured dot
+  // sitting on a system-coloured button with nothing between them. This is the
+  // one mode where it needs a real edge, and it is the only place in the
+  // package that draws one for it.
+  .docpilot-nav-trigger__badge {
+    forced-color-adjust: none;
+    background: Highlight;
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+  // The fill is forced to a system colour here; the blur underneath it is not,
+  // so the pill would sit as a smeared patch of thread inside a mode whose whole
+  // contract is flat system colours. Drop the glass and keep the ring.
+  .docpilot__jump {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
   // The system palette repaints `color` but never touches -webkit-text-fill-
   // color, so a label left at `transparent` renders as an empty line in the one
   // mode with the least tolerance for a missing string. Restore the whole trio.
@@ -2427,6 +2717,12 @@ body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
   .docpilot__status-dot {
     animation: none;
     transform: scale(1);
+  }
+  // The dot stays; the jump goes. What it says is carried by its being there at
+  // all, which is why this is `animation: none` and not `display: none`.
+  .docpilot-nav-trigger__badge {
+    animation: none;
+    transform: none;
   }
   // Cancelling the animation alone freezes a transparent fill mid-gradient. The
   // label must land on the colour it would have had if the sweep never existed.

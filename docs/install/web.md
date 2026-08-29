@@ -49,7 +49,7 @@ Three files, and the third only matters for the module form:
 |---|---|
 | `docpilot.web.js` | IIFE — `window.DocPilot`, everything inlined |
 | `docpilot.web.mjs` | ESM — same API, code-split so grammars load on demand |
-| `docpilot.web.css` | the panel's stylesheet |
+| `docpilot.web.css` | the panel's stylesheet, inside `@layer docpilot` |
 
 Copy `dist/web/` alongside the `.mjs` if you use the module form: that is where
 its lazily-loaded chunks live.
@@ -162,6 +162,48 @@ tokens, override the `--dp-*` set after it:
 ```
 
 The full table is on [Appearance](/guide/appearance).
+
+**`prefers-color-scheme` is the only signal this file has**, and a page pinned
+against its reader's OS is exactly the case it gets wrong: a site forced dark by
+its own stylesheet gets a light panel on a light-OS machine. Say so instead:
+
+```js
+mountDocPilot({
+  config: {
+    ...window.__DOCPILOT__,
+    ui: { theme: 'dark' },   // 'light' · 'auto' — the default, which reads the OS
+  },
+})
+```
+
+A pin puts a class on `<html>` and the stylesheet declares its own dark set
+there, so it outranks the media query without you overriding a token. See
+[`ui.theme`](/reference/config#ui-theme).
+
+**This stylesheet is a cascade layer.** Its whole contents are declared inside
+`@layer docpilot`, and only this file is — the VitePress and Docusaurus builds
+are not. An unlayered rule beats a layered one whatever its specificity, so any
+CSS your site already has wins over the panel's without `!important` and without
+counting selectors:
+
+```css
+/* no layer, no !important — this wins */
+.docpilot__send { border-radius: 4px; }
+```
+
+If your own stylesheets are layered too, order decides it, and the order is the
+one the layers are first named in. State it yourself rather than depend on which
+`<link>` the browser reached first:
+
+```css
+@layer docpilot, site;   /* before anything else — your layers now win */
+```
+
+**It points the other way too.** A reset the page loads unlayered now outranks
+the panel. The two seen in practice: Tailwind v3's preflight sets
+`border: 0 solid` on `*`, which erases every hairline in the panel, and a bare
+`a`, `button` or `ul` rule repaints the answer body. Both are fixed by declaring
+the property back — which is the control the layer exists to hand over.
 
 **The font is already yours.** `--dp-font` is `inherit` and the panel is mounted
 into `<body>`, so it is set in whatever face your page is — there is nothing to

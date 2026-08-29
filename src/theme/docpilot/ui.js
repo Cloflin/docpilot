@@ -11,6 +11,7 @@
  *     prefetch:     'hover' | 'idle' | false,   // ui-specs/009
  *     firstRunHint: true | false,               // ui-specs/009
  *     credit:       true | false,               // the `DocPilot` link in the footnote
+ *     theme:        'auto' | 'light' | 'dark',  // ui-specs/011
  *     font:         string | null,              // a family list, or `--your-var`
  *     fontMono:     string | null,
  *   }
@@ -132,6 +133,52 @@ export const UI_LAYOUTS = ['overlay', 'push']
 export const UI_PREFETCH = ['hover', 'idle', false]
 
 /**
+ * WHAT A TURN DOES WHEN THE PANEL GOES AWAY UNDER IT — ui-specs/010.
+ *
+ *   'notify'   the turn runs on; the trigger carries a dot when it settles
+ *   'open'     the turn runs on; the panel comes back with the answer in place
+ *   false      the turn is abandoned on close, which is where it was before
+ *              this setting existed
+ *
+ * `'notify'` ships because the panel's own stated position is that the docs
+ * stay readable beside the answer: a reader who put the panel away was reading
+ * something, and a panel that reopens itself over that is the one behaviour
+ * this package has always refused. The dot is the smallest thing that can say
+ * "it is done" without taking the page back.
+ *
+ * `false` is the switch rule, not a hedge: this is a reader-visible behaviour
+ * arriving on an `npm update`, and it has to be removable.
+ */
+export const UI_BACKGROUND = ['notify', 'open', false]
+
+/**
+ * WHICH COLOUR SCHEME THE PANEL WEARS — ui-specs/011.
+ *
+ *   'auto'   whatever the page already says: the host's own light/dark toggle
+ *            where there is an adapter, `prefers-color-scheme` where there is
+ *            not. Today's behaviour, and the default.
+ *   'light'  the core's light palette, whatever the page and the OS say
+ *   'dark'   the core's dark palette, on the same terms
+ *
+ * `'system'` is accepted as a spelling of `'auto'` and normalised to it before
+ * the enum is checked, because the two words name the same thing everywhere
+ * else a reader has met this setting and neither is worth an error message.
+ *
+ * THE ONE KEY WHERE `'auto'` SURVIVES RESOLUTION. `panel: 'auto'` names a SHAPE,
+ * and the build can settle it from the trigger list — see the note on `panel`
+ * below for why nothing downstream may re-derive it. `theme: 'auto'` names a
+ * SIGNAL, and the signal is the reader's browser: there is nothing to settle at
+ * build time, and a resolver that picked one would be pinning every reader to
+ * whichever scheme the machine that ran the build happened to prefer.
+ *
+ * A PIN WEARS THE CORE'S OWN PALETTE, not the host's. `--dp-surface` maps to
+ * `--vp-c-bg` on VitePress, and `--vp-c-bg` only holds a dark value while
+ * VitePress is *in* dark mode — so a panel pinned dark on a light site has no
+ * host value to read and uses the core's. Same trade `ui.font` makes.
+ */
+export const UI_THEMES = ['auto', 'light', 'dark']
+
+/**
  * WHAT MAY REACH `style.setProperty`, stated as what may not.
  *
  * The resolved value is written onto `<html>` as a custom property and is read
@@ -180,6 +227,18 @@ export const UI_DEFAULTS = {
   prefetch: 'hover',
   firstRunHint: false,
   /**
+   * `'notify'` — the turn outlives the panel, and says so with a dot.
+   *
+   * A default that changes behaviour on update, which this package normally
+   * refuses. It is taken here because the behaviour it replaces was a FALSEHOOD
+   * rather than a preference: closing the panel mid-retrieval aborted the turn,
+   * and an abort with nothing painted yet renders as `I couldn't find this in
+   * the docs.` — a statement about the corpus, made about a turn the corpus was
+   * never asked to answer. There is no value of this setting under which that
+   * sentence was right, so no reader loses anything they had.
+   */
+  background: 'notify',
+  /**
    * `true` — the panel says what it is, once, at the bottom of the footnote.
    *
    * One word, `DocPilot`, linked to the project, after the disclaimer it shares
@@ -188,6 +247,16 @@ export const UI_DEFAULTS = {
    * somebody else's product and the last word in it is theirs.
    */
   credit: true,
+  /**
+   * `'auto'` — the panel follows the page, which is what it has always done.
+   *
+   * The default changes nothing: with no pin, the core's dark values still come
+   * from `prefers-color-scheme` and an adapter's still come from the host's own
+   * toggle. `'light'` and `'dark'` are for the site those two signals cannot
+   * answer for — an embed on a page pinned against its reader's OS, or a
+   * product that wants the assistant to read as one scheme everywhere.
+   */
+  theme: 'auto',
   /**
    * `null` — and the default lives in the STYLESHEET, not here.
    *
@@ -443,10 +512,29 @@ export function resolveUi(docPilot, err = console.error) {
     // otherwise resolve silently to the default and the author would be looking
     // for a hint that never renders and never complained.
     firstRunHint: pick(ui.firstRunHint, [true, false], UI_DEFAULTS.firstRunHint, 'firstRunHint', err),
+    // ── ui-specs/010 ────────────────────────────────────────────────────────
+    background: pick(ui.background, UI_BACKGROUND, UI_DEFAULTS.background, 'background', err),
     // Through `pick` for the same reason as the line above it: `credit: 'no'` is
     // an author switching the link off, and resolving that silently to `true`
     // leaves them looking at a badge they told the config to remove.
     credit: pick(ui.credit, [true, false], UI_DEFAULTS.credit, 'credit', err),
+    /**
+     * Like `font` below, this one reaches the STYLESHEET rather than a
+     * component: `session.configure` writes `docpilot-light` / `docpilot-dark`
+     * onto `<html>` and the core's pinned blocks do the rest.
+     *
+     * `'system'` is folded into `'auto'` BEFORE the enum check, so the message
+     * `pick` would otherwise print never fires for a word that is not a mistake,
+     * and so the resolved value stays inside `UI_THEMES` — which is what keeps
+     * the second pass in the browser a no-op.
+     */
+    theme: pick(
+      ui.theme === 'system' ? 'auto' : ui.theme,
+      UI_THEMES,
+      UI_DEFAULTS.theme,
+      'theme',
+      err,
+    ),
     /**
      * The two that do not reach a component at all — `session.configure` writes
      * them onto `<html>` as `--dp-font` and `--dp-font-mono`. Resolved here

@@ -247,6 +247,23 @@ replaces, draining at the same 500ms interval it already debounces at.
 disclosure carrying `aria-expanded`, and opening it shows the exact retrieved
 chunk, in the quote chip's dimmed treatment: level 1, no ring, no new token.
 
+**The chunk is RENDERED, not printed.** A chunk is corpus markdown, so shown as
+a text node the disclosure was the one surface in the panel that asked a reader
+to parse `##`, `**` and a fence themselves — directly under an answer that never
+does. It runs through the same `markdown-it` instance the answer does, with two
+departures: no copy button on a fence, because a copy control inside a 240px
+quotation sits under the turn's own and adds a tab stop to a scroller that
+already is one; and headings demoted to a bold line, because a corpus `##` is
+the heading of the page it was cut from and not of this box.
+
+This does not touch the invariant above it. *The exact retrieved chunk* means
+all of it, uncut — which is why the box is a scroller and not a clamp — and
+rendering changes only whether the syntax is in front of the text or behind it.
+The link filter is the answer's, for a different reason: a corpus link is
+written relative to the page it sits on, and resolved against a panel teleported
+to `body` it points at nothing, which is exactly the question `isKnownPath`
+already answers.
+
 The text is read from `turn.gate.chunks` on a live turn and by id **through the
 retriever** otherwise — never off `state.index` directly, because the check
 script holds the rule that ids resolve through the retriever and the panel is not

@@ -62,6 +62,13 @@ Sources: [OpenAI design system](https://open-design.ai/systems/openai/) ·
 mechanism: the adapter re-declares the whole colour set on `:root` and wins by
 coming second. A consumer who loads the adapter alone gets no panel at all.
 
+**One thing outranks an adapter, and it has to.** `ui.theme` is a site saying
+*light* or *dark* against the host's own toggle, so it cannot be settled by load
+order — the core loads first. It is written as a class on `<html>`, and the core
+declares the dark set again on `html.docpilot-dark`, which is `(0,1,1)` against
+the adapter's `(0,1,0)`. Specificity is the exception here precisely because
+order is the rule everywhere else — ui-specs/011.
+
 ---
 
 ## Tokens
@@ -127,15 +134,25 @@ it.
 | `--dp-surface-2` | level 1 — an object's paint, and a row's hover | `rgba(101,117,133,.12)` | `rgba(101,117,133,.16)` | `var(--vp-c-default-soft)` |
 | `--dp-wash` | level 2 — a pointer on a control | derived, see above | derived — **no dark variant** | not re-declared |
 | `--dp-line` | the 1px ring, everywhere | `rgba(101,117,133,.24)` | `rgba(130,130,140,.32)` | `var(--vp-c-divider)` |
+| `--dp-lip` | the underside of the one glass surface — the jump pill's bottom edge, and nothing else | derived, 15% of `--dp-text` | derived — **no dark variant** | not re-declared |
 | `--dp-text` | primary text; the armed send and pressed toggle fill | `#1f2328` | `#dfdfd6` | `var(--vp-c-text-1)` |
 | `--dp-text-dim` | muted text, list markers, placeholders | `#5c6672` | `#98989f` | `var(--vp-c-text-2)` |
 | `--dp-on-text` | ink on `--dp-text` | `#ffffff` | `#1b1b1f` | `var(--vp-c-neutral-inverse, var(--vp-c-bg))` |
 | `--dp-focus` | the one focus ring | `#1f2328` | `#dfdfd6` | `var(--vp-c-brand-1)` |
 | `--dp-accent-soft` | the single accent — a marker-linked source row | `rgba(100,108,255,.18)` | — | `var(--brand-bg-active, var(--vp-c-brand-soft))` |
+| `--dp-alert` | the one signal colour — the unread dot on the trigger, and nothing else | `#e34c1e` | — | **not re-declared** |
 | `--dp-chip` | the nav trigger's fill — it must match the host's search box, which is a different job from anything inside the panel | `rgba(101,117,133,.08)` | `rgba(101,117,133,.16)` | `var(--vp-c-bg-alt)` |
 | `--dp-code-bg` | the code card's surface | `rgba(101,117,133,.08)` | `rgba(101,117,133,.16)` | `var(--vp-code-block-bg)` |
 | `--dp-shadow` | the three things that float: the popup, the FAB and the selection popover | two-layer black alpha | — | `var(--vp-shadow-3)` |
 | `--dp-scrim` | the sheet's backdrop | `rgba(0,0,0,.6)` | — | `var(--vp-backdrop-bg-color)` |
+
+**The nine rows with a value in BOTH core columns are the pin.** `ui.theme:
+'light' | 'dark'` re-declares exactly those on `html.docpilot-light` /
+`html.docpilot-dark` — ui-specs/011. The six that are dashed, derived or not
+re-declared stay out of it, and three of them for a reason worth stating:
+`--dp-accent-soft`, `--dp-shadow` and `--dp-scrim` carry the SITE's brand tint,
+elevation and backdrop on a host, and a question about light and dark has no
+opinion about any of the three.
 
 `--dp-on-text` used to map to `var(--vp-c-white-invrert, …)`. **That token does
 not exist** — not in VitePress, not in the VoidZero theme — so it had always
@@ -187,17 +204,21 @@ declaration climbing back out.
 
 ### The invariants a token change has to keep
 
-`test/styles.test.js` asserts three, and they are the reason the split works:
+`test/styles.test.js` asserts four, and they are the reason the split works:
 
 1. every `var(--dp-*)` used in either sheet is **declared in `core.scss`**;
 2. the adapter declares **nothing core does not** — it overrides, it never
    introduces;
 3. every token in core's dark block is re-declared **unconditionally** in the
-   adapter's `:root`, and that block holds more than five.
+   adapter's `:root`, and that block holds more than five;
+4. the two `ui.theme` blocks name the same tokens as core's dark block and carry
+   the same VALUES as the two sets they copy — the light block against `:root`,
+   the dark block against the media query.
 
-A derived token like `--dp-wash` satisfies all three by staying out of the dark
+A derived token like `--dp-wash` satisfies all four by staying out of the dark
 block. A token declared only in the adapter fails (2) — which is what makes the
-core loadable on its own.
+core loadable on its own. (4) exists because the pin is a copy, and a copy nobody
+checks goes stale on the first palette change with nothing in the diff to say so.
 
 ---
 
@@ -343,10 +364,18 @@ imperceptible, and reserving the ease for movement is what keeps it meaningful.
 `scale(0.96)` on `:active` is the press response, on all four pressable controls —
 `better-ui`'s value, and never below 0.95.
 
-Six `@keyframes` exist: three entrances (`dp-in-x`, `dp-in-y`, `dp-in-pop`), one
-reduced-motion fade, and **two that repeat, both on the busy status node** — the
-breathing dot and the label's sweep. Their 1.8s and 2.4s are perceptual pacing,
-not part of the motion scale, and they do not move with these tokens.
+Seven `@keyframes` exist: three entrances (`dp-in-x`, `dp-in-y`, `dp-in-pop`), one
+reduced-motion fade, **two that repeat, both on the busy status node** — the
+breathing dot and the label's sweep — and one that runs a **fixed three times**,
+`dp-bounce` on the unread dot. Their 1.8s and 2.4s are perceptual pacing, not part
+of the motion scale, and they do not move with these tokens.
+
+`dp-bounce` is finite on purpose, and rule 6a is why it could be either. An
+indicator that repeats forever is a notification the reader has to dismiss, and
+with the panel shut there is nothing to dismiss it with — so the burst is the
+arrival and the dot that stays is the state. Because it names no iteration count
+of `infinite`, **the seventh keyframe did not move rule 6a**, and a rule that does
+not need to move should not.
 
 > `prefers-reduced-motion` replaces every entrance with a fade, stops both
 > repeating animations, and cancels all four press scales. It must also restore
@@ -463,12 +492,23 @@ back `-12px` so their text lands on the field's alignment.
 
 ### Jump pill — `.docpilot__jump`
 
-**The one thing that occludes without floating.** A `--dp-r-pill` at
+**The one thing that separates without floating.** A `--dp-r-pill` at
 `--dp-surface` with a ring, 48×32 around a 16px chevron, `min-block-size: 44px`
 on a coarse pointer — and **no shadow**: it lives inside the panel it belongs to,
-so it separates by occluding the thread with the panel's own surface, exactly as
-the code card's copy chip does. Hover moves colour only, because `--dp-wash` is
+so it separates against the thread rather than above it, exactly as the code
+card's copy chip does. Hover moves colour only, because `--dp-wash` is
 translucent and would let the thread show through the pill.
+
+**The one glass in the package**, and it is gated on `@supports
+(backdrop-filter)`. Inside the query the fill drops to `color-mix(in srgb,
+var(--dp-surface) 65%, transparent)` under `blur(2px)`, and the bottom border
+alone becomes `color-mix(in srgb, var(--dp-text) 15%, transparent)` — a lip that
+reads near-white on dark and grounded on light, where a white edge would erase
+the pill's underside. Both values are DERIVED: a literal dark fill would put a
+dark pill on the light panel and would not survive an adapter's `--dp-surface`.
+Outside the query the opaque fill stands, because 65% without a blur is a pill
+you read the thread through. `forced-colors: active` turns the blur off — the fill
+is forced to a system colour there but the blur is not.
 
 It rides a **rail of zero height** between the thread and the composer:
 `block-size: 0` with `align-items: flex-end` puts its bottom edge on the boundary
@@ -618,6 +658,20 @@ only** — the popup measures the button's block size to place itself — taking
 `padding-inline: 16px` and 14px/500, with the glyph pulled back 4px so a bounding
 box does not out-pad the letterforms beside it.
 
+### Unread dot — `.docpilot-nav-trigger__badge`
+
+10px, `--dp-r-pill`, `--dp-alert`, at the block-start/inline-end corner of the
+trigger — half outside its box, over a `box-shadow` cut-out in `--dp-surface`.
+Never a border: rule 1 knows one border in this package and cutting a hole in a
+surface is a different job from drawing an edge on it. On the mobile nav row it
+is `position: static` at the end of the line, with no cut-out — that row is text,
+and there is no corner near the words.
+
+`dp-bounce` three times on arrival. `forced-colors` is the one mode that gives it
+a real edge, `1px solid CanvasText`, because that mode erases both the fill and
+the cut-out; `prefers-reduced-motion` keeps the dot and drops the bounce, because
+the dot is the information and the bounce is only the announcement of it.
+
 ### Article CTA
 
 An inline text control, not a pill: it lives in the host's article, and a pill
@@ -654,6 +708,11 @@ Design direction that can be checked, is. `scripts/check-docpilot.sh`, run by
 
 Three of these are worth stating in prose because their *shape* matters more than
 their text.
+
+**Rule 1b's ceiling is now met — 20 of 20.** The twentieth is the unread dot's
+`forced-colors` edge (ui-specs/010). The next ring anywhere in either sheet is a
+deliberate edit to `scripts/check-docpilot.sh` rather than a diff nobody counted,
+which is exactly what the stated ceiling is for.
 
 **Rule 1 stopped being a budget.** It used to count resting borders and name the
 five selectors allowed to carry one, because the old design carried structure in

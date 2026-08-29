@@ -440,10 +440,27 @@ export interface UiSettings {
   prefetch?: 'hover' | 'idle' | false
   firstRunHint?: boolean
   /**
+   * Whether a turn outlives the panel it was asked in — ui-specs/010.
+   *
+   * `'notify'` runs it on and marks the trigger with a dot when it settles;
+   * `'open'` runs it on and brings the panel back with the answer in place;
+   * `false` abandons it on close, which is where this was before the setting.
+   */
+  background?: 'notify' | 'open' | false
+  /**
    * The one word of attribution in the footnote — `DocPilot`, linked to the
    * project. On by default; `false` removes it.
    */
   credit?: boolean
+  /**
+   * Which colour scheme the panel wears — ui-specs/011.
+   *
+   * `'auto'` follows the page, which is what it has always done: the host's own
+   * light/dark toggle where there is an adapter, `prefers-color-scheme` where
+   * there is none. `'light'` and `'dark'` pin it against both. `'system'` is a
+   * spelling of `'auto'` and resolves to it.
+   */
+  theme?: 'auto' | 'light' | 'dark' | 'system'
   /**
    * The panel's face, for a site the panel cannot inherit one from. A family
    * list — `'Inter, system-ui, sans-serif'` — or the name of the custom
@@ -475,7 +492,14 @@ export interface ResolvedUi {
   layout: 'overlay' | 'push'
   prefetch: 'hover' | 'idle' | false
   firstRunHint: boolean
+  background: 'notify' | 'open' | false
   credit: boolean
+  /**
+   * The one key here that may still be `'auto'`, and the exception is the
+   * point: `panel: 'auto'` names a shape the build can settle, this names a
+   * SIGNAL that only exists in the reader's browser. `'system'` is gone by now.
+   */
+  theme: 'auto' | 'light' | 'dark'
   /** A CSS value, ready to write — a family list or a `var(--…)`. */
   font: string | null
   fontMono: string | null

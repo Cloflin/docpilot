@@ -73,6 +73,38 @@ Only windows that clear the hard refusal floor with a threshold above the lexica
 
 `calibration.json` carries the model it was measured with, and `docpilot index` refuses to inline it onto an index built with a different one. Without that check a calibration measured on `bge-m3` inlines itself onto an OpenAI index in silence — which is what shipped, once.
 
+That check is unconditional and stays that way. What follows is the one route across it.
+
+### Carrying a calibration across embedders
+
+Only two numbers in the guard describe an embedder. `denseFromCosine` maps a raw cosine affinely into 0–1, so `cosFloor` and `cosCeil` are where the model puts its cosines, while `tau`, `tauLexical` and the two weights are expressed in that normalised space and describe the **corpus**. The lexical channel is BM25 over text and has no embedder in it at all.
+
+So a threshold can cross where a window cannot:
+
+```bash
+DOCPILOT_EMBED_MODEL=big npx docpilot index
+npx docpilot calibrate --transfer=docpilot/calibration.json --out=docpilot/calibration.big.json
+```
+
+It runs against the **target** index, embeds the anchors with the target's own embedder, keeps the source's `tau` and `tauLexical`, and re-fits the window here. **A window is never inherited — only tau is.**
+
+Three assertions license it, and each one refuses rather than warns: the corpus hash, the vocabulary hash and the resolved levers must be identical. The corpus hash is the load-bearing one and it is an equality rather than a stamp, because `manifest.hash` is taken over chunk text and **does not move with the embedder** — two indexes of one corpus embedded differently carry the same hash. Under those three, `L`, `admissible` and `n` are identical between the two runs and only the cosines moved.
+
+The anchor set is sized by the strata's own ceilings rather than by taste: the smallest n at which `UB95` at zero failures still fits inside a bound is 52 for the 5% strata and 32 for the 8% one. A convenient-looking 120-probe draw gives `U ≈ 34`, where `UB95(0, 34) = 0.074` against a 0.05 ceiling — infeasible before a single probe is scored, so such a run would refuse every window in the grid. `--anchors` therefore takes `bounded` or `full`, not a number.
+
+The window is fitted at the pinned `tau` under the same viability rules a normal sweep uses, with `feasible` kept as a hard filter. That filter is not decoration. Pinning `tau` removes the brake `chooseTau` normally applies, and without it the objective is a monotone reward for refusing everything: measured on this corpus, the unfiltered argmax is `[0.44, 0.84]` at 100% negative-catch and **77.5% over-refusal on `U`**. With the filter, one window of 272 survives — and applied to the embedder that measured it, the pinned fit returns the joint search's own answer.
+
+**What it costs, measured.** bge-m3 → `qwen3-embedding` (1024 → 4096 dimensions) over one corpus, 271 anchors of 597, then scored on all 597:
+
+| | window | tau | decision cut at `L=0` | U | S | F | negatives caught |
+|---|---|---|---|---|---|---|---|
+| transferred | `[0.22, 0.62]` | 0.63 | 0.5560 | 0/169 | 1/128 | 0/60 | 40.0% |
+| measured here | `[0.24, 0.64]` | 0.60 | 0.5600 | 0/169 | 2/128 | 0/60 | 40.8% |
+
+Four thousandths of a cosine apart, no over-refusal, and 0.8 points of negative-catch given up.
+
+**And what it is not.** The three UB95 bounds are not re-established at anchor size — `overRefusalUB95` and `gatePrecision` are written `null` for that reason, because an anchor-scale figure in those two fields rides into the manifest and every feedback record reading as the corpus's. A transferred guard is a bounded bet, not a measurement, and it is stamped `source: "transferred-window"` so every record of the session says so. Prefer a real `calibrate` wherever the endpoint allows one.
+
 ## Evaluate
 
 ```bash
