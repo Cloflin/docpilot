@@ -43,7 +43,7 @@ export const docPilot = {
   evalDir: 'docpilot',
   importDir: null,
   sources: null,
-  chat: { provider: 'auto', model: null, baseURL: null, models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192 },
+  chat: { provider: 'auto', chain: 'auto', preferLocal: false, model: null, baseURL: null, models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192, reasoning: 'auto', verbosity: null, topP: null, seed: null },
   embed: 'auto',
   topK: null,
   maxIterations: 2,
@@ -54,11 +54,12 @@ export const docPilot = {
   composer: { editLastOnArrowUp: true, deepLink: true },
   feedbackEndpoint: null,
   feedback: { send: 'both', comment: true, confirm: true },
-  guard: { mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
+  guard: { mode: 'dense-only', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
+  vocabulary: null,
   scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
   history: { enabled: true, maxConversations: 20, exportThread: true },
   prompt: { show: false, allowAppend: false, appendMaxChars: 500, override: null, extend: '' },
-  ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, font: null, fontMono: null },
+  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, background: 'notify', credit: true, theme: 'auto', font: null, fontMono: null },
   host: { base: null, ragBase: null, article: null, search: null, content: null },
   i18n: { translations: {}, locales: {} },
 }
@@ -116,12 +117,19 @@ written by hand; only the values are mechanical.
 | [`importDir`](#importdir) | `string \| null` | `null` | A second corpus root that is indexed but never routed — its pages carry a mandatory frontmatter `source:` as their citation — *server-only, and it must sit outside `docsDir` or VitePress publishes the pages anyway* |
 | [`sources`](#sources) | `{ allow: string[] } \| null` | `null` | The https origins a page may name in `source:`, each optionally narrowed to a path prefix; `null` forbids `source:` outright — *server-only, and assigned whole rather than merged, so a partial object is the entire allowlist* |
 | [`chat.provider`](#chat-provider) | `ProviderId \| 'auto'` | `'auto'` | Picks which service answers and where the request is sent; `'auto'` reads the environment and takes the first key it finds along [the chain](#the-provider-chain) — *fifteen ids, listed under [Choosing providers](/guide/providers); a misspelled one stops the build instead of quietly becoming a local Ollama* |
+| [`chat.chain`](#chat-chain) | `'auto' \| false \| Array<ProviderId \| ChainMember>` | `'auto'` | Which SERVICES may answer, in order — the provider-level form of `chat.models`; `'auto'` is every member of [the chain](#the-provider-chain) the environment selects, billed accounts before free tiers, an array is your own set, `false` is one provider chosen once — *fires only where `chat.provider` is also `'auto'`, so naming a provider is how rotation is declined; the embed half never rotates* |
+| [`chat.preferLocal`](#chat-preferlocal) | `boolean` | `false` | Puts a server of your own — `custom`, `llamacpp`, `ollama` — at the FRONT of the ladder instead of the back, and makes an environment that selects nothing fall through to a local Ollama rather than to OpenRouter's free tier — *it reorders, it never selects: a local server is still reached by its address, and `readiness` says so when this moved nothing* |
 | [`chat.model`](#chat-model) | `string \| null` | `null` | The id the provider knows the model by — `null` takes that provider's own default from the table in [Choosing providers](/guide/providers), and `'auto'`, `'free'` and `''` normalise to it — *never inherited across providers; `openrouter` and `custom` have no default, so a free pool answers for the first and only you can answer for the second* |
 | [`chat.baseURL`](#chat-baseurl) | `string \| null` | `null` | Where the provider is, for one that is somewhere of your own — `null` takes the provider's own address, and `OLLAMA_BASE_URL` / `LLAMACPP_BASE_URL` / `CUSTOM_BASE_URL` set it from the environment — *ignored for a hosted provider, which the browser reaches through the same-origin `/ai`* |
 | [`chat.models`](#chat-models) | `string[] \| null` | `null` | An ordered fallback pool walked on a 429, a retired id or an empty answer, with the model that answered tried first next time — *left `null` on `openrouter` with no model named, the shipped free pool rotates anyway* |
+| [`chat.extraBody`](#chat-extrabody) | `Record<string, unknown> \| null` | *(the provider's own)* | Fields merged into the body of every chat request, for the things one brand understands and the transport does not — *PRESENCE decides: omit it and the provider's fragment stands, `null` posts the plain body, an object REPLACES rather than merges; it is not in `DEFAULTS` because there is no third value to ship* |
 | [`chat.temperature`](#chat-temperature-chat-maxtokens) | `number` | `0.2` | Sampling spread for the answering model; 0.2 keeps one question from yielding two different sets of steps, higher loosens the wording — *never sent to Anthropic, whose API rejects sampling parameters outright* |
-| [`chat.maxTokens`](#chat-temperature-chat-maxtokens) | `number` | `2048` | Caps the tokens in a single reply; a reply cut off at that ceiling is continued rather than lost, up to `budget.maxContinuations` — *the Ollama transport drops it — that adapter sends no token ceiling at all* |
+| [`chat.maxTokens`](#chat-temperature-chat-maxtokens) | `number` | `2048` | Caps the tokens in a single reply; a reply cut off at that ceiling is continued rather than lost, up to `budget.maxContinuations` — *every transport sends it, under the name that API gives it: `max_tokens`, `max_completion_tokens`, or Ollama's `options.num_predict`* |
 | [`chat.numCtx`](#chat-numctx) | `number` | `8192` | Context window asked of Ollama; 8192 keeps a primed turn plus its tool calls from shifting the system block off the front |
+| [`chat.reasoning`](#chat-reasoning) | `'auto' \| false \| true \| ReasoningLevel \| object` | `'auto'` | How hard the model should think, in one provider-neutral word — `'auto'` leaves it to DocPilot, which asks on the answer and never on a search step — *the level is clamped to the vocabulary the configured service publishes, and no two services publish the same one* |
+| [`chat.verbosity`](#chat-verbosity) | `'low' \| 'medium' \| 'high' \| null` | `null` | A soft ceiling on the answer's length, where `maxTokens` is the hard one — *accepted by two providers in the table; naming it beside any other stops the build* |
+| [`chat.topP`](#chat-topp-chat-seed) | `number \| null` | `null` | Nucleus sampling, sent only when set — *Anthropic rejects it, so setting it there stops the build* |
+| [`chat.seed`](#chat-topp-chat-seed) | `number \| null` | `null` | Pins the sampler so the same question takes the same steps twice — *the Anthropic Messages API has no such parameter at all* |
 | [`embed`](#embed) | `EmbedConfig` | `'auto'` | Picks who embeds the corpus and each query — `'auto'` follows `chat.provider`, an object splits them, `false` or `'none'` means BM25 only — *under `'auto'` a provider with no embeddings endpoint borrows OpenRouter's free pool at build time* |
 | [`topK`](#topk) | `number \| null` | `null` | How many excerpts the gate primes a turn with — `null` takes the k `docpilot tune` measured into the manifest, a number overrides it — *a number is rounded and clamped to 1..12, and the model's own `search_docs` k stays capped at 8* |
 | [`maxIterations`](#maxiterations) | `number` | `2` | Caps the tool-calling steps before the forced final answer — each step re-sends every observation, so a turn's cost grows quadratically — *a budget plan that lands in one-shot mode drives it to 0 for that turn* |
@@ -146,10 +154,11 @@ written by hand; only the values are mechanical.
 | [`feedback.send`](#feedback-send) | `'both' \| 'down' \| 'up' \| 'none'` | `'both'` | Which verdicts leave the device — `'down'` for complaints only, `'none'` keeps the thumbs on screen but sends nothing — *inert without `feedbackEndpoint`; an unrecognised value logs and falls back to `'both'`* |
 | [`feedback.comment`](#feedback-comment) | `boolean` | `true` | Offers a free-text box beside the down-vote reason buttons; `false` keeps the buttons and drops the box — *the box is hidden anyway when there is no `feedbackEndpoint` or `send` is `'none'`* |
 | [`feedback.confirm`](#feedback-confirm) | `boolean` | `true` | Replaces the submitted form with a line naming where the report went; `false` leaves only the live-region announcement |
-| [`guard.mode`](#guard-mode-guard-supportminidentifiers) | `'calibrated' \| 'off'` | `'calibrated'` | Enforces the gate's verdict, so a question with too little evidence is refused; `'off'` lets every question reach the model instead — *`'off'` still scores every turn and records the verdict — only the refusal is skipped* |
+| [`guard.mode`](#guard-mode-guard-supportminidentifiers) | `'dense-only' \| 'calibrated' \| 'off'` | `'dense-only'` | Whether a failing verdict ENDS the turn before the model is called — `'dense-only'` enforces it only where there is a dense channel that scored it, `'calibrated'` always, `'off'` never — *every value scores every turn and records the verdict; only the refusal moves* |
 | [`guard.tau`](#guard-tau-guard-taulexical) | `number \| null` | `null` | Pass mark for the hybrid score `wDense·D + wLexical·L`; null takes the calibrated pair from the manifest, a number overrides it — *a value at or below `wLexical` (0.25 provisional) throws at retrieval init* |
 | [`guard.tauLexical`](#guard-tau-guard-taulexical) | `number \| null` | `null` | The pass mark on turns with no dense channel, where G is lexical coverage alone; null keeps the manifest's measured value — *setting either threshold stamps `gate.source: "config"` on every record of the session* |
 | [`guard.supportMinIdentifiers`](#guard-mode-guard-supportminidentifiers) | `number` | `3` | Minimum code identifiers an answer must carry before its identifier-support ratio is scored rather than assumed perfect — *support is recorded for calibration only and never enforced, so this blocks no answer* |
+| [`vocabulary`](#vocabulary) | `Record<string, string[]> \| null` | `null` | The documentation's own name for things readers call by other names — `{DocPilot: ['widget', 'виджет', 'ассистент']}` — rewritten into the query and into the index by the one tokenizer, so a reader who says `виджет` reaches a page that says `DocPilot`; `null` takes the sidecar `npx docpilot vocabulary` writes — *server-only: the browser gets it from the manifest, because the manifest is what the index was built with* |
 | [`scope.enabled`](#scope) | `boolean` | `true` | Shows the scope picker; `false` removes it and every question then searches the whole corpus |
 | [`scope.default`](#scope) | `'all'` | `'all'` | The scope a reader's first question starts in — whole-corpus is the only accepted value, since a narrowed default hides pages silently — *anything else is reported to the console and reset to `'all'` at configure() time* |
 | [`scope.promptListLimit`](#scope) | `number` | `12` | How many page paths a narrowed scope names in the system prompt before it states a count instead |
@@ -163,13 +172,16 @@ written by hand; only the values are mechanical.
 | [`prompt.appendMaxChars`](#prompt-appendmaxchars) | `number` | `500` | Caps that reader line as a `maxlength` on the field, so the limit shows before it bites; `0` switches appending off — *the field only — what is sent is clamped at a hard-coded 500 in prompt.js* |
 | [`prompt.override`](#prompt-override-prompt-extend) | `string \| null` | `null` | Replaces the shipped system instruction outright with text you wrote in full — `{product}` is not interpolated into it — *losing the shipped citation and confidence-0 rules refuses every turn; re-run `npx docpilot calibrate`* |
 | [`prompt.extend`](#prompt-override-prompt-extend) | `string` | `''` | Appended to whichever instruction is in force, shipped or overridden, for house rules short of a full rewrite |
-| [`ui.trigger`](#ui-trigger) | `UiTriggerWord \| UiTrigger[]` | `'nav'` | Picks which of the three placements show an open button; `'both'` gives all three, `'none'` leaves only the hotkey — *as a word `'nav'` means the navbar button and its mobile row — `['nav']` is the desktop button alone* |
+| [`ui.trigger`](#ui-trigger) | `UiTriggerWord \| UiTrigger[]` | `'fab'` | Picks which of the three placements show an open button; `'nav'` moves it into your navigation bar, `'both'` gives all three, `'none'` leaves only the hotkey — *as a word `'nav'` means the navbar button and its mobile row — `['nav']` is the desktop button alone* |
 | [`ui.panel`](#ui-panel) | `'auto' \| 'drawer' \| 'popup'` | `'auto'` | Shape the answer opens in — `'drawer'` full height at the trailing edge, `'popup'` floating above the button — *`'auto'` resolves to `'popup'` whenever `fab` is in the trigger list, even alongside `nav`* |
 | [`ui.fabLabel`](#ui-fablabel-ui-fabicon) | `true \| false \| string` | `true` | Words on the floating button: `true` takes the i18n string, a string is used verbatim, `false` leaves the icon alone — *floating placement only, and a blank or whitespace string counts as `false`* |
 | [`ui.fabIcon`](#ui-fablabel-ui-fabicon) | `boolean` | `true` | Drops the sparkle glyph from the floating button when `false`, leaving the label as the whole control — *floating placement only, and `false` is overruled when `fabLabel` is `false` too* |
 | [`ui.layout`](#ui-layout) | `'overlay' \| 'push'` | `'overlay'` | How the panel treats the page beneath it — `'push'` pads the content aside so docs and answer sit side by side — *does nothing below 960px, where the panel is already edge to edge* |
 | [`ui.prefetch`](#ui-prefetch) | `'hover' \| 'idle' \| false` | `'hover'` | When the retrieval index is downloaded — `'idle'` pays up front, `false` waits until the panel is opened — *skipped entirely when the browser reports `saveData` or a 2G-class connection* |
 | [`ui.firstRunHint`](#ui-firstrunhint) | `boolean` | `false` | Shows one dismissible line on a first visit, naming the gesture nobody discovers: selecting a passage to ask about it — *withheld when both `quote` switches are off* |
+| [`ui.background`](#ui-background) | `'notify' \| 'open' \| false` | `'notify'` | Whether a turn outlives the panel it was asked in — `'notify'` marks the trigger with a dot when it settles, `'open'` brings the panel back with the answer in place — *`false` abandons it on close; the composer's Stop always ends a turn regardless* |
+| [`ui.credit`](#ui-credit) | `boolean` | `true` | One word at the end of the footnote — `DocPilot`, linked to the project — so a reader can find out what answered them — *`false` removes it; the disclaimer beside it is not affected* |
+| [`ui.theme`](#ui-theme) | `'auto' \| 'light' \| 'dark' \| 'system'` | `'auto'` | Which colour scheme the panel wears — `'auto'` follows the page, `'light'` and `'dark'` pin it against both your site's toggle and the reader's OS — *a pinned panel wears DocPilot's own palette, not your site's, because a host has no dark value to read while it is in light mode* |
 | [`ui.font`](#ui-font-ui-fontmono) | `string \| false \| null` | `null` | The panel's face, for a site it cannot inherit one from — a family list, or the name of the custom property your site already keeps it in — *unset the panel wears the page's own font; a value here outranks a host adapter's mapping* |
 | [`ui.fontMono`](#ui-font-ui-fontmono) | `string \| false \| null` | `null` | The same for code blocks, the reasoning trace and the prompt disclosure — *unset they keep a system monospace stack, because a page has no monospace to inherit* |
 | [`host.base`](#host-base) | `string \| null` | `null` | Path the site is served from, e.g. `/docs/` for a subdirectory install — neutral fallback `/` — *applied only at the index fetch and citation navigation — manifest paths and answer hrefs stay base-less* |
@@ -287,11 +299,11 @@ contents nobody wrote.
 
 ## chat
 
-- **Type:** `object`
-- **Default:** `{ provider: 'ollama', model: 'qwen3:8b', models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192 }`
-- **Related:** [`embed`](#embed), [Choosing providers](/guide/providers)
+- **Type:** `object | false | 'none'`
+- **Default:** `{ provider: 'auto', chain: 'auto', model: null, baseURL: null, models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192, reasoning: 'auto', verbosity: null, topP: null, seed: null }`
+- **Related:** [`chat: false`](#chat-false), [`embed`](#embed), [Choosing providers](/guide/providers)
 
-The model that answers.
+The model that answers, or [`false`](#chat-false) for no model at all.
 
 ```js
 chat: {
@@ -337,10 +349,10 @@ the environment selects:
 | 7 | `openrouter` | `OPENROUTER_API_KEY` | yes | *the free pool* |
 | 8 | `anthropic` | `ANTHROPIC_API_KEY` | no | `claude-sonnet-4-6` |
 | 9 | `groq` | `GROQ_API_KEY` | no | `llama-3.3-70b-versatile` |
-| 10 | `deepseek` | `DEEPSEEK_API_KEY` | no | `deepseek-chat` |
+| 10 | `deepseek` | `DEEPSEEK_API_KEY` | no | `deepseek-v4-flash` |
 | 11 | `xai` | `XAI_API_KEY` | no | `grok-4` |
 | 12 | `cerebras` | `CEREBRAS_API_KEY` | no | `llama-3.3-70b` |
-| 13 | `custom` | `CUSTOM_API_KEY` *(`CUSTOM_BASE_URL` moves it)* | yes | — *you name it* |
+| 13 | `custom` | `CUSTOM_BASE_URL` *(`CUSTOM_API_KEY` authorises, and does not select)* | yes | — *you name it* |
 | 14 | `llamacpp` | `LLAMACPP_BASE_URL` | yes | `local` |
 | 15 | `ollama` | `OLLAMA_BASE_URL` | yes | `qwen3:8b` |
 | — | **nothing matched** | → `openrouter`, free tier | yes | *the free pool* |
@@ -434,11 +446,10 @@ that before anything reads them — neither is ever sent as a model name.
 - **Type:** `string | null`
 - **Default:** `null` — the provider's own address
 
-Where the service is, for one that is somewhere of your own.
+Where the service is, for one that is somewhere of your own — `ollama`,
+`llamacpp` and `custom`, the three ids that name a HOST rather than a service.
 
-`null` resolves per provider: the table's upstream for a hosted service,
-`OLLAMA_BASE_URL` or `http://localhost:11434` for a local Ollama. The two
-self-hosted entries take theirs from the environment, which is also what selects
+The same three take an address from the environment, which is also what selects
 them — see [the provider chain](#the-provider-chain):
 
 ```bash
@@ -447,13 +458,26 @@ LLAMACPP_BASE_URL=http://gpu.internal:8080
 CUSTOM_BASE_URL=https://gateway.internal
 ```
 
-A value written here outranks all of them.
+**A value written here outranks all of them**, and `null` takes whichever of
+them is set — or the shipped port when none is.
 
-**It is ignored for a hosted provider.** The browser reaches every hosted service
-through the same-origin `/ai`, so the address the request actually goes to is
-your reverse proxy's, not this one's — see
-[Production](/guide/production). Moving a hosted provider is not a thing this
-setting can do; the `*_BASE_URL` variables above are for the self-hosted three.
+**Which end reads it depends on whether the member has a route.** `ollama` has
+none, so the BROWSER calls that address itself; `llamacpp` and `custom` do, so
+it is what your proxy posts to and the browser reaches them same-origin like
+everything else. `npx docpilot doctor --proxy` prints the resolved upstream, and
+it is the only copy of it that cannot go stale.
+
+**Naming it beside a branded provider stops the build.** That service has an
+address of its own, and rerouting it on the strength of one line is a surprise
+nobody asked for. `custom` is the id for a host of your own that copied
+somebody's API:
+
+```js
+chat: { provider: 'custom', baseURL: 'https://gateway.internal', model: 'qwen3-8b' }
+```
+
+A member of [`chat.chain`](#chat-chain) takes the same key on the same terms,
+which is how a deployment reaches two of them at two addresses.
 
 ### chat.models
 
@@ -494,6 +518,228 @@ Nor does it rotate once the turn has no requests left to spend — see
 better answer with a request that would have answered the next question, and
 that is a trade only a comfortable budget can make.
 
+#### It does not stop the chain
+
+**A list here is a list of MODELS, and it says nothing about which services may
+answer.** When it runs out, [`chat.chain`](#chat-chain) asks the next provider —
+with that provider's own model, because a model id never crosses providers.
+
+```js
+// two keys in the environment, and this is a two-provider deployment
+chat: { models: ['gpt-4.1', 'gpt-4o'] }
+// → openai [gpt-4.1, gpt-4o] → groq [llama-3.3-70b-versatile]
+```
+
+To end the walk at your list, decline provider rotation as well — either by
+naming the provider, or with `false`:
+
+```js
+chat: { provider: 'openai', models: ['gpt-4.1', 'gpt-4o'] }  // the chain is not consulted
+chat: { chain: false, models: ['gpt-4.1', 'gpt-4o'] }        // one provider, chosen once
+```
+
+The one thing a written list DOES do to the chain is keep its provider on the
+billed rung — see [Billed accounts first](#billed-accounts-first).
+
+### chat.chain
+
+- **Type:** `'auto' | false | Array<ProviderId | ChainMember>`
+- **Default:** `'auto'`
+
+**Which services may answer, in order.** It is the provider-level form of the
+argument [`chat.models`](#chat-models) already makes about models: a 429, a
+retired id or a rejected key is a statement about *one* service, and a
+deployment with a second key in its environment should not spend a reader's
+question on the first one's bad afternoon.
+
+| value | what answers |
+| --- | --- |
+| `'auto'` | every member of [the chain](#the-provider-chain) this environment selects, billed accounts first |
+| `[…]` | your own set, in the order you wrote it |
+| `false` | one provider, chosen once — every deployment that existed before this key |
+
+**An environment with one key resolves to one member**, which is the scalar
+configuration this package has always emitted, to the byte — same single proxy
+route, same request. `'auto'` changes what happens to an environment holding
+*several*: they are all walked, rather than the first one being the only one
+tried. It is [rung 1 of the answer ladder](/concepts/the-ladder).
+
+#### Billed accounts first
+
+The [chain table](#the-provider-chain) is ordered by *what one key covers*,
+which is the right question for choosing one provider and the wrong one for
+ordering a set to walk. So the resolved set sorts into three rungs, keeping the
+table's order inside each:
+
+| rung | members |
+| --- | --- |
+| 1 | every provider billed to your account |
+| 2 | a provider's own free catalogue — OpenRouter's [free pool](/guide/free-tier) |
+| 3 | a server of your own — `custom`, `llamacpp`, `ollama` |
+
+OpenRouter sits at position 7 of the table and answers *after* `groq` here,
+because its allowance is 50 requests a day shared by every reader of the site
+and `groq`'s is the account's. A local server answers last: it is the one
+nobody but you can reach.
+
+**A model you name keeps its provider billed.** `chat: {model:
+'anthropic/claude-sonnet-4'}` beside an OpenRouter key is a paid deployment —
+the free catalogue answers only where nothing was named — so naming a model, or
+writing your own `chat.models` list, flattens the rungs and the order is the
+table's, unchanged. The sort fires exactly where the whole question is *which of
+these keys, in what order*, which is the zero-config path.
+
+```js
+// your own set — an entry is a provider id, or an object saying what to send it
+chat: {
+  chain: [
+    'openrouter',
+    { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+    'cerebras',
+    { provider: 'ollama', baseURL: 'http://localhost:11434' },
+  ],
+}
+```
+
+An entry is a provider id, or a `ChainMember`: `{provider, name?, model?,
+models?, baseURL?, apiKeyEnv?}`. An entry that names no model falls to that
+provider's own default from the table in
+[Choosing providers](/guide/providers), or to its free pool where it has one.
+
+#### Two of one service
+
+A member is identified by its **name**, which defaults to the provider id — so
+two entries of one service are two members the moment you name them, each with
+its own address, its own credential, its own route and its own cooldown:
+
+```js
+chat: {
+  chain: [
+    { name: 'gw-eu', provider: 'custom', baseURL: 'https://eu.gw.internal', apiKeyEnv: 'GW_EU_KEY', model: 'qwen3-8b' },
+    { name: 'gw-us', provider: 'custom', baseURL: 'https://us.gw.internal', apiKeyEnv: 'GW_US_KEY', model: 'qwen3-8b' },
+    'openrouter',
+  ],
+}
+```
+
+```
+/ai/gw-eu/v1/chat/completions       → https://eu.gw.internal   GW_EU_KEY
+/ai/gw-us/v1/chat/completions       → https://us.gw.internal   GW_US_KEY
+/ai/openrouter/v1/chat/completions  → https://openrouter.ai/api  OPENROUTER_API_KEY
+```
+
+- **`name`** goes into a URL and is matched exactly by your proxy, so it is
+  lowercase letters, digits and hyphens. **Two members may not share one** —
+  a repeat stops the build rather than being deduped in silence.
+- **`apiKeyEnv`** is the NAME of an environment variable, never the value: a key
+  written in a config file is a key compiled into the browser bundle. Omitted, it
+  takes the provider's own variable from the table.
+- **`baseURL`** works for `ollama`, `llamacpp` and `custom` — see
+  [`chat.baseURL`](#chat-baseurl) — and stops the build beside a branded
+  provider, which has an address of its own.
+
+Nothing here moves for a chain that names no member: the name IS the provider id
+then, so every path this package has ever emitted is the path it still emits.
+
+**It fires only where [`chat.provider`](#chat-provider) is also `'auto'`.** *A
+provider you name is never overridden* predates this key, and naming one is
+therefore how provider rotation is declined; `false` declines it without naming
+one. An explicit array is the exception — a named provider **leads** it and is
+not asked twice.
+
+**`chat.model` and `chat.models` reach the head member and no other.** A model
+name never crosses providers: `gpt-4o-mini` posted to Groq is a 404 for a model
+nobody typed. Give a later member its own model in the object form.
+
+#### The embed half does not rotate
+
+It cannot. Two embedding models are two vector spaces, so `npx docpilot index`
+picks one and writes it into the manifest, and every reader's browser is bound
+to that name for the life of the index — see
+[An unnamed embedder, and why it does not rotate](#an-unnamed-embedder-and-why-it-does-not-rotate).
+The chain is the **answering** half only, and the first member is what
+`embed: 'auto'` follows.
+
+#### What it costs in production
+
+One chat route per member, and the paths change shape when a second member
+appears:
+
+```
+one member    /ai/v1/chat/completions
+two or more   /ai/openrouter/v1/chat/completions
+              /ai/groq/v1/chat/completions
+```
+
+The prefix is not decoration: `openrouter` and `groq` are both the OpenAI
+adapter, so both ask for `/ai/v1/chat/completions` and would collide on one
+path. A single member — the shipped default, and every pinned provider — keeps
+the bare path this package has always emitted, so no reverse proxy breaks on
+upgrade.
+
+`npx docpilot doctor --proxy` prints the routes for **your** configuration,
+which is the only copy of them that cannot go stale. Read it again when the
+environment changes: with `chain: 'auto'`, a second key in `.env` changes the
+*number* of routes, not only the upstream. See [Production](/guide/production).
+
+#### Members a deployed proxy cannot reach
+
+`ollama`, `llamacpp` and `custom` are addresses rather than accounts, and the
+contract says so rather than leaving it to be discovered in production:
+
+- **`ollama` gets no route at all** — the browser calls it directly, at its own
+  address. That works on the machine running it and nowhere else: an https page
+  cannot fetch `http://localhost`, and Ollama sends no CORS headers.
+- **`llamacpp` and `custom` get a route**, and it is marked `LOCAL ADDRESS`
+  when it resolves to a loopback or private host. A proxy can serve it only if
+  it runs on that host.
+
+Neither is removed from the set. Dropping a member because the build machine
+judged its address unreachable would mean the resolver read the network, and
+then CI and the laptop beside it would resolve two different configurations.
+
+### chat.preferLocal
+
+- **Type:** `boolean`
+- **Default:** `false`
+
+**A server of your own answers first.**
+
+The ladder sorts a resolved set into three rungs — billed accounts, then a
+provider's own free catalogue, then `custom`, `llamacpp` and `ollama`. This puts
+the third rung at the front instead of the back, and makes an environment that
+selects nothing fall through to a local Ollama rather than to
+[OpenRouter's free tier](/guide/free-tier).
+
+```js
+chat: { preferLocal: true }
+```
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+**It reorders; it never selects.** A local server is still reached by its
+address, because that is the only thing a build can know about it — from inside
+this process a laptop running Ollama and a CI box that has never heard of one
+are the same environment, which is why
+[naming no provider stopped resolving to a local Ollama](#the-provider-chain) in
+the first place. Writing this key is not a guess; inferring it would be. So the
+one case it selects anything is the fall-through, where there is nothing to
+select and the author has said which way to fall.
+
+**`npx docpilot doctor` says when it moved nothing.** Setting it without setting
+an address resolves exactly as it would have without it, and the panel then
+works — off whatever cloud key is around — with nothing looking wrong. That is
+the failure mode this key would otherwise reintroduce, so it is reported rather
+than left to be discovered.
+
+**To pin a local server rather than merely prefer it**, name it:
+
+```js
+chat: { provider: 'ollama' }   // the chain is not consulted at all
+```
+
 ### chat.temperature, chat.maxTokens
 
 `temperature` is 0.2 because this is documentation, not prose: the same question
@@ -507,6 +753,92 @@ Sent on the Ollama transport only; hosted providers size their own context and
 ignore it. Ollama's server default is 4096, and a primed turn plus one tool call
 already exceeds that — past which llama.cpp shifts the window and drops the
 system block off the front, which surfaces as an unexplained refusal.
+
+### chat.reasoning
+
+- **Type:** `'auto' | false | true | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | object`
+- **Default:** `'auto'`
+- **Related:** [What each provider honours](/guide/providers#what-each-provider-honours)
+
+How hard the model should think, written once in a vocabulary that is the same
+whoever is answering.
+
+```js
+chat: { provider: 'openai', reasoning: 'high' }
+chat: { provider: 'ollama', reasoning: false }
+chat: { provider: 'anthropic', reasoning: { effort: 'high', budgetTokens: 8192 } }
+```
+
+`'auto'` is the shipped value and it means *DocPilot decides*: it asks for
+reasoning on the final answer and never on a search step, because a step that is
+choosing a tool is not composing anything — leaving reasoning on across four of
+them was measured at a p50 of 215 seconds. `false` never asks. `true` is the
+same as `'medium'`.
+
+**The level is clamped, not posted as written.** No two services publish the same
+vocabulary: OpenAI and OpenRouter have six words, xAI has four, DeepSeek has
+three and no `medium` at all, and Groq's Qwen models accept `none` and `default`
+and nothing else. So the word you write is ranked and the nearest one the
+configured service actually accepts is sent, ties going down — `medium` on
+DeepSeek is posted as `low`. `npx docpilot doctor` prints the substitution.
+
+The object form takes three keys:
+
+- **`effort`** — one of the six levels above, or `null` to leave the depth to the
+  service.
+- **`budgetTokens`** — a thinking budget in tokens, for the services that measure
+  it that way rather than in levels. Setting it on one that does not stops the
+  build and names the alternative.
+- **`visible`** — `false` asks the service to think without sending the trace
+  back. That is a genuinely different request from not thinking: the model
+  reasons, and the panel — which is not showing the box — pays for less output.
+  Two providers can spell it; the rest ignore it.
+
+A model with no thinking capability is never asked, whatever is written here:
+capability beats preference, and on Ollama the capability is one this package can
+read from the server rather than guess.
+
+### chat.verbosity
+
+- **Type:** `'low' | 'medium' | 'high' | null`
+- **Default:** `null`
+
+A soft ceiling on how long the answer should be, where [`chat.maxTokens`](#chat-temperature-chat-maxtokens)
+is the hard one — the difference between asking for a shorter reply and cutting
+one off mid-sentence.
+
+Two providers in the table accept the field. **Naming it beside any other stops
+the build**, by name, rather than being dropped in silence on the way out:
+
+```
+[docpilot] chat.verbosity is set to "low", and "anthropic" does not
+  accept it — the field belongs to OpenAI's chat-completions surface.
+  Drop the key, or say it yourself with chat.extraBody if you know better.
+```
+
+### chat.topP, chat.seed
+
+- **Type:** `number | null`
+- **Default:** `null` for both
+
+Nucleus sampling, and the seed that pins it. Both are sent only when set, so a
+configuration that names neither posts exactly the body it always posted.
+
+`seed` is the stronger form of the argument [`chat.temperature: 0.2`](#chat-temperature-chat-maxtokens)
+already makes: the same question asked twice should not produce two different
+sets of steps.
+
+Neither reaches Anthropic — that API has no `seed` parameter at all, and its
+sampling parameters are version-gated to the point where the only value newer
+models accept is the one this package is trying to move away from. Setting either
+there stops the build rather than being ignored.
+
+**`chat.stop` is deliberately not a setting.** Every reply this package asks for
+has a pinned shape — a strict JSON schema, a JSON object, or a forced tool call —
+and a stop sequence that fires inside one truncates the object mid-write. The
+result is indistinguishable from a model that ran out of tokens, which is the one
+failure the continuation path exists to tell apart. If you need one anyway, it is
+one line of [`chat.extraBody`](#chat-extrabody).
 
 ### chat.extraBody
 
@@ -550,6 +882,48 @@ level of the request body and happens **before** the fields the adapter owns, so
 configuration. The same fragment reaches `docpilot import`'s annotation pass, so
 the CLI and the panel route the same way — a CLI that silently annotated worse
 than the panel is a difference nobody would think to look for.
+
+### chat: false
+
+No model, anywhere — **search-only mode**. A question is scored against the index
+exactly as it always was, and what comes back is the ranked passages themselves:
+each one an excerpt under a link to the heading it was cut from. No model is
+called on any turn, so there is no key to hold, no token to spend and no sentence
+that can be wrong. `'none'` is accepted as the same value spelled out.
+
+```js
+chat: false
+```
+
+Everything before the answer is unchanged. The scope picker narrows the search,
+the credential check still settles a pasted key locally, a greeting is still
+answered as a greeting, and the calibrated gate still runs.
+
+**What the gate does here is different, and deliberately so.** On an answering
+site a failed gate ends the turn — because a model asked to write from weak
+evidence produces something plausible and wrong, and the reader cannot tell.
+Nothing is generated in this mode, so there is nothing to be wrong about: the
+rows are shown either way, and the verdict only chooses the sentence above them.
+A question the corpus does not cover reads *Nothing matches this closely in the
+docs. The nearest passages:* rather than a refusal, and a question whose answer
+sits outside the reader's scope still offers the one-click widen.
+
+What it buys:
+
+| | |
+|---|---|
+| `chat: false` | no answering key, no per-question cost, no daily allowance to ration |
+| `chat: false` **and** [`embed: false`](#embed-false) | no provider key at all, and no outbound request of any kind after the page loads — the index is static files and retrieval runs in the browser |
+
+An embedder is still worth having if you can reach one: `chat: false` with
+`embed` left alone ranks on the hybrid channel, which is the same retrieval an
+answering site gets. The corpus is then still posted to the embedding service at
+**build** time, once per `npx docpilot index`, and `npx docpilot doctor` says so
+— switching the model off is not by itself a deployment that sends nothing
+anywhere.
+
+`npx docpilot doctor` prints `chat none — search-only` in place of the provider
+line, and asks for no chat route in `--proxy`.
 
 ## embed
 
@@ -1216,9 +1590,38 @@ guard: { mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers:
 
 ### guard.mode, guard.supportMinIdentifiers
 
-`mode` selects which thresholds the gate reads: `'calibrated'` takes the measured
-pair from the manifest, and it is the only value worth setting. Everything below
-is what happens when you do not.
+**`mode` decides whether a failing verdict ENDS the turn.** It never decides
+whether one is scored: every value scores every turn and records the result, so
+a report reads the same whichever is set — what moves is only the refusal.
+
+| value | a failing verdict |
+| --- | --- |
+| `'dense-only'` | refuses only where a dense channel scored it. **The default.** |
+| `'calibrated'` | refuses always |
+| `'off'` | never refuses — every question reaches the model |
+
+**Why the default is not "always".** With no embedder the hybrid score collapses
+to `G = L`, and `L` is token overlap between the question and the corpus. A
+reader who asks in a language the documentation is not written in shares no
+token with it, and neither does one who calls the product by a name the docs do
+not use. `L` is 0 for a question that is squarely about the product, and the
+panel then answers *I couldn't find this in the docs* — which is false. It did
+not look. [`vocabulary`](#vocabulary) closes the second of those; nothing closes
+the first.
+
+So on a vectorless turn the verdict picks the copy above the rows and the
+**model** decides whether the question is answerable, which is the judgement it
+can actually make: it is shown the passages and holds a
+[refusal contract](/concepts/a-turn) of its own — an answer with no citation in
+it is withdrawn before the reader sees it.
+
+**On a site with an embedder nothing changes.** `'dense-only'` and
+`'calibrated'` are the same gate there, request for request.
+
+**What it costs where it does change.** A question the corpus has nothing for
+now spends a model turn before that is known. On [a shared free
+tier](/guide/free-tier) that is one of fifty a day for the whole site, so a
+vectorless deployment on one is the case to write `'calibrated'` for.
 
 `supportMinIdentifiers` is the floor under the support check — an answer carrying
 fewer than this many code identifiers is not scored for support at all, because
@@ -1235,6 +1638,84 @@ hand-set threshold visible in a report rather than invisible in behaviour.
 On a vectorless index there is no dense channel to measure `tau` against, so
 `calibrate` sweeps `tauLexical` alone and leaves `tau` null rather than writing a
 number nothing measured.
+
+## vocabulary
+
+- **Type:** `Record<string, string[]> | null`
+- **Default:** `null`
+
+**The documentation's own name for things readers call by other names.**
+
+A plugin that is also an assistant, a chat and a widget has four names before
+anybody translates one, and the lexical channel knows only the one the docs
+happened to use. A reader who types *виджет* against a corpus that says
+*DocPilot* shares no token with it at all, so lexical coverage `L` is 0 — and on
+a site with no dense channel that is the whole score, so
+[the gate](#guard-tau-guard-taulexical) refuses a question about the product
+before any model is asked.
+
+```js
+vocabulary: {
+  DocPilot: ['widget', 'виджет', 'ассистент', 'чат', 'плагин'],
+  'chat.chain': ['fallback', 'фоллбек', 'перебор провайдеров'],
+}
+```
+
+The key is the word the documentation uses; the array is the words readers use
+for it. One entry is still an array of one.
+
+### It rewrites, it never adds
+
+What the gate scores is the question with the reader's word replaced by the
+documentation's, exactly as if they had typed the second one. Nothing is
+removed either, which is what keeps the guard's sign intact: an off-topic
+question padded with product nouns still carries every off-domain term it came
+with, so `L` cannot saturate on a rewrite.
+
+The same substitution runs over the corpus at build time and over the query in
+the browser, because both go through one tokenizer. That is the safety argument
+and it is the same one [suffix stripping](/concepts/a-turn) rests on: a
+symmetric rewrite can only ever add matches.
+
+Inflection is handled: a single-word name is matched again after stemming, so
+`виджеты` and `виджета` reach the term `виджет` already reached. A multi-word
+name — `ии чат` — is matched before anything is stemmed, longest first, so it is
+recognised whole rather than as two words.
+
+**A name is a canonical or an alias, never both.** Naming a term on both sides
+would put a cycle in the rewrite, and the build says so rather than dropping it.
+
+### Where it comes from
+
+`npx docpilot vocabulary` reads the corpus, asks the configured model which
+words readers are likely to use for the terms it finds, and writes
+`${evalDir}/vocabulary.json`. It **proposes and never decides**: the file is
+committed and edited like the golden set.
+
+This key overrides it, per term rather than wholesale — adding one pair by hand
+does not discard the twenty a model found. An empty object is a different
+statement from an omitted key: `vocabulary: {}` is *declared, and empty*, and
+takes nothing, including the sidecar.
+
+### What it owes
+
+Every lexical score moves when the map does, and `tau` was calibrated against
+the old one. The index hash is over chunk text and cannot see it, so the
+manifest carries a `vocabHash` beside it and `npx docpilot index` reports a
+stale guard when the two disagree:
+
+```
+npx docpilot vocabulary && npx docpilot index && npx docpilot calibrate --refresh && npx docpilot index
+```
+
+### What the model is told
+
+On a turn with no dense channel the declared pairs are sent in the system block,
+so the model's own `search_docs` calls query the documentation's word rather than
+the reader's. On a hybrid turn they are not: the embedder already bridges the
+two, and the tokens are the excerpts' to spend. Both halves are covered by the
+[prompt hash](/guide/i18n), so two sites with different maps do not file their
+reports under one number.
 
 ## scope
 
@@ -1305,25 +1786,28 @@ privacy review leaves nothing behind.
 ## ui
 
 - **Type:** `object`
-- **Default:** `{ trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, font: null, fontMono: null }`
+- **Default:** `{ trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, background: 'notify', credit: true, theme: 'auto', font: null, fontMono: null }`
 - **Related:** [Appearance](/guide/appearance)
 
 Where the buttons live, what shape the panel takes, what the floating button is
 made of, and how the panel treats the page it opens over.
 
 ```js
-ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true }
+ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true }
 ```
 
 | key | values | default |
 |---|---|---|
-| `trigger` | a placement, a word standing for several, or an array — [see below](#ui-trigger) | `'nav'` |
+| `trigger` | a placement, a word standing for several, or an array — [see below](#ui-trigger) | `'fab'` |
 | `panel` | `'auto'` · `'drawer'` — full height, right edge · `'popup'` — floating, above the button | `'auto'` |
 | `fabLabel` | `true` — the shipped words · a string — those words · `false` — no label | `true` |
 | `fabIcon` | `false` drops the sparkle | `true` |
 | `layout` | `'overlay'` — the panel covers the page · `'push'` — the page moves aside | `'overlay'` |
 | `prefetch` | `'hover'` · `'idle'` · `false` | `'hover'` |
 | `firstRunHint` | `true` shows one dismissible line on a first visit | `false` |
+| `background` | `'notify'` — a dot on the trigger · `'open'` — the panel returns · `false` — the turn is abandoned on close | `'notify'` |
+| `credit` | `false` removes the `DocPilot` link from the footnote | `true` |
+| `theme` | `'auto'` — the page decides · `'light'` · `'dark'` — pinned, whatever the page says — [see below](#ui-theme) | `'auto'` |
 | `font` | a family list, or the name of a custom property — [see below](#ui-font-ui-fontmono) | `null` — the page's own font |
 | `fontMono` | the same, for code — `null` keeps a system monospace stack | `null` |
 
@@ -1341,9 +1825,16 @@ only exists outside it — so a site is allowed all of them at once.
 |---|---|
 | `'nav'` | in your navigation bar, beside the search box |
 | `'screen'` | a text row inside your mobile navigation menu |
-| `'fab'` | floating, bottom corner, on every page and at every width |
+| `'fab'` | floating, bottom corner, on every page and at every width — **the default** |
+
+`'fab'` ships because it is the one placement that needs nothing from your
+theme: a navbar slot is a VitePress given and nothing else's, so a custom theme,
+a React page or a host with its own header rendered no button at all under the
+old `'nav'` default. Say `trigger: 'nav'` to put it back beside your search box —
+[`ui.panel`](#ui-panel) is `'auto'`, so the drawer comes back with it.
 
 ```js
+ui: { trigger: 'nav' }                            // navbar button + mobile row, drawer
 ui: { trigger: ['nav', 'fab'], panel: 'popup' }   // both buttons, one popup
 ui: { trigger: 'both' }                           // all three
 ui: { trigger: 'fab', fabLabel: 'Ask AI' }        // the floating button alone
@@ -1417,6 +1908,132 @@ passage offers to ask about it.
 also withheld when both [`quote`](#quote) switches are off, because a hint naming
 a gesture the panel does not answer is worse than no hint.
 
+### ui.background
+
+What happens to a turn when the reader puts the panel away while it is still
+running.
+
+```js
+ui: { background: 'notify' }   // the shipped value
+ui: { background: 'open' }     // the panel comes back on its own
+ui: { background: false }      // the turn is abandoned, as it was before 0.4
+```
+
+**Closing the panel and stopping the turn are two different intentions, and they
+used to share one `abort()`.** That is the defect this setting is the switch for,
+and it is worth stating plainly because the symptom did not look like a bug: a
+reader who asked a question and put the panel away during retrieval — which is
+most of a turn's latency, before the first token — reopened it to
+
+> I couldn't find this in the docs.
+
+That sentence is the [gate's refusal](/concepts/the-gate), and the gate had never
+run. An abort *after* the first token has always settled honestly as **Stopped.**;
+an abort before it had no state of its own and fell into the refusal. There is no
+value of this setting under which the old behaviour was right, which is why the
+default changes it rather than preserving it.
+
+| value | the turn | the reader |
+|---|---|---|
+| `'notify'` | runs to completion | a dot on the trigger, which the next open clears |
+| `'open'` | runs to completion | the panel returns by itself, answer in place |
+| `false` | abandoned on close | nothing — the pre-0.4 behaviour, refusal included |
+
+`'notify'` ships because the panel's own position is that
+[the docs stay readable beside the answer](/concepts/the-panel), and a reader who
+closed the panel was reading something. A panel that reopens itself over that page
+is the one behaviour this package has always declined to have; `'open'` is for a
+site that has decided otherwise, and it is a single word away.
+
+**Stop is still Stop.** The button in the composer, and the `Escape` that stands
+in for it while a turn is running, reach the abort directly and are not affected
+by any value here. The setting governs the close button, the scrim, the floating
+button and the hotkey — the four ways of saying *get off my screen*, none of which
+ever asked for anything to end.
+
+The turn also survives **navigation**: the store is a module singleton, so a
+reader who moves to another page of your site keeps the turn and finds the dot
+waiting on the trigger there. It does not survive a full page load, because
+nothing in a browser does.
+
+**What the dot is.** A 10px circle in `--dp-alert` — see
+[Appearance](/guide/appearance) — in the corner of whichever
+[trigger placement](#ui-trigger) is on the page, or at the end of the row in the
+mobile navigation menu. It bounces three times on arrival and then rests; it is
+not a count, and it carries `aria-hidden`, because the words that go with it are
+in the button's accessible name and a screen reader is told through the panel's
+live region as the turn settles. `prefers-reduced-motion` keeps the dot and drops
+the bounce.
+
+### ui.credit
+
+One word at the end of the footnote under the composer — **DocPilot**, linked to
+[the project](https://docpilot-nine.vercel.app/) — on the same line as the scope
+button and the AI disclaimer:
+
+```
+All docs · AI-generated. Check the linked pages. · DocPilot
+```
+
+It is there from the first open, before any question, because the moment a reader
+wants to know what just answered them is the moment they are looking at an empty
+panel. The AI disclaimer beside it appears only once a turn exists and is a
+separate string — turning the credit off leaves it exactly as it was.
+
+```js
+ui: { credit: false }   // no link; the rest of the footnote is unchanged
+```
+
+**On by default.** A site that would rather word the attribution itself turns it
+off and writes its own line — the [`i18n`](#i18n) key `credit.label` renames it
+in place if all you want is different words.
+
+### ui.theme
+
+**`'auto'` is what the panel has always done, and it is still the default.** With
+no adapter loaded the core reads `prefers-color-scheme`, which is the only signal
+a page without a theme system has. With one, the adapter maps every colour token
+to the host's own — `--vp-c-bg`, `--ifm-background-color` — so the panel follows
+your site's light/dark toggle with the rest of the site.
+
+`'light'` and `'dark'` overrule both.
+
+```js
+ui: { theme: 'auto' }    // the page decides — the shipped value
+ui: { theme: 'light' }   // always light, whatever the site and the OS say
+ui: { theme: 'dark' }    // always dark, on the same terms
+```
+
+`'system'` is accepted as a spelling of `'auto'` and resolves to it, because the
+two words name the same thing everywhere else you have met this setting.
+
+| value | what decides the scheme |
+|---|---|
+| `'auto'` | your site's own toggle where the panel has a host adapter; the reader's OS where it has none |
+| `'light'` | nothing — the panel is light on a dark site, and light for a dark-OS reader |
+| `'dark'` | nothing — the same, the other way round |
+
+**A pinned panel wears DocPilot's own palette, not your site's**, and it cannot be
+otherwise: `--dp-surface` maps to `--vp-c-bg`, and `--vp-c-bg` only holds a dark
+value while VitePress is *in* dark mode — so on a light site there is no host
+value for a dark pin to read. Three tokens are deliberately left to the host even
+under a pin: `--dp-accent-soft`, `--dp-shadow` and `--dp-scrim` have one value for
+both schemes, so they stay your brand tint, your elevation and your backdrop.
+Pinning a scheme is not the same as discarding a palette.
+
+The pin is a class on `<html>` — `docpilot-light` or `docpilot-dark` — and the
+core stylesheet declares the nine tokens that differ between its own light and
+dark sets one class deeper than the `:root` an adapter maps on. That is what lets
+it win: an adapter beats the core by **loading second**, not by specificity, so a
+rule of ours at `:root` would lose on exactly the two hosts with a toggle to
+overrule. It also sets `color-scheme` on the panel and the trigger — the caret,
+the scrollbar and any native control — and never on `<html>`, because your page's
+own scrollbars are not the panel's to repaint.
+
+This is a site-wide setting with no reader-facing switch. A reader who wants the
+panel to follow them already has one: their site's own theme toggle, under
+`'auto'`.
+
 ### ui.font, ui.fontMono
 
 **The panel ships no font of its own.** `--dp-font` is `inherit`, and the panel
@@ -1444,10 +2061,12 @@ prompt disclosure. It has no `inherit` default and should not be given one: a
 page has no monospace face for the panel to borrow, so unset it keeps a system
 monospace stack.
 
-Both are written onto `<html>` as `--dp-font` and `--dp-font-mono`, which is
-**the only layer that outranks a host adapter** — a value here reaches the panel
-on VitePress and Docusaurus too, where a `:root` rule of your own in a stylesheet
-loaded before the adapter would not. A value that could end the declaration or
+Both are written onto `<html>` as `--dp-font` and `--dp-font-mono`, **which
+outranks a host adapter** — a value here reaches the panel on VitePress and
+Docusaurus too, where a `:root` rule of your own in a stylesheet loaded before
+the adapter would not. An inline property on the root is one of the two layers
+that can; [`ui.theme`](#ui-theme) is the other, and it gets there by specificity
+rather than by being inline. A value that could end the declaration or
 open another — `;` `{` `}` `<` `>` `@` `*` `\` or `url()` — is reported on stdout
 during the build and dropped, and the panel keeps the page's font.
 
@@ -1458,7 +2077,9 @@ the value depends on something only a stylesheet knows — a media query, a
 ### ui.panel
 
 `'auto'` follows the trigger: a list with `fab` in it opens the popup, a list
-without one opens the drawer. The crossed pairs — `nav` + `popup`, `fab` +
+without one opens the drawer. Both keys ship untouched, so the shipped panel is
+the **popup** — and a site that sets `trigger: 'nav'` and nothing else gets the
+drawer back without touching this key at all. The crossed pairs — `nav` + `popup`, `fab` +
 `drawer` — are carried out in silence, which is what `'auto'` is for: once the
 implied pairing has a name of its own, an explicit value is an intention rather
 than a mistake to correct.

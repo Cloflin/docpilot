@@ -33,10 +33,10 @@ and `embed: 'auto'` follows it into the retrieval half.
 | 7 | `openrouter` | `OPENROUTER_API_KEY` | yes | *[the free pool](#openrouter-with-nothing-named)* |
 | 8 | `anthropic` | `ANTHROPIC_API_KEY` | no | `claude-sonnet-4-6` |
 | 9 | `groq` | `GROQ_API_KEY` | no | `llama-3.3-70b-versatile` |
-| 10 | `deepseek` | `DEEPSEEK_API_KEY` | no | `deepseek-chat` |
+| 10 | `deepseek` | `DEEPSEEK_API_KEY` | no | `deepseek-v4-flash` |
 | 11 | `xai` | `XAI_API_KEY` | no | `grok-4` |
 | 12 | `cerebras` | `CEREBRAS_API_KEY` | no | `llama-3.3-70b` |
-| 13 | `custom` | `CUSTOM_API_KEY` *(`CUSTOM_BASE_URL` moves it)* | yes | — *you name it* |
+| 13 | `custom` | `CUSTOM_BASE_URL` *(`CUSTOM_API_KEY` authorises, and does not select)* | yes | — *you name it* |
 | 14 | `llamacpp` | `LLAMACPP_BASE_URL` | yes | `local` |
 | 15 | `ollama` | `OLLAMA_BASE_URL` | yes | `qwen3:8b` |
 | — | **nothing matched** | → `openrouter`, free tier | yes | *the free pool* |
@@ -88,12 +88,58 @@ asked — it prints the whole chain and marks the member that answered:
                      · gemini      GEMINI_API_KEY
                      · mistral     MISTRAL_API_KEY
                      …
-                     ✓ ollama      no key needed
+                     ✓ ollama      OLLAMA_BASE_URL
 ```
 
 Everything below is how to override it. **A provider you name is never
 overridden**, whatever the environment holds — so a stray `OPENAI_API_KEY` set
 for something else cannot move a site that said `provider: 'ollama'`.
+
+## Two keys, and which answers first
+
+[`chat.chain`](/reference/config#chat-chain) ships as `'auto'`, so an environment
+holding several keys walks **all** of them rather than spending the reader's
+question on the first one's bad afternoon. One key still resolves to one member
+and one route, unchanged.
+
+The table above is ordered by *what one key covers*, which is the wrong order to
+walk a set in: it would send every question to a 50-a-day allowance shared by the
+whole site while a funded key sat two rows below. So the selected set sorts into
+three tiers first, keeping the table's order inside each — billed accounts, then
+a provider's own free catalogue, then a server of your own. `openrouter` answers
+after `groq`; `ollama` answers last.
+
+**A model you name keeps its provider billed.** `chat: {model:
+'anthropic/claude-sonnet-4'}` beside an `OPENROUTER_API_KEY` is a paid
+deployment, so naming a model — or writing your own `chat.models` — flattens the
+tiers back to the table's order. The sort fires on the zero-config path, where
+the whole question is *which of these keys, in what order*.
+
+Priority is written with the settings that already exist, and there is no new
+knob for it:
+
+| what you are ordering | where you say it |
+|---|---|
+| the providers | the [`chat.chain`](/reference/config#chat-chain) array — a named `chat.provider` leads it and is not asked twice |
+| the models on a member that is not the head | that member's object — `{provider, model, models, baseURL}` |
+| the models on the head | [`chat.model`](/reference/config#chat-model), then [`chat.models`](/reference/config#chat-models) in order |
+
+```js
+export const docPilot = {
+  chat: {
+    chain: [
+      { provider: 'openai', models: ['gpt-4o-mini', 'gpt-4o'] },
+      { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+      'openrouter',
+    ],
+  },
+}
+```
+
+A model name never crosses providers — `gpt-4o-mini` posted to Groq is a 404 for
+a model nobody typed — so give a later member its own. What steps a provider
+aside, what the reader is told when one does (nothing), and what happens when
+none of them answers is [The answer ladder](/concepts/the-ladder).
 
 ## One provider, if it can do both
 
@@ -236,6 +282,34 @@ in the chain and says where it is, while `chat: { provider: 'ollama' }` pins it
 whatever the environment holds. Set both and the variable still moves the
 address — your own `chat.baseURL` outranks both.
 
+### A local server is never assumed
+
+**Installing this package and running Ollama is not enough.** A local server is
+selected by its ADDRESS and by nothing else, and an environment that names
+nothing at all falls through to [OpenRouter's free
+tier](/guide/free-tier) rather than to `localhost:11434`.
+
+That is deliberate, and the reason is that a build cannot tell the difference: a
+laptop with Ollama running and a CI box that has never heard of it are the same
+environment from inside this process. The package used to guess, and the guess
+was a connection refused everywhere but one machine.
+
+Three ways to say it, in order of how much they commit to:
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434    # selects it, and says where it is
+```
+
+```js
+chat: { preferLocal: true }   // local answers FIRST, and an empty environment lands there
+chat: { provider: 'ollama' }  // pinned; the chain is not consulted at all
+```
+
+[`chat.preferLocal`](/reference/config#chat-preferlocal) is the one to reach for
+on a machine that has cloud keys lying around for something else: it moves the
+local server to the front of the ladder without taking the others out of it, and
+`npx docpilot doctor` says so when it moved nothing.
+
 ### llama.cpp
 
 `llama-server` speaks the OpenAI-compatible API and serves whatever weights it
@@ -249,10 +323,15 @@ llama-server -m ./model.gguf --port 8080 --embeddings
 LLAMACPP_BASE_URL=http://localhost:8080
 ```
 
-That variable is all of it — no config file entry, no key. The model id sent
-with each request is the literal `local`, which llama-server ignores; the
-`--embeddings` flag is what makes the same server cover the retrieval half.
-Point the variable at another host and requests follow it.
+That variable is all of it: it both selects llama.cpp and says where it is. The
+model id sent with each request is the literal `local`, which llama-server
+ignores; the `--embeddings` flag is what makes the same server cover the
+retrieval half. Point the variable at another host and requests follow it, and
+`chat: { provider: 'llamacpp', baseURL: 'http://gpu.internal:8080' }` says the
+same thing in the config file, where it outranks the variable.
+
+`llama-server --api-key` is honoured if you started it with one: set
+`LLAMACPP_API_KEY` and the proxy attaches it. Most people run it without.
 
 ## No embedder at all
 
@@ -283,6 +362,107 @@ Retrieval reports itself as `lexical-only` in both cases, and they are not the s
 | what to do | nothing, or measure and reconsider | fix the embedder |
 
 The console being silent is the point of the distinction: on a declared site there is no failure to report, and a warning printed on every question would train the reader to ignore the one that matters. `npx docpilot doctor` states the mode outright, which is the fastest way to settle it on a deployment you did not configure yourself.
+
+## What each provider honours
+
+One vocabulary goes in; each service gets the spelling it accepts. This table is the map, and it is the same record `npx docpilot doctor` prints and the adapters translate from — there is one copy of it, so the page and the behaviour cannot drift apart.
+
+Cells name the **field that actually goes on the wire**. `—` means the service has nowhere to put it, and naming that knob beside that provider stops the build rather than being dropped in silence.
+
+| provider | reasoning | levels it accepts | budget | verbosity | temperature | topP | seed | token ceiling |
+|---|---|---|---|---|---|---|---|---|
+| `openai` | `reasoning_effort` | all six † | — | `verbosity` | ✓ | `top_p` | `seed` | `max_completion_tokens` on o-series and GPT-5, `max_tokens` elsewhere |
+| `openrouter` | `reasoning: {…}` | all six † | `max_tokens` | `verbosity` | ✓ | `top_p` | `seed` | `max_tokens` |
+| `anthropic` | `thinking` | low → max | `budget_tokens` ‡ | — | — | — | — | `max_tokens` |
+| `ollama` | `think` | low, medium, high, max | — | — | `options.temperature` | `options.top_p` | `options.seed` | `options.num_predict` |
+| `llamacpp` | `reasoning_effort` | all six | `reasoning_budget` | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `groq` | `reasoning_effort` | low, medium, high † | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `xai` | `reasoning_effort` | low, medium, high, xhigh | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `deepseek` | `reasoning_effort` | low, high, max | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `gemini` | `reasoning_effort` | minimal → high | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `together` | `reasoning_effort` | low, medium, high | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `fireworks` | `reasoning_effort` | low → max | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `mistral` | `reasoning_effort` | minimal → xhigh † | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `nebius` | `reasoning_effort` | all six † | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `cerebras` | `reasoning_effort` | low, medium, high † | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+| `custom` | `reasoning_effort` | all six | — | — | ✓ | `top_p` | `seed` | `max_tokens` |
+
+† **Support varies by model on these services**, so nothing static can be asserted about it and nothing here refuses your configuration — the knob is sent and `doctor` prints the caveat. `minimal` on OpenAI is GPT-5-only and gone again at 5.1; Groq's Qwen models take `none` and `default` where its GPT-OSS models take the three levels; Cerebras treats all three as equivalent on some models. `custom` is a **host** rather than a service, so this package cannot know what your gateway accepts and says so instead of guessing.
+
+‡ Anthropic's budget belongs to the older thinking shape. Models after Opus 4.6 reject it and take adaptive thinking steered by an effort instead; models at 4.5 and earlier reject adaptive. The adapter picks the shape from the model name, and an effort you write is converted to a budget where the older shape is the one in play.
+
+Two knobs are refused everywhere for reasons of their own: `chat.stop`, because a stop sequence inside a pinned JSON reply truncates the object, and `top_k`, which only one transport has. Both are one line of `chat.extraBody` if you want them anyway.
+
+### Thinking, turned up
+
+```js
+export const docPilot = {
+  chat: { provider: 'openai', model: 'gpt-5-mini', reasoning: 'high' },
+}
+```
+
+Costs more and answers better on questions with several moving parts. Note the model: on GPT-5 and the o-series this package posts `max_completion_tokens`, because those models reject the field every other model wants — a request naming `max_tokens` there fails with a 400, which the panel renders as "I couldn't find this in the docs".
+
+### Thinking, turned off
+
+```js
+export const docPilot = {
+  chat: { provider: 'ollama', model: 'qwen3:8b', reasoning: false },
+}
+```
+
+The fastest configuration a thinking model has. It is worth knowing what you are turning off: DocPilot already declines reasoning on every search step, because a step choosing a tool is not composing anything and leaving it on across four of them was measured at a p50 of 215 seconds. This turns off the remaining one — the answer.
+
+On xAI, reasoning cannot be switched off at all. Writing `false` there is not an error; it is a request the service will not honour, and `doctor` says so.
+
+### A thinking budget
+
+```js
+export const docPilot = {
+  chat: { provider: 'anthropic', model: 'claude-opus-4-5', reasoning: { budgetTokens: 8192 } },
+}
+```
+
+For the services that measure thinking in tokens rather than in levels — Anthropic's older shape, OpenRouter, and llama.cpp. Naming it on a service that has only levels stops the build and tells you to name an effort instead.
+
+The budget has to stay under `chat.maxTokens`, which is the ceiling for the whole reply; where it cannot, no thinking is requested rather than a request being sent that would be rejected.
+
+### A local model that thinks
+
+```js
+export const docPilot = {
+  chat: { provider: 'ollama', model: 'qwen3:8b', reasoning: 'high' },
+}
+```
+
+Ollama is the one service that will tell you whether a model can think at all — `/api/show` publishes a capability list, and sending `think` to a model without it is an error rather than a no-op. So capability beats preference here in a way it cannot elsewhere: a model that cannot think is not asked, however deeply you wanted it to.
+
+`npx docpilot doctor --models` prints what your server has pulled, what the configured model can do, and the `ollama pull` command if it is a model you have not downloaded.
+
+### Reasoning on a rotating pool
+
+```js
+export const docPilot = {
+  chat: { provider: 'openrouter', reasoning: 'medium' },
+}
+```
+
+OpenRouter is the one provider whose model moves between requests, so its own per-model support cannot be known when the site is built — the knob is sent and the pool sorts it out.
+
+One caveat worth the paragraph. This package sends `provider: { require_parameters: true }` to OpenRouter by default, which is what makes it route only to upstreams that honour the strict answer schema. Reasoning counts as one of those parameters, so asking for it narrows the routing a second time — and on a thin free pool that can turn an answerable question into *no provider available*. `doctor` prints the caveat when both are in play; `chat.extraBody: null` is how you decline the flag if you would rather have the breadth.
+
+### A knob DocPilot does not name
+
+```js
+export const docPilot = {
+  chat: {
+    provider: 'ollama',
+    extraBody: { options: { top_k: 40, repeat_penalty: 1.1 } },
+  },
+}
+```
+
+`chat.extraBody` is merged into the body of every chat request and reaches all four adapters. Nothing it contains can overwrite a field the adapter owns — a stray `stream: false` would otherwise turn off streaming for every reader on the site — and on Ollama its `options` merge with the adapter's rather than replacing them, so `num_ctx` and `temperature` survive.
 
 ## Where the key lives
 

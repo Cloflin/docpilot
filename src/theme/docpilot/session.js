@@ -8,10 +8,12 @@
 import { reactive, computed } from 'vue'
 import { loadIndex } from './store.js'
 import { createRetrieval } from './retriever.js'
+import { enforces } from './gate.js'
+import { resultRows } from './results.js'
 import { embedQuery } from './embed.js'
 import { runTurn } from './harness.js'
 import { detectTools } from './llm.js'
-import { renderAnswer } from './markdown.js'
+import { renderAnswer, renderPassage } from './markdown.js'
 import { ensureHighlighter, onReady } from './highlight.js'
 import * as scopeApi from './scope.js'
 import * as instruction from './prompt-store.js'
@@ -70,6 +72,18 @@ const originHost = (url) => {
 
 const DEFAULTS = {
   enabled: true,
+  /**
+   * SEARCH-ONLY — no model is called on any turn, and a question is answered
+   * with the ranked passages themselves.
+   *
+   * `false` here rather than derived from `llm.provider`, on the same terms as
+   * `embed.lexicalOnly` two blocks down: a mode read off the absence of a value
+   * turns itself on the first time something else goes missing, and this one
+   * decides whether a turn ever reaches a transport. It is spelled out for the
+   * two configs that never met `themeDocPilot` — a hand-written `themeConfig`
+   * and the `{enabled: false}` payload — so every read is a boolean question.
+   */
+  searchOnly: false,
   // `apiKey` exists for a self-hosted endpoint on a private network. It must
   // stay null in any public build: themeConfig is compiled into the client
   // bundle, so a key written here is a key published. In production the panel
@@ -99,6 +113,32 @@ const DEFAULTS = {
     extraBody: null,
     rateLimited: false,
     freePool: false,
+    /**
+     * THE SET, for the two configs that never met `themeDocPilot` — a
+     * hand-written `themeConfig` and the `{enabled: false}` payload.
+     *
+     * Null is one service, which is exactly what those two describe: they carry
+     * the scalars above and nothing that could resolve a second member. A build
+     * that DID meet the resolver overwrites this with `chain[0]` restating those
+     * same scalars, so the shipped single-provider deployment reads identically
+     * either way.
+     */
+    chain: null,
+    /**
+     * The connector knobs, named here for the same two configs the three above
+     * are named for — a hand-written `themeConfig` and the `{enabled: false}`
+     * payload, neither of which met `themeDocPilot`.
+     *
+     * `tuning` is the one the transport reads: the author's request already
+     * clamped to what the configured service accepts, carrying a body SHAPE and
+     * never a brand. Null here means "post what you always posted", which is
+     * exactly what a config predating this feature should get.
+     */
+    reasoning: null,
+    verbosity: null,
+    topP: null,
+    seed: null,
+    tuning: null,
   },
   // Configured separately from `llm` on purpose: Anthropic has no embeddings
   // endpoint, so the two halves must be able to point at different services.
@@ -161,7 +201,7 @@ const DEFAULTS = {
   // The configured DELTA only — the shipped tree lives in i18n.js and is looked
   // up behind it, so a project that overrides nothing ships no extra bytes.
   i18n: { translations: {}, locales: {} },
-  guard: { mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
+  guard: { mode: 'dense-only', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
   scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
   // The reader's own conversations, on their device. Off means "do not record
   // AND clear what is there" — see `configure` below.
@@ -174,16 +214,17 @@ const DEFAULTS = {
   // reachable from here. Equal to `resolveUi({})` by construction, and the
   // suite says so — this is what the panel runs on before `configure` lands.
   ui: {
-    trigger: ['nav', 'screen'],
-    panel: 'drawer',
-    showNavTrigger: true,
-    showScreen: true,
-    showFab: false,
+    trigger: ['fab'],
+    panel: 'popup',
+    showNavTrigger: false,
+    showScreen: false,
+    showFab: true,
     fabLabel: true,
     fabIcon: true,
     layout: 'overlay',
     prefetch: 'hover',
     firstRunHint: false,
+    background: 'notify',
   },
   // All null, and they stay null here: "nobody said" is a distinct answer from
   // any value, and it is what lets the host binding supply one. `hostConfig()`
@@ -193,6 +234,16 @@ const DEFAULTS = {
 
 export const state = reactive({
   open: false,
+  /**
+   * A turn that settled while the panel was shut — ui-specs/010.
+   *
+   * BOOLEAN, not a count. The badge says "there is something in there"; how
+   * much is a question the thread answers, and a number on a 10px dot is a
+   * number nobody reads. It is set in `finishTurn` and cleared in `open()`,
+   * which is the only place it can be cleared from: every path that shows the
+   * panel goes through that one function.
+   */
+  unread: false,
   ready: false,
   degraded: false,
   degradedReason: '',
@@ -350,12 +401,44 @@ function applyFont(ui) {
   }
 }
 
+/**
+ * `ui.theme` — the other setting that reaches the STYLESHEET.
+ *
+ * A class on `<html>`, not an inline property, because a pin is twelve tokens
+ * and one `color-scheme`, and the values belong in `core.scss` beside the light
+ * and dark sets they are made of. `html.docpilot-dark` is one class more
+ * specific than the `:root` an adapter maps on, which is what lets a pin beat a
+ * host that wins over the core by load order alone.
+ *
+ * THE ROOT, not the panel: `:root` is where the tokens live, because the nav
+ * trigger, the floating button and the CTA render outside the panel and outlive
+ * it — a class on `.docpilot` would leave the button on the page's scheme while
+ * the panel it opens wore another.
+ *
+ * REMOVED, not skipped, on `'auto'` — the same rule as `applyFont` directly
+ * above. `setConfig` runs on a live page, and a pin taken out of the settings
+ * has to leave the document with it or the panel keeps a scheme nothing can now
+ * explain.
+ */
+function applyTheme(ui) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (!root) return
+  root.classList.toggle('docpilot-light', ui?.theme === 'light')
+  root.classList.toggle('docpilot-dark', ui?.theme === 'dark')
+}
+
 export function configure(themeConfig, path, lang) {
   const cfg = themeConfig?.docPilot || {}
   state.config = {
     ...DEFAULTS,
     ...cfg,
     llm: { ...DEFAULTS.llm, ...(cfg.llm || {}) },
+    // Coerced rather than carried, because this one decides whether a turn ever
+    // reaches a transport: a truthy string from a hand-written themeConfig would
+    // switch the model off just as effectively as the boolean, and a config that
+    // never met `themeDocPilot` carries no key at all.
+    searchOnly: cfg.searchOnly === true,
     // Resolved, not spread — `embed` is a union on the same terms as `budget`
     // below, and a spread reads `embed: false` as an absent key. See
     // `resolveEmbed` for what that cost.
@@ -425,6 +508,7 @@ export function configure(themeConfig, path, lang) {
     // property of the document, not of a component, so it is applied here
     // rather than left to whichever of the four mounted roots renders first.
     applyFont(state.config.ui)
+    applyTheme(state.config.ui)
     state.debug = new URLSearchParams(location.search).has('dpdebug')
     feedback.installConsoleHelper()
   }
@@ -721,6 +805,11 @@ export function applyDeepLink(search, replace = null) {
 
 export function open() {
   state.open = true
+  // The badge is cleared HERE and nowhere else, because every path that shows
+  // the panel arrives through this function — the trigger, the hotkey, the
+  // article call to action, the deep link and the host's own handle. A reader
+  // who is looking at the thread has read it.
+  state.unread = false
   ensureIndex()
   // Fetched here, not at the first code fence: the answer highlights live, so
   // the grammars have to be resident before the first code token arrives. It is
@@ -731,7 +820,19 @@ export function open() {
 export function close() {
   state.open = false
   state.dockPanel = null
-  stop()
+  /**
+   * CLOSING THE PANEL IS NOT STOPPING THE TURN — ui-specs/010.
+   *
+   * One `abort()` used to serve two different intentions. "Stop" is the
+   * composer's button and the `Esc` rung above it, and it still reaches
+   * `stop()` directly. "Get off my screen" is this, and it never asked for
+   * anything to end: a reader who shuts the panel while the gate is still
+   * retrieving used to be handed `I couldn't find this in the docs.` — a claim
+   * about the corpus, for a turn the corpus had not yet refused.
+   *
+   * `ui.background: false` is a project keeping the old behaviour.
+   */
+  if (state.config.ui.background === false) stop()
 }
 
 export function toggle() {
@@ -878,6 +979,7 @@ function rehydrate(row) {
     // turn. A restored turn simply has no reasoning disclosure.
     thought: '',
     thoughtOpen: false,
+    thoughtChoice: null,
     thoughtSeconds: 0,
     streaming: false,
     reasonOpen: false,
@@ -991,6 +1093,21 @@ function sourceRow(c) {
  */
 const PAGES_READ_MAX = 8
 
+/**
+ * How many passages search-only mode shows.
+ *
+ * 8, which is also the ceiling `retrieval.search()` clamps its k to — the model's
+ * own tool argument is bounded there, and a reader is owed at least what the
+ * model could have asked for. Not `GATE_K` (5, the excerpt budget a prompt can
+ * afford) because no prompt is being built: nothing here is paid for per token,
+ * and the cost of a ninth row is a longer page rather than a larger request.
+ *
+ * NOT a config knob. `topK` already exists and means the gate's k — the evidence
+ * an ANSWER is written from — and giving it a second meaning on one mode is how a
+ * documented setting starts doing two things.
+ */
+const RESULTS_K = 8
+
 function pagesReadFrom(emitted) {
   const paths = [...new Set((emitted || []).map((id) => String(id).split('#')[0]))]
   return paths
@@ -1011,6 +1128,32 @@ export function passageFor(turn, src) {
 }
 
 /**
+ * The same passage as markdown, for the disclosure that is open.
+ *
+ * SEPARATE FROM `passageFor` rather than replacing it, because the text answers
+ * a different question three times over: whether the row gets a chevron at all,
+ * whether it gets the `has-passage` column, and what the disclosure contains.
+ * Only the third one wants html.
+ *
+ * A ONE-ENTRY MEMO, and it is not premature. At most one passage is open across
+ * the whole thread — `openPassage` is a single id — but the panel re-renders
+ * every 90ms while a later turn streams, and each of those frames would
+ * otherwise re-parse and re-highlight a 1200-character chunk that has not
+ * changed. Keyed on the chunk id and dropped when the highlighter arrives, on
+ * the same tick the settled answers are re-rendered in colour.
+ */
+let passageMemo = null
+
+export function passageHtml(turn, src) {
+  const text = passageFor(turn, src)
+  if (!text) return ''
+  if (passageMemo?.id === src.id && passageMemo.text === text) return passageMemo.html
+  const html = renderPassage(text, knownPaths.value)
+  passageMemo = { id: src.id, text, html }
+  return html
+}
+
+/**
  * A turn that settled before the highlighter arrived gets its colour late.
  *
  * `renderAnswer` is a pure function of (text, knownPaths, cited) and the turn
@@ -1020,6 +1163,7 @@ export function passageFor(turn, src) {
  * outranks syntax colour.
  */
 onReady(() => {
+  passageMemo = null
   for (const turn of state.turns) {
     if (!turn.answerText) continue
     if (turn.sources?.length && !turn.cited) continue
@@ -1055,18 +1199,48 @@ function onStream(turn, ev, started) {
     // Opened for the reader the moment there is something to read, and closed
     // again by the first answer token: reasoning is a progress indicator while
     // it is the only thing happening and a footnote once it is not.
-    if (!turn.answerText) turn.thoughtOpen = true
+    //
+    // Through `autoThought`, and this is the whole of the fix it carries: this
+    // line runs on EVERY thinking delta, so a reader who pressed the toggle to
+    // collapse the box had their press undone within a frame, forever, for as
+    // long as the model kept thinking. The rule is now stated once, in one
+    // place: the automatic disclosure is a default, and a default yields.
+    if (!turn.answerText) autoThought(turn, true)
     turn.thoughtSeconds = Math.max(1, Math.round((performance.now() - started) / 1000))
   }
 
   if (ev.text) {
-    turn.thoughtOpen = false
+    autoThought(turn, false)
     turn.answerText = ev.text
     const now = performance.now()
     if (now - lastRender < RENDER_FLOOR_MS) return
     lastRender = now
     turn.answerHtml = renderAnswer(ev.text, knownPaths.value).html
   }
+}
+
+/**
+ * THE READER'S CHOICE ABOUT THE REASONING BOX OUTRANKS THE STREAM'S.
+ *
+ * `thoughtOpen` has two authors. The stream opens the box while reasoning is
+ * the only thing happening and closes it once an answer is being written; the
+ * reader opens and closes it by pressing the toggle. They disagree, and per
+ * token, so the loser has to be named rather than left to the last writer —
+ * which was the stream, at 60 presses a second.
+ *
+ * `turn.thoughtChoice` is that name: `null` while nobody has said anything, and
+ * the reader's own boolean once they have. It lives on the TURN and dies with
+ * it — the next question reasons out loud again, because the press was about
+ * this answer's scratchpad and not about reasoning as a feature.
+ */
+export function autoThought(turn, open) {
+  if (turn.thoughtChoice === null) turn.thoughtOpen = open
+}
+
+/** The toggle under `Thinking for 4s`. A press is an intent, so it is recorded. */
+export function toggleThought(turn) {
+  turn.thoughtOpen = !turn.thoughtOpen
+  turn.thoughtChoice = turn.thoughtOpen
 }
 
 function makeTurn(question, frozen, quote = '') {
@@ -1083,9 +1257,49 @@ function makeTurn(question, frozen, quote = '') {
     answerHtml: '',
     answerText: '',
     sources: [],
+    /**
+     * The ranked passages, in search-only mode — this turn's whole answer.
+     *
+     * Always an array, never null, on the same terms as `quote` above: it is
+     * rendered with `v-if="turn.results.length"` and PERSISTED, so a turn
+     * restored from a history written before this field existed must land on the
+     * same falsy-length value rather than on `undefined`.
+     */
+    results: [],
+    // The gate did not pass, but rows are shown anyway — see the search-only
+    // branch in submit(). This is what makes the panel lead with "no strong
+    // matches" rather than with the matches.
+    noStrongMatches: false,
+    // Widening the scope would change that verdict, so the affordance renders.
+    // Reachable in lexical-only only since the retriever grew a lexical unscoped
+    // check; before that every search-only refusal in that mode looked the same.
+    wouldWiden: false,
+    // The floor under `results`: pages rather than sections, for the one case
+    // where the ranked set is genuinely empty. Same shape as `refusal.closest`,
+    // which is a different field on a different kind of turn — this one belongs
+    // to a turn that answered, with the least it had.
+    closest: [],
+    closestAreOutside: false,
+    /**
+     * WHY these rows are here: the search answered because no model could.
+     *
+     * Stated on every turn rather than left undefined for the same reason
+     * `results` is always an array — it is read by a `v-if` and it is persisted,
+     * so a turn restored from a history written before the ladder existed has to
+     * land on `false` rather than on nothing. It is the ONLY difference between
+     * this settle and the one a search-only site serves: same rows, same links,
+     * one sentence and a Retry button.
+     */
+    hybrid: false,
+    // Which SERVICE answered, where more than one could have — `{provider,
+    // index, freePool}`, or null on a turn that never reached one. Debug and
+    // feedback only; nothing renders it.
+    ladder: null,
     refusal: null,
     thought: '',
     thoughtOpen: false,
+    // `null` until the reader presses the reasoning toggle — see `autoThought`.
+    thoughtChoice: null,
     thoughtSeconds: 0,
     streaming: false,
     verdict: null,
@@ -1102,6 +1316,34 @@ function makeTurn(question, frozen, quote = '') {
     feedbackRevision: 0,
     startedAt: performance.now(),
   })
+}
+
+/**
+ * The question the composed channel composes against — the last one that was
+ * ANSWERED, not the last one that was asked.
+ *
+ * A refused turn is invisible to the model (`buildMessages` drops history turns
+ * that produced no answer, for a measured reason) and was visible to the gate
+ * anyway, which is the asymmetry this closes. The question of a turn that
+ * refused is a question this corpus demonstrably retrieved nothing for; putting
+ * it in front of the follow-up embeds the reader's dead end into the composed
+ * query and anchors the one channel that could have recovered the turn to the
+ * one question known not to work. Two refusals in a row made the third
+ * unanswerable that way, and the reader who rephrases after a refusal is
+ * exactly the reader this channel exists for.
+ *
+ * `answerText` is the same field the prompt's history filter tests and it is
+ * persisted, so a restored thread composes against the same question as the
+ * live one did. Falling back to the immediately previous question keeps the
+ * shipped behaviour for a thread where nothing has answered yet — including
+ * search-only, which never sets `answerText` at all.
+ */
+export function priorAntecedent(turns) {
+  const prior = turns.slice(0, -1)
+  for (let i = prior.length - 1; i >= 0; i--) {
+    if (prior[i].answerText && prior[i].answerText.trim()) return prior[i].question
+  }
+  return prior.length ? prior[prior.length - 1].question : null
 }
 
 /**
@@ -1212,6 +1454,101 @@ export async function submit(question, { quote = '' } = {}) {
   const cfg = state.config
   const started = performance.now()
 
+  /**
+   * THE RETRIEVAL THIS TURN ALREADY DID, hoisted so the catch can still see it.
+   *
+   * Every one of these is settled before the first request to a model, and a
+   * transport failure is the case where that work is the only thing left worth
+   * showing — see the hybrid settle below. Declared here rather than inside the
+   * try purely for scope; each is assigned exactly where it always was.
+   */
+  let retrieval = null
+  let queryVec = null
+  let g = null
+  /**
+   * The composed channel's query, hoisted beside `g` because the rows are built
+   * after the verdict and outside the block that scored it.
+   *
+   * NO INITIALISER on the vector. `undefined` means "there is no second query to
+   * score" and `null` means "score it with no vector", and `evaluate()` reads
+   * the difference — writing `= null` here would announce a composed channel on
+   * every first turn in the corpus.
+   */
+  let composedQuery = null
+  let composedVec
+
+  /**
+   * The ranked passages, as reader-facing rows — the answer in search-only mode,
+   * and the answer when no model could be reached.
+   *
+   * ONE function for both, because they are one product: the same rows, the same
+   * links, the same empty-state floor. Only the sentence above them differs, and
+   * that is `turn.hybrid`'s job. Written as a declaration so the catch below can
+   * call it — the failure it serves is the whole reason it is not inline.
+   */
+  /**
+   * The same rows where a failure is already being handled — a search that
+   * throws must not be able to take the settle down with it.
+   *
+   * Inside a catch there is no second handler behind this one: an exception here
+   * would escape `ask()` entirely, leaving the panel busy with a turn that never
+   * settles. The rows are a courtesy; the settle is the contract.
+   */
+  function safeResults(turn) {
+    try {
+      fillResults(turn)
+    } catch (e) {
+      if (state.debug) console.error('[docpilot] could not build the search rows', e)
+    }
+  }
+
+  function fillResults(turn) {
+    /**
+     * The rows follow the VERDICT's query, not the raw question.
+     *
+     * The gate scores two channels and the panel prints one list, and when the
+     * composed channel is what scored, rows ranked on the tail alone are a
+     * different search from the one the sentence above them reports: "nothing
+     * here matched strongly" sits over the results of a query the gate did not
+     * use. In search-only that list IS the answer, and «а я могу его
+     * стилизировать?» ranked alone retrieves the tail's noise while the gate
+     * had the appearance page in hand.
+     *
+     * Costs no request: both halves were computed for the verdict.
+     */
+    const composedWon = g?.channel === 'composed'
+    turn.results = resultRows(
+      retrieval.search({
+        query: composedWon ? composedQuery : q,
+        queryVec: composedWon ? composedVec : queryVec,
+        k: RESULTS_K,
+      }),
+      { index: state.index },
+    )
+    /**
+     * THE EMPTY-STATE SIGNAL, and it is NOT the refusal policy.
+     *
+     * `guard.mode` decides whether a failing verdict ENDS a turn; this decides
+     * whether the rows say "nothing here matched strongly", which is a true
+     * statement about retrieval whoever gets to act on it. Routing this through
+     * `enforces` took the sentence off every search-only site — the one shape
+     * with no model to hand the judgement to, where the verdict is the ONLY
+     * signal there is. `chat: false` says so in as many words: the gate is an
+     * empty-state signal there rather than a suppressor.
+     *
+     * `'off'` still silences it, because that is a deployment saying it does not
+     * want the verdict acted on at all.
+     */
+    if (g && cfg.guard.mode !== 'off' && !g.pass) {
+      turn.noStrongMatches = true
+      turn.wouldWiden = g.wouldPassUnscoped
+    }
+    if (!turn.results.length) {
+      turn.closest = retrieval.closest({ query: q, queryVec, outsideScope: g?.wouldPassUnscoped })
+      turn.closestAreOutside = Boolean(g?.wouldPassUnscoped)
+    }
+  }
+
   try {
     /**
      * Query embedding. If the embedder is unreachable, retrieval degrades to
@@ -1229,7 +1566,6 @@ export async function submit(question, { quote = '' } = {}) {
      * made every later turn report lexical-only long after the embedder was
      * back.
      */
-    let queryVec = null
     let mode = 'hybrid'
     state.retrieval = 'hybrid'
     state.retrievalError = ''
@@ -1273,7 +1609,7 @@ export async function submit(question, { quote = '' } = {}) {
       }
     }
 
-    const retrieval = createRetrieval({
+    retrieval = createRetrieval({
       index: state.index,
       scope: frozen,
       guard: guard.value,
@@ -1300,7 +1636,7 @@ export async function submit(question, { quote = '' } = {}) {
      * can only raise G through a channel `admissible()` still polices against the
      * reader's OWN words, and G is a maximum, so refusals can only decrease.
      */
-    const previous = state.turns.length > 1 ? state.turns[state.turns.length - 2].question : null
+    const previous = priorAntecedent(state.turns)
     const antecedent = selected || previous
     /**
      * `null` is not `undefined` here, and `evaluate()` reads the difference:
@@ -1316,12 +1652,12 @@ export async function submit(question, { quote = '' } = {}) {
      * being refused on the one deployment shape that cannot fall back to a
      * dense channel.
      */
-    let composedVec
+    composedQuery = antecedent ? `${antecedent}\n${q}` : null
     if (antecedent && mode === 'lexical-only') {
       composedVec = null
     } else if (antecedent && queryVec) {
       try {
-        composedVec = await embed(`${antecedent}\n${q}`, cfg, signal)
+        composedVec = await embed(composedQuery, cfg, signal)
       } catch (e) {
         // Same reason as the query embedding above: cancellation has to keep
         // travelling outward, where the turn ends as aborted.
@@ -1330,7 +1666,7 @@ export async function submit(question, { quote = '' } = {}) {
       }
     }
 
-    const g = {
+    g = {
       ...retrieval.evaluate({
         question: q,
         previousQuestion: antecedent,
@@ -1354,8 +1690,54 @@ export async function submit(question, { quote = '' } = {}) {
     }
     if (state.debug) console.debug('[docpilot] gate', g)
 
+    /**
+     * ── SEARCH-ONLY: the passages ARE the answer ─────────────────────────────
+     *
+     * Everything above this line ran exactly as it does on an answering site —
+     * the credential settle, the social settle, the frozen scope, the embed or
+     * the declared skip, the composed channel, the gate. What changes is what
+     * happens with the result: the ranked chunks are rendered instead of being
+     * handed to a model to write about.
+     *
+     * THE GATE IS AN EMPTY-STATE SIGNAL HERE, NOT A SUPPRESSOR, and that is a
+     * deliberate departure from the branch below it.
+     *
+     * The refusal contract exists because a model asked to answer from weak
+     * evidence writes something plausible and wrong, and a reader cannot tell
+     * the difference. That argument is about GENERATED TEXT. Every row here is a
+     * verbatim passage under a link into the docs the reader can check in one
+     * click — there is nothing for the panel to be wrong about, and hiding BM25
+     * hits that exist in order to say "not in the docs" would be a worse product
+     * and a less honest one. So `g.pass` chooses the lead copy and nothing else.
+     *
+     * What the gate still buys is the DISCRIMINATION: `wouldPassUnscoped` says
+     * whether the reader's scope is what is standing in the way, which is the
+     * difference between offering a widen button and offering nothing. That
+     * signal is only available in lexical-only since the retriever grew a
+     * lexical unscoped check; before it, this branch could not have told the two
+     * apart on the deployment shape most likely to run search-only.
+     *
+     * `closest()` is the floor: no rows at all is the one case where there is
+     * genuinely nothing to show, and it answers with pages rather than sections.
+     */
+    if (cfg.searchOnly) {
+      fillResults(turn)
+      // The scope label the panel prints comes from `turn.scope`, which
+      // `makeTurn` already froze — one copy, not two that can disagree.
+      turn.gate = g
+      turn.state = 'results'
+      finishTurn(turn, started)
+      return
+    }
+
     // ── the gate may end the turn here, before any model call ────────────────
-    if (cfg.guard.mode !== 'off' && !g.pass) {
+    //
+    // MAY, and `enforces` is where that is decided. On a vectorless turn the
+    // shipped `dense-only` scores the verdict, records it, and lets the question
+    // through: G is L alone there, and L is 0 for a reader asking in another
+    // language or by another name — a refusal computed from that says the corpus
+    // has nothing when the truth is that this channel cannot tell.
+    if (enforces(cfg.guard.mode, g.mode) && !g.pass) {
       const cause = g.wouldPassUnscoped ? 'out-of-scope' : 'no-evidence'
       turn.state = 'no-answer'
       turn.refusal = {
@@ -1376,6 +1758,29 @@ export async function submit(question, { quote = '' } = {}) {
         closestAreOutside: cause === 'out-of-scope',
       }
       turn.gate = g
+      /**
+       * WHICH refusal this is, on the one path that leaves no other trace.
+       *
+       * Both refusals reach the reader as the same sentence, and they are
+       * opposite bugs: this one never called the model and the one after
+       * validation spent the whole turn's budget. That one already prints
+       * `low-confidence or untraceable`; without the line below, a report of
+       * "it says it can't find something the docs cover" cannot be told apart
+       * from a console the reader has already screenshotted. `admissibleBy`
+       * is here because a follow-up refused with the composed channel dropped
+       * and one refused with it scored and beaten are also different bugs.
+       */
+      if (state.debug) {
+        console.debug('[docpilot] refusal', cause, {
+          channel: g.channel,
+          antecedent: g.antecedent,
+          admissible: g.admissible,
+          admissibleBy: g.admissibleBy,
+          G: g.G,
+          threshold: g.threshold,
+          mode: g.mode,
+        })
+      }
       finishTurn(turn, started)
       return
     }
@@ -1464,6 +1869,16 @@ export async function submit(question, { quote = '' } = {}) {
       onModel: (m) => {
         turn.model = m
       },
+      // WHICH SERVICE answered, on a deployment whose environment selected more
+      // than one. Recorded for the same reason as the model and rendered in the
+      // same places — nowhere: a provider stepping aside for the next one is the
+      // ladder working, and a badge saying so would report a fault on a turn that
+      // was answered correctly. `?dpdebug=1` prints it, and a feedback record
+      // carries it, which is where "the first member was down all afternoon" is
+      // a question anybody can actually ask.
+      onMember: (m, index) => {
+        turn.ladder = { provider: m.provider, index, freePool: Boolean(m.freePool) }
+      },
       onStream: (ev) => onStream(turn, ev, started),
       signal,
     })
@@ -1493,7 +1908,11 @@ export async function submit(question, { quote = '' } = {}) {
       turn.thoughtSeconds = Math.max(1, Math.round((performance.now() - started) / 1000))
     } else {
       turn.thoughtSeconds = 0
-      turn.thoughtOpen = false
+      // Through `autoThought` like every other write to this flag, though the
+      // reader cannot see the difference: with no reasoning there is no box —
+      // the disclosure renders under `v-if="turn.thought"` — so this closes a
+      // thing that is not on screen. One writer is the point.
+      autoThought(turn, false)
     }
 
     /**
@@ -1642,6 +2061,18 @@ export async function submit(question, { quote = '' } = {}) {
        */
       turn.state = 'rate-limited'
       turn.rateLimit = { resetAt: e.rateLimit.resetAt, limit: e.rateLimit.limit }
+      /**
+       * AND THE PASSAGES, because they cost nothing and are what the reader came
+       * for.
+       *
+       * Retrieval settled before the first request went out, so the rows are
+       * already paid for — printing "come back at four" while the sections that
+       * answer the question sit in memory is the panel choosing to be less useful
+       * than the index it shipped with. The state is untouched: no Retry, no
+       * `role="alert"`, the reset still named. The rows arrive under their own
+       * quieter sentence, beneath it.
+       */
+      if (retrieval && !turn.answerText) safeResults(turn)
       // A turn with nothing on screen is still dropped from the archive, exactly
       // as a transport error is: `slimTurn` keeps neither, because it has no
       // answer and no refusal to restore. What it does keep, since this state
@@ -1652,6 +2083,34 @@ export async function submit(question, { quote = '' } = {}) {
       // travel with it: the reset is rendered as a clock time, and a clock time
       // that has already passed is worse than no line at all.
       if (state.debug) console.debug('[docpilot] daily rate limit', e.rateLimit)
+    } else if (retrieval && !turn.answerText) {
+      /**
+       * ── THE HYBRID ANSWER: no model answered, so the search does ─────────────
+       *
+       * "The AI service didn't respond" plus a Retry button is the whole of what
+       * this used to be, and it throws away a turn's completed work to say it.
+       * By the time a transport failure lands here the question has been embedded
+       * or deliberately not, the corpus has been searched on both channels, the
+       * gate has scored it, and every ranked passage is sitting in memory. Not
+       * one of those needed a model. The reader asked where something is
+       * documented; the panel knows, and was printing an apology.
+       *
+       * So the last rung of the ladder is the search-only product, reached at
+       * runtime rather than by configuration: the same rows, the same links, the
+       * same empty-state floor — under a sentence that says plainly that the
+       * models are unreachable and this is what search alone found. `error.lead`
+       * is not gone, it is one branch down: a failure BEFORE retrieval has no
+       * rows to show and is still the transport error it always was.
+       *
+       * `turn.error` travels for `?dpdebug=1`, which is the only place a stack
+       * trace helps anyone.
+       */
+      turn.state = 'results'
+      turn.hybrid = true
+      turn.error = String(e.message || e)
+      turn.gate = g
+      safeResults(turn)
+      if (state.debug) console.error('[docpilot] no model answered — hybrid settle', e)
     } else {
       turn.state = 'error'
       turn.error = String(e.message || e)
@@ -1711,7 +2170,7 @@ export function resetLine(turn) {
 function finishTurn(turn, started) {
   turn.latencyMs = Math.round(performance.now() - started)
   turn.streaming = false
-  turn.thoughtOpen = false
+  autoThought(turn, false)
   // THE TURN'S OWN CONTEXT, frozen at the moment it settled.
   //
   // `writeFeedback` used to read all six of these from live session state, which
@@ -1752,7 +2211,45 @@ function finishTurn(turn, started) {
   // touched.
   if (!state.turns.includes(turn)) return
   saveCurrent()
+  /**
+   * IT SETTLED WHILE NOBODY WAS LOOKING — ui-specs/010.
+   *
+   * Below the `includes` check on purpose: a turn that settled into a thread
+   * the reader has since left is not something to point at, for the same
+   * reason it is not something to save. Every settled state counts, refusals
+   * included — a refusal is still an answer to a question that was asked, and
+   * a badge that only lit for successes would be a badge that goes dark
+   * exactly when the reader most wants to know what happened.
+   *
+   * `open()` clears the flag, so the order here is what makes `'open'` mean
+   * "the panel came back": the badge is left burning only where the opening
+   * did not happen.
+   */
+  if (!state.open && state.config.ui.background !== false) {
+    state.unread = true
+    if (state.config.ui.background === 'open') open()
+  }
   if (turn.state === 'complete') say(T('announce.answerReady', { n: turn.sources.length }))
+  // Search-only settles as `results`, and the count is the announcement: there
+  // is no answer to read out, so what a screen reader needs is how many links
+  // arrived and whether the panel is leading with a caveat. Zero rows falls
+  // through to the closest-pages line, which is the same shape a refusal uses.
+  // A hybrid settle leads with WHY: a reader who cannot see the panel is owed
+  // the reason the answer is a list of links this once, and not on every turn a
+  // search-only site ever serves.
+  else if (turn.state === 'results')
+    say(
+      turn.results.length
+        ? T(
+            turn.hybrid
+              ? 'announce.hybrid'
+              : turn.noStrongMatches
+                ? 'announce.resultsWeak'
+                : 'announce.resultsReady',
+            { n: turn.results.length },
+          )
+        : T('refusal.notFound', { scope: turn.scope.label }),
+    )
   // A credential turn searched nothing, so "I couldn't find this in the docs"
   // would be a claim about the corpus for a turn that never looked at it — the
   // same falsehood §13 already forbids on a degraded search. The announcement
@@ -1898,6 +2395,20 @@ function writeFeedback(turn, {retracted = null} = {}) {
       // covers a turn stored before this field existed.
       retrieval: turn.retrieval ?? state.retrieval,
       model: turn.model ?? state.config.llm.model,
+      /**
+       * WHICH SERVICE answered, where more than one could have.
+       *
+       * The provider-level sibling of `model` above, and filed for the same
+       * reason: on a rotating set the settings cannot say. A reviewer reading a
+       * run of bad answers off one deployment has no other way to ask whether
+       * they share a provider — the model name alone cannot tell a free
+       * catalogue's id from the same id on a funded key.
+       *
+       * Omitted entirely on a single-provider deployment rather than sent as a
+       * null: every record there would carry the one fact the config already
+       * states, which is the noise this file drops `retrievedIds` for.
+       */
+      ...(turn.ladder ? {ladder: turn.ladder} : {}),
       iterations: turn.iterations ?? 0,
       rejectedFetches: turn.rejectedFetches ?? 0,
       latencyMs: turn.latencyMs,

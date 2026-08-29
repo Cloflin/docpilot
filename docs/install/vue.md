@@ -37,6 +37,19 @@ createApp(App)
   .mount('#app')
 ```
 
+Shiki is **not** installed by that `npm i` — this package declares no
+dependencies on it, so the four packages `@cloflin/docpilot/shiki` imports are
+yours to add:
+
+```bash
+npm i @shikijs/core @shikijs/engine-javascript @shikijs/langs @shikijs/themes
+```
+
+Without them the build fails on `failed to resolve import "@shikijs/core"`. Drop
+the `highlighter` line instead and every code block renders as a plain escaped
+`<pre>`; [Syntax highlighting](/reference/highlighting) covers Prism and
+highlight.js, which are smaller if your app already ships one.
+
 Then place the components:
 
 ```vue

@@ -4,6 +4,17 @@ OpenRouter's free tier is a real way to run this panel, and it is metered in a
 way that catches people out. This page is what the constraint actually is, what
 DocPilot does about it, and what you have to decide.
 
+It is also **rung 2 of [the answer ladder](/concepts/the-ladder)**: where the
+environment holds a billed key as well, the free pool sinks beneath it and
+answers only once that account has stepped aside, because fifty requests a day
+shared by every reader of the site is not the allowance to spend first. A chain
+mixing the two turns per-day rationing **off** — the rules below need one
+allowance to defend and that deployment has more than one — so a spent free day
+rotates to the billed member and starts billing with nothing on screen saying so.
+The build prints that consequence, and
+[`budget.dailyLimit`](/reference/config#budget-dailylimit) is how you state one
+ceiling for the whole chain and get the rationing back.
+
 ## The constraint is requests, not tokens
 
 The free tier caps **requests per day**, not tokens:
@@ -55,6 +66,109 @@ search and answers from the retrieval the gate already performed.
 The difference is not free. A one-shot answer is as good as the first retrieval
 was, and the loop exists because the first retrieval is sometimes not good
 enough. What one-shot buys is roughly three times as many questions in a day.
+
+## One key, ten models
+
+The panel is not pinned to a model. `chat: { provider: 'openrouter' }` with no
+model named resolves to an **ordered pool of ten**, and the reason is what a free
+id actually is: a shared allocation, so its `429` reports how many other people
+are asking rather than anything about the model. Pinning one buys a panel that
+works until somebody else's traffic arrives.
+
+So a turn walks the list instead:
+
+| | |
+| --- | --- |
+| head of the pool | `openrouter/free` — OpenRouter's own router over the free tier |
+| behind it | nine explicit free ids |
+| one refuses | the next one answers; the refuser goes to the back for a minute |
+| one answers | it is tried first on the next turn |
+
+The router leads because it is this feature implemented one hop closer to the
+pool than a browser can see it: it picks a free model per request, skips the
+saturated ones, and reports which one answered. The explicit ids behind it are
+what runs when the router itself is unavailable, or when a deployment pins an
+older catalogue.
+
+Their order is not "biggest context first". The final step of a turn pins its
+shape with a strict `response_format: json_schema`, so a model without
+structured outputs fails **that one call** — the interesting one — with a 400.
+Structured-output models therefore lead, `response_format`-only models follow,
+and tools-only models are the tail the walk reaches when nothing better is free.
+
+### What costs a model its turn
+
+A rate limit, a retired id, a moderation refusal, a 5xx — and a `200` that
+carries no answer at all, which is the one no status code will tell you about.
+The refuser is set aside for sixty seconds, or for however long the service's
+own `retry-after` asked, and then it is back in the list. **Nothing is ever
+dropped from the pool**: a pool where every member is cooling is exactly the
+moment a reader is waiting, and answering *no models available* while ten of
+them would have answered is the failure this whole arrangement exists to prevent.
+
+Rotating is not the same as retrying, and the pool does both for different
+reasons. Measured against the live pool, three failures in four were a `429`
+carrying `retry-after: 1` — a second, on a model that is fine. Waiting one
+second is cheaper than spending another of the fifty, so exactly one candidate
+per call gets the full retry budget and the rest are walked past.
+
+### Four failures that do not rotate
+
+Asking the next model would be worse than stopping:
+
+- **The reader pressed stop.** They did not ask for a second opinion.
+- **An answer is already painting on screen.** There is nowhere to put a second one.
+- **A `401`.** A rejected key rejects every model behind it, so rotating turns
+  one clear message into ten pointless requests.
+- **The day's limit rather than the minute's.** That allowance belongs to the
+  account and refuses every candidate identically.
+
+Nor does the pool rotate once the turn has no requests left to spend —
+[`budget.rotateAbove`](/reference/config#budget-oneshotbelow-budget-rotateabove)
+is `6` by default. Rotation buys a better answer with a request that would have
+answered somebody's next question, and that is a trade only a comfortable budget
+can make.
+
+### Writing your own order
+
+The shipped pool is a snapshot rather than a contract — free ids are retired
+weekly. [`chat.models`](/reference/config#chat-models) replaces it with your own
+list, tried in the order you wrote it:
+
+```js
+export const docPilot = {
+  chat: {
+    provider: 'openrouter',
+    models: [
+      'openrouter/free',
+      'openai/gpt-oss-20b:free',
+      'google/gemma-4-31b-it:free',
+      'nvidia/nemotron-nano-9b-v2:free',
+      'dots-studio/dots-3-note-preview:free',
+    ],
+  },
+}
+```
+
+Name a `model` beside it and the pair reads as *this one, and these if it is
+busy* — a paid primary with free understudies:
+
+```js
+chat: { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6', models: ['openrouter/free'] }
+```
+
+One thing to know before you write the list: **a pool you assembled is not the
+free tier**, as far as the rationing in the next section is concerned. Those
+rules engage on a count they can defend — a
+[`budget.dailyLimit`](/reference/config#budget-dailylimit) you set, or the
+shipped free pool's own published ceiling — and a list of `:free` ids you wrote
+yourself is neither. Set `dailyLimit` beside it to get the rationing back.
+
+`npx docpilot doctor --models` is what keeps either list honest: it asks
+OpenRouter's live catalogue whether the ids in force are still served, prints the
+pool size against the catalogue size, and then `RETIRED:` for every id upstream
+no longer lists. It is a flag rather than part of the default run because it is
+the only thing in `doctor` that touches the network.
 
 ## What DocPilot does without being asked
 
@@ -133,8 +247,8 @@ day the index cannot be rebuilt.
 The pool is two models deep. When both refuse, the build says so and stops:
 
 ```
-  warn  nvidia/nemotron-3-embed-1b:free is not answering (HTTP 429); trying the next free embedder
-  FAIL  no free embedder answered. Tried 2:
+  warn  nvidia/nemotron-3-embed-1b:free is not answering (HTTP 429); trying the next embedder
+  FAIL  no embedder answered. Tried 2:
 ```
 
 **Stopping is the default and it is deliberate.** You still have the index you
@@ -160,3 +274,33 @@ Naming a **second embedder** as the fallback is not offered, and the reason is
 worth knowing: the index and every query have to land in one vector space, so a
 second embedder is a second index — and its address would have to reach every
 reader's browser. A local Ollama solves the build and breaks the site.
+
+## The zero-allowance deployment
+
+There is a floor below all of this, and it has no allowance to run out: turn the
+answering half off entirely.
+
+```js
+chat: false,
+embed: false,
+```
+
+[`chat: false`](/reference/config#chat-false) is search-only — a question is
+scored against the index and answered with the ranked passages themselves, each
+one an excerpt under a link to the heading it came from. Nothing is generated, so
+no request is made. With [`embed: false`](/reference/config#embed-false) beside
+it, the build makes none either: no key anywhere, no daily count to ration, and
+after the page loads the site fetches nothing but its own static index.
+
+What you give up is the answer — the paragraph that reads three pages and tells
+the reader which one they wanted — and, from `embed: false`, most of the recall
+that finds those pages. What you keep is the scope picker, the credential check,
+the calibrated gate deciding whether the panel leads with matches or with *nothing
+matches this closely*, and citations that were never going to be wrong because
+nothing wrote them.
+
+It is also the shape to reach for when the day IS spent and the site still has to
+answer something: search-only degrades to a better site search rather than to a
+panel that has stopped working. Keeping the embedder — `chat: false` alone —
+costs nothing per question and buys back the hybrid ranking, at the price of a
+key and one build-time pass over the corpus.

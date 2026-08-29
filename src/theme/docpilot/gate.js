@@ -140,6 +140,38 @@ export function assertWeights(guard) {
   }
 }
 
+/**
+ * WHETHER THE VERDICT ENDS THE TURN — the gate's other question, and the one
+ * `guard.mode` answers.
+ *
+ * The verdict is ALWAYS scored and always recorded. This decides only whether a
+ * failing one refuses before the model is called, and the three values differ in
+ * where they draw that line:
+ *
+ *   · `'calibrated'` — always. The behaviour that shipped, kept for a deployment
+ *     that wants the refusal contract enforced whatever the channel.
+ *   · `'dense-only'` — only where there is a dense channel to have scored it
+ *     with. THE DEFAULT, and the reason is arithmetic rather than taste: with no
+ *     embedder G is L alone, and L is token overlap between the question and the
+ *     corpus. A reader who asks in a language the corpus is not written in, or
+ *     who calls the product by a name the docs do not use, scores L = 0 for a
+ *     question that is squarely about the product — and the panel then answers
+ *     "I couldn't find this in the docs", which is false. It did not look.
+ *     `vocabulary` closes the second of those; nothing closes the first. So on a
+ *     vectorless turn the verdict picks the copy and the MODEL decides whether
+ *     the question is answerable, which is the judgement it can actually make.
+ *   · `'off'` — never. Every question reaches the model on every deployment.
+ *
+ * WHAT IT COSTS, on the one deployment shape it changes: a question the corpus
+ * has nothing for now spends a model turn before that is known. On a shared free
+ * tier that is one of fifty a day for the whole site. `readiness` says so.
+ */
+export function enforces(guardMode, retrievalMode) {
+  if (guardMode === 'off') return false
+  if (guardMode === 'dense-only') return retrievalMode !== 'lexical-only'
+  return true
+}
+
 export function verdict({ D, L, mode, guard }) {
   if (mode === 'lexical-only') {
     return { G: L, threshold: guard.tauLexical, pass: L >= guard.tauLexical }
@@ -171,4 +203,82 @@ export function admissible(question, composedEvidenceText) {
   if (!tail.length) return true // nothing to switch topic to
   const T = new Set(terms(composedEvidenceText))
   return tail.some((t) => T.has(t))
+}
+
+/**
+ * WHEN ADMISSIBILITY HAS NOTHING TO MEASURE — a tail written in a script the
+ * corpus is not written in.
+ *
+ * `admissible` asks whether a content term of the tail appears in the composed
+ * evidence. Over a corpus in another writing system that question has no
+ * answer: not one term of "а я могу его стилизировать?" can appear in English
+ * prose, whatever the reader asked about, so the veto fires on every follow-up
+ * a reader in that language ever asks and the composed channel — the one
+ * mechanism that resolves "его" — is discarded exactly where it is needed.
+ * `enforces` names the same hole for L one screen up and closes it for the
+ * vectorless case only; this is the same hole in the same file, on the
+ * deployment shape that HAS a dense channel to decide with.
+ *
+ * ABSTAINING IS NOT PASSING. The caller still requires `composed.G > raw.G` and
+ * still requires the winner to clear `tau`, and `assertWeights` guarantees
+ * `wLexical < tau`, so a channel that gets past this predicate has to carry
+ * real DENSE evidence — a foreign tail cannot lexically smuggle itself through
+ * on the antecedent's terms. What is given up is the topic-switch check for one
+ * population, and what replaces it is the dense floor.
+ *
+ * TWO CONDITIONS, and both are load-bearing:
+ *
+ *   1. No tail term is known to the corpus. A Russian question that names
+ *      `css` or `docpilot` HAS something the lexical test can match, so the
+ *      veto stays and does its job. This is also what keeps
+ *      "and for AWS S3 buckets?" rejected on a corpus that mentions AWS.
+ *   2. The tail's letters are not the corpus's letters. Without this, condition
+ *      1 alone would abstain for any off-topic English tail whose words the
+ *      corpus happens not to use — the documented case the veto exists for.
+ *
+ * WHY A MASS SHARE AND NOT A CHARACTER SET. Five words of a Russian UI sample
+ * in an i18n page put 20 Cyrillic letters into this corpus's vocabulary, which
+ * is enough for a set-membership test to call a wholly Russian question native
+ * and refuse it. Measured over the shipped 405-chunk index: the tails above
+ * score 0.04%–0.08% of the vocabulary's letter mass, an English tail scores
+ * 41%–56% (every English word carries a vowel), and a contrived tail of nothing
+ * but the rarest English letters still scores 0.36%. The floor sits an order of
+ * magnitude clear on both sides — it separates writing systems, and it is not
+ * asked to separate anything finer.
+ */
+const ALPHABET_FLOOR = 0.01
+const LETTER = /\p{L}/u
+const ALPHABETS = new WeakMap()
+
+/** Letters of the corpus vocabulary, counted once per type. Memoised per index. */
+function letterMass(df) {
+  let m = ALPHABETS.get(df)
+  if (m) return m
+  const share = new Map()
+  let total = 0
+  for (const t of Object.keys(df)) {
+    for (const ch of t) {
+      if (!LETTER.test(ch)) continue
+      share.set(ch, (share.get(ch) || 0) + 1)
+      total++
+    }
+  }
+  m = { share, total }
+  ALPHABETS.set(df, m)
+  return m
+}
+
+export function foreignTail(question, df) {
+  if (!df) return false // no corpus profile, no claim about the corpus
+  const tail = terms(question)
+  if (!tail.length) return false
+  if (tail.some((t) => (df[t] ?? 0) > 0)) return false
+  const { share, total } = letterMass(df)
+  if (!total) return false
+  const letters = new Set()
+  for (const t of tail) for (const ch of t) if (LETTER.test(ch)) letters.add(ch)
+  if (!letters.size) return false // digits and symbols make no claim about script
+  let mass = 0
+  for (const ch of letters) mass += share.get(ch) || 0
+  return mass / total < ALPHABET_FLOOR
 }

@@ -13,7 +13,13 @@ properties to override, and what the two placements actually do.
 | `@cloflin/docpilot/style/core.css` | the panel, on real values | any other host, or your own mapping |
 | `@cloflin/docpilot/style/vitepress.css` | the VitePress mapping only | you replaced the core and kept the host |
 | `@cloflin/docpilot/style/docusaurus.css` | the Docusaurus mapping only | loaded for you by the Docusaurus plugin |
-| `@cloflin/docpilot/web.css` | the core, from the prebuilt bundle | a `<script>` tag, or the React adapter |
+| `@cloflin/docpilot/web.css` | the core, from the prebuilt bundle, inside `@layer docpilot` | a `<script>` tag, or the React adapter |
+
+**Only `web.css` is layered.** It is the one build that lands on a site nobody
+mapped an adapter for, so it declares everything inside `@layer docpilot` and
+lets that site's own unlayered CSS win — with the reset caveat spelled out under
+[Script tag → Colours](/install/web#colours). The other four are not layered:
+they are loaded by a host whose tokens they already translate.
 
 An adapter is loaded **after** the core, always. The Docusaurus plugin lists them
 in that order itself; everywhere else it is the order of your two imports.
@@ -54,11 +60,13 @@ Everything the panel paints goes through one of these. The second column is what
 | `--dp-surface-2` | `rgba(101,117,133,.12)` / `.16` | `var(--vp-c-default-soft)` | `var(--ifm-color-emphasis-100)` |
 | `--dp-wash` | `color-mix(in srgb, var(--dp-text) 12%, transparent)` | derived — not re-declared | derived |
 | `--dp-line` | `rgba(101,117,133,.24)` / `rgba(130,130,140,.32)` | `var(--vp-c-divider)` | `var(--ifm-color-emphasis-300)` |
+| `--dp-lip` | `color-mix(in srgb, var(--dp-text) 15%, transparent)` | derived — not re-declared | derived |
 | `--dp-text` | `#1f2328` / `#dfdfd6` | `var(--vp-c-text-1)` | `var(--ifm-font-color-base)` |
 | `--dp-text-dim` | `#5c6672` / `#98989f` | `var(--vp-c-text-2)` | `var(--ifm-color-emphasis-700)` |
 | `--dp-on-text` | `#ffffff` / `#1b1b1f` | `var(--vp-c-neutral-inverse, var(--vp-c-bg))` | `var(--ifm-background-color)` |
 | `--dp-focus` | `#1f2328` / `#dfdfd6` | `var(--vp-c-brand-1)` | `var(--ifm-color-primary)` |
-| `--dp-accent-soft` | `rgba(100,108,255,.18)` | `var(--vp-c-brand-soft)` | the primary at 18%, via `color-mix` |
+| `--dp-accent-soft` | `rgba(100,108,255,.18)` | `var(--brand-bg-active, var(--vp-c-brand-soft))` | the primary at 18%, via `color-mix` |
+| `--dp-alert` | `#e34c1e` | not re-declared | not re-declared |
 | `--dp-chip` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-c-bg-alt)` | `var(--ifm-color-emphasis-100)` |
 | `--dp-code-bg` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-code-block-bg)` | `var(--ifm-code-background)` |
 | `--dp-shadow` | two-layer black alpha | `var(--vp-shadow-3)` | `var(--ifm-global-shadow-lw)` |
@@ -67,7 +75,11 @@ Everything the panel paints goes through one of these. The second column is what
 | `--dp-font-mono` | a system monospace stack | `var(--vp-font-family-mono)` | `var(--ifm-font-family-monospace)` |
 | `--dp-top` | `0px` | `var(--vp-nav-height)` | `var(--ifm-navbar-height)` |
 
-`--dp-wash` is **derived rather than mapped**, and deliberately: substitution resolves it against whatever `--dp-text` ends up being, so it follows the host's theme — and your override of it — without a second declaration. It has no dark variant and must not be given one; the suite requires every token that darkens to be re-declared unconditionally by an adapter, and no host token expresses "7% in light, 15% in dark" as one value.
+`--dp-wash` and `--dp-lip` are **derived rather than mapped**, and deliberately: substitution resolves it against whatever `--dp-text` ends up being, so it follows the host's theme — and your override of it — without a second declaration. Neither has a dark variant and neither may be given one; the suite requires every token that darkens to be re-declared unconditionally by an adapter, and no host token expresses "7% in light, 15% in dark" as one value.
+
+`--dp-lip` is the **second and last border colour** in the package, and it is a different job from the hairline rather than a second one of it. The jump pill is the one glass surface here — a translucent fill under `backdrop-filter: blur(2px)` — and a translucent thing with no light on its underside reads as a hole in the thread instead of an object over it. `--dp-line` still draws the pill's other three sides. Because it resolves against `--dp-text`, it is a near-white rim in dark and a grounded dark edge in light; a literal `rgba(255,255,255,.15)` would have been right in one scheme and invisible in the other.
+
+`--dp-alert` is the **one colour in the package that is not part of your theme**, and the reason it is not mapped is the same reason it exists. It paints a single 10px dot on the trigger, and only when an answer settled while the panel was closed — see [`ui.background`](/reference/config#ui-background). "There is something waiting" is not a statement any brand palette has a value for, so an adapter that reached for the host's own warning colour would be answering a question the host never asked; a site that disagrees repoints the one token. It has no dark variant because it needs none: the shipped literal clears the 3:1 non-text floor against both surfaces, at 4.8:1 on the light one and 3.6:1 on the dark. It is never text, never a border, and the only place it appears outside that dot is `forced-colors`, where the system palette takes it over entirely.
 
 Geometry is declared once and does not vary with appearance:
 
@@ -102,6 +114,8 @@ Override any of them after the stylesheet:
 ```
 
 The core's dark values come from `prefers-color-scheme`. An adapter has to re-declare **the whole colour set unconditionally**, not the tokens that differ: every host switches appearance by a class or an attribute and lets a reader pin the site against their OS, so a token left out would keep its OS-driven value and paint one dark element into an otherwise light panel. The suite checks this pairing, for every adapter.
+
+[`ui.theme`](/reference/config#ui-theme) overrules both. `'light'` and `'dark'` put a class on `<html>` and the core re-declares the nine tokens that differ between its own two sets, one class deeper than the `:root` an adapter maps on — because an adapter wins by loading second, not by specificity, so a pin written at `:root` would lose on exactly the hosts with a toggle to overrule. `--dp-accent-soft`, `--dp-shadow` and `--dp-scrim` are deliberately left out: they have one value for both schemes, so under a pin they stay the host's. The default, `'auto'`, changes nothing on this page.
 
 Writing one for a host of your own is the same shape: a `:root` block that
 re-declares those fifteen names in your tokens' terms, loaded after the core. It
@@ -155,7 +169,7 @@ marks its monospaced *blocks* instead of the other way round.
 
 ```js
 docPilot: {
-  ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true },
+  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, theme: 'auto' },
 }
 ```
 
@@ -177,9 +191,11 @@ With a label it becomes a pill and grows on the **inline axis only** — `--dp-f
 
 **Selecting inside an answer offers to quote it.** A one-button popover appears above the selection; pressing it puts the passage in the composer as a chip the reader can withdraw, and the question is then asked *about* it. The popover is the third and last thing in the package that floats, so it takes a hairline **and** `--dp-shadow` like the popup. It uses the platform's top layer where there is one, which is what keeps the popup shape from clipping it, and a plain fixed box where there is not. The chip is `--dp-surface-2` at `--dp-r-md`, one line, 13px, dimmed — a quotation reads as quieter text here, never as a rule down its side.
 
-**The hairline is the structure.** One device, one value — `1px solid var(--dp-line)` — on the drawer's edge, the popup, the selection popover, the header (transparent until the thread is scrolled), the conversation dock, the scope picker, the composer, the feedback textarea, the code card and the floating button. `outline` is the focus ring and nothing else: `2px solid var(--dp-focus)` at `2px` offset, on every control.
+**The hairline is the structure.** One device, one value — `1px solid var(--dp-line)` — on the drawer's edge, the popup, the selection popover, the header (transparent until the thread is scrolled), the conversation dock, the scope picker, the composer, the feedback textarea, the code card and the floating button. `outline` is the focus ring and nothing else: `2px solid var(--dp-focus)` at `2px` offset, on every control. The one exception is the jump pill's bottom edge, which takes `--dp-lip` because it is the package's only glass surface and needs an underside rather than a boundary.
 
-**Buttons are pills, not links.** No border, a `--dp-wash` on hover and focus, `scale(0.96)` on press, and the inverted `--dp-text` / `--dp-on-text` pair for a toggle that is on. The two controls inside the footnote sentence, and the call-to-action under each article, keep their underline — a pill in running text breaks the line box — and take the same wash at `--dp-r-sm`.
+**Buttons are pills, not links.** No border, a `--dp-wash` on hover and focus, `scale(0.96)` on press, and the inverted `--dp-text` / `--dp-on-text` pair for a toggle that is on. The three controls inside the footnote sentence, and the call-to-action under each article, keep their underline — a pill in running text breaks the line box — and take the same wash at `--dp-r-sm`.
+
+**The footnote closes on one word.** `All docs · AI-generated. Check the linked pages. · DocPilot` — the scope button, the disclaimer once a turn exists, and a link to the project so a reader can find out what answered them. The link is the one segment that is always there; it wears `--dp-text` like the two controls beside it rather than your accent, because a coloured word would be the only one in the panel. [`ui.credit: false`](/reference/config#ui-credit) removes it.
 
 **The composer does not answer a hover.** It is a `--dp-r-field` stadium with a hairline and the page's own surface, and only focus changes it. A tinted field *and* a ring would be two devices doing one job.
 
@@ -215,7 +231,10 @@ neither, so a stylesheet has to pick one. The core picks off
 signal — `html.dark` and `html:not(.dark)` on VitePress,
 `html[data-theme='dark']` and its negation on Docusaurus. The negative branch is
 not decoration: without it, a dark-OS reader on a site pinned to light gets the
-panel's code painted for a dark background. This is the one thing in the package a
+panel's code painted for a dark background. A site using
+[`ui.theme`](/reference/config#ui-theme) gets a third pair on the same terms,
+stated *after* the host's in each adapter — `html.dark` and `html.docpilot-dark`
+are the same specificity, so order is the only thing that separates them. This is the one thing in the package a
 token cannot cover, because the `var()` has to sit on a rule targeting the spans,
 which is the only place those variables exist.
 

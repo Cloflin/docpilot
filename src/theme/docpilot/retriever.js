@@ -8,7 +8,7 @@
  */
 
 import MiniSearch from 'minisearch'
-import { terms, STOP } from './text.js'
+import { terms, stemLite, STOP } from './text.js'
 import {
   denseSeparation,
   denseFromCosine,
@@ -16,6 +16,7 @@ import {
   verdict,
   composeQuery,
   admissible,
+  foreignTail,
   assertWeights,
 } from './gate.js'
 
@@ -134,6 +135,39 @@ const W_DENSE_RRF = tune('W_DENSE_RRF', 1.0)
  */
 const MMR_LAMBDA = tune('MMR_LAMBDA', 1.0)
 /**
+ * The diversity lever for the path where MMR has none — at most this many chunks
+ * of one page in the final set, applied INSTEAD of `mmr()` when there is no query
+ * vector.
+ *
+ * The paragraph above ends "the lexical-only path survives: with no queryVec every
+ * `rel` is 0, the greedy pick ties, and the pool keeps its RRF order". It survives
+ * in the sense that it does not crash. What it does not do is diversify: at λ=1.0
+ * the redundancy term is multiplied by (1 − λ) = 0, so `simTo.pair` — which in the
+ * vectorless branch is exactly the same-page indicator this cap re-derives — is
+ * dead code, and one page can take all of GATE_K. That is the shape lexical-only
+ * least affords: with no dense channel to cross-check it, a page whose wording
+ * happens to repeat the query's rare terms wins every slot on the strength of one
+ * lucky vocabulary.
+ *
+ * A cap rather than a lexical-similarity MMR at λ<1, for two reasons. The first is
+ * that λ is a MEASURED number and a manifest-tuned one — `docpilot tune` sweeps it
+ * over cosine geometry, and feeding it a token-overlap similarity it was never
+ * measured against silently repurposes a value the manifest claims was measured.
+ * The second is that the similarity in question would mostly re-derive page
+ * membership anyway, so the cap says the thing directly, in O(pool), deterministic
+ * and testable, and leaves the hybrid path bit-identical.
+ *
+ * 2, not 1. The λ measurement above is unambiguous that "several sections of one
+ * page is the shape an answer needs"; a cap of 1 would over-rotate against the one
+ * finding on this axis that has numbers behind it. 2 keeps the shape and stops the
+ * sweep.
+ *
+ * `sectionExpand` may still pull a same-page `next` after this runs — deliberate.
+ * That is answer shape, not retrieval redundancy, and the cap governs what was
+ * SELECTED, not what a short selected chunk drags in behind it.
+ */
+const PAGE_CAP = tune('PAGE_CAP', 2)
+/**
  * 30, not 20 — deeper lexical and dense lists into the fusion. Worth one record
  * on recall@8 with a plateau at 30–35 (20 → 0.88, 25 → 0.88, 30 → 0.92,
  * 35 → 0.90); 40 alone is worse, so this is not "more is better".
@@ -143,25 +177,90 @@ const FUSED = tune('FUSED', 12)
 const EXPAND_BELOW_TOKENS = tune('EXPAND_BELOW_TOKENS', 150)
 /** The gate's own k. The model's k is its tool argument, clamped 1..8 separately. */
 const GATE_K = tune('GATE_K', 5)
+/**
+ * BM25's own three, and the two field boosts — MiniSearch's defaults and ours,
+ * written down where a sweep can reach them.
+ *
+ * These five were never decided; they were inherited. `k`, `b` and `d` are
+ * MiniSearch's `defaultBM25params` verbatim, and nothing in this package had ever
+ * named them, so the one lexical scoring function DocPilot ships was the only part
+ * of retrieval that could not be measured — which matters most in the mode where
+ * it is the ONLY scoring function. The values below reproduce what shipped, so
+ * this is plumbing at identity: until a sweep moves one, every number this file
+ * has ever reported still stands.
+ *
+ * `b` is the one to reach for first. It is the length normalisation, and this
+ * corpus is chunks with a context line — far more uniform in length than the web
+ * pages BM25's defaults were fitted on.
+ *
+ * The boosts are the existing constructor literals, read through the same fold so
+ * there is one spelling of each: `miniSearchFor` uses them as the floor for a bare
+ * `ms.search()`, and the retrieval passes the fully resolved values per search.
+ */
+const BM25_K = tune('BM25_K', 1.2)
+const BM25_B = tune('BM25_B', 0.7)
+const BM25_D = tune('BM25_D', 0.5)
+const BOOST_TITLE = tune('BOOST_TITLE', 2)
+const BOOST_BREADCRUMB = tune('BOOST_BREADCRUMB', 1.5)
+/**
+ * THE ROUTE AND THE HEADING SLUG, indexed — two fields the chunks have carried
+ * since the first build and nothing ever searched.
+ *
+ * A reader who types `getting-started`, or a `search_docs` argument naming a
+ * route, could only reach a page through its prose: `/guide/getting-started` was
+ * a field on every chunk and a term in no index. `indexTokens` already splits on
+ * `[./#-]`, so the route enters as the compound plus `guide`, `getting`,
+ * `started` — which is exactly the shape that makes a half-remembered URL a
+ * usable query.
+ *
+ * `kind` is deliberately NOT a field. It is a FILTER, and indexing its four enum
+ * values would put `guide` and `reference` in the vocabulary of every chunk that
+ * has them — inflating the document frequency of two words this corpus uses in
+ * their ordinary sense on nearly every page.
+ *
+ * The anchor carries the slightly higher boost of the two because it is the
+ * heading a reader landed on and is nearly always a phrase from the docs; a path
+ * segment is as often structural (`reference`, `guide`) as it is topical, so it
+ * enters at parity and earns no thumb.
+ */
+const BOOST_PATH = tune('BOOST_PATH', 1.0)
+const BOOST_ANCHOR = tune('BOOST_ANCHOR', 1.25)
 
 /**
  * The allowlist, and the reason `tuning` is not just spread over the defaults.
  *
  * A tuning object arrives from a manifest, which arrives from a file a consumer
- * commits; `resolveLevers` reads only these eight names out of it, so a
+ * commits; `resolveLevers` reads only these names out of it, so a
  * `tau` that finds its way in there — by hand, by a merge, by a future writer
  * being helpful — resolves to nothing rather than to a threshold the guard never
  * agreed to. The build drops such a key loudly; this is the second wall.
+ *
+ * BEING HERE IS NOT BEING IN `MEASURED_LEVER_NAMES`. That build-side allowlist is
+ * narrower on purpose: a name in a manifest's `tuning` object is a claim that
+ * `docpilot tune` swept it on that corpus, and `tune` sweeps two. The six names
+ * added below — PAGE_CAP and the five lexical scoring levers — are env-sweepable
+ * here so `eval --gate-only --lexical` can measure them, and are dropped loudly by
+ * `tuningFor` if they turn up in a tuning.json. They can all move `L`, and `L` is
+ * half of `G`, so the road from a hand-edited file to a moved verdict is exactly
+ * the road that allowlist exists to close.
  */
 export const LEVER_NAMES = [
   'RRF_K',
   'W_LEXICAL_RRF',
   'W_DENSE_RRF',
   'MMR_LAMBDA',
+  'PAGE_CAP',
   'CANDIDATES',
   'FUSED',
   'EXPAND_BELOW_TOKENS',
   'GATE_K',
+  'BM25_K',
+  'BM25_B',
+  'BM25_D',
+  'BOOST_TITLE',
+  'BOOST_BREADCRUMB',
+  'BOOST_PATH',
+  'BOOST_ANCHOR',
 ]
 
 const FALLBACK = {
@@ -169,10 +268,18 @@ const FALLBACK = {
   W_LEXICAL_RRF,
   W_DENSE_RRF,
   MMR_LAMBDA,
+  PAGE_CAP,
   CANDIDATES,
   FUSED,
   EXPAND_BELOW_TOKENS,
   GATE_K,
+  BM25_K,
+  BM25_B,
+  BM25_D,
+  BOOST_TITLE,
+  BOOST_BREADCRUMB,
+  BOOST_PATH,
+  BOOST_ANCHOR,
 }
 
 /**
@@ -201,7 +308,7 @@ export function envPin(name) {
 
 /**
  * @param {object|null} tuning  manifest.tuning — per-corpus levers, or null
- * @returns {{RRF_K:number, W_LEXICAL_RRF:number, W_DENSE_RRF:number, MMR_LAMBDA:number, CANDIDATES:number, FUSED:number, EXPAND_BELOW_TOKENS:number, GATE_K:number}}
+ * @returns {{RRF_K:number, W_LEXICAL_RRF:number, W_DENSE_RRF:number, MMR_LAMBDA:number, PAGE_CAP:number, CANDIDATES:number, FUSED:number, EXPAND_BELOW_TOKENS:number, GATE_K:number, BM25_K:number, BM25_B:number, BM25_D:number, BOOST_TITLE:number, BOOST_BREADCRUMB:number, BOOST_PATH:number, BOOST_ANCHOR:number}}
  */
 export function resolveLevers(tuning = null) {
   const out = {}
@@ -253,7 +360,20 @@ const indexTokens = (s) => {
     out.push(t)
     if (!/[./#-]/.test(t)) continue
     for (const part of t.split(/[./#-]+/)) {
-      if (part.length >= 2 && !STOP.has(part)) out.push(part)
+      /**
+       * STEMMED, like every other word — and this is the one place the
+       * asymmetry above must NOT extend to.
+       *
+       * `terms()` returns the compound whole, and `stemLite` refuses to touch a
+       * token carrying a separator, so a compound arrives here unstripped and
+       * correctly so. Its PARTS are ordinary words: `plugin.settings` splits to
+       * `plugin` and `settings`, while a reader typing `settings` on the query
+       * side gets `setting`. Pushing the raw part would put a form in the index
+       * that no query can now produce — the compound tokenizer's whole purpose,
+       * inverted.
+       */
+      const stem = stemLite(part)
+      if (stem.length >= 2 && !STOP.has(part)) out.push(stem)
     }
   }
   return out
@@ -305,12 +425,18 @@ let miniCache = null
 function miniSearchFor(index) {
   if (miniCache?.hash === index.manifest.hash) return miniCache.ms
   const ms = new MiniSearch({
-    fields: ['text', 'title', 'breadcrumb'],
+    fields: ['text', 'title', 'breadcrumb', 'path', 'anchor'],
     storeFields: ['path'],
     idField: 'id',
     tokenize: indexTokens,
     searchOptions: {
-      boost: { title: 2, breadcrumb: 1.5 },
+      boost: {
+        title: BOOST_TITLE,
+        breadcrumb: BOOST_BREADCRUMB,
+        path: BOOST_PATH,
+        anchor: BOOST_ANCHOR,
+      },
+      bm25: { k: BM25_K, b: BM25_B, d: BM25_D },
       prefix: true,
       fuzzy: 0.2,
       tokenize: terms,
@@ -374,6 +500,49 @@ export function mmr(ids, simTo, k, lambda = MMR_LAMBDA) {
   return picked
 }
 
+/**
+ * At most `cap` chunks per page, in the order they arrived, then backfilled.
+ *
+ * The lexical-only stand-in for `mmr()` — see PAGE_CAP. Two properties it has to
+ * have, and both are load-bearing:
+ *
+ * ORDER IS PRESERVED. The pool arrives in RRF order, which in lexical-only is BM25
+ * rank, and nothing here reorders it — a cap is a filter, not a re-rank. That is
+ * what makes this a drop-in for the branch where `mmr()` at λ=1.0 already
+ * degenerates to the pool's own order.
+ *
+ * IT NEVER RETURNS FEWER THAN `mmr()` WOULD. On a corpus of three pages a cap of 2
+ * would otherwise hand back 6 chunks where 8 were asked for, and a short set is a
+ * worse failure than a repetitive one — the model would be reasoning from less
+ * evidence, not more diverse evidence. So overflow is kept and appended, in pool
+ * order, until k is met. The cap shapes the head of the set; it does not shorten
+ * it.
+ *
+ * Exported for the tests, which pin both of those, and for a sweep that wants to
+ * score the objective without standing up a whole retrieval.
+ */
+export function pageCap(ids, byId, k, cap = PAGE_CAP) {
+  const picked = []
+  const overflow = []
+  const seen = new Map()
+  for (const id of ids) {
+    if (picked.length >= k) break
+    const path = byId.get(id)?.path
+    const n = seen.get(path) || 0
+    if (n >= cap) {
+      overflow.push(id)
+      continue
+    }
+    seen.set(path, n + 1)
+    picked.push(id)
+  }
+  for (const id of overflow) {
+    if (picked.length >= k) break
+    picked.push(id)
+  }
+  return picked
+}
+
 export class ScopeEscape extends Error {}
 
 /**
@@ -430,14 +599,55 @@ export function createRetrieval({
     return kept
   }
 
-  const lexical = (query, k) =>
+  /**
+   * The scoring half of every `ms.search` this retrieval makes.
+   *
+   * `boost` and `bm25` come from `T` rather than from the constructor, because the
+   * constructor is memoised on the manifest hash and `T` is per-retrieval: two
+   * instances over one index may resolve different levers, and the instance that
+   * built the cache must not decide for the one that found it. The constructor's
+   * own copies are the floor for a search made outside this closure; both read the
+   * same module fold, so there is one spelling of each number.
+   */
+  const lexOpts = (filter = null) => ({
+    boost: {
+      title: T.BOOST_TITLE,
+      breadcrumb: T.BOOST_BREADCRUMB,
+      path: T.BOOST_PATH,
+      anchor: T.BOOST_ANCHOR,
+    },
+    bm25: { k: T.BM25_K, b: T.BM25_B, d: T.BM25_D },
+    ...(filter ? { filter } : {}),
+  })
+
+  /**
+   * Scope, and `kind` when the model asked for one, as a MiniSearch `filter`.
+   *
+   * Same results as filtering the returned array — MiniSearch applies `filter`
+   * before its own sort, and a filter either side of a sort by score leaves the
+   * relative order alone — but it is the search that now knows what the caller
+   * will accept. That matters for `kind`: filtering afterwards could only shrink a
+   * list already truncated to CANDIDATES, so a rare kind was answered out of
+   * whatever survived a search that had never heard of it.
+   *
+   * IDF stays corpus-global. One instance over the whole corpus, never rebuilt per
+   * scope — the gate needs the whole-corpus distribution to know what a rare term
+   * is, and a per-scope index would redefine rarity for every reader.
+   */
+  const lexFilter = (kind) => {
+    if (allow === null && !kind) return null
+    return (r) =>
+      (allow === null || allow.has(r.path)) &&
+      (!kind || index.byId.get(r.id)?.kind === kind)
+  }
+
+  const lexical = (query, k, kind = null) =>
     ms
-      .search(query)
-      .filter((r) => allow === null || allow.has(r.path))
+      .search(query, lexOpts(lexFilter(kind)))
       .slice(0, k)
       .map((r) => r.id)
 
-  const dense = (queryVec, k) => {
+  const dense = (queryVec, k, kind = null) => {
     if (!queryVec) return { ids: [], cosines: [], scopedMax: 0 }
     // Computed over the FULL array and masked afterwards: the gate needs the
     // whole-corpus distribution to know what "similar" means for this query.
@@ -445,11 +655,16 @@ export function createRetrieval({
     for (let i = 0; i < index.chunks.length; i++) {
       cosines[i] = dot(index.vectors, index.dims, i, queryVec)
     }
+    // `scopedMax` is the best the SCOPE holds and is deliberately not narrowed by
+    // `kind`: it is the gate's D, the gate never passes a kind, and a maximum
+    // taken over a model-chosen subset would answer a different question than the
+    // one the threshold was calibrated against.
     let scopedMax = -1
     const scored = []
     for (const c of scopedChunks) {
       const v = cosines[c.row]
       if (v > scopedMax) scopedMax = v
+      if (kind && c.kind !== kind) continue
       scored.push([c.id, v])
     }
     scored.sort((a, b) => b[1] - a[1])
@@ -483,19 +698,29 @@ export function createRetrieval({
       onDebug?.('dim-mismatch', { got: queryVec.length, want: index.dims })
       queryVec = null
     }
-    const lex = lexical(query, T.CANDIDATES)
-    const den = dense(queryVec, T.CANDIDATES)
-    const fused = rrf(
-      [
-        { ids: lex, weight: T.W_LEXICAL_RRF },
-        { ids: den.ids, weight: T.W_DENSE_RRF },
-      ],
-      T.RRF_K,
-    ).slice(0, T.FUSED)
+    const fuse = (l, d) =>
+      rrf(
+        [
+          { ids: l, weight: T.W_LEXICAL_RRF },
+          { ids: d.ids, weight: T.W_DENSE_RRF },
+        ],
+        T.RRF_K,
+      ).slice(0, T.FUSED)
 
-    // `kind` is the one filter the model may request, and it can only intersect.
-    const filtered = kind ? fused.filter((id) => index.byId.get(id)?.kind === kind) : fused
-    const pool = filtered.length ? filtered : fused
+    // `kind` is the one filter the model may request, and it can only intersect —
+    // a kind the corpus does not have under this query must not silently widen the
+    // search, so an empty result falls back to the unfiltered pool rather than to
+    // nothing. What changed is WHERE it intersects: both channels now generate
+    // candidates that already satisfy it, so the fallback is a genuinely empty
+    // kind rather than a kind that merely lost the truncation.
+    let lex = lexical(query, T.CANDIDATES, kind)
+    let den = dense(queryVec, T.CANDIDATES, kind)
+    let pool = fuse(lex, den)
+    if (kind && !pool.length) {
+      lex = lexical(query, T.CANDIDATES)
+      den = dense(queryVec, T.CANDIDATES)
+      pool = fuse(lex, den)
+    }
 
     const rowOf = (id) => index.byId.get(id).row
     const simTo = {
@@ -511,7 +736,12 @@ export function createRetrieval({
       },
     }
 
-    const diverse = mmr(pool, simTo, Math.min(k, pool.length), T.MMR_LAMBDA)
+    // The vectorless branch takes the cap, not MMR. `queryVec` has been through
+    // both drops above, so this is the same condition every dense arithmetic site
+    // below already tests, and the hybrid path is untouched.
+    const diverse = queryVec
+      ? mmr(pool, simTo, Math.min(k, pool.length), T.MMR_LAMBDA)
+      : pageCap(pool, index.byId, Math.min(k, pool.length), T.PAGE_CAP)
     const chunks = gate2(diverse.map((id) => index.byId.get(id)))
     return { chunks: sectionExpand(chunks), lexIds: lex, dense: den }
   }
@@ -618,10 +848,23 @@ export function createRetrieval({
       // inside an && is a boolean nothing can measure. Evaluating it eagerly costs
       // one set intersection on turns after the first and changes no verdict.
       let admissibleTail = null
+      let admissibleBy = null
       const composed = composeQuery(question, previousQuestion)
       if (composed && composedVec !== undefined) {
         const c = run(composed, composedVec)
-        admissibleTail = admissible(question, c.evidence)
+        const byTerm = admissible(question, c.evidence)
+        /**
+         * `foreignTail` abstains where the term test has nothing to measure, and
+         * it is restricted to a scored dense channel on purpose: what replaces
+         * the veto is the dense floor, and in lexical-only there is no dense
+         * floor to replace it with — G is L there, and abstaining would hand a
+         * foreign tail the antecedent's L with nothing at all standing behind
+         * it. The remedy on that deployment shape is `vocabulary`, which makes
+         * the tail's terms corpus terms and the veto measurable again.
+         */
+        const byScript = !byTerm && mode !== 'lexical-only' && foreignTail(question, index.df)
+        admissibleTail = byTerm || byScript
+        admissibleBy = byTerm ? 'lexical' : byScript ? 'foreign-tail' : null
         if (admissibleTail && c.G > best.G) best = { ...c, channel: 'composed' }
       }
 
@@ -652,6 +895,39 @@ export function createRetrieval({
         const v = verdict({ D, L, mode, guard })
         unscopedG = v.G
         wouldPassUnscoped = v.pass
+      } else if (allow !== null && mode === 'lexical-only') {
+        /**
+         * The same question, asked of the only channel this mode has.
+         *
+         * The block above is gated on dense cosines existing, which in
+         * lexical-only they never do — so `wouldPassUnscoped` was structurally
+         * false, every scoped refusal was reported as `no-evidence` even when the
+         * answer sat one directory away, and the one-click widen affordance could
+         * not render at all. The reader was told the docs did not cover their
+         * question when what was true is that their scope did not.
+         *
+         * Symmetric with the dense arm by construction: top 3 of an UNSCOPED
+         * search, the raw `question` (not the composed channel's query — the same
+         * choice the dense arm makes, for the same reason: this measures the
+         * corpus, not the conversation), the same `lexicalCoverage`, the same
+         * `verdict` and therefore the same `tauLexical`. It introduces no
+         * threshold and moves no primary `G`, so nothing here is owed a
+         * recalibration — and `unscopedG_lex`, which `docpilot calibrate` has
+         * always recorded and always found null, starts carrying the value
+         * RAG-SPEC 5.6 step 3 needs to re-derive the boolean at another tau.
+         *
+         * Costs one extra `ms.search` per scoped turn, on the path that has no
+         * embedding request to pay for.
+         */
+        const unscopedEvidence = ms
+          .search(question, lexOpts())
+          .slice(0, 3)
+          .map((r) => index.byId.get(r.id)?.text || '')
+          .join('\n')
+        const { L } = lexicalCoverage(question, unscopedEvidence, index.df)
+        const v = verdict({ D: 0, L, mode, guard })
+        unscopedG = v.G
+        wouldPassUnscoped = v.pass
       }
 
       return {
@@ -665,6 +941,11 @@ export function createRetrieval({
         threshold: best.threshold,
         mode,
         admissible: admissibleTail,
+        // WHICH test admitted the channel, not merely that one did: `admissible`
+        // is now the disjunction of a term match and a script abstention, and a
+        // calibration record that cannot tell them apart cannot tell whether a
+        // stratum moved because the corpus matched or because nothing could.
+        admissibleBy,
         wouldPassUnscoped,
         unscopedG,
         chunks: best.chunks,
@@ -692,7 +973,7 @@ export function createRetrieval({
               .sort((a, b) => b[1] - a[1])
               .map(([c]) => c)
           : ms
-              .search(query)
+              .search(query, lexOpts())
               .map((r) => index.byId.get(r.id))
               .filter(Boolean)
               .filter((c) => (outsideScope ? true : inScope(c)))

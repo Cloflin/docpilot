@@ -29,6 +29,55 @@ export type ProviderId =
   | 'gemini'
   | 'anthropic'
 
+/**
+ * One member of the answering chain — a provider, and optionally what to send it.
+ *
+ * The object form exists because a model id already contains slashes
+ * (`meta-llama/Llama-3.3-70B-Instruct-Turbo`, `openrouter/free`), so
+ * `'provider/model'` is a spelling nothing can parse unambiguously.
+ */
+export interface ChainMember {
+  provider: ProviderId
+  /**
+   * What identifies this member, where the provider id does not.
+   *
+   * Two entries of one service — two gateways, two regions, two accounts — are
+   * two members, and this is what tells them apart: it keys the proxy route
+   * (`/ai/<name>/…`), the cooldown the transport learns, and the credential.
+   * Omitted, it IS the provider id, which is what keeps every chain written
+   * before this existed resolving to the same paths.
+   *
+   * It is rendered into a URL and matched exactly by your proxy, so it is
+   * lowercase letters, digits and hyphens. Two members may not share one.
+   */
+  name?: string
+  /** Omitted takes that provider's own default from the table. */
+  model?: string | null
+  /** That member's own ordered pool, walked before the next PROVIDER is tried. */
+  models?: string[] | null
+  /**
+   * Where this member is — for `ollama`, `llamacpp` and `custom`, which name a
+   * host you run rather than a service. It sets the address the proxy posts to
+   * (the browser always calls your own origin), and it outranks the matching
+   * environment variable.
+   *
+   * Naming it beside a branded provider STOPS THE BUILD. That service has an
+   * address of its own, and rerouting it on the strength of one line is a
+   * surprise; `custom` is the id for a host of your own that copied somebody's
+   * API.
+   */
+  baseURL?: string | null
+  /**
+   * The NAME of the environment variable holding this member's key — never the
+   * value, which in a config file is a value compiled into the client bundle.
+   *
+   * Omitted takes the provider's own variable from the table, which has exactly
+   * one name per provider. This is what lets two members of one service carry
+   * two credentials.
+   */
+  apiKeyEnv?: string
+}
+
 export interface ChatSettings {
   /**
    * `'auto'` — the default, and what an omitted key means — reads the
@@ -39,13 +88,68 @@ export interface ChatSettings {
    */
   provider?: ProviderId | 'auto'
   /**
+   * WHICH SERVICES MAY ANSWER, in order — the provider-level sibling of
+   * `models`.
+   *
+   * `'auto'` — the shipped value — is every member of `CHAIN` this environment
+   * selects, billed accounts before a provider's own free catalogue and a server
+   * of your own last, walked in order until one answers. `false` is one provider
+   * chosen once, which is what every deployment did before this key. An array is
+   * your own set, in your order: an entry is a provider id, or an object saying
+   * what to send that member.
+   *
+   * An environment holding ONE key selects one member either way, and a
+   * one-member chain is the scalar configuration that has always shipped.
+   *
+   * IT FIRES ONLY WHERE `provider` IS ALSO `'auto'`. A provider you name is
+   * never overridden, so naming one is how rotation is declined and `false` is
+   * how it is declined without naming one. An explicit array is the exception —
+   * a named provider LEADS it.
+   *
+   * `model` and `models` above reach the HEAD member only: a model name never
+   * crosses providers.
+   *
+   * THE EMBED HALF DOES NOT ROTATE and cannot — two embedding models are two
+   * vector spaces, and the manifest binds every reader's browser to the one the
+   * index was built with.
+   */
+  chain?: 'auto' | false | Array<ProviderId | ChainMember>
+  /**
    * Omit it and the PROVIDER's own default is used — every branded provider
    * carries one. Two do not: `openrouter`, where an unnamed model resolves to
    * the shipped free pool, and `custom`, which names a host rather than a
    * service and therefore stops the build, because the alternative is a 400 in
    * a reader's browser naming a model that appears nowhere in your config.
    */
-  model?: string
+  model?: string | null
+  /**
+   * The address of a server of your own, for the transports that name a host
+   * instead of a service — `ollama`, `llamacpp` and `custom`.
+   *
+   * It outranks the matching environment variable (`OLLAMA_BASE_URL`,
+   * `LLAMACPP_BASE_URL`, `CUSTOM_BASE_URL`), which sets the same address without
+   * committing it to the config. For `ollama` it is where the BROWSER goes; for
+   * the other two it is where your proxy posts, the browser reaching them
+   * same-origin like everything else.
+   *
+   * Naming it beside a branded provider STOPS THE BUILD rather than being
+   * ignored: that service carries its own endpoint, and overriding it is how a
+   * request ends up at a URL nobody configured.
+   */
+  baseURL?: string | null
+  /**
+   * Prefer a server of your own — `custom`, `llamacpp`, `ollama` sort to the
+   * FRONT of the ladder rather than the back, and an environment that selects
+   * nothing falls through to a local Ollama rather than to OpenRouter's free
+   * tier.
+   *
+   * It reorders; it never selects. A local server is still reached by its
+   * address, because from inside a build a laptop running one and a CI box that
+   * has never heard of one are the same environment — which is why naming no
+   * provider stopped resolving to a local Ollama in the first place. Writing
+   * this is not a guess; inferring it would be.
+   */
+  preferLocal?: boolean
   /**
    * An ORDERED fallback pool, tried in turn until one member answers — for
    * shared free tiers, where a 429 reports how many other people are asking
@@ -70,6 +174,57 @@ export interface ChatSettings {
    * "none", and without it here a documented decline would not compile.
    */
   extraBody?: Record<string, unknown> | null
+  /**
+   * How hard the model should think, in one provider-neutral word.
+   *
+   * `'auto'` — the default, and what an omitted key means — leaves it to
+   * DocPilot, which asks on the answer and never on a search step. `false` never
+   * asks; `true` is `'medium'`.
+   *
+   * THE LEVEL IS CLAMPED, not posted as written: no two services publish the
+   * same vocabulary, so the word is ranked and the nearest one the configured
+   * provider accepts is sent, ties going down. `npx docpilot doctor` prints the
+   * substitution. See the capability matrix in the providers guide.
+   */
+  reasoning?: 'auto' | boolean | ReasoningLevel | ReasoningRequest
+  /**
+   * A soft ceiling on the ANSWER's length, where `maxTokens` is the hard one.
+   * Accepted by two providers; naming it beside any other stops the build rather
+   * than being dropped on the way out, and so does a word that is not one of
+   * these three.
+   */
+  verbosity?: 'low' | 'medium' | 'high' | null
+  /** Nucleus sampling, sent only when set. Not accepted by Anthropic. */
+  topP?: number | null
+  /**
+   * The stronger form of the argument `temperature: 0.2` already makes. The
+   * Anthropic Messages API has no such parameter, so setting it there stops the
+   * build.
+   */
+  seed?: number | null
+}
+
+/**
+ * The neutral effort scale — a union of real vocabularies rather than an
+ * invention. Every service accepts a subset and no two subsets agree, which is
+ * why what you write is clamped rather than forwarded.
+ */
+export type ReasoningLevel = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+export interface ReasoningRequest {
+  /** Null leaves the depth to the service. */
+  effort?: ReasoningLevel | 'auto' | null
+  /**
+   * A thinking budget in TOKENS, for the services that measure it that way
+   * rather than in levels. Setting it on one that does not stops the build.
+   */
+  budgetTokens?: number | null
+  /**
+   * `false` asks the service to think without sending the trace back — a
+   * different request from not thinking, and cheaper output on a panel that is
+   * not showing the box. Two providers can spell it.
+   */
+  visible?: boolean
 }
 
 export interface EmbedSettings {
@@ -123,6 +278,19 @@ export interface EmbedSettings {
  * the configuration `docs/reference/config.md` documents fail to compile.
  */
 export type EmbedConfig = 'auto' | false | 'none' | EmbedSettings
+
+/**
+ * An object configures the model that answers. `false` declares that NOTHING
+ * does — search-only mode: a question is scored against the index and answered
+ * with the ranked passages themselves, each linked to its heading, and no model
+ * is called on any turn.
+ *
+ * The same two spellings as `embed` above, for the same reason: `false` is
+ * documented, `'none'` is the accepted alias. Paired with `embed: false` it is a
+ * deployment that holds no provider key and makes no outbound request after the
+ * page loads; paired with an embedder it is hybrid ranking with no prose.
+ */
+export type ChatConfig = ChatSettings | false | 'none'
 
 export interface SuggestionsSettings {
   questions?: string[]
@@ -192,12 +360,40 @@ export interface FeedbackSettings {
 }
 
 export interface GuardSettings {
-  mode?: 'calibrated' | 'off'
+  /**
+   * Whether a failing verdict ENDS the turn before the model is called. Every
+   * value still SCORES every turn and records the result; only the refusal moves.
+   *
+   * `'dense-only'` — the default — refuses only where a dense channel scored it.
+   * With no embedder the hybrid score collapses to lexical coverage alone, and
+   * that is 0 for a reader asking in another language or calling the product by
+   * a name the docs do not use: a refusal built on it says the corpus has
+   * nothing when the truth is that the channel cannot tell. `'calibrated'`
+   * refuses always. `'off'` never does.
+   */
+  mode?: 'dense-only' | 'calibrated' | 'off'
   /** Null keeps the calibrated value from the manifest. */
   tau?: number | null
   tauLexical?: number | null
   supportMinIdentifiers?: number
 }
+
+/**
+ * The documentation's own name for things readers call by other names.
+ *
+ *     vocabulary: {DocPilot: ['widget', 'виджет', 'ассистент']}
+ *
+ * The key is the word the corpus uses; the array is the words readers use for
+ * it. `terms()` rewrites one into the other over BOTH the index and the query,
+ * so a reader who says `виджет` reaches a page that says `DocPilot`. It
+ * rewrites and never adds, so an off-topic question padded with product nouns
+ * still carries every off-domain term it came with.
+ *
+ * Null takes the sidecar `npx docpilot vocabulary` writes; `{}` is
+ * declared-and-empty and takes nothing. Server-only: the browser reads it off
+ * the manifest, which is what the index was built with.
+ */
+export type VocabularySettings = Record<string, string[]>
 
 export interface ScopeSettings {
   enabled?: boolean
@@ -244,6 +440,28 @@ export interface UiSettings {
   prefetch?: 'hover' | 'idle' | false
   firstRunHint?: boolean
   /**
+   * Whether a turn outlives the panel it was asked in — ui-specs/010.
+   *
+   * `'notify'` runs it on and marks the trigger with a dot when it settles;
+   * `'open'` runs it on and brings the panel back with the answer in place;
+   * `false` abandons it on close, which is where this was before the setting.
+   */
+  background?: 'notify' | 'open' | false
+  /**
+   * The one word of attribution in the footnote — `DocPilot`, linked to the
+   * project. On by default; `false` removes it.
+   */
+  credit?: boolean
+  /**
+   * Which colour scheme the panel wears — ui-specs/011.
+   *
+   * `'auto'` follows the page, which is what it has always done: the host's own
+   * light/dark toggle where there is an adapter, `prefers-color-scheme` where
+   * there is none. `'light'` and `'dark'` pin it against both. `'system'` is a
+   * spelling of `'auto'` and resolves to it.
+   */
+  theme?: 'auto' | 'light' | 'dark' | 'system'
+  /**
    * The panel's face, for a site the panel cannot inherit one from. A family
    * list — `'Inter, system-ui, sans-serif'` — or the name of the custom
    * property the site already keeps it in — `'--brand-font'`, which is wrapped
@@ -274,6 +492,14 @@ export interface ResolvedUi {
   layout: 'overlay' | 'push'
   prefetch: 'hover' | 'idle' | false
   firstRunHint: boolean
+  background: 'notify' | 'open' | false
+  credit: boolean
+  /**
+   * The one key here that may still be `'auto'`, and the exception is the
+   * point: `panel: 'auto'` names a shape the build can settle, this names a
+   * SIGNAL that only exists in the reader's browser. `'system'` is gone by now.
+   */
+  theme: 'auto' | 'light' | 'dark'
   /** A CSS value, ready to write — a family list or a `var(--…)`. */
   font: string | null
   fontMono: string | null
@@ -308,7 +534,7 @@ export interface DocPilotSettings {
   evalDir?: string
   importDir?: string | null
   sources?: { allow: string[] } | null
-  chat?: ChatSettings
+  chat?: ChatConfig
   embed?: EmbedConfig
   /**
    * How many excerpts the gate hands the model — the retriever's `GATE_K` under
@@ -335,6 +561,7 @@ export interface DocPilotSettings {
   feedbackEndpoint?: string | null
   feedback?: FeedbackSettings
   guard?: GuardSettings
+  vocabulary?: VocabularySettings | null
   scope?: ScopeSettings
   history?: HistorySettings
   prompt?: PromptSettings
@@ -349,6 +576,14 @@ export interface DocPilotSettings {
  */
 export interface DocPilotThemeConfig {
   enabled?: boolean
+  /**
+   * SEARCH-ONLY — no model is ever called, and the panel answers with the
+   * passages themselves. Emitted as its own key rather than inferred from
+   * `llm.provider === null`, for the same reason `embed.lexicalOnly` is: a mode
+   * read off the absence of a value is a mode that turns itself on the first
+   * time something else goes missing. `session.js` branches on it directly.
+   */
+  searchOnly?: boolean
   /**
    * `provider` is the ADAPTER id, never the brand — the browser is told how to
    * speak, not to whom. `extraBody` is the one brand-shaped thing that has to
@@ -403,6 +638,7 @@ export interface DocPilotThemeConfig {
   feedbackEndpoint?: string | null
   feedback?: FeedbackSettings
   guard?: GuardSettings
+  vocabulary?: VocabularySettings | null
   scope?: ScopeSettings
   history?: HistorySettings
   prompt?: PromptSettings
@@ -438,6 +674,30 @@ export declare function resolveChain(env?: Record<string, string | undefined>): 
   id: ProviderId
   tried: Array<{ id: ProviderId; envKey: string | null; found: boolean }>
 }
+/** One member of a resolved answer ladder, as `resolveChatChain` returns it. */
+export interface ResolvedChainMember {
+  id: ProviderId
+  model: string | null
+  models: string[] | null
+  baseURL: string | null
+  own: boolean
+}
+/**
+ * Sorts provider ids into ladder tiers — billed accounts, then a provider's own
+ * free catalogue, then a server of your own — keeping the given order inside
+ * each tier. A model named in `chat` keeps its provider billed and flattens the
+ * tiers back to the order passed in.
+ */
+export declare function ladderOrder(ids: ProviderId[], chat?: ChatSettings): ProviderId[]
+/**
+ * Which services may answer, in the order they are walked. Empty in search-only
+ * mode, where nothing answers; one member for an environment holding one key,
+ * which is the scalar configuration that has always shipped.
+ */
+export declare function resolveChatChain(
+  docPilot: Required<DocPilotSettings>,
+  env?: Record<string, string | undefined>,
+): ResolvedChainMember[]
 /** Keys deliberately withheld from the client half. */
 export declare const SERVER_ONLY: readonly string[]
 /** Keys the theme reads that `docPilot` deliberately does not carry. */
@@ -457,41 +717,109 @@ export declare function themeDocPilot(
   settings: Required<DocPilotSettings>,
   env?: Record<string, string | undefined>,
 ): DocPilotThemeConfig
-export declare function providerKey(provider: ProviderId): string
+/**
+ * The credential for one provider, read out of `env`. Null when the id is
+ * self-hosted (it takes no key) or when none of its environment variables is
+ * set — so check the result before sending it.
+ */
+export declare function providerKey(
+  env: Record<string, string | undefined>,
+  provider: ProviderId,
+): string | null
+/**
+ * The embed target as the INDEXER sees it: no proxy, so the real host, and the
+ * key in hand.
+ *
+ * TWO ARMS. `embed: false` returns the lexical-only one — every field null with
+ * `lexicalOnly: true` beside them, stated rather than omitted because the caller
+ * destructures this without checking, and a `baseURL` there would name somewhere
+ * the indexer COULD post when the point of the mode is that there is nothing it
+ * should.
+ */
 export declare function nodeEmbedTarget(
   settings: Required<DocPilotSettings>,
   env?: Record<string, string | undefined>,
-): {
-  provider: ProviderId
-  baseURL: string
-  model: string
-  models: string[] | null
-  /**
-   * Whose name `model` is — the author's, or the provider table's. A default
-   * that ages may be walked past by the index build; a name somebody wrote may
-   * not.
-   */
-  modelAuto: boolean
-  apiKey?: string
-}
+):
+  | {
+      lexicalOnly?: undefined
+      /** The BRAND; `provider` beside it is the adapter that speaks to it. */
+      id: ProviderId
+      provider: ProviderId
+      /**
+       * Null for a provider the adapters cannot reach directly — Gemini, whose
+       * compatible surface lives at `/v1beta/openai` while the adapter builds
+       * `${baseURL}/v1/…`.
+       */
+      baseURL: string | null
+      model: string | null
+      models: string[] | null
+      /**
+       * Whose name `model` is — the author's, or the provider table's. A default
+       * that ages may be walked past by the index build; a name somebody wrote may
+       * not.
+       */
+      modelAuto: boolean
+      apiKey: string | null
+    }
+  | {
+      lexicalOnly: true
+      id: null
+      provider: null
+      baseURL: null
+      model: null
+      models: null
+      modelAuto: false
+      apiKey: null
+    }
 /**
  * The chat half as a NODE tool sees it: the real host rather than `/ai`, and the
  * key in hand. `id` is the brand, `provider` the adapter that speaks to it.
+ *
+ * TWO ARMS, as `nodeEmbedTarget` has. `chat: false` / `chat: 'none'` resolves to
+ * the search-only arm — every field null beside `searchOnly: true` — because a
+ * `baseURL` there would name somewhere a CLI COULD post when the point of the
+ * mode is that there is nothing it should. Discriminate on `searchOnly` before
+ * dereferencing `id`, `provider` or `baseURL`.
  */
 export declare function nodeChatTarget(
   settings: Required<DocPilotSettings>,
   env?: Record<string, string | undefined>,
-): {
-  id: ProviderId
-  provider: ProviderId
-  baseURL: string | null
-  model: string | null
-  models: string[] | null
-  apiKey: string | null
-  maxTokens?: number
-  numCtx?: number
-  extraBody?: Record<string, unknown> | null
-}
+):
+  | {
+      searchOnly?: undefined
+      id: ProviderId
+      provider: ProviderId
+      /** Null for a provider no adapter can reach directly — Gemini. */
+      baseURL: string | null
+      model: string | null
+      models: string[] | null
+      apiKey: string | null
+      maxTokens: number
+      numCtx: number
+      /**
+       * Whose name `model` is — the author's, or the provider table's. `doctor`
+       * reads it to tell "you named a model this server does not have" from
+       * "our default is stale for your machine".
+       */
+      modelAuto: boolean
+      /** A HOST that answers with whatever it loaded — llama-server. */
+      modelPlaceholder: boolean
+      extraBody: Record<string, unknown> | null
+    }
+  | {
+      searchOnly: true
+      id: null
+      provider: null
+      baseURL: null
+      model: null
+      models: null
+      apiKey: null
+      maxTokens: null
+      numCtx: null
+      modelAuto: false
+      modelPlaceholder: false
+      extraBody: null
+    }
 export declare function devProxy(
   settings: Required<DocPilotSettings>,
   env?: Record<string, string | undefined>,

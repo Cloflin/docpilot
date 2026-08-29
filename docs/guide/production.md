@@ -365,7 +365,7 @@ support, scope: { kind, label, pages, paths[], truncated },
 promptHash, promptStock, addendumHash, addendumChars, restored?
 ```
 
-`quote` is the passage the reader selected in an earlier answer before asking — `null` on the great majority of turns, and the whole subject of the question on the rest. `gate.antecedent` says what a `channel: 'composed'` score was composed **with**: `'question'` for an ordinary follow-up, `'quote'` for a quoted one, `null` for a first turn. The two travel together: a composed score with no previous question behind it is not a threshold probe, and `docpilot feedback` uses this to keep quoted turns out of the calibration set.
+`quote` is the passage the reader selected in an earlier answer before asking — `null` on the great majority of turns, and the whole subject of the question on the rest. `gate.antecedent` says what a `channel: 'composed'` score was composed **with**: `'question'` for an ordinary follow-up — the last question that was answered, not merely the last one asked — `'quote'` for a quoted one, `null` for a first turn. The two travel together: a composed score with no previous question behind it is not a threshold probe, and `docpilot feedback` uses this to keep quoted turns out of the calibration set.
 
 **Three keys are absent rather than null, and each one looks like a bug to whoever writes the schema:**
 

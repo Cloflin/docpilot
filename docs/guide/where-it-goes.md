@@ -76,5 +76,7 @@ correct on a docs site and wrong on a pricing page. One string, three places:
 - A bundler you already have — [JavaScript](/install/javascript).
 - A framework with an adapter — [Which entry point](/install/).
 - A host nothing here covers — [A host of your own](/guide/other-sites).
+- What the panel actually does once it is there —
+  [The assistant panel](/guide/panel).
 - What the panel promises wherever it is —
   [What it guarantees](/concepts/guarantees).

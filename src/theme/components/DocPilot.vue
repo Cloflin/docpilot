@@ -303,7 +303,7 @@
                 class="docpilot__thoughts-toggle"
                 :aria-expanded="String(!!turn.thoughtOpen)"
                 :aria-controls="`dp-thoughts-${turn.id}`"
-                @click="turn.thoughtOpen = !turn.thoughtOpen"
+                @click="toggleThought(turn)"
               >
                 {{ thoughtLabel(turn) }}
               </button>
@@ -313,6 +313,7 @@
                 class="docpilot__thoughts"
                 role="region"
                 :aria-label="T('panel.reasoning')"
+                @scroll.passive="onThoughtScroll(turn, $event)"
               >{{ turn.thought }}</div>
             </template>
 
@@ -430,6 +431,123 @@
               </button>
             </template>
 
+            <!--
+              SEARCH-ONLY — the passages, as the answer.
+
+              The rows render whether or not the gate passed; `noStrongMatches`
+              chooses the lead and nothing else. Every row is a verbatim passage
+              under a link into the docs, so there is no generated claim here for
+              the panel to be wrong about, and hiding matches that exist in order
+              to say "not in the docs" would be the less honest of the two.
+            -->
+            <template v-if="turn.state === 'results'">
+              <p v-if="settledLine(turn)" class="docpilot__meta">{{ settledLine(turn) }}</p>
+              <!--
+                `turn.hybrid` is the last rung of the answer ladder: every
+                service the environment selected was asked, none answered, and
+                the retrieval this turn had already done is what is left. It
+                names the cause once and then reads exactly like the search-only
+                product, because that is what it is.
+              -->
+              <p class="docpilot__lead">
+                {{
+                  turn.hybrid
+                    ? turn.results.length
+                      ? T('hybrid.lead')
+                      : T('error.lead')
+                    : turn.results.length
+                      ? T(turn.noStrongMatches ? 'results.noStrong' : 'results.lead', {
+                          scope: turnScope(turn),
+                        })
+                      : T('results.empty', { scope: turnScope(turn) })
+                }}
+              </p>
+              <ol
+                v-if="turn.results.length"
+                class="docpilot__sources docpilot__results"
+                role="list"
+                :aria-label="T('results.label')"
+                @keydown="onResultsKey($event, turn)"
+              >
+                <li v-for="(r, i) in turn.results" :key="r.id" class="docpilot__source">
+                  <span class="docpilot__source-n">{{ i + 1 }}</span>
+                  <div class="docpilot__result-body">
+                    <!-- `href` is already the original for an imported page —
+                         `resultRows` builds it from `page.origin` — so there is
+                         no second address to choose between here. -->
+                    <a
+                      :href="r.href"
+                      :target="r.origin ? '_blank' : null"
+                      :rel="r.origin ? 'noopener noreferrer' : null"
+                      :tabindex="i === resultFocus(turn) ? 0 : -1"
+                      :data-dp-result="i"
+                      @click="onSourceClick($event, { origin: r.origin, href: r.href })"
+                    >
+                      <span class="docpilot__source-title">{{ r.title }}</span
+                      ><span v-if="r.breadcrumb" class="docpilot__source-tail">
+                        · {{ r.breadcrumb }}</span
+                      >
+                    </a>
+                    <!-- Escaped in `markQuery` before any markup is added: the
+                         snippet is corpus text and the marks are ours. -->
+                    <p
+                      v-if="r.snippet"
+                      class="docpilot__result-snippet"
+                      v-html="markQuery(r.snippet, turn.question)"
+                    ></p>
+                  </div>
+                </li>
+              </ol>
+              <!-- No rows at all: pages instead of sections, the same floor a
+                   refusal falls to. -->
+              <template v-if="!turn.results.length && turn.closest.length">
+                <p class="docpilot__meta">
+                  {{ T(turn.closestAreOutside ? 'refusal.closestPagesElsewhere' : 'refusal.closestPages') }}
+                </p>
+                <ol class="docpilot__sources" role="list" :aria-label="T('panel.closestPages')">
+                  <li v-for="(c, i) in turn.closest" :key="c.path" class="docpilot__source">
+                    <span class="docpilot__source-n">{{ i + 1 }}</span>
+                    <a
+                      :href="c.origin || c.path"
+                      :target="c.origin ? '_blank' : null"
+                      :rel="c.origin ? 'noopener noreferrer' : null"
+                      @click="onSourceClick($event, { origin: c.origin, href: c.path })"
+                    >
+                      <span class="docpilot__source-title">{{ c.title }}</span
+                      ><span v-if="c.tail" class="docpilot__source-tail"> · {{ c.tail }}</span>
+                    </a>
+                  </li>
+                </ol>
+              </template>
+              <button
+                v-if="turn.wouldWiden"
+                type="button"
+                class="docpilot__text-btn"
+                @click="widen(turn)"
+              >
+                {{ T('refusal.widen') }}
+              </button>
+              <!--
+                Retry belongs on this one and on no other `results` turn: a
+                search-only site has nothing to retry, and here the outage may
+                well have cleared. The same pair the transport error offers, for
+                the same reasons — the quote travels with the question, and
+                search stays offered because it never depended on a model.
+              -->
+              <p v-if="turn.hybrid" class="docpilot__row">
+                <button
+                  type="button"
+                  class="docpilot__text-btn"
+                  @click="submitText(turn.question, turn.quote)"
+                >
+                  {{ T('error.retry') }}
+                </button>
+                <button v-if="hasSearch" type="button" class="docpilot__text-btn" @click="openSearch">
+                  {{ T('error.search') }}
+                </button>
+              </p>
+            </template>
+
             <template v-if="turn.state === 'error'">
               <p class="docpilot__lead" role="alert">{{ T('error.lead') }}</p>
               <p class="docpilot__row">
@@ -470,6 +588,34 @@
             <template v-if="turn.state === 'rate-limited'">
               <p class="docpilot__lead">{{ T('error.rateLimited') }}</p>
               <p v-if="resetLine(turn)" class="docpilot__meta">{{ resetLine(turn) }}</p>
+              <!--
+                The passages, under a spent quota. They cost nothing — retrieval
+                settled before the first request went out — and a panel that
+                prints "come back at four" while the sections that answer the
+                question sit in memory is being less useful than the index it
+                shipped with. Links only, no snippets: this is an addition to an
+                explanation, not the answer, and the state above keeps its own
+                sentence.
+              -->
+              <template v-if="turn.results?.length">
+                <p class="docpilot__meta">{{ T('hybrid.meanwhile') }}</p>
+                <ol class="docpilot__sources" role="list" :aria-label="T('results.label')">
+                  <li v-for="(r, i) in turn.results" :key="r.id" class="docpilot__source">
+                    <span class="docpilot__source-n">{{ i + 1 }}</span>
+                    <a
+                      :href="r.href"
+                      :target="r.origin ? '_blank' : null"
+                      :rel="r.origin ? 'noopener noreferrer' : null"
+                      @click="onSourceClick($event, { origin: r.origin, href: r.href })"
+                    >
+                      <span class="docpilot__source-title">{{ r.title }}</span
+                      ><span v-if="r.breadcrumb" class="docpilot__source-tail">
+                        · {{ r.breadcrumb }}</span
+                      >
+                    </a>
+                  </li>
+                </ol>
+              </template>
               <p v-if="hasSearch" class="docpilot__row">
                 <button type="button" class="docpilot__text-btn" @click="openSearch">
                   {{ T('error.search') }}
@@ -531,6 +677,17 @@
                 >
                   <Icon name="chevronDown" :class="openPassage === src.id ? 'is-open' : null" />
                 </button>
+                <!--
+                  Rendered markdown, not the chunk's source. It is corpus text
+                  either way; the only question is whether the reader parses the
+                  `##` and the `**` or the panel does — and the answer above it
+                  never asks them to.
+
+                  `onAnswerClick` for the same reason the answer carries it: a
+                  link inside v-html has no Vue handler of its own, and a chunk's
+                  own cross-references are exactly the links a reader following
+                  provenance will press.
+                -->
                 <div
                   v-if="openPassage === src.id"
                   :id="`dp-passage-${turn.id}-${src.n}`"
@@ -538,7 +695,9 @@
                   tabindex="0"
                   role="region"
                   :aria-label="T('citation.passageLabel')"
-                >{{ passage(turn, src) }}</div>
+                  v-html="passageHtml(turn, src)"
+                  @click="onAnswerClick"
+                ></div>
               </li>
             </ol>
 
@@ -998,7 +1157,20 @@
                 aria-controls="dp-picker"
                 :aria-label="T('composer.scopeAria', { scope: scopeLabel })"
                 @click="toggleDock('picker')"
-              >{{ scopeLabel }}</button><span v-if="s.turns.length"> · {{ disclaimer }}</span>
+              >{{ scopeLabel }}</button
+              ><span v-if="s.turns.length"
+                ><template v-if="s.config.scope.enabled"> · </template>{{ disclaimer }}</span
+              ><span v-if="s.config.ui.credit"
+                ><template v-if="creditSep"> · </template
+                ><a
+                  class="docpilot__credit"
+                  :href="CREDIT_URL"
+                  :title="T('credit.title')"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >{{ T('credit.label') }}</a
+                ></span
+              >
               <button
                 v-if="s.config.prompt.show && (s.turns.length || s.instruction)"
                 type="button"
@@ -1012,9 +1184,21 @@
         </div>
 
         <span id="dp-hint" class="docpilot__sr">{{ T('composer.hint', { scope: scopeLabel }) }}</span>
-        <div class="docpilot__sr" aria-live="polite">{{ announced }}</div>
       </section>
     </div>
+    <!--
+      OUTSIDE the `v-if`, and that is the whole point of it being down here.
+
+      It used to live in the composer, which meant it was destroyed with the
+      panel — so a turn that settled while the panel was shut announced into
+      nothing, and ui-specs/010 made that the normal case rather than an edge
+      one. It also means the region is now RESIDENT: a live region inserted in
+      the same frame as its text is a region some screen readers do not
+      announce, which is a race this used to run on every open.
+
+      This component is mounted on every page; only its subtree is conditional.
+    -->
+    <div class="docpilot__sr" aria-live="polite">{{ announced }}</div>
   </Teleport>
 </template>
 
@@ -1031,6 +1215,8 @@ import { COMMENT_MAX } from '../docpilot/feedback.js'
 import { createSelectionAsk } from '../docpilot/selection.js'
 import { FILTER_AUTO_ABOVE } from '../docpilot/switches.js'
 import { hasDailyAllowance } from '../docpilot/budget.js'
+import { terms } from '../docpilot/text.js'
+import { atBottom as isAtBottom, createFollower } from '../docpilot/follow.js'
 
 const s = session.state
 const { theme, route, lang, router } = useHost()
@@ -1074,24 +1260,35 @@ const scrolled = ref(false)
 /**
  * Is the reader at the foot of the thread? — the predicate behind the jump pill.
  *
- * A SECOND, independent signal, and `pinned` below is deliberately left alone.
- * That one answers "keep chasing the answer?", and it answers from INTENT —
- * a wheel, a finger — because smooth scrolling makes a `scroll` event
- * indistinguishable from user input, which is what its own comment says. This
- * answers "where is the reader now", and position is exactly what it should read.
- * Folding the two together would put the scroll event back into the autoscroll
- * decision, which is the thing that rule forbids.
+ * A SECOND signal, next to `threadFollow.pinned`, and the two are kept apart
+ * because they are read at different MOMENTS rather than from different facts.
+ * This one is "where is the reader now", written on every scroll and on every
+ * path that swaps the conversation, and it drives a control. The pin is "was
+ * the reader at the foot the last time the box moved", and it is consulted
+ * inside the frame that writes — where a streaming answer has already grown the
+ * scroller and this one is briefly, correctly, false. Folding them together
+ * would flash the pill in for the one frame between "taller" and "scrolled to
+ * the new bottom", which is the flash the write order below already avoids.
  */
 const atBottom = ref(true)
+// One per scroller that gets written to. See follow.js: the pin is read from
+// the scroll event, and both of these are handed their element per call because
+// the reasoning box is unmounted every time a reader collapses one.
+const threadFollow = createFollower()
+const thoughtFollow = createFollower()
 const syncAtBottom = () => {
   const el = thread.value
-  // The same 40px slack `onIntent` uses, so the pill cannot appear while the
+  // The same slack the follower pins on, so the pill cannot appear while the
   // autoscroll still considers itself pinned.
-  if (el) atBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+  if (el) atBottom.value = isAtBottom(el)
 }
 
 const onThreadScroll = (e) => {
   scrolled.value = e.target.scrollTop > 0
+  // Whatever moved the thread — a wheel, a finger, a scrollbar, PageUp, a
+  // screen reader — this is where the follower hears about it. An autoscroll
+  // write lands at the foot, so its own event can only re-pin: follow.js.
+  threadFollow.read(e.target)
   syncAtBottom()
   // The selection popover is placed against the viewport, so a scrolling thread
   // moves the passage out from under it. `reposition` is a no-op when it is
@@ -1384,17 +1581,24 @@ function visibleTrigger() {
   return document.querySelector(hostConfig(s.config).content)
 }
 
-// Autoscroll: written inside one coalesced rAF, and disengaged by pointer or
-// keyboard intent — never by a `scroll` event, which smooth scrolling makes
-// indistinguishable from user input.
-let pinned = true
+// Autoscroll: one coalesced rAF per frame, and it stops the moment the reader
+// moves the thread themselves — `onThreadScroll` above is where that is heard.
+let queued = false
 watch(
   () => s.turns.map((t) => t.answerHtml + (t.thought || '').length + t.state).join('|'),
   () => {
-    if (!pinned) return
+    // A token per frame is common and a token per millisecond is not unheard
+    // of; without this the frame is requested once per token and writes the
+    // same number to the same property N times before the browser paints once.
+    if (queued) return
+    queued = true
     requestAnimationFrame(() => {
-      const el = thread.value
-      if (el) el.scrollTop = el.scrollHeight
+      queued = false
+      // The pin is tested HERE, inside the frame, and not at the top of this
+      // watcher: a reader who scrolls up in the gap between the token and the
+      // frame it asked for would otherwise be dragged back down by a frame that
+      // was queued while they were still at the foot. `follow` makes the test.
+      threadFollow.follow(thread.value)
       // After the write, not before: a streaming answer grows the scroller on
       // every frame, and the pill would otherwise flash in for the one frame
       // between "taller" and "scrolled to the new bottom".
@@ -1402,22 +1606,6 @@ watch(
     })
   },
 )
-function onIntent() {
-  const el = thread.value
-  if (!el) return
-  pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-}
-onMounted(() => {
-  const el = () => thread.value
-  const h2 = () => onIntent()
-  document.addEventListener('wheel', h2, { passive: true })
-  document.addEventListener('touchmove', h2, { passive: true })
-  onBeforeUnmount(() => {
-    document.removeEventListener('wheel', h2)
-    document.removeEventListener('touchmove', h2)
-  })
-  void el
-})
 
 const close = () => session.close()
 // `scrolled` is written by a scroll EVENT, and replacing the thread's contents
@@ -1436,6 +1624,8 @@ const newChat = () => {
 }
 const vote = session.vote
 const toggleReason = session.toggleReason
+// A press outranks the stream for the rest of the turn — session.js/autoThought.
+const toggleThought = session.toggleThought
 const widen = session.widen
 const askWithoutSecret = session.askWithoutSecret
 
@@ -1772,6 +1962,11 @@ const promptBlocks = computed(() =>
     promptListLimit: s.config.scope.promptListLimit,
     prompt: s.config.prompt,
     product: s.config.product,
+    // The DECLARED mode only. A runtime degradation also sends the block on its
+    // own turns, but the disclosure describes the deployment, not the last
+    // turn's weather — and a panel whose published instructions flickered with
+    // an embedder's uptime would be less honest, not more.
+    lexicalOnly: s.config.embed.lexicalOnly,
     // Headings only. The bodies are the exact text sent to the model, and a
     // translated body would make this disclosure a description of something
     // other than what was sent.
@@ -1806,7 +2001,7 @@ function removeInstruction() {
 /**
  * Back to the newest answer.
  *
- * `pinned` as well as the scroll write: pressing this says "chase it again",
+ * The pin as well as the scroll write: pressing this says "chase it again",
  * and without that a reader who jumps down mid-answer would watch the stream
  * run off the bottom of the box they just came back to.
  *
@@ -1816,7 +2011,7 @@ function removeInstruction() {
 function jumpToLatest() {
   const el = thread.value
   if (!el) return
-  pinned = true
+  threadFollow.repin()
   el.scrollTop = el.scrollHeight
   atBottom.value = true
   // The button is about to disappear from under the pointer, so focus goes to
@@ -1856,7 +2051,7 @@ function send() {
  * and then abandoned. Only the two sites that mean it name a quote.
  */
 function submitText(q, quoted = '') {
-  pinned = true
+  threadFollow.repin()
   closeAsk()
   session.submit(q, { quote: quoted })
 }
@@ -1996,6 +2191,7 @@ function dropQuote() {
  */
 const openPassage = ref(null)
 const passage = (turn, src) => session.passageFor(turn, src)
+const passageHtml = (turn, src) => session.passageHtml(turn, src)
 const togglePassage = (id) => (openPassage.value = openPassage.value === id ? null : id)
 
 /**
@@ -2127,7 +2323,7 @@ function saveTurnEdit(turn) {
   // Unchanged text is a cancel, not an ask: re-running it would destroy an
   // answer that is already on screen to get another one to the same question.
   if (next === turn.question) return cancelTurnEdit()
-  pinned = true
+  threadFollow.repin()
   closeAsk()
   // Left open on a refusal — busy, degraded, or a conversation swapped out from
   // under the click — so a draft is never dropped into a thread it never reached.
@@ -2160,7 +2356,7 @@ const canRetry = (turn) =>
 
 function retryTurn(turn) {
   if (s.busy) return
-  pinned = true
+  threadFollow.repin()
   closeAsk()
   session.retryTurn(turn)
 }
@@ -2288,6 +2484,28 @@ const disclaimer = computed(() => {
   if (!feedbackEndpoint || feedback.send === 'none') return T('disclaimer.base')
   return T(feedback.send === 'down' ? 'disclaimer.withFeedback' : 'disclaimer.withRating')
 })
+
+/**
+ * The footnote's one word of attribution — `ui.credit`, on by default.
+ *
+ * Hardcoded rather than configurable: this is the link to the project the panel
+ * IS, and a site that wants a different destination wants a different sentence,
+ * which is what `ui.credit: false` plus their own markup gives them. Held equal
+ * to `homepage` in package.json by packaging.test.js, because those two have
+ * disagreed before.
+ */
+const CREDIT_URL = 'https://docpilot-nine.vercel.app'
+
+/**
+ * WHETHER A SEPARATOR BELONGS IN FRONT OF IT — the credit is the first thing on
+ * this line that renders unconditionally, and a `·` belongs to what precedes it.
+ *
+ * Both of the segments before it are optional: the scope button is gone under
+ * `scope.enabled: false`, and the disclaimer only arrives with the first answer.
+ * With neither, a leading dot is the whole footnote's first character. The
+ * disclaimer carries the same test for the same reason, one segment earlier.
+ */
+const creditSep = computed(() => s.config.scope.enabled || s.turns.length > 0)
 
 /**
  * Whether this deployment HAS a daily allowance — the settings half of the
@@ -2426,17 +2644,39 @@ function thoughtLabel(turn) {
   })
 }
 
-// The reasoning box is a fixed-height scroller, so live text has to be followed
-// the same way the thread is.
+/**
+ * The reasoning box is a fixed-height scroller, so live text has to be followed
+ * the same way the thread is — and STOPPED the same way, which is what
+ * `thoughtFollow` is for. A reader who scrolls up inside it is re-reading a
+ * line the model has already moved past; dragging them back to the foot on the
+ * next token makes the box unreadable while it is the only thing on screen.
+ *
+ * The box is found BY THE LAST TURN'S ID, not as the last `.docpilot__thoughts`
+ * in the panel. Those were the same node only while the disclosure was the
+ * stream's to control: now that a reader can collapse the live one and open an
+ * older one, "the last box in the document" is somebody else's reasoning.
+ */
+const thoughtBox = () => {
+  const last = s.turns[s.turns.length - 1]
+  return last ? panel.value?.querySelector(`#dp-thoughts-${last.id}`) : null
+}
+const onThoughtScroll = (turn, e) => {
+  // Only the live box follows anything, so only the live box can unfollow.
+  if (turn === s.turns[s.turns.length - 1]) thoughtFollow.read(e.target)
+}
+let thoughtQueued = false
 watch(
   () => s.turns[s.turns.length - 1]?.thought,
-  () => {
+  (now, before) => {
+    // The box was emptied — a new turn, or a second model call inside this one,
+    // which `onStream`'s `start` clears it for. Nothing the reader scrolled up
+    // to read is in there any more, so the hold on it is released with the text.
+    if (!now || (before && now.length < before.length)) thoughtFollow.repin()
+    if (thoughtQueued) return
+    thoughtQueued = true
     requestAnimationFrame(() => {
-      // The last one in the thread, not the first: a reader who reopened an
-      // earlier turn's reasoning must not have it yanked to the bottom.
-      const boxes = panel.value?.querySelectorAll('.docpilot__thoughts')
-      const el = boxes?.[boxes.length - 1]
-      if (el) el.scrollTop = el.scrollHeight
+      thoughtQueued = false
+      thoughtFollow.follow(thoughtBox())
     })
   },
 )
@@ -2461,14 +2701,24 @@ const statusLabel = computed(() => {
  * reads "I couldn't find this in All docs." The kind is the fact; the label is
  * one rendering of it.
  */
-const shortScope = (refusal) =>
-  (refusal?.scopeKind ?? 'all') === 'all' ? T('refusal.allDocsShort') : refusal.scopeLabel
+const scopeWord = (kind, label) => ((kind ?? 'all') === 'all' ? T('refusal.allDocsShort') : label)
+const shortScope = (refusal) => scopeWord(refusal?.scopeKind, refusal?.scopeLabel)
+// The same word for a turn that ANSWERED with passages. A refusal carries its
+// scope flattened into `refusal.scopeKind`/`scopeLabel`; a results turn has the
+// frozen `turn.scope` itself, and one renderer for both is what keeps "All docs"
+// from appearing in a sentence that reads "in All docs".
+const turnScope = (turn) => scopeWord(turn?.scope?.kind, turn?.scope?.label)
 const settledLine = (turn) => {
   // A credential turn settles before retrieval, so it has no provenance line to
   // print: "Searched the docs" would describe work that did not happen. A social
   // turn settles even earlier, for the same reason and with the same result.
   if (turn.refusal?.cause === 'credential' || turn.refusal?.cause === 'social') return ''
-  const scope = shortScope(turn.refusal)
+  // A refusal carries its scope flattened onto `turn.refusal`; every other
+  // settled turn — a search-only one above all — has only the frozen
+  // `turn.scope`. Reading the refusal's copy unconditionally made a scoped
+  // search-only turn print "Searched the docs" for a search that was confined to
+  // one page, because `refusal.scopeKind` was undefined and defaulted to 'all'.
+  const scope = turn.refusal ? shortScope(turn.refusal) : turnScope(turn)
   if (turn.refusal?.cause === 'not-answerable' || turn.state === 'error') {
     return T('refusal.searchedAndRead', { scope, n: turn.refusal?.pagesRead ?? 0 })
   }
@@ -2512,6 +2762,80 @@ function onSourceClick(e, src) {
   if (src.origin) return
   e.preventDefault()
   goSource(src.href)
+}
+
+/**
+ * The reader's own words, marked inside a search-only snippet.
+ *
+ * ESCAPED FIRST, ALWAYS. The snippet is corpus text — a page author's prose,
+ * which can contain angle brackets and does on any page documenting HTML.
+ * Escaping and then inserting our own `<mark>` is the order that makes the marks
+ * the only markup in the string; matching first and escaping after would escape
+ * the marks too, and escaping neither is an injection.
+ *
+ * The passage disclosure is the other place corpus text becomes `v-html`, and it
+ * arrives already parsed: markdown-it runs with `html: false`, so an author's
+ * angle bracket is escaped there by the renderer rather than by this function.
+ *
+ * COMPUTED AT RENDER, NEVER STORED. A results turn is persisted to the archive,
+ * and marked-up HTML in a stored record is a hazard that outlives the render it
+ * was correct for — the query that produced it is right there in `turn.question`,
+ * so the marks can always be re-derived.
+ *
+ * `terms()` rather than a split on spaces, so the tokens marked are the tokens
+ * the retriever actually matched on: stop words are dropped, an identifier keeps
+ * its dots, and a one-character query marks nothing rather than every letter.
+ */
+const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ESCAPES[c])
+
+function markQuery(snippet, question) {
+  const safe = escapeHtml(snippet)
+  const words = [...new Set(terms(question || ''))].filter((w) => w.length >= 2)
+  if (!words.length) return safe
+  // Longest first, so `window.initeditor` marks as one run rather than being
+  // broken up by an earlier match on `window`.
+  const pattern = words
+    .sort((a, b) => b.length - a.length)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')
+  // Escaped text, so `&amp;` and `&lt;` are in the haystack — a term can only
+  // match inside one of those entities if the reader typed `amp` or `lt`, and
+  // marking a substring of an entity would break it. The lookarounds keep the
+  // match off any run that is part of an entity.
+  return safe.replace(new RegExp(`(?<![&#\\w])(${pattern})(?![\\w;])`, 'giu'), '<mark>$1</mark>')
+}
+
+/**
+ * Arrow keys move between result rows — a roving tabindex, scoped to the list.
+ *
+ * One tab stop for the whole list rather than one per row: eight results is
+ * eight tab presses to get past, and a reader who wants the composer back should
+ * not have to walk the answer to reach it. `resultFocus` is which row holds that
+ * stop; the arrows move it, Enter follows the link the browser already activates.
+ *
+ * Keyed per turn, because a thread can hold several results turns and a single
+ * index would move all of them at once.
+ */
+const resultCursor = ref({})
+const resultFocus = (turn) => resultCursor.value[turn.id] || 0
+
+function onResultsKey(e, turn) {
+  const n = turn.results.length
+  if (!n) return
+  const at = resultFocus(turn)
+  let next = at
+  if (e.key === 'ArrowDown') next = Math.min(at + 1, n - 1)
+  else if (e.key === 'ArrowUp') next = Math.max(at - 1, 0)
+  else if (e.key === 'Home') next = 0
+  else if (e.key === 'End') next = n - 1
+  else return
+  e.preventDefault()
+  resultCursor.value = { ...resultCursor.value, [turn.id]: next }
+  nextTick(() => {
+    const list = e.currentTarget
+    list?.querySelector?.(`[data-dp-result="${next}"]`)?.focus()
+  })
 }
 
 // The answer is v-html, so its links have no Vue handlers of their own: without

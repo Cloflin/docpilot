@@ -70,7 +70,8 @@ every other host.
 
 ### Which version, and why not to pin one
 
-**Any Shiki from 2.0 up**, which is what the peer range says: `>=2`. The adapter
+**Any Shiki from 2.0 up**, and nothing enforces it — the package declares no peer
+ranges at all, so the version is yours to get right. The adapter
 needs `createHighlighterCore`, the JavaScript regex engine, and the per-language
 and per-theme subpaths — four things that have not moved across 2.x, 3.x and 4.x.
 So the version is simply whatever the host already ships: 2.x under VitePress 1.6,

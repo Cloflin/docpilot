@@ -16,7 +16,7 @@ import CodeGroup from '@voidzero-dev/vitepress-theme/src/components/shared/CodeG
  * print the same five pairs, and a variant invented on one of them is a command
  * a reader runs and reports as broken.
  *
- * `pnpm exec`, never a bare `pnpm docpilot`: `pnpm run` executes package.json
+ * `pnpm exec`, not `pnpm run docpilot`: `pnpm run` executes package.json
  * scripts, `pnpm exec` runs a bin. No line uses `dlx`/`npx` with the UNSCOPED
  * name either — `docpilot` without the scope is not this package, it is an
  * unowned name on the registry. Deno reaches npm only through the `npm:`
@@ -72,16 +72,25 @@ onMounted(() => {
   <div class="wrapper wrapper--ticks grid md:grid-cols-2 w-full border-nickel divide-x">
     <div class="flex flex-col p-10 justify-between items-center md:items-start">
       <div class="flex flex-col gap-5 text-center md:text-left items-center md:items-start">
+        <!--
+          `no vector DB`, not `no server`. The panel needs exactly one
+          server-side thing — a reverse-proxy route that attaches the model key
+          — and `docs/guide/philosophy.md` is careful to write "no server beyond
+          the one already serving your site" and then "One server-side piece
+          remains, and only one". A four-word eyebrow cannot carry that
+          qualification, so it claims the thing that IS unqualified instead.
+        -->
         <span class="text-grey text-xs font-mono uppercase tracking-wide">
-          MIT licensed &middot; no server &middot; any page
+          AI assistant &middot; MIT licensed &middot; no vector DB &middot; any page
         </span>
         <h1 class="text-white text-pretty max-w-[40rem]">
-          Grounded AI answers<br />on every page of your site
+          An AI assistant<br />on every page of your site
         </h1>
         <p class="text-white/70 text-lg max-w-[30rem] text-pretty">
-          A docs site, a landing page, a help centre, an app you already ship.
-          Retrieval runs in the browser against an index you built, and refuses
-          before the model is called
+          A real chat &mdash; scope it, quote a passage, follow up, keep the
+          thread. It answers from an index you built rather than from the page it
+          sits on, retrieval runs in the reader's browser, and it refuses before
+          the model is called
         </p>
         <div class="flex items-center gap-5 mt-6">
           <a href="/guide/" class="button button--primary inline-block w-fit">
@@ -168,14 +177,29 @@ onMounted(() => {
       <div
         class="relative px-6 sm:px-16 h-full flex flex-col justify-center overflow-clip py-8 sm:py-16 hero-background"
       >
-        <!-- A rendering of one turn, not a screenshot: it stays honest when the
-             panel's markup changes, and it costs no image bytes. -->
+        <!--
+          A rendering of a CONVERSATION, not a screenshot: it stays honest when
+          the panel's markup changes, and it costs no image bytes.
+
+          Two turns rather than one, and the second one mid-flight. A single
+          question-and-answer card is a search box with better typography, which
+          is exactly the thing this panel is not — the follow-up, the scope chip
+          in the header and the live status line under the second question are
+          the three cheapest ways to show that on a page nobody will scroll
+          twice. Every string here is a real one: the scope label, the six
+          status lines and the source chips all come out of `i18n.js`.
+        -->
         <div
-          class="w-full max-w-[32rem] rounded-xl bg-primary/85 outline outline-white/15 p-5 flex flex-col gap-4 shadow-2xl"
+          class="w-full max-w-[32rem] rounded-xl bg-primary/85 outline outline-white/15 p-5 flex flex-col gap-3.5 shadow-2xl"
         >
           <div class="flex items-center gap-2">
             <span class="size-2 rounded-full bg-dp-violet"></span>
             <span class="font-mono text-xs uppercase tracking-wide text-white/50">DocPilot</span>
+            <span
+              class="ml-auto font-mono text-[11px] text-white/60 bg-white/10 rounded px-2 py-0.5"
+            >
+              All docs
+            </span>
           </div>
 
           <p class="text-white text-base">How do I rebuild the index in CI?</p>
@@ -200,6 +224,15 @@ onMounted(() => {
               2 chunks retrieved
             </span>
           </div>
+
+          <div class="h-px bg-white/10"></div>
+
+          <p class="text-white text-base">And in a Docker build?</p>
+
+          <p class="font-mono text-xs text-white/50 flex items-center gap-2">
+            <span class="dp-pulse size-1.5 rounded-full bg-dp-violet"></span>
+            Reading reference/cli
+          </p>
         </div>
       </div>
 
@@ -255,6 +288,27 @@ onMounted(() => {
     margin-right: 0;
     margin-left: 0;
     border-radius: 0 0 8px 8px !important;
+  }
+}
+
+/*
+ * The one moving thing on the page, and it stops for anyone who has asked it to.
+ * A status line that never changes reads as a stalled panel; a status line that
+ * animates is the only part of this card claiming to be live.
+ */
+@keyframes dp-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.dp-pulse {
+  animation: dp-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-pulse {
+    animation: none;
   }
 }
 

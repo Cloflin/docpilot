@@ -292,7 +292,27 @@ const CONFIG_SRC = fs.readFileSync(path.join(DOCS, '.vitepress', 'config.mjs'), 
  * comparison skips itself rather than lying.
  */
 const EXTRA_SOURCES = fs.existsSync(SPEC_DIR) || /importDir/.test(CONFIG_SRC)
+
+/**
+ * EVERY COMMITTED INDEX, not the one this file used to know about.
+ *
+ * `docs/public/rag/` is what the deploy serves and was the only manifest held to
+ * the corpus. `docs/public/rag-local/` is a second one — the same corpus
+ * embedded by a local bge-m3, published so that a measurement against a weaker
+ * embedder can be reproduced and compared — and the argument for gating it is
+ * word for word the argument the .gitignore made for the first: an index nobody
+ * checks is an index that silently stops describing the docs beside it.
+ *
+ * Discovered rather than listed, so a third one is covered the day it appears.
+ * The corpus hash is a fact about `docs/`, not about any embedder, so ONE hash
+ * holds all of them.
+ */
+const PUBLIC = path.join(DOCS, 'public')
+/** The DEPLOYED index, for the figures gate below — those numbers are the site's. */
 const MANIFEST = path.join(RAG, 'manifest.json')
+const MANIFESTS = (fs.existsSync(PUBLIC) ? fs.readdirSync(PUBLIC, { withFileTypes: true }) : [])
+  .filter((e) => e.isDirectory() && fs.existsSync(path.join(PUBLIC, e.name, 'manifest.json')))
+  .map((e) => ({ dir: `docs/public/${e.name}`, file: path.join(PUBLIC, e.name, 'manifest.json') }))
 
 describe('docs — the committed index cannot go stale', () => {
   it('has no corpus source this rebuild does not read', () => {
@@ -305,9 +325,9 @@ describe('docs — the committed index cannot go stale', () => {
   })
 
   // A fresh clone that has never run `docpilot index` is not a broken
-  // repository, and `docs/public/rag/` is build output.
-  it.skipIf(!fs.existsSync(MANIFEST) || EXTRA_SOURCES)(
-    'matches the hash in docs/public/rag/manifest.json',
+  // repository, and everything under `docs/public/*/` is build output.
+  it.skipIf(!MANIFESTS.length || EXTRA_SOURCES)(
+    'matches the hash in every committed manifest.json',
     () => {
       const chunks = []
       for (const file of walkCorpus(DOCS)) {
@@ -328,16 +348,119 @@ describe('docs — the committed index cannot go stale', () => {
         .digest('hex')
         .slice(0, 8)
 
-      const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'))
+      /**
+       * The rebuild command names the DIRECTORY, because the two are not built
+       * the same way: `docs/public/rag/` is the OpenRouter build and
+       * `docs/public/rag-local/` takes `DOCPILOT_EMBED_LOCAL=1`. Printing one
+       * command for both would send somebody to overwrite the wrong one.
+       */
+      const rebuild = (dir) =>
+        dir.endsWith('/rag')
+          ? 'npx docpilot index'
+          : 'DOCPILOT_EMBED_LOCAL=1 npx docpilot index'
+
       expect(
-        hash === manifest.hash
-          ? []
-          : [
-              `the committed index is stale — run \`npx docpilot index\` and commit docs/public/rag/. ` +
-                `manifest.json is index ${manifest.hash} (${manifest.chunkCount} chunks); ` +
-                `docs/ now chunks to ${hash} (${chunks.length} chunks).`,
-            ],
+        MANIFESTS.flatMap(({ dir, file }) => {
+          const manifest = JSON.parse(fs.readFileSync(file, 'utf8'))
+          return hash === manifest.hash
+            ? []
+            : [
+                `the committed index at ${dir} is stale — run \`${rebuild(dir)}\` and commit it. ` +
+                  `manifest.json is index ${manifest.hash} (${manifest.chunkCount} chunks); ` +
+                  `docs/ now chunks to ${hash} (${chunks.length} chunks).`,
+              ]
+        }),
       ).toEqual([])
     },
   )
+})
+
+/**
+ * THE THIRD GATE, and the one the other two cannot cover.
+ *
+ * The marketing page and three docs pages print CONCRETE MEASUREMENTS of the
+ * committed index — "405 chunks", "810 KB", "829,440 bytes", "3.2 MB as
+ * float32" — because a claim a reader can check with `ls -l` is worth more than
+ * a claim they have to take. The whole point is that they are checkable.
+ *
+ * Which makes them the most perishable sentences in the repository. Every one
+ * of them is a statement about a file that `docpilot index` rewrites, and the
+ * gate above deliberately says nothing about them: it compares the corpus hash,
+ * so a rebuild that moves the chunk count from 405 to 409 turns that gate GREEN
+ * and every figure below into a lie on the same commit. That has already
+ * happened once between two sessions editing docs/ in parallel.
+ *
+ * So the figures are derived here from the manifest and the vector blob and
+ * asserted verbatim in the files that print them. The failure message names the
+ * replacement, because the fix is mechanical and the point of the test is that
+ * nobody has to go and measure anything.
+ *
+ * WHERE THE NUMBERS COME FROM, so a future reader can check the test itself:
+ *   chunks       manifest.chunkCount
+ *   bytes        chunkCount × dims, which is the blob's size on disk because
+ *                the quantisation is one signed byte per dimension with no
+ *                per-vector scale (src/build/lib/quantize.js). Asserted against
+ *                the real file rather than trusted.
+ *   KB           bytes / 1024, rounded — what `ls -lh` prints
+ *   float32 MB   bytes × 4, the same array unquantised
+ */
+describe('docs — the printed index figures match the committed index', () => {
+  const VECTORS = (m) => path.join(RAG, m.vectors ?? '')
+
+  it.skipIf(!fs.existsSync(MANIFEST))('the blob is one byte per dimension', () => {
+    const m = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'))
+    // If this ever fails, every figure below is derived from a false premise
+    // and the templates in the next test need rewriting, not just re-running.
+    expect(fs.statSync(VECTORS(m)).size).toBe(m.chunkCount * m.dims)
+  })
+
+  it.skipIf(!fs.existsSync(MANIFEST))('every page printing a figure prints the current one', () => {
+    const m = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'))
+    const bytes = fs.statSync(VECTORS(m)).size
+    const n = m.chunkCount
+    const kb = `${Math.round(bytes / 1024)} KB`
+    const mb = `${((bytes * 4) / 1024 / 1024).toFixed(1)} MB`
+    const grouped = bytes.toLocaleString('en-US')
+
+    /**
+     * One entry per sentence that carries a measurement, spelled as the exact
+     * substring the file must contain. Deliberately not a regex sweep for
+     * `\d+ chunks`: the docs say "1191-chunk corpus" about somebody else's
+     * measurement and "5,000–10,000 chunks" about the scale ceiling, and a
+     * sweep would either rewrite those or need exceptions for them.
+     */
+    const claims = [
+      ['docs/.vitepress/theme/FeatureGrid.vue', `${n} chunks × ${m.dims} dims × 1 byte = ${grouped} bytes`],
+      ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: 'float32', bytes: '${mb}'`],
+      ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: 'int8', bytes: '${kb}'`],
+      ['docs/.vitepress/theme/FeatureGrid.vue', `${n} chunks at ${m.dims} dimensions`],
+      ['docs/.vitepress/theme/Comparison.vue', `${kb} for ${n} chunks`],
+      ['docs/guide/comparison.md', `${kb} for this site's ${n} chunks at ${m.dims} dimensions`],
+      ['docs/guide/comparison.md', `${n} chunks, ${m.dims} dimensions`],
+      // The same sentence carries a third measurement the two claims above do
+      // not reach: "405 chunks, 2048 dimensions," ends one line and "810 KB of
+      // int8 vectors" begins the next, so the KB token sits outside both spans
+      // and a rebuild would have left it stale with this gate green.
+      ['docs/guide/comparison.md', `${kb} of int8 vectors`],
+      ['docs/guide/indexing.md', `indexes ${n} chunks at ${m.dims} dimensions`],
+      ['docs/guide/indexing.md', `${grouped} bytes — ${kb}, where float32 would have been ${mb}`],
+      ['README.md', `${kb} for this project's own ${n}-chunk index, where float32 would be ${mb}`],
+      ['README.md', `${kb} for this site's ${n} chunks`],
+    ]
+
+    const stale = claims
+      .filter(([file, claim]) => !fs.readFileSync(path.join(ROOT, file), 'utf8').includes(claim))
+      .map(([file, claim]) => `${file} no longer says "${claim}"`)
+
+    expect(
+      stale.length
+        ? [
+            `the index was rebuilt and the printed figures were not updated. ` +
+              `The committed index is ${n} chunks × ${m.dims} dims = ${grouped} bytes ` +
+              `(${kb}; ${mb} as float32). Update:`,
+            ...stale,
+          ]
+        : [],
+    ).toEqual([])
+  })
 })

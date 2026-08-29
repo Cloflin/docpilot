@@ -91,7 +91,7 @@ describe('init helpers', () => {
     // One validator for the whole codebase: the CLI complains in the resolver's
     // words, and falls back to the same defaults the build would.
     expect(validateUi({ trigger: 'sidebar', panel: 'sheet' }, (m) => said.push(m))).toEqual({
-      trigger: 'nav',
+      trigger: 'fab',
       panel: 'auto',
     })
     expect(said).toHaveLength(2)
@@ -133,10 +133,14 @@ describe('init helpers', () => {
   })
 
   it('says so when the answer is the default, and still shows it', () => {
-    const out = uiSnippet({ trigger: 'nav', panel: 'auto' }, 'docs/.vitepress/config.mjs')
+    const out = uiSnippet({ trigger: 'fab', panel: 'auto' }, 'docs/.vitepress/config.mjs')
     expect(out).toContain('the shipped default')
-    expect(out).toContain("trigger: 'nav',")
-    expect(uiSnippet({ trigger: 'fab', panel: 'auto' }, null)).toContain('your `docPilot` settings')
+    expect(out).toContain("trigger: 'fab',")
+    // And the other branch: an answer that is NOT the shipped pair says where
+    // to put it instead.
+    const chosen = uiSnippet({ trigger: 'nav', panel: 'auto' }, null)
+    expect(chosen).toContain('your `docPilot` settings')
+    expect(chosen).not.toContain('the shipped default')
   })
 
   // A list is written as a list — valid JavaScript in the block the reader

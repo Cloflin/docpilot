@@ -9,7 +9,7 @@ import {
 import { chunkMarkdown, slug } from '../src/build/lib/chunker.js'
 import { resolveSections, orphanPages } from '../src/build/lib/sections.js'
 import { l2normalise, toInt8, cosineInt8 } from '../src/build/lib/quantize.js'
-import { terms, norm } from '../src/theme/docpilot/text.js'
+import { terms, norm, stemLite } from '../src/theme/docpilot/text.js'
 import {
   lexicalCoverage,
   denseFromCosine,
@@ -17,8 +17,9 @@ import {
   assertWeights,
   composeQuery,
   admissible,
+  foreignTail,
 } from '../src/theme/docpilot/gate.js'
-import { chat, detectTools, parseFallback, splitThink, streamingAnswerText } from '../src/theme/docpilot/llm.js'
+import { chat, detectTools, parseFallback, splitOpenThink, splitThink, streamingAnswerText } from '../src/theme/docpilot/llm.js'
 import { providerFor } from '../src/theme/docpilot/providers.js'
 import {
   systemText,
@@ -35,8 +36,14 @@ import {
   promptHash,
   localeOf,
   CORE,
+  LEXICAL_DOC,
 } from '../src/theme/docpilot/prompt.js'
-import { isKnownPath, renderAnswer } from '../src/theme/docpilot/markdown.js'
+import {
+  isKnownPath,
+  renderAnswer,
+  renderPassage,
+  toPlainText,
+} from '../src/theme/docpilot/markdown.js'
 import { GLYPHS, SYMBOLS, symbolId } from '../src/theme/docpilot/glyphs.js'
 import { highlight, __setHighlighterForTests } from '../src/theme/docpilot/highlight.js'
 import { identifiers, computeSupport } from '../src/theme/docpilot/support.js'
@@ -68,6 +75,9 @@ import {
   dOf,
   regate,
   chooseWindow,
+  STRATA,
+  fitWindowAtTau,
+  pickAnchors,
   WINDOWS,
 } from '../src/eval/calibrate.js'
 import { guardFor, tuningFor } from '../src/build/build-rag-index.js'
@@ -83,7 +93,7 @@ import {
 } from '../src/eval/levels.js'
 import { previousReport, writeReport } from '../src/eval/report.js'
 import { lintRecords, levelSummary } from '../src/eval/lint-golden.js'
-import { mmr, resolveLevers, LEVER_NAMES } from '../src/theme/docpilot/retriever.js'
+import { mmr, pageCap, resolveLevers, LEVER_NAMES } from '../src/theme/docpilot/retriever.js'
 import { parseRange, chooseCell, buildTuningDoc } from '../src/eval/tune.js'
 import { TUNING_OUT, CALIBRATION_OUT } from '../src/cli-context.js'
 import {
@@ -398,7 +408,106 @@ describe('text', () => {
   it('keeps dots inside identifiers', () => expect(terms('Plugin.init')).toContain('plugin.init'))
   it('strips zero-width characters', () => expect(norm('ed​itor')).toBe('editor'))
   it('drops function words in three languages', () => {
-    expect(terms('как включить the commenting')).toEqual(['включить', 'commenting'])
+    // The stop list is matched on the SURFACE form, before any stripping: every
+    // entry in it is a word somebody typed, and matching it against a stem would
+    // mean maintaining a stemmed copy of the list and keeping the two in step.
+    expect(terms('как включить the commenting')).toEqual(['включ', 'commenting'])
+  })
+
+  /**
+   * `stemLite` — suffix stripping, and the three guards that bound it.
+   *
+   * The reason this can be a table rather than a corpus measurement is symmetry:
+   * `terms()` is the single tokenizer for `df.json`, the gate's L and
+   * MiniSearch's query side, so both sides are stripped by this code and a
+   * symmetric strip can only ADD matches. What it can do is conflate two words,
+   * which is what the guards bound and what the cases below pin.
+   */
+  describe('stemLite', () => {
+    it('collapses the case forms of one word onto one stem', () => {
+      for (const family of [
+        ['конфигурация', 'конфигурации', 'конфигурацию', 'конфигураций', 'конфигурацией'],
+        ['документ', 'документы', 'документов', 'документами', 'документах'],
+        ['модель', 'модели', 'моделью', 'моделей'],
+        ['налаштування', 'налаштувань', 'налаштуваннями'],
+        ['token', 'tokens'],
+        ['policy', 'policies'],
+        ['class', 'classes'],
+        ['index', 'indexes'],
+      ]) {
+        expect(new Set(family.map(stemLite)).size, family[0]).toBe(1)
+      }
+    })
+
+    it('never touches a name', () => {
+      // A token carrying a digit or any of `.`/`/`/`#`/`_`/`$`/`-` is an
+      // identifier, a route or a version, and a name with its tail removed is a
+      // different name. This is also what keeps `indexTokens`' compound tokens
+      // whole while their word parts are stripped.
+      for (const name of [
+        'plugin.init',
+        'max_tokens',
+        '/getting-started',
+        'v2',
+        'bge-m3',
+        'qwen3',
+        'docpilot',
+        'openai',
+      ]) {
+        expect(stemLite(name), name).toBe(name)
+      }
+    })
+
+    it('leaves a short token alone', () => {
+      // Under five characters there is not enough word left to be confident the
+      // tail is inflection rather than the stem.
+      for (const short of ['код', 'set', 'бот', 'apis']) expect(stemLite(short), short).toBe(short)
+    })
+
+    it('is idempotent', () => {
+      // The Cyrillic arm strips repeatedly because endings stack — `моделью` is
+      // `модель` plus `ю` — and the walk has to converge, or a second
+      // application would move a token that the first one settled.
+      for (const w of [
+        'настроить',
+        'конфигурацией',
+        'моделью',
+        'налаштуваннями',
+        'провайдеров',
+        'tokens',
+        'policies',
+        'indexes',
+      ]) {
+        expect(stemLite(stemLite(w)), w).toBe(stemLite(w))
+      }
+    })
+
+    /**
+     * `-ing` and `-ed` were built, measured and dropped, and this pins the
+     * measurement rather than the taste: they collided on exactly the pairs this
+     * corpus cannot afford — an artefact and the process that makes it, both of
+     * which this documentation is about.
+     */
+    it('keeps a process distinct from the artefact it produces', () => {
+      for (const [a, b] of [
+        ['index', 'indexing'],
+        ['bill', 'billing'],
+        ['embed', 'embedding'],
+        ['configure', 'configuration'],
+        ['конфигурация', 'конфигуратор'],
+        ['модель', 'модуль'],
+      ]) {
+        expect(stemLite(a), `${a} vs ${b}`).not.toBe(stemLite(b))
+      }
+    })
+
+    it('strips symmetrically, so index and query still meet', () => {
+      // The whole safety argument, stated as a test: whatever this does to a
+      // word, it does to both sides.
+      const asked = terms('где настройки конфигураций?')
+      const written = terms('Настройка конфигурации задаётся в файле.')
+      expect(asked.filter((t) => written.includes(t)).length).toBeGreaterThan(0)
+    })
   })
 })
 
@@ -422,8 +531,12 @@ describe('gate', () => {
   })
 
   it('treats an unlisted term as maximally rare', () => {
+    // `kubernetes` reaches the df table as `kubernete` — a proper noun ending in
+    // `s` reads as a plural to the suffix stripper. It costs nothing, because
+    // the same strip runs on the evidence side, and this pins the token the
+    // table is actually keyed by rather than the one that was typed.
     const { Q } = lexicalCoverage('editor kubernetes', 'editor', { editor: 400 })
-    expect(Q[0]).toBe('kubernetes')
+    expect(Q[0]).toBe('kubernete')
     expect(lexicalCoverage('kubernetes', 'editor docs', {}).L).toBe(0)
   })
 
@@ -462,6 +575,89 @@ describe('gate', () => {
     // is inadmissible and the turn is judged on the raw one, where it refuses.
     expect(admissible('what is the weather in paris', evidence)).toBe(false)
   })
+
+  /**
+   * ── the tail the term test cannot measure — RAG-SPEC 3.4.5
+   *
+   * `admissible` asks whether a term of the tail is in the evidence. Over a
+   * corpus in another script the answer is no for every question a reader in
+   * that language could ask, on topic or off, so the veto stops measuring topic
+   * and starts measuring alphabet. `foreignTail` is the test for that, and the
+   * cases below are the boundary: it must fire for the follow-up and NOT for
+   * either documented topic switch, which are the veto's reason to exist.
+   */
+  it('separates a tail in another script from a tail that changed the subject', () => {
+    const evidence = 'the widget style is set with tokens the theme declares'
+    const df = { widget: 30, style: 12, token: 40, theme: 20, declare: 8 }
+
+    // The reported follow-up. The term test refuses it and cannot do otherwise:
+    // no Russian term appears in English prose, whatever it asked about.
+    expect(admissible('а я могу его стилизировать?', evidence)).toBe(false)
+    expect(foreignTail('а я могу его стилизировать?', df)).toBe(true)
+
+    // The two documented topic switches are written in the corpus's own script.
+    // The veto keeps them, which is the property this must not trade away.
+    expect(foreignTail('what is the weather in paris', df)).toBe(false)
+    expect(foreignTail('and for AWS S3 buckets?', df)).toBe(false)
+
+    // One corpus term is enough to make the term test measurable again — the
+    // same question, asked with the word the docs use.
+    expect(foreignTail('а могу я поменять style?', df)).toBe(false)
+
+    // Nothing to judge: no tail, no letters, no corpus profile.
+    expect(foreignTail('', df)).toBe(false)
+    expect(foreignTail('42 / 7', df)).toBe(false)
+    expect(foreignTail('а я могу его стилизировать?', null)).toBe(false)
+    expect(foreignTail('а я могу его стилизировать?', {})).toBe(false)
+  })
+
+  /**
+   * WHY A MASS SHARE AND NOT A CHARACTER SET.
+   *
+   * Five words of a Russian UI sample on one i18n page put twenty Cyrillic
+   * letters into this package's own shipped vocabulary — measured, not
+   * supposed. A predicate that asked "does the corpus use this letter" would
+   * call a wholly Russian question native on the strength of them and refuse
+   * it, which is the reported bug restored by the fix meant to remove it.
+   *
+   * The second half is the same five words in a corpus that IS written in that
+   * language, where the term test works and the veto is owed its say. What
+   * separates the two is the share of the vocabulary, which is why that is what
+   * gets measured.
+   */
+  const withSamples = (types) => {
+    const df = { привет: 1, спросите: 1, документацию: 1, помочь: 1, спрашивайте: 1 }
+    for (let i = 0; i < 400; i++) df[`${types}${i}`] = 1
+    return df
+  }
+
+  it('is not fooled by a handful of foreign sample words in a corpus of thousands', () => {
+    expect(foreignTail('а я могу его стилизировать?', withSamples('configuration'))).toBe(true)
+    expect(foreignTail('а я могу его стилизировать?', withSamples('конфигурация'))).toBe(false)
+  })
+})
+
+describe('the antecedent of a follow-up', () => {
+  const turn = (question, answerText = '') => ({ question, answerText })
+
+  /**
+   * A refused turn is dropped from the model's history and was never dropped
+   * from the gate's. Composing against it embeds the reader's dead end into the
+   * one channel that could have recovered the follow-up.
+   */
+  it('composes against the last question that was answered', () => {
+    expect(session.priorAntecedent([turn('q1', 'a1'), turn('q2'), turn('q3')])).toBe('q1')
+    expect(session.priorAntecedent([turn('q1', 'a1'), turn('q2', '   '), turn('q3')])).toBe('q1')
+  })
+
+  /**
+   * The shipped behaviour where there is nothing better — including search-only,
+   * which never sets `answerText` on any turn at all.
+   */
+  it('falls back to the previous question when nothing has answered', () => {
+    expect(session.priorAntecedent([turn('q1'), turn('q2'), turn('q3')])).toBe('q2')
+    expect(session.priorAntecedent([turn('q1')])).toBe(null)
+  })
 })
 
 describe('fallback parser — strict and positional', () => {
@@ -480,6 +676,35 @@ describe('fallback parser — strict and positional', () => {
   })
   it('does not repair single quotes', () => {
     expect(parseFallback("{'tool':'answer'}").ok).toBe(false)
+  })
+
+  /**
+   * The pair-matching split cannot see a trace the model was still writing, and
+   * the strict-schema path had no other strip — so the same reply parsed through
+   * `parseFallback` and came back "could not read the response" under a schema.
+   * `splitOpenThink` is that missing half, and it is deliberately destructive,
+   * which is why the answer path reaches for it only after a parse has failed.
+   */
+  it('separates a think block the model never closed', () => {
+    const { think, rest } = splitOpenThink('{"text":"done"}<think>still reasoning when the ceiling hit')
+    expect(rest).toBe('{"text":"done"}')
+    expect(think).toBe('still reasoning when the ceiling hit')
+  })
+
+  it('leaves a reply that closed its tags alone', () => {
+    const s = '{"text":"done"}'
+    expect(splitOpenThink(s)).toEqual({ think: '', rest: s })
+  })
+
+  /**
+   * The reason the repair runs second. This corpus documents `<think>` handling,
+   * so an answer ABOUT it carries the literal tag inside a JSON string —
+   * repairing that reply first would cut the object in half.
+   */
+  it('would destroy a good answer that merely mentions the tag', () => {
+    const good = '{"text":"deepseek-r1 emits <think> before the answer","citations":[]}'
+    expect(JSON.parse(good).text).toContain('<think>')
+    expect(splitOpenThink(good).rest).not.toBe(good)
   })
 })
 
@@ -788,20 +1013,44 @@ describe('provider adapters', () => {
     expect(seen.body.tools[0].function).toBeUndefined()
   })
 
-  it('anthropic: a forced answer schema suppresses thinking, which cannot ride with it', async () => {
+  /**
+   * THE GUARD MOVED, because the API did. Manual extended thinking — the older
+   * `{type: 'enabled'}` shape — accepts only `tool_choice: auto` or `none`, so
+   * asking for it beside the forced `answer` tool failed every final call with a
+   * 400. ADAPTIVE THINKING SUPPORTS FORCED TOOL USE, so on a current model the
+   * two now ride together and an Anthropic deployment can think about its answer
+   * rather than only about which search to run.
+   *
+   * Both halves are pinned here, because the difference is the model string and
+   * nothing else — and a package that picks one shape and posts it everywhere is
+   * wrong for half the catalogue, in opposite directions.
+   */
+  it('anthropic: a legacy model gets no thinking beside a forced answer schema', async () => {
     const seen = capture({ ok: true, json: async () => ({ content: [] }) })
     await chat({
       provider: 'anthropic',
       baseURL: '/ai',
-      model: 'm',
+      model: 'claude-opus-4-5',
       messages: [],
       schema: { type: 'object', properties: { text: { type: 'string' } } },
       enableThink: true,
     })
-    // This is the final answer call: tool_choice pins the shape, so asking for
-    // thinking alongside it made every answer fail with a 400.
     expect(seen.body.tool_choice).toEqual({ type: 'tool', name: 'answer' })
     expect(seen.body.thinking).toBeUndefined()
+  })
+
+  it('anthropic: a current model thinks adaptively beside the same forced schema', async () => {
+    const seen = capture({ ok: true, json: async () => ({ content: [] }) })
+    await chat({
+      provider: 'anthropic',
+      baseURL: '/ai',
+      model: 'claude-sonnet-4-6',
+      messages: [],
+      schema: { type: 'object', properties: { text: { type: 'string' } } },
+      enableThink: true,
+    })
+    expect(seen.body.tool_choice).toEqual({ type: 'tool', name: 'answer' })
+    expect(seen.body.thinking).toEqual({ type: 'adaptive' })
   })
 
   it('anthropic: the tool-calling probe sends no sampling parameter either', async () => {
@@ -896,6 +1145,30 @@ describe('prompt', () => {
     expect(promptHash({ override: 'Be terse.' })).not.toBe(promptHash())
     expect(promptHash({ extend: 'x' })).not.toBe(promptHash())
     expect(promptHash({ override: null, extend: '' })).toBe(promptHash())
+  })
+
+  /**
+   * The lexical block — sent only where it is true, hashed always.
+   *
+   * On a hybrid turn a search_docs paraphrase works because the dense channel
+   * scores meaning; on a lexical-only one it silently returns the same BM25
+   * miss, and nothing in the envelope told the model which mode it is in. The
+   * block states the fact once. It is conditional like the scope block, and its
+   * CONSTANT is in PROMPT_HASH like TOOLS_DOC — also conditional — so an edit to
+   * the text moves the hash whichever mode a report came from.
+   */
+  it('tells the model what search is, only on a lexical-only turn', () => {
+    const hybrid = buildMessages({ ...base })[0].content
+    const lexical = buildMessages({ ...base, lexicalOnly: true })[0].content
+    expect(hybrid).not.toContain('matches words, not meaning')
+    expect(lexical).toContain('matches words, not meaning')
+    // The language sentence is the half that counters the core rule above it:
+    // "answer in the language of the question" must not read as license to
+    // SEARCH in it against a corpus written in another one.
+    expect(lexical).toContain('language the documentation is written in')
+    // Everything else in the envelope is byte-identical — the block is added,
+    // nothing is reworded around it.
+    expect(lexical.replace(`${LEXICAL_DOC}\n\n`, '')).toBe(hybrid)
   })
 
   it('keeps the reader out of the system message even under an override', () => {
@@ -1404,6 +1677,162 @@ describe('009 — the passage behind a citation', () => {
     sessionState.index = { byId: new Map([[SRC.id, chunk('still here')]]) }
     expect(session.passageFor({ gate: { chunks: [chunk('still here')] } }, SRC)).toBe('')
   })
+
+  // `passageHtml` is the same three resolutions with a renderer on the end, and
+  // it stays SEPARATE from `passageFor` because the text still answers two
+  // questions that want nothing to do with html: whether the row gets a chevron
+  // at all, and whether it gets the `has-passage` column.
+  describe('as html', () => {
+    const withIndex = (text) => {
+      sessionState.index = {
+        byId: new Map([[SRC.id, chunk(text)]]),
+        manifest: { pages: [{ path: '/guide' }] },
+      }
+    }
+
+    it('renders the chunk rather than handing over its syntax', () => {
+      withIndex('## Auth\n\nSet the **token** first.')
+      const html = session.passageHtml({}, SRC)
+      expect(html).toContain('<h2>Auth</h2>')
+      expect(html).toContain('<strong>token</strong>')
+    })
+
+    // The renderer is shared, so the manifest has to reach it: a chunk's own
+    // cross-references are exactly the links a reader following provenance
+    // presses, and the ones that resolve to nothing must not look pressable.
+    it("filters the chunk's links against the manifest", () => {
+      withIndex('See [guide](/guide) and [gone](/gone).')
+      const html = session.passageHtml({}, SRC)
+      expect(html).toContain('<a href="/guide">guide</a>')
+      expect(html).toContain('<span>gone</span>')
+    })
+
+    it('is empty wherever the text is', () => {
+      sessionState.index = { byId: new Map(), manifest: { pages: [] } }
+      expect(session.passageHtml({}, SRC)).toBe('')
+    })
+  })
+})
+
+/**
+ * The passage, RENDERED — the same markdown pipeline the answer runs on.
+ *
+ * A chunk is corpus markdown, so shown as a text node it was the one surface in
+ * the panel that asked the reader to parse `##` and `**` themselves, directly
+ * under an answer that never does. Nothing about what is shown changes here:
+ * the whole chunk, still uncut, which is the invariant 009 argues for.
+ */
+describe('009 — the passage renders as markdown', () => {
+  const known = new Set(['/guide/config'])
+  const html = (src) => renderPassage(src, known)
+
+  it('renders the block constructs a documentation chunk is made of', () => {
+    const out = html('## Setting up\n\nA **token** and `a value`.\n\n- one\n- two')
+    expect(out).toContain('<h2>Setting up</h2>')
+    expect(out).toContain('<strong>token</strong>')
+    expect(out).toContain('<code>a value</code>')
+    expect(out).toContain('<li>one</li>')
+    expect(out).not.toContain('##')
+    expect(out).not.toContain('**')
+  })
+
+  // The fence card, minus its button. A copy control inside a 240px quotation
+  // sits under the turn's own copy button and adds a tab stop to a scroller
+  // that already is one.
+  it('renders a fence as a card with no copy button', () => {
+    const out = html('```js\nconst a = 1\n```')
+    expect(out).toContain('class="docpilot__code"')
+    expect(out).toContain('const a = 1')
+    expect(out).not.toContain('docpilot__code-copy')
+  })
+
+  // The other half of that switch: the answer is the reason the button exists.
+  it('leaves the answer its copy button', () => {
+    expect(renderAnswer('```js\nconst a = 1\n```', known).html).toContain('docpilot__code-copy')
+  })
+
+  // Not because a chunk can lie — it is what the site's own author wrote. A
+  // corpus link is written relative to the page it sits on, and resolved against
+  // a panel teleported to `body` it points at nothing.
+  it('keeps a link the manifest knows and de-links one it does not', () => {
+    const out = html('See [config](/guide/config) and [next](../guide/next.md).')
+    expect(out).toContain('<a href="/guide/config">config</a>')
+    expect(out).toContain('<span>next</span>')
+    expect(out).not.toContain('href="../guide/next.md"')
+  })
+
+  // A literal `[1]` in a chunk is prose about a footnote on that page, not a
+  // citation into this turn's source list.
+  it('does not turn a bracketed digit into a citation marker', () => {
+    const out = html('See note [1] below.')
+    expect(out).toContain('[1]')
+    expect(out).not.toContain('docpilot__cite')
+  })
+
+  // `html: false` on the shared instance, which is what makes this the second
+  // v-html in the panel that needs no escaping of its own.
+  it('escapes an author\'s raw HTML rather than passing it through', () => {
+    expect(html('Use <script>alert(1)</script> nowhere.')).not.toContain('<script>')
+  })
+
+  // The panel has no DOM here, so the binding is asserted the way 008's row
+  // placement is: by reading the source and stating the contract it keeps.
+  describe('the disclosure that shows it', () => {
+    const panel = fs.readFileSync(
+      new URL('../src/theme/components/DocPilot.vue', import.meta.url),
+      'utf8',
+    )
+    const region = panel.slice(panel.indexOf('class="docpilot__passage"'))
+
+    it('renders the html and not the interpolated source', () => {
+      expect(region).toContain('v-html="passageHtml(turn, src)"')
+      expect(panel).not.toContain('>{{ passage(turn, src) }}<')
+    })
+
+    // A link inside v-html has no Vue handler of its own, and a chunk's own
+    // cross-references are exactly the links a reader following provenance
+    // presses: without this it is a full page load out of the SPA, which below
+    // 960px also drops the panel it was opened from.
+    it('delegates its clicks the way the answer does', () => {
+      expect(region.slice(0, region.indexOf('</div>'))).toContain('@click="onAnswerClick"')
+    })
+  })
+})
+
+/**
+ * `toPlainText` — markdown as the text under it, for the search-only snippet.
+ *
+ * A row shows a 220-character window so a reader can tell whether it is the one
+ * they want, and characters spent on `**` and `](/guide/config#tokens)` buy them
+ * nothing.
+ */
+describe('toPlainText', () => {
+  it('drops the syntax and keeps the words', () => {
+    expect(toPlainText('## Heading\n\nA **bold** and [linked](/x) line.')).toBe(
+      'Heading\nA bold and linked line.',
+    )
+  })
+
+  // Half the answers in a documentation corpus ARE the code block.
+  it('keeps the body of a fence', () => {
+    expect(toPlainText('```js\nconst a = 1\n```')).toBe('const a = 1')
+  })
+
+  // A cell separator of its own: a row of cells is one line, not four.
+  it('flattens a table to a line per row', () => {
+    expect(toPlainText('| a | b |\n| - | - |\n| 1 | 2 |')).toBe('a b\n1 2')
+  })
+
+  // The one thing it must not do: an emphasis close is INSIDE a sentence, and
+  // ending the line there would cut every emphasised phrase in the corpus.
+  it('does not break the sentence an emphasis sits in', () => {
+    expect(toPlainText('Set **token** before you start.')).toBe('Set token before you start.')
+  })
+
+  it('is empty for nothing at all', () => {
+    expect(toPlainText('')).toBe('')
+    expect(toPlainText(null)).toBe('')
+  })
 })
 
 describe('009 — a copied answer carries its sources', () => {
@@ -1705,6 +2134,84 @@ describe('009 — the first-visit hint', () => {
   })
 })
 
+/**
+ * The footnote's last word — `ui.credit`.
+ *
+ * A panel a reader cannot name is a panel they cannot ask about, so the row
+ * under the composer closes on one linked word: `DocPilot`. It is the only
+ * segment of that row with no condition on it, which is what makes the
+ * SEPARATORS the interesting part — the two segments in front of it are both
+ * optional, and a footnote that opens with `· ` is what happens when nobody
+ * checks.
+ */
+describe('the credit link in the footnote', () => {
+  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const collect = () => {
+    const messages = []
+    const err = (message) => messages.push(message)
+    err.messages = messages
+    return err
+  }
+
+  it('is on by default and comes off with one word', () => {
+    expect(themeDocPilot(resolveDocPilot({})).ui.credit).toBe(true)
+    expect(themeDocPilot(resolveDocPilot({ ui: { credit: false } })).ui.credit).toBe(false)
+  })
+
+  /**
+   * Through `pick`, not `!== false`. `credit: 'no'` is an author switching the
+   * link OFF, and the difference between reporting that and resolving it
+   * silently to `true` is whether they spend the afternoon looking for the
+   * setting that already exists.
+   */
+  it('names a value it does not recognise instead of keeping the badge in silence', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { credit: 'no' } }, err).credit).toBe(true)
+    expect(err.messages.join('\n')).toContain('ui.credit')
+  })
+
+  // Documented and dead is the failure this asserts against: the knob resolves,
+  // the reference describes it, and the template never asks.
+  it('is what the template actually reads', () => {
+    expect(panel).toContain('s.config.ui.credit')
+    expect(panel).toContain("T('credit.label')")
+  })
+
+  /**
+   * NOT GATED ON A TURN, unlike the disclaimer beside it. The moment a reader
+   * wants to know what is about to answer them is the moment the thread is
+   * still empty, so the credit is there on the first open.
+   */
+  it('does not wait for the first answer', () => {
+    const row = panel.match(/<p id="dp-footnote"[\s\S]*?<\/p>/)[0]
+    const credit = row.match(/<span v-if="s\.config\.ui\.credit"[\s\S]*?<\/span\s*>/)[0]
+    expect(credit).not.toContain('s.turns.length')
+  })
+
+  /**
+   * The separator belongs to what PRECEDES it. With `scope.enabled: false` and
+   * no turn yet, both earlier segments are gone and an unconditional ` · ` is
+   * the first thing in the row.
+   */
+  it('never leaves a leading separator in the row', () => {
+    const fn = panel.match(/const creditSep = computed\([\s\S]*?\)\n/)[0]
+    expect(fn).toContain('s.config.scope.enabled')
+    expect(fn).toContain('s.turns.length')
+    // The disclaimer's own separator, one segment earlier, on the same terms.
+    const row = panel.match(/<p id="dp-footnote"[\s\S]*?<\/p>/)[0]
+    expect(row).toContain('<template v-if="s.config.scope.enabled"> · </template>')
+    expect(row).toContain('<template v-if="creditSep"> · </template')
+  })
+
+  // A link that leaves the site, on the same terms as every external source row
+  // in the thread — see the `c.origin` pair on the refusal list.
+  it('opens the project in a new tab, safely', () => {
+    const row = panel.match(/<p id="dp-footnote"[\s\S]*?<\/p>/)[0]
+    expect(row).toContain('target="_blank"')
+    expect(row).toContain('rel="noopener noreferrer"')
+  })
+})
+
 /** ui-specs/009, wave 6 — working the thread, and the panel beside the docs. */
 describe('009 — working the thread', () => {
   const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
@@ -1821,6 +2328,8 @@ describe('009 — the panel beside the docs', () => {
   it('is off by default', () => {
     expect(themeDocPilot(resolveDocPilot({})).ui.layout).toBe('overlay')
     expect(themeDocPilot(resolveDocPilot({ ui: { layout: 'push' } })).ui.layout).toBe('push')
+    expect(themeDocPilot(resolveDocPilot({})).ui.theme).toBe('auto')
+    expect(themeDocPilot(resolveDocPilot({ ui: { theme: 'dark' } })).ui.theme).toBe('dark')
   })
 
   // Below the sheet breakpoint the panel is edge to edge; there is nothing to
@@ -1981,6 +2490,13 @@ describe('rule 11 — every action has a switch', () => {
    * translation tree and a locale table — so `leavesOf` bottoms out at `{}` and
    * yields nothing for either, and the whole key is documented, and tabulated,
    * as one thing.
+   *
+   * `chat.extraBody` is the one row with no DEFAULT to check. It cannot have
+   * one: `extraBodyOf` reads PRESENCE, so `undefined` means "the provider's own
+   * fragment" and `null` means "none", and a value in `DEFAULTS` would have to
+   * be one of those two and would delete the other. It is tabulated anyway —
+   * a reader who scans this table and does not find a setting concludes it does
+   * not exist — so its Default cell is prose and is skipped below.
    */
   it('11e — the `Parameters` table is DEFAULTS, row for row', () => {
     const doc = read('docs/reference/config.md')
@@ -2013,7 +2529,7 @@ describe('rule 11 — every action has a switch', () => {
 
     // Every setting, once, in the order the tree declares them — a table sorted
     // differently from the block above it is two orders for the reader to hold.
-    const expected = [...leavesOf(DEFAULTS), 'i18n']
+    const expected = [...leavesOf(DEFAULTS), 'i18n', 'chat.extraBody']
     expect(rows.map((r) => r.name).sort(), 'the tabulated settings').toEqual([...expected].sort())
 
     // And the VALUE, executed rather than string-matched: `'docs'` and `"docs"`
@@ -2021,6 +2537,11 @@ describe('rule 11 — every action has a switch', () => {
     // anybody writes JavaScript.
     const leafOf = (path) => path.split('.').reduce((o, k) => o?.[k], DEFAULTS)
     for (const row of rows) {
+      // The one row whose default is a sentence rather than a value — see above.
+      if (row.name === 'chat.extraBody') {
+        expect(row.type.replace(/`/g, '').trim(), 'chat.extraBody — Type cell').not.toBe('')
+        continue
+      }
       const literal = row.value.replace(/^`|`$/g, '').trim()
       let got
       expect(() => {
@@ -2482,6 +3003,94 @@ describe('calibration — the cosine window sweep', () => {
     ...many('N2', 20, 0.42),
   ]
 
+  /**
+   * The transfer's half of the sweep: the window is re-fitted against a new
+   * embedder while tau is inherited. These pin the two properties that make
+   * that legal — it recovers the joint search's own answer, and it cannot be
+   * talked into buying negative-catch with over-refusal.
+   */
+  describe('with tau inherited rather than chosen', () => {
+    const sourceRate = { U: 0, S: 0, F: 0 }
+
+    it('recovers the jointly-searched window when handed the tau that search chose', () => {
+      const joint = chooseWindow(rows, guard)
+      expect(joint).not.toBeNull()
+      const pinned = fitWindowAtTau(rows, guard, joint.best.tau, sourceRate)
+      expect(pinned).not.toBeNull()
+      // Self-consistency: applied to the embedder it was measured on, the
+      // pinned fit is the joint search. Without this the mode is a new
+      // estimator rather than the same one with a coordinate fixed.
+      expect(pinned.window).toEqual(joint.window)
+    })
+
+    it('refuses the window that buys negative-catch by over-refusing', () => {
+      const tau = 0.63
+      // The unconstrained argmax: right-shift the window until D collapses for
+      // everything, and precision reads 100% because every negative is refused
+      // — along with most of the positives. Measured on this package's own
+      // corpus, [0.44, 0.84] scores exactly that at 77.5% over-refusal on U.
+      const greedy = WINDOWS.map((w) => ({ w, row: sweepRow(regate(rows, w, guard), tau, 'G') }))
+        .filter((c) => c.row.gatePrecision === 1)
+        .sort((a, b) => b.row.byStratum.U.rate - a.row.byStratum.U.rate)[0]
+      expect(greedy).toBeDefined()
+      expect(greedy.row.byStratum.U.rate).toBeGreaterThan(0.5)
+
+      const pinned = fitWindowAtTau(rows, guard, tau, sourceRate)
+      if (pinned) expect(pinned.window).not.toEqual(greedy.w)
+    })
+
+    it('returns null rather than a window when no candidate makes the inherited tau feasible', () => {
+      // Nothing in the grid can lift a corpus this flat to tau 0.95.
+      expect(fitWindowAtTau(rows, guard, 0.95, sourceRate)).toBeNull()
+    })
+
+    it('refuses an inherited tau at or below wLexical, which gate.js throws on', () => {
+      expect(fitWindowAtTau(rows, guard, guard.wLexical, sourceRate)).toBeNull()
+      expect(fitWindowAtTau(rows, guard, 0.1, sourceRate)).toBeNull()
+    })
+
+    it('never exceeds the over-refusal the source measured', () => {
+      const pinned = fitWindowAtTau(rows, guard, 0.63, { U: 0, S: 0, F: 0 })
+      if (pinned) {
+        for (const k of ['U', 'S', 'F']) expect(pinned.row.byStratum[k].rate).toBe(0)
+      }
+    })
+  })
+
+  /**
+   * The anchor draw. Its size is not a preference: below the n at which UB95 at
+   * zero failures fits inside a stratum's own bound, `feasible` is unreachable
+   * and every window in the grid is filtered out — a run that refuses always.
+   */
+  describe('anchor selection for a transfer', () => {
+    const probes = [
+      ...Array.from({ length: 169 }, (_, i) => ({ id: `u-${i}`, question: 'q', stratum: 'U' })),
+      ...Array.from({ length: 128 }, (_, i) => ({ id: `s-${i}`, question: 'q', stratum: 'S' })),
+      ...Array.from({ length: 60 }, (_, i) => ({ id: `f-${i}`, question: 'q', stratum: 'F' })),
+      ...Array.from({ length: 30 }, (_, i) => ({ id: `n4-${i}`, question: 'q', stratum: 'N4' })),
+      ...Array.from({ length: 30 }, (_, i) => ({ id: `p-${i}`, question: 'q', stratum: 'P' })),
+    ]
+
+    it('is deterministic, so one calibration onto one index is one window', () => {
+      const a = pickAnchors(probes, 'bounded').map((p) => p.id)
+      const b = pickAnchors(probes, 'bounded').map((p) => p.id)
+      expect(a).toEqual(b)
+    })
+
+    it('gives every bounded stratum an n its own ceiling can reach at zero failures', () => {
+      const picked = pickAnchors(probes, 'bounded')
+      for (const [k, v] of Object.entries(STRATA)) {
+        if (!v.positive) continue
+        const n = picked.filter((p) => p.stratum === k).length
+        expect(wilsonUpper95(0, n)).toBeLessThanOrEqual(v.bound)
+      }
+    })
+
+    it('takes the whole set under "full"', () => {
+      expect(pickAnchors(probes, 'full')).toHaveLength(probes.length)
+    })
+  })
+
   it('maps a cosine onto D linearly inside the window and clamps outside it', () => {
     const w = { cosFloor: 0.16, cosCeil: 0.24 }
     expect(dOf(0.2, w)).toBeCloseTo(0.5, 10)
@@ -2746,20 +3355,24 @@ describe('resolveUi — trigger placement and panel shape', () => {
     return fn
   }
 
-  it('defaults to the navbar trigger and the drawer', () => {
+  it('defaults to the floating button and the popup', () => {
     const err = collect()
     const expected = {
-      // The WORD `'nav'` is two placements, and the resolved value says so.
-      trigger: ['nav', 'screen'],
-      panel: 'drawer',
-      showNavTrigger: true,
-      showScreen: true,
-      showFab: false,
+      // The WORD `'fab'` is one placement — deliberately, and unlike `'nav'`,
+      // which is two: the floating button is on screen at every width already.
+      trigger: ['fab'],
+      panel: 'popup',
+      showNavTrigger: false,
+      showScreen: false,
+      showFab: true,
       fabLabel: true,
       fabIcon: true,
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
+      credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     }
@@ -2830,7 +3443,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
     expect(resolveUi({ ui: { trigger: [] } }, err).trigger).toEqual([])
     expect(err.messages).toEqual([])
 
-    expect(resolveUi({ ui: { trigger: ['sidebar'] } }, err).trigger).toEqual(['nav', 'screen'])
+    expect(resolveUi({ ui: { trigger: ['sidebar'] } }, err).trigger).toEqual(['fab'])
     expect(err.messages).toHaveLength(1)
   })
 
@@ -2912,7 +3525,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
   // dropped, and the shipped default in its place.
   it('treats a prototype key as the typo it is', () => {
     const err = collect()
-    expect(resolveUi({ ui: { trigger: 'toString' } }, err).trigger).toEqual(['nav', 'screen'])
+    expect(resolveUi({ ui: { trigger: 'toString' } }, err).trigger).toEqual(['fab'])
     expect(err.messages).toHaveLength(1)
     expect(err.messages[0]).toContain('ui.trigger')
     expect(resolveUi({ ui: { trigger: ['toString', 'fab'] } }, collect()).trigger).toEqual(['fab'])
@@ -2922,8 +3535,8 @@ describe('resolveUi — trigger placement and panel shape', () => {
   // `.push()` anywhere must not be able to rewrite what the next call returns.
   it('hands out a list of its own, never the shared table', () => {
     const first = resolveUi({}, () => {})
-    first.trigger.push('fab')
-    expect(resolveUi({}, () => {}).trigger).toEqual(['nav', 'screen'])
+    first.trigger.push('nav')
+    expect(resolveUi({}, () => {}).trigger).toEqual(['fab'])
   })
 
   it('carries out the explicit combinations in silence', () => {
@@ -2939,6 +3552,9 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
+      credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -2953,6 +3569,9 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
+      credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3008,13 +3627,49 @@ describe('resolveUi — trigger placement and panel shape', () => {
       panel: 'popup',
     })
     expect(resolveUi({ ui: { trigger: 'sidebar' } }, err)).toMatchObject({
-      trigger: ['nav', 'screen'],
-      panel: 'drawer',
+      trigger: ['fab'],
+      panel: 'popup',
     })
     expect(err.messages).toHaveLength(2)
     expect(err.messages[0]).toContain('ui.panel')
     expect(err.messages[0]).toContain('"modal"')
     expect(err.messages[1]).toContain('ui.trigger')
+  })
+
+  /**
+   * `ui.theme` — the one key where `'auto'` comes back out.
+   *
+   * `panel: 'auto'` names a SHAPE and the build settles it from the trigger
+   * list, which is why nothing downstream may re-derive it. This names a
+   * SIGNAL, and the signal is the reader's browser: there is nothing to settle
+   * at build time, and a resolver that settled it anyway would pin every reader
+   * to whichever scheme the machine that ran the build happened to prefer.
+   */
+  it('leaves the scheme unsettled, and pins the two that are settled', () => {
+    const err = collect()
+    expect(resolveUi({}, err).theme).toBe('auto')
+    expect(resolveUi({ ui: { theme: 'auto' } }, err).theme).toBe('auto')
+    expect(resolveUi({ ui: { theme: 'light' } }, err).theme).toBe('light')
+    expect(resolveUi({ ui: { theme: 'dark' } }, err).theme).toBe('dark')
+    expect(err.messages).toEqual([])
+  })
+
+  // The same thing said twice. Folded BEFORE the enum check, so the word never
+  // reaches `pick` and the message it would have printed never fires — and so
+  // the resolved value is one `UI_THEMES` names, which is what keeps the
+  // browser's second pass a no-op.
+  it('reads `system` as the word `auto`', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { theme: 'system' } }, err).theme).toBe('auto')
+    expect(err.messages).toEqual([])
+  })
+
+  it('reports a scheme outside the enum and falls back to the page', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { theme: 'darkk' } }, err).theme).toBe('auto')
+    expect(err.messages).toHaveLength(1)
+    expect(err.messages[0]).toContain('ui.theme')
+    expect(err.messages[0]).toContain('"darkk"')
   })
 
   // The property the two-sided call depends on: the build resolves and emits
@@ -3040,8 +3695,16 @@ describe('resolveUi — trigger placement and panel shape', () => {
         // makes the second pass a no-op rather than a rewrite.
         for (const fabLabel of [undefined, true, false, 'Ask AI']) {
           for (const fabIcon of [undefined, true, false]) {
-            const once = resolveUi({ ui: { trigger, panel, fabLabel, fabIcon } }, () => {})
-            expect(resolveUi({ ui: once }), `${trigger}/${panel}/${fabLabel}/${fabIcon}`).toEqual(once)
+            // `'system'` is the one input in this suite whose resolved form is a
+            // DIFFERENT word, so it is the one that would break the round trip
+            // if the fold ever moved after the enum check instead of before it.
+            for (const theme of [undefined, 'auto', 'light', 'dark', 'system']) {
+              const once = resolveUi({ ui: { trigger, panel, fabLabel, fabIcon, theme } }, () => {})
+              expect(
+                resolveUi({ ui: once }),
+                `${trigger}/${panel}/${fabLabel}/${fabIcon}/${theme}`,
+              ).toEqual(once)
+            }
           }
         }
       }
@@ -3213,6 +3876,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
+      credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3220,16 +3886,19 @@ describe('ui — from settings to the browser', () => {
 
   it('emits the resolved structure, so no component re-derives it', () => {
     expect(themeDocPilot(resolveDocPilot({})).ui).toEqual({
-      trigger: ['nav', 'screen'],
-      panel: 'drawer',
-      showNavTrigger: true,
-      showScreen: true,
-      showFab: false,
+      trigger: ['fab'],
+      panel: 'popup',
+      showNavTrigger: false,
+      showScreen: false,
+      showFab: true,
       fabLabel: true,
       fabIcon: true,
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
+      credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3244,6 +3913,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
+      credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3262,6 +3934,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
+      credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3280,6 +3955,9 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      background: 'notify',
+      credit: true,
+      theme: 'auto',
       font: null,
       fontMono: null,
     })
@@ -3314,15 +3992,24 @@ describe('themeDocPilot — the client half is complete by construction', () => 
   const RENAMED = { chat: 'llm' }
   const emitted = themeDocPilot(resolveDocPilot({}))
 
+  // A dotted entry withholds one key inside a group whose others DO cross —
+  // `chat.preferLocal`, an input to resolution whose OUTPUT is `llm.chain`.
+  const TOP_ONLY = SERVER_ONLY.filter((k) => !k.includes('.'))
+  const NESTED_ONLY = new Set(SERVER_ONLY.filter((k) => k.includes('.')))
+
   it('emits every top-level setting that is not explicitly server-only', () => {
     const unreachable = Object.keys(DEFAULTS).filter(
-      (k) => !SERVER_ONLY.includes(k) && !Object.hasOwn(emitted, RENAMED[k] ?? k),
+      (k) => !TOP_ONLY.includes(k) && !Object.hasOwn(emitted, RENAMED[k] ?? k),
     )
     expect(unreachable).toEqual([])
   })
 
   it('withholds every server-only setting — a key, not an oversight', () => {
-    for (const k of SERVER_ONLY) expect(Object.hasOwn(emitted, k)).toBe(false)
+    for (const k of TOP_ONLY) expect(Object.hasOwn(emitted, k)).toBe(false)
+    for (const dotted of NESTED_ONLY) {
+      const [group, key] = dotted.split('.')
+      expect(Object.hasOwn(emitted[RENAMED[group] ?? group] ?? {}, key), dotted).toBe(false)
+    }
   })
 
   it('carries every nested key of chat, prompt, guard and scope', () => {
@@ -3336,6 +4023,7 @@ describe('themeDocPilot — the client half is complete by construction', () => 
       ['feedback', 'feedback'],
     ]) {
       for (const k of Object.keys(DEFAULTS[from])) {
+        if (NESTED_ONLY.has(`${from}.${k}`)) continue
         expect(Object.hasOwn(emitted[to], k), `${from}.${k}`).toBe(true)
       }
     }
@@ -5739,7 +6427,16 @@ describe('i18n — the documented key table matches the shipped one', () => {
     const said = doc.match(/^(\d+) leaves, in ([\w-]+) groups\./m)
     expect(said, 'the "N leaves, in M groups" sentence').not.toBe(null)
     expect(Number(said[1])).toBe(KEY_PATHS.size)
-    const words = { eighteen: 18, nineteen: 19, twenty: 20, 'twenty-one': 21, 'twenty-two': 22 }
+    const words = {
+      eighteen: 18,
+      nineteen: 19,
+      twenty: 20,
+      'twenty-one': 21,
+      'twenty-two': 22,
+      'twenty-three': 23,
+      'twenty-four': 24,
+      'twenty-five': 25,
+    }
     expect(words[said[2]] ?? Number(said[2])).toBe(m.size)
   })
 
@@ -5749,6 +6446,36 @@ describe('i18n — the documented key table matches the shipped one', () => {
       expect(row, `a table row for \`${group}\``).not.toBe(null)
       expect(Number(row[1]), `\`${group}\` count`).toBe(n)
     }
+  })
+
+  /**
+   * THE FOUR OTHER PLACES THE SAME PAIR OF NUMBERS IS PRINTED.
+   *
+   * The two tests above hold `docs/guide/i18n.md`, which is the page a
+   * translator opens. It is not the only page that quotes the totals: the
+   * README, the comparison table, the panel guide and the landing page's
+   * feature card all print "N strings … in M groups" as a selling point, and
+   * none of them was checked. They had drifted to 158 in 22 against a tree of
+   * 170 in 25 — the same failure, in the same shape, as the drift the block
+   * above was written for, one file over.
+   *
+   * Held as substrings rather than by regex sweep: each page words the sentence
+   * differently, and the wording is the part a test should not own.
+   */
+  it('every other page quoting the totals quotes the current ones', () => {
+    const n = KEY_PATHS.size
+    const g = new Set([...KEY_PATHS].map((p) => p.split('.')[0])).size
+    const claims = [
+      ['README.md', `Every reader-facing string — ${n} of them, in ${g} groups —`],
+      ['docs/guide/comparison.md', `all ${n} of them, one at a time, in ${g} groups`],
+      ['docs/guide/panel.md', `All ${n} reader-facing strings are replaceable one at a time, in ${g} groups`],
+      ['docs/.vitepress/theme/ChatFeatures.vue', `'${n} strings, one at a time'`],
+      ['docs/.vitepress/theme/ChatFeatures.vue', `replaceable, in ${g} groups.`],
+    ]
+    const stale = claims
+      .filter(([f, claim]) => !fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8').includes(claim))
+      .map(([f, claim]) => `${f} no longer says "${claim}"`)
+    expect(stale, `the key tree is ${n} leaves in ${g} groups — update the pages that print it`).toEqual([])
   })
 })
 
@@ -5917,7 +6644,7 @@ describe('createRetrieval', () => {
    * exactly why the omission has to be spelled out rather than noticed.
    */
   let fixtureCount = 0
-  const makeIndex = (rows, guard = GUARD) => {
+  const makeIndex = (rows, guard = GUARD, df = {}) => {
     const hash = `test-${++fixtureCount}`
     const vectors = new Int8Array(rows.length * DIMS)
     rows.forEach((r, i) => vectors.set(r.vec, i * DIMS))
@@ -5936,7 +6663,7 @@ describe('createRetrieval', () => {
       },
       shards: [chunks],
       vectorBuffer: vectors.buffer,
-      dfDoc: { df: {} },
+      dfDoc: { df },
     })
   }
 
@@ -6127,10 +6854,407 @@ describe('createRetrieval', () => {
     expect(miss.G).toBeLessThan(GUARD.tau)
   })
 
+  /**
+   * ── the follow-up asked in another language — RAG-SPEC 3.4.5
+   *
+   * The reported failure end to end: turn one is answered, turn two says "and
+   * can I style it?" in Russian, and the pronoun makes the raw question
+   * retrieve nothing. The composed channel is what resolves it, and the term
+   * veto used to discard the composed channel for every question in this
+   * language — so the reader was told the docs do not cover styling by a gate
+   * that had the styling chunk in hand.
+   */
+  const ENGLISH_DF = { alpha: 2, widget: 3, configured: 1, manifest: 1, token: 2, beta: 1 }
+
+  it('admits the composed channel when the tail is in another script', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS(), GUARD, ENGLISH_DF),
+      scope: ALL,
+      guard: GUARD,
+    })
+    // The pronoun on its own lands on no axis and overlaps no term.
+    const alone = r.evaluate({ question: 'а я могу его стилизировать?', queryVec: axis(3) })
+    expect(alone.pass).toBe(false)
+
+    const withPrevious = r.evaluate({
+      question: 'а я могу его стилизировать?',
+      previousQuestion: 'для чего нужен этот виджет?',
+      queryVec: axis(3),
+      composedVec: axis(0),
+    })
+    expect(withPrevious.channel).toBe('composed')
+    expect(withPrevious.admissible).toBe(true)
+    expect(withPrevious.admissibleBy).toBe('foreign-tail')
+    expect(withPrevious.pass).toBe(true)
+    // The chunk the model is primed with is the composed channel's, not the
+    // raw channel's — abstaining decides what the model reads, not only whether
+    // it is called.
+    expect(withPrevious.chunks[0].id).toBe('a#one')
+  })
+
+  /**
+   * ABSTAINING IS NOT PASSING, and these two are the whole safety argument.
+   *
+   * The first: the same foreign tail with nothing behind it. Admissibility no
+   * longer stands in the way and the turn still refuses, because the dense
+   * floor is what replaced it.
+   *
+   * The second: a topic switch in the corpus's own script, with the antecedent's
+   * evidence sitting right there to inherit. The veto is measurable there, so it
+   * applies, and the composed channel is dropped however high it scores.
+   */
+  it('refuses a foreign tail the composed channel cannot support either', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS(), GUARD, ENGLISH_DF),
+      scope: ALL,
+      guard: GUARD,
+    })
+    const g = r.evaluate({
+      question: 'а где купить пиццу?',
+      previousQuestion: 'для чего нужен этот виджет?',
+      queryVec: axis(3),
+      composedVec: axis(3),
+    })
+    expect(g.admissible).toBe(true)
+    expect(g.channel).toBe('raw')
+    expect(g.pass).toBe(false)
+  })
+
+  it('still vetoes a topic switch written in the corpus’s own script', () => {
+    const r = createRetrieval({
+      index: makeIndex(CORPUS(), GUARD, ENGLISH_DF),
+      scope: ALL,
+      guard: GUARD,
+    })
+    const g = r.evaluate({
+      question: 'what is the weather in paris',
+      previousQuestion: 'how is the alpha widget configured?',
+      queryVec: axis(3),
+      composedVec: axis(0),
+    })
+    expect(g.admissible).toBe(false)
+    expect(g.admissibleBy).toBe(null)
+    expect(g.channel).toBe('raw')
+    expect(g.pass).toBe(false)
+  })
+
   it('an empty corpus refuses instead of throwing', () => {
     const r = createRetrieval({ index: makeIndex([]), scope: ALL, guard: GUARD })
     expect(r.search({ query: 'anything', queryVec: axis(0) })).toEqual([])
     expect(r.evaluate({ question: 'anything', queryVec: axis(0) }).pass).toBe(false)
+  })
+
+  /**
+   * The diversity the lexical-only path did not have.
+   *
+   * `mmr()` at the shipped λ=1.0 multiplies its redundancy term by (1 − λ) = 0, so
+   * `simTo.pair` — which without a query vector IS the same-page indicator — was
+   * dead code, and every slot could go to one page. The fixture is the shape that
+   * exposes it: one page repeating the query's terms across six sections, against
+   * two other pages that say the same thing once.
+   */
+  const REPETITIVE = () => {
+    const filler = 'plans invoices refunds billing statements '.repeat(20)
+    const rows = []
+    for (let i = 1; i <= 6; i++) {
+      rows.push({
+        id: `big#${i}`,
+        path: '/big',
+        anchor: `${i}`,
+        title: `Billing ${i}`,
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: `Billing section ${i}. ${filler}`,
+        prev: null,
+        next: null,
+        vec: axis(0),
+      })
+    }
+    for (const [n, p] of [
+      [1, '/one'],
+      [2, '/two'],
+    ]) {
+      rows.push({
+        id: `s${n}#one`,
+        path: p,
+        anchor: 'one',
+        title: `Side ${n}`,
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: `Side note ${n} about invoices and refunds. ${filler}`,
+        prev: null,
+        next: null,
+        vec: axis(1),
+      })
+    }
+    return rows
+  }
+
+  it('caps one page to PAGE_CAP slots when there is no query vector', () => {
+    const r = createRetrieval({ index: makeIndex(REPETITIVE()), scope: ALL, guard: GUARD })
+    const hits = r.search({ query: 'invoices refunds billing', queryVec: null, k: 5 })
+    expect(hits).toHaveLength(5)
+    const fromBig = hits.filter((c) => c.path === '/big')
+    // The cap shapes the HEAD of the set: at most two before anything else is
+    // offered. Backfill may return to /big afterwards rather than hand back a
+    // short set, so the assertion is on the first three, not on the total.
+    expect(hits.slice(0, 3).filter((c) => c.path === '/big')).toHaveLength(2)
+    expect(new Set(hits.slice(0, 3).map((c) => c.path)).size).toBeGreaterThan(1)
+    expect(fromBig.length).toBeLessThan(5)
+  })
+
+  it('backfills rather than returning a short set when the corpus is all one page', () => {
+    // Every candidate is on one page, so a cap that only filtered would hand the
+    // model three chunks where five were asked for — less evidence, not more
+    // diverse evidence.
+    const rows = REPETITIVE().filter((c) => c.path === '/big')
+    const r = createRetrieval({ index: makeIndex(rows), scope: ALL, guard: GUARD })
+    expect(r.search({ query: 'invoices refunds billing', queryVec: null, k: 5 })).toHaveLength(5)
+  })
+
+  it('leaves the hybrid path on MMR: a query vector still orders the set', () => {
+    // The cap is the vectorless branch only. With a vector in hand the dense
+    // re-rank decides, and the chunk on the query axis leads however repetitive
+    // its page is.
+    const r = createRetrieval({ index: makeIndex(REPETITIVE()), scope: ALL, guard: GUARD })
+    const hits = r.search({ query: 'invoices refunds billing', queryVec: axis(0), k: 5 })
+    expect(hits[0].path).toBe('/big')
+    expect(hits.filter((c) => c.path === '/big').length).toBeGreaterThan(2)
+  })
+
+  /**
+   * `pageCap` on its own, because the two properties it has to hold are easier to
+   * state than to read out of a retrieval.
+   */
+  it('pageCap keeps pool order and never shortens the set', () => {
+    const byId = new Map(
+      [
+        ['a', '/p1'],
+        ['b', '/p1'],
+        ['c', '/p1'],
+        ['d', '/p2'],
+        ['e', '/p3'],
+      ].map(([id, path]) => [id, { id, path }]),
+    )
+    const pool = ['a', 'b', 'c', 'd', 'e']
+    // Capped ids are deferred, not dropped: 'c' returns at the end.
+    expect(pageCap(pool, byId, 5, 2)).toEqual(['a', 'b', 'd', 'e', 'c'])
+    expect(pageCap(pool, byId, 5, 1)).toEqual(['a', 'd', 'e', 'b', 'c'])
+    // k is respected before the backfill runs.
+    expect(pageCap(pool, byId, 3, 2)).toEqual(['a', 'b', 'd'])
+    // A cap of 1 over a single page is the degenerate case the backfill exists
+    // for, and it still returns k.
+    expect(pageCap(pool.slice(0, 3), byId, 3, 1)).toEqual(['a', 'b', 'c'])
+    expect(pageCap([], byId, 5, 2)).toEqual([])
+  })
+
+  /**
+   * `kind` intersects at candidate generation now, not after fusion.
+   *
+   * Filtering afterwards could only shrink a list already truncated to FUSED, so
+   * a kind that was real but rare was answered out of whatever survived a search
+   * that had never heard of it — and often out of the unfiltered fallback.
+   */
+  it('generates candidates of the requested kind instead of filtering the fused pool', () => {
+    const filler = 'plans invoices refunds billing statements '.repeat(20)
+    const rows = []
+    for (let i = 1; i <= 14; i++) {
+      rows.push({
+        id: `g#${i}`,
+        path: `/g${i}`,
+        anchor: 'one',
+        title: `Guide ${i}`,
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: `Guide ${i} on invoices and refunds. ${filler}`,
+        prev: null,
+        next: null,
+        vec: axis(0),
+      })
+    }
+    // One reference page, deliberately a weaker lexical match than any guide, so
+    // it lands outside the fused window and a post-filter would never see it.
+    rows.push({
+      id: 'ref#one',
+      path: '/ref',
+      anchor: 'one',
+      title: 'Reference',
+      breadcrumb: 'Docs',
+      kind: 'reference',
+      text: `Refunds field reference. ${'unrelated tokens '.repeat(60)}`,
+      prev: null,
+      next: null,
+      vec: axis(1),
+    })
+    const r = createRetrieval({ index: makeIndex(rows), scope: ALL, guard: GUARD })
+    const got = r.search({ query: 'invoices refunds', queryVec: null, k: 3, kind: 'reference' })
+    expect(got.map((c) => c.id)).toContain('ref#one')
+    expect(got.every((c) => c.kind === 'reference')).toBe(true)
+  })
+
+  it('falls back to the unfiltered pool when the kind is genuinely absent', () => {
+    // The intersect-only contract: a kind the corpus does not have under this
+    // query must not silently widen into an empty answer.
+    const r = createRetrieval({ index: makeIndex(CORPUS()), scope: ALL, guard: GUARD })
+    const got = r.search({ query: 'invoices refunds', queryVec: null, k: 3, kind: 'extensions' })
+    expect(got.length).toBeGreaterThan(0)
+    expect(got.some((c) => c.kind !== 'extensions')).toBe(true)
+  })
+
+  /**
+   * The per-search options MiniSearch is now handed must not clobber the ones the
+   * constructor set. `{...globalSearchOptions, ...searchOptions}` is a SHALLOW
+   * merge, so passing `boost`/`bm25`/`filter` has to leave `prefix`, `fuzzy` and
+   * — most of all — the query-side `tokenize` in place. Losing that last one
+   * would silently switch the asymmetric tokenizer off for queries only, which no
+   * other assertion in this file would notice.
+   */
+  it('keeps prefix, fuzzy and the query tokenizer when scoring options are passed', () => {
+    const rows = [
+      {
+        id: 'api#init',
+        path: '/api',
+        anchor: 'init',
+        title: 'API',
+        breadcrumb: 'Docs',
+        kind: 'reference',
+        text: 'Call window.initEditor once the container exists.',
+        prev: null,
+        next: null,
+        vec: axis(0),
+      },
+      {
+        id: 'other#one',
+        path: '/other',
+        anchor: 'one',
+        title: 'Other',
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: 'Unrelated prose about billing plans and refunds.',
+        prev: null,
+        next: null,
+        vec: axis(1),
+      },
+    ]
+    const r = createRetrieval({ index: makeIndex(rows), scope: ALL, guard: GUARD })
+    const ids = (q) => r.search({ query: q, queryVec: null }).map((c) => c.id)
+    // The compound tokenizer survives (query side): both halves still reach it.
+    expect(ids('initEditor')).toContain('api#init')
+    expect(ids('window.initEditor')).toContain('api#init')
+    // `prefix: true` survives.
+    expect(ids('initEdi')).toContain('api#init')
+    // `fuzzy: 0.2` survives.
+    expect(ids('initEdotor')).toContain('api#init')
+  })
+
+  /**
+   * The parts a compound is split into are stemmed like any other word, and this
+   * is the one place the index/query asymmetry must NOT extend to.
+   *
+   * `terms()` returns a compound whole and `stemLite` refuses to touch a token
+   * carrying a separator — correctly, because a name with its tail removed is a
+   * different name. But the PARTS are ordinary words, and pushing them raw put a
+   * form in the index that no query could produce: `plugin.settings` indexed
+   * `settings` while a reader typing `settings` now asks for `setting`. The
+   * compound tokenizer exists so either half of an identifier reaches the page;
+   * unstemmed parts invert it.
+   */
+  it('stems the parts it splits out of a compound', () => {
+    const rows = [
+      {
+        id: 'api#cfg',
+        path: '/api',
+        anchor: 'cfg',
+        title: 'API',
+        breadcrumb: 'Docs',
+        kind: 'reference',
+        text: 'Docs — API\nCall plugin.settings before the container exists.',
+        prev: null,
+        next: null,
+        vec: axis(0),
+      },
+      {
+        id: 'other#one',
+        path: '/other',
+        anchor: 'one',
+        title: 'Other',
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: 'Docs — Other\nUnrelated prose about billing plans and refunds.',
+        prev: null,
+        next: null,
+        vec: axis(1),
+      },
+    ]
+    const r = createRetrieval({ index: makeIndex(rows), scope: ALL, guard: GUARD })
+    const ids = (q) => r.search({ query: q, queryVec: null }).map((c) => c.id)
+    // Both halves, and the whole, still reach it — the property the asymmetric
+    // tokenizer was measured for, now under a stemmer.
+    expect(ids('settings')).toContain('api#cfg')
+    expect(ids('setting')).toContain('api#cfg')
+    expect(ids('plugin')).toContain('api#cfg')
+    expect(ids('plugin.settings')).toContain('api#cfg')
+  })
+
+  /**
+   * The route and the heading slug, searchable — two fields every chunk has
+   * carried since the first build and nothing ever indexed.
+   */
+  it('finds a page by its route or its heading slug', () => {
+    const rows = [
+      {
+        id: 'guide/getting-started#roles',
+        path: '/guide/getting-started',
+        anchor: 'roles',
+        title: 'Roles',
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        // Deliberately says nothing the queries below use: if this passes on the
+        // body text, it is not testing the new fields.
+        text: 'Docs — Roles\nEach account carries a badge that decides what it may open.',
+        prev: null,
+        next: null,
+        vec: axis(0),
+      },
+      {
+        id: 'other#one',
+        path: '/other',
+        anchor: 'one',
+        title: 'Other',
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: 'Docs — Other\nUnrelated prose about billing plans and refunds.',
+        prev: null,
+        next: null,
+        vec: axis(1),
+      },
+    ]
+    const r = createRetrieval({ index: makeIndex(rows), scope: ALL, guard: GUARD })
+    const ids = (q) => r.search({ query: q, queryVec: null }).map((c) => c.id)
+    expect(ids('/guide/getting-started')).toContain('guide/getting-started#roles')
+    expect(ids('roles')).toContain('guide/getting-started#roles')
+    // A SEGMENT of the route reaches it too, through the parts `indexTokens`
+    // splits out. The query side stays plain `terms()` — the asymmetry is
+    // deliberate and measured — so this works because `guide` is a term in the
+    // index, not because the query was taken apart.
+    expect(ids('roles guide')).toContain('guide/getting-started#roles')
+  })
+
+  /**
+   * The scope predicate moved into the search and must mean the same thing. It is
+   * a filter either side of a sort by score, so the surviving order is identical
+   * — and GATE 1 still holds: nothing outside the scope comes back.
+   */
+  it('scopes the lexical channel inside the search, with the same result', () => {
+    const scoped = createRetrieval({
+      index: makeIndex(CORPUS()),
+      scope: { kind: 'page', paths: ['/a'], label: 'Alpha' },
+      guard: GUARD,
+    })
+    expect(scoped.search({ query: 'invoices refunds', queryVec: null })).toEqual([])
+    expect(
+      scoped.search({ query: 'alpha widget token', queryVec: null }).map((c) => c.path),
+    ).toEqual(['/a'])
   })
 })
 
@@ -6236,6 +7360,47 @@ describe('runTurn — the free-step ceiling', () => {
   it('the same cached search cannot buy free steps forever', async () => {
     const r = await run({ function: { name: 'search_docs', arguments: '{"query":"alpha"}' } })
     expect(r.calls).toBeLessThanOrEqual(10)
+  })
+
+  /**
+   * The lexical block reaches the wire, and only on the mode the gate named.
+   *
+   * `buildMessages` accepting the flag is the mechanism; this is the seam — the
+   * harness reads `gateResult.mode`, which is the one field that is right in all
+   * three ways of landing on lexical-only (declared, degraded, dim-mismatch).
+   */
+  it('tells the model search is lexical when the gate said so, and not otherwise', async () => {
+    const bodies = []
+    vi.stubGlobal('fetch', async (url, opts) => {
+      bodies.push(JSON.parse(opts.body))
+      return {
+        ok: true,
+        json: async () => ({
+          message: { tool_calls: [{ function: { name: 'answer', arguments: JSON.stringify({ text: 'x [1]', citations: ['a#one'], confidence: 1 }) } }] },
+        }),
+      }
+    })
+    const index = oneChunkIndex()
+    const retrieval = createRetrieval({
+      index,
+      scope: { kind: 'all', paths: [], label: 'All docs' },
+      guard: GUARD,
+    })
+    const turn = (mode) =>
+      runTurn({
+        retrieval,
+        gateResult: { G: 1, pass: true, chunks: index.chunks, mode },
+        question: 'how is the alpha widget configured?',
+        history: [],
+        addendum: '',
+        config: { llm: { provider: 'ollama', baseURL: 'http://x', model: 'm' }, maxIterations: 4 },
+        fallback: false,
+        queryVec: null,
+      })
+    await turn('lexical-only')
+    expect(bodies.at(-1).messages[0].content).toContain('matches words, not meaning')
+    await turn('hybrid')
+    expect(bodies.at(-1).messages[0].content).not.toContain('matches words, not meaning')
   })
 })
 
@@ -6587,10 +7752,22 @@ describe('retrieval levers — the three-layer precedence', () => {
     W_LEXICAL_RRF: 1.0,
     W_DENSE_RRF: 1.0,
     MMR_LAMBDA: 1.0,
+    PAGE_CAP: 2,
     CANDIDATES: 30,
     FUSED: 12,
     EXPAND_BELOW_TOKENS: 150,
     GATE_K: 5,
+    // MiniSearch's `defaultBM25params` and the constructor's own boosts, pinned
+    // here for the same reason as the rest: they are what a browser bundle scores
+    // with, and they were inherited rather than chosen, so the first time one
+    // moves it should read as a decision and not as a dependency bump.
+    BM25_K: 1.2,
+    BM25_B: 0.7,
+    BM25_D: 0.5,
+    BOOST_TITLE: 2,
+    BOOST_BREADCRUMB: 1.5,
+    BOOST_PATH: 1.0,
+    BOOST_ANCHOR: 1.25,
   }
 
   /**
@@ -7747,10 +8924,18 @@ describe('resolveLevers — the env layer is read at CALL time', () => {
     W_LEXICAL_RRF: 1.0,
     W_DENSE_RRF: 1.0,
     MMR_LAMBDA: 1.0,
+    PAGE_CAP: 2,
     CANDIDATES: 30,
     FUSED: 12,
     EXPAND_BELOW_TOKENS: 150,
     GATE_K: 5,
+    BM25_K: 1.2,
+    BM25_B: 0.7,
+    BM25_D: 0.5,
+    BOOST_TITLE: 2,
+    BOOST_BREADCRUMB: 1.5,
+    BOOST_PATH: 1.0,
+    BOOST_ANCHOR: 1.25,
   }
 
   /**
@@ -8796,7 +9981,22 @@ describe('tuning — only what `docpilot tune` measures may cross into the manif
     const { LEVER_NAMES } = await import('../src/theme/docpilot/retriever.js')
     const unmeasured = LEVER_NAMES.filter((n) => n !== 'MMR_LAMBDA' && n !== 'GATE_K')
     expect(unmeasured).toContain('CANDIDATES')
-    expect(unmeasured.length).toBe(6)
+    // The lexical scoring levers and the lexical-only diversity cap are sweepable
+    // from the environment and NOT writable from a manifest. Every one of them can
+    // move `L`, and `L` is half of `G` — so a hand-edited tuning.json is exactly
+    // the road from a file nobody calibrated to a verdict nobody measured.
+    for (const name of [
+      'PAGE_CAP',
+      'BM25_K',
+      'BM25_B',
+      'BM25_D',
+      'BOOST_TITLE',
+      'BOOST_BREADCRUMB',
+      'BOOST_PATH',
+      'BOOST_ANCHOR',
+    ])
+      expect(unmeasured).toContain(name)
+    expect(unmeasured.length).toBe(14)
     for (const name of unmeasured) {
       const { out, warnings, count } = await run({ MMR_LAMBDA: 0.6, GATE_K: 9, [name]: 3 })
       expect(out, name).toEqual({ MMR_LAMBDA: 0.6, GATE_K: 9, source: 'tuned', tunedAt: 'abc12345' })

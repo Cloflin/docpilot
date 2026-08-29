@@ -68,7 +68,14 @@ done
 #   border[-side]: 1px solid CanvasText        forced-colors, where fills vanish
 #   border: none  |  border: 0                 a reset
 #
-# and `border-color` may only name `--dp-line` or `transparent`.
+# and `border-color` may only name `--dp-line`, `--dp-lip` or `transparent`.
+#
+# `--dp-lip` is the ONE addition and it is a different job, not a second ring:
+# the jump pill's glass needs an underside, and a boundary colour that reads the
+# same on both faces of an edge cannot be one. It is derived from `--dp-text`
+# like `--dp-wash`, so it is still a single colour SOURCE — which is what this
+# rule is actually about — and it is legal only as a `-color` longhand, so no
+# shorthand can quietly draw a whole ring in it.
 #
 # The named inventory lives in ui-specs/000-design-system.md, where each ring can
 # carry the reason it exists. 1b prints it here anyway, so a reviewer still sees
@@ -80,9 +87,9 @@ BORDER_RESET=':[[:space:]]*(none|0);'
 shape=$(cat $SCSS_ALL | grep -nE "$BORDER_RE" \
   | grep -vE "$BORDER_RESET" \
   | grep -vE ':[[:space:]]*1px solid (var\(--dp-line\)|transparent|CanvasText);' \
-  | grep -vE 'border(-[a-z-]+)?-color:[[:space:]]*(var\(--dp-line\)|transparent);' \
+  | grep -vE 'border(-[a-z-]+)?-color:[[:space:]]*(var\(--dp-(line|lip)\)|transparent);' \
   | tr '\n' ' ')
-[ -z "$(echo "$shape" | tr -d ' ')" ] && ok "rule 1 — every border is 1px solid --dp-line / transparent / CanvasText" \
+[ -z "$(echo "$shape" | tr -d ' ')" ] && ok "rule 1 — every border is 1px solid --dp-line / --dp-lip / transparent / CanvasText" \
                                       || bad "rule 1 — border that is not the hairline: $shape"
 
 # 1b — the ceiling, and the inventory. Generous, because the ring is a structural
@@ -361,20 +368,30 @@ entry=$(strip_comments "$ENTRY" | grep -vE '^[[:space:]]*(@use|$)' | tr '\n' ' '
 # `--dp-brand-gradient`, which belongs to the documentation SITE's own theme and
 # has nothing to do with the panel — widening this rule, or running a `--dp-`
 # replacement across `docs/`, walks straight into it.
-DOCS=docs/guide/appearance.md
-if [ ! -s "$DOCS" ]; then
-  bad "rule 10 — $DOCS is missing or empty"
-else
-  declared=$(grep -oE '^[[:space:]]*--dp-[a-z0-9-]+' "$CORE" | tr -d ' ' | sort -u)
+#
+# TWO pages now, not one. `docs/reference/theme.md` is a second published copy
+# of the same table, and it says of itself that "the published table and
+# core.scss are asserted to name exactly the same 34 properties" — a sentence
+# that was false for as long as this rule read one file. A second copy is a
+# second place to drift, and the page that promises it is checked is the worst
+# place to leave unchecked.
+declared=$(grep -oE '^[[:space:]]*--dp-[a-z0-9-]+' "$CORE" | tr -d ' ' | sort -u)
+rule10=0
+for DOCS in docs/guide/appearance.md docs/reference/theme.md; do
+  if [ ! -s "$DOCS" ]; then
+    bad "rule 10 — $DOCS is missing or empty"
+    rule10=1
+    continue
+  fi
   documented=$(grep -oE -- '--dp-[a-z0-9-]+' "$DOCS" | sort -u)
   undoc=$(comm -23 <(printf '%s\n' "$declared") <(printf '%s\n' "$documented") | tr '\n' ' ')
   unreal=$(comm -13 <(printf '%s\n' "$declared") <(printf '%s\n' "$documented") | tr '\n' ' ')
-  if [ -z "$(echo "$undoc$unreal" | tr -d ' ')" ]; then
-    ok "rule 10 — the token table and core.scss agree"
-  else
-    bad "rule 10 — undocumented:$undoc / not declared:$unreal"
+  if [ -n "$(echo "$undoc$unreal" | tr -d ' ')" ]; then
+    bad "rule 10 — $DOCS — undocumented:$undoc / not declared:$unreal"
+    rule10=1
   fi
-fi
+done
+[ "$rule10" -eq 0 ] && ok "rule 10 — both token tables and core.scss agree"
 
 # Scope enforcement — the harness must not be able to reach the index.
 if strip_comments "$HARNESS" | grep -qE '\bindex\b'; then

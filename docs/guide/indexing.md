@@ -112,9 +112,71 @@ Whenever the docs change, and always when `embed.model` changes. Rebuilding also
 
 The corpus hash covers the chunk TEXT. Swap the embedder and every cosine moves while the hash does not — which is why the model name is recorded beside the thresholds. The manifest records which model built it, and the panel compares that against the model the browser embeds with: a mismatch drops retrieval to keyword-only and says so loudly in the console rather than scoring queries against a foreign vector space.
 
+## A second index, to measure against
+
+Nothing stops a project committing more than one index of the same corpus, and
+there is one good reason to: **a weaker embedder is a floor.** A retrieval
+configuration that answers well on 1024 local dimensions answers at least as well
+on the 2048 a hosted pool gives you, so a run against the weaker index is a lower
+bound rather than a different measurement — and a regression that shows up there
+is a real one.
+
+This site does it. `docs/public/rag/` is the deployed index, embedded by
+OpenRouter; `docs/public/rag-local/` is the same corpus embedded by a local
+`bge-m3`, and both are committed:
+
+```js
+// docs/.vitepress/config.mjs
+const LOCAL = process.env.DOCPILOT_EMBED_LOCAL === '1'
+
+export const docPilot = {
+  ...(LOCAL
+    ? { indexDir: 'docs/public/rag-local', embed: { provider: 'ollama', model: 'bge-m3' } }
+    : { embed: 'auto' }),
+}
+```
+
+```bash
+DOCPILOT_EMBED_LOCAL=1 npx docpilot index    # costs no API requests
+DOCPILOT_EMBED_LOCAL=1 npx docpilot bench    # the floor, measured
+```
+
+**`indexDir` is the whole of the separation.** Without it both builds write to
+the same directory, and the local one overwrites the deployed index with a
+manifest the browser cannot use — on a spent daily quota, with no way to rebuild
+it until the limit resets.
+
+**Both are held to the corpus.** The freshness gate walks every `manifest.json`
+under `docs/public/` and fails when any of them stops matching what `docs/`
+chunks to, which is the only thing that makes the comparison mean anything: two
+indexes of two different corpora are not a measurement.
+
+**And the deployed site cannot land on the wrong one by accident.** The manifest
+names the model that built it, `readiness()` raises a hard `missing` when the
+browser's embedder does not serve that model, and `npx docpilot doctor` exits 1
+on it. Serving a `bge-m3` index takes an embedder that serves `bge-m3`; there is
+no arrangement where it silently degrades to keyword matching.
+
+What it costs is disk and deploy weight — a second copy of the vectors, about the
+size of the first. Readers download neither one they are not using.
+
 ## Vectors are quantised
 
 Chunk vectors are stored as int8. The round-trip error is below 0.01 cosine, which is under the noise floor of the ranking it feeds, and it makes the difference between an index a browser downloads and one it does not.
+
+The scheme is the plainest one that works, and it is plain on purpose. Every vector is L2-normalised, then each dimension becomes `round(v × 127)` clamped to ±127 — **signed 8-bit, one byte per dimension, and no per-vector scale or offset stored anywhere.** Because the vectors are normalised, cosine *is* the dot product, so the browser scores with integer arithmetic over one flat `Int8Array` and divides once by 127² at the end. There is nothing to unpack per vector and nothing to look up per chunk.
+
+The blob is a single file, `vectors.<hash>.bin`, exactly `chunkCount × dims` bytes long — the store checks that on load and throws rather than scoring against a truncated download. The chunk **text** is what gets sharded, 250 chunks per `chunks-NN.<hash>.json`.
+
+**The error is measured, not assumed.** Every build samples up to 200 vector pairs, compares the exact float cosine against the int8 round trip, and prints the mean absolute difference:
+
+```
+quantisation err 0.00262 mean |Δcos|
+```
+
+Above `0.01` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.
+
+For scale: this documentation site indexes 460 chunks at 1024 dimensions, so its vector blob is 471,040 bytes — 460 KB, where float32 would have been 1.8 MB.
 
 ## Scale
 

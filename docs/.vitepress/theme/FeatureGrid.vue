@@ -1,8 +1,22 @@
 <script setup>
-// What the browser ends up fetching, so the numbers below stay checkable.
+/*
+ * What the browser ends up fetching — THE REAL FILENAMES, checked against
+ * `docs/public/rag/` and against what `build-rag-index.js` writes.
+ *
+ * This list used to read `docpilot-index.json` and `docpilot-vectors.bin`.
+ * Neither string exists anywhere in this repository; they were plausible names
+ * for files that are actually called something else, printed on the homepage as
+ * if a reader could go and look at them. A made-up filename on a page arguing
+ * that the index is just files is the worst possible place to be wrong, so the
+ * hash placeholder is spelled `<hash>` rather than pinned to a build: the
+ * content hash changes every time the corpus does, and a stale one here would
+ * be the same failure wearing a different coat.
+ */
 const artifacts = [
-  { name: 'docpilot-index.json', note: 'chunks + postings' },
-  { name: 'docpilot-vectors.bin', note: 'quantised embeddings' },
+  { name: 'manifest.json', note: 'dims, guard, shards' },
+  { name: 'chunks-NN.<hash>.json', note: '250 chunks per shard' },
+  { name: 'vectors.<hash>.bin', note: 'int8 embeddings' },
+  { name: 'df.<hash>.json', note: 'document frequencies' },
 ]
 
 // The two citations the turn in the hero produced, and one the host dropped.
@@ -10,6 +24,41 @@ const citations = [
   { marker: '1', target: 'guide/indexing', state: 'checked' },
   { marker: '2', target: 'reference/cli', state: 'checked' },
   { marker: '3', target: 'guide/deploying', state: 'dropped' },
+]
+
+/*
+ * The fused ranking, as ranks rather than as scores — which is what RRF
+ * actually consumes (`src/theme/docpilot/retriever.js:331-346`). The ids are
+ * illustrative; the SHAPE is not: both channels always run, both carry weight
+ * 1.0 (`retriever.js:102-103`), and a chunk ranked well by either one surfaces.
+ *
+ * DELIBERATELY NO 75/25 ANYWHERE ON THIS PAGE. `wDense: 0.75 / wLexical: 0.25`
+ * are the refusal gate's weights (`gate.js:147`), not the fusion's, and
+ * `retriever.js:60-61` says so in as many words. Printing them beside the word
+ * "fused" would be a factual error about the one mechanism this card explains.
+ */
+const channels = [
+  { label: 'bm25', ranks: ['c4', 'c1', 'c7', 'c2'], fused: false },
+  { label: 'dense', ranks: ['c1', 'c9', 'c4', 'c3'], fused: false },
+  { label: 'rrf', ranks: ['c1', 'c4', 'c9', 'c7'], fused: true },
+]
+
+/*
+ * This site's own index, and the figures are the served file rather than a
+ * rounded boast: 460 chunks × 1024 dims × 1 byte = 471,040 bytes, which is
+ * exactly what `ls -l docs/public/rag/vectors.*.bin` prints. The float32 row is
+ * the same array at 4 bytes a dimension.
+ *
+ * THESE MOVE WHEN THE CORPUS DOES. Adding a page changes the chunk count, and
+ * the moment it does these two rows are a claim about a file that no longer
+ * exists — `docs/guide/comparison.md`, `docs/guide/indexing.md` and the README
+ * carry the same pair. The check is one line:
+ *   node -e "const m=require('./docs/public/rag/manifest.json');console.log(m.chunkCount*m.dims)"
+ * against `ls -l docs/public/rag/vectors.*.bin`.
+ */
+const sizes = [
+  { label: 'float32', bytes: '1.8 MB', width: '100%', dim: true },
+  { label: 'int8', bytes: '460 KB', width: '25%', dim: false },
 ]
 </script>
 
@@ -134,11 +183,93 @@ const citations = [
         </p>
       </div>
     </div>
+
+    <div class="flex flex-col gap-3 justify-between">
+      <div class="p-5 sm:p-15 pb-0 sm:pb-0 flex flex-col gap-3">
+        <h5 class="text-white">Two channels, fused</h5>
+        <p class="max-w-[30rem] text-pretty">
+          Keywords and meaning are different questions, so both are asked and the
+          answers are merged by rank
+        </p>
+      </div>
+      <div class="p-5 sm:p-15 flex flex-col gap-5">
+        <ul class="flex flex-col gap-2 list-none">
+          <li
+            v-for="channel in channels"
+            :key="channel.label"
+            class="flex items-center gap-3"
+            :class="channel.fused ? 'pt-2 border-t border-nickel' : ''"
+          >
+            <span
+              class="font-mono text-xs w-12 shrink-0"
+              :class="channel.fused ? 'text-dp-violet' : 'text-grey'"
+              >{{ channel.label }}</span
+            >
+            <span class="flex gap-1.5">
+              <span
+                v-for="(id, position) in channel.ranks"
+                :key="position"
+                class="font-mono text-xs rounded px-2 py-1"
+                :class="channel.fused ? 'bg-white/10 text-white' : 'bg-slate text-grey'"
+                >{{ id }}</span
+              >
+            </span>
+          </li>
+        </ul>
+        <p class="text-sm">
+          BM25 over the chunk text and cosine over the vectors, fused with
+          <span class="font-mono text-white">Reciprocal Rank Fusion</span> and then
+          re-ranked by cosine. With no embedder, or one that cannot be reached, the
+          keyword channel runs alone and the gate switches to its lexical threshold.
+        </p>
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-3 justify-between">
+      <div class="p-5 sm:p-15 pb-0 sm:pb-0 flex flex-col gap-3">
+        <h5 class="text-white">Vectors a browser can afford</h5>
+        <p class="max-w-[28rem] text-pretty">
+          Quantised to one byte per dimension at build time, with the error
+          measured rather than assumed
+        </p>
+      </div>
+      <div class="p-5 sm:p-15 flex flex-col gap-5">
+        <ul class="flex flex-col gap-2.5 list-none">
+          <li v-for="size in sizes" :key="size.label" class="flex flex-col gap-1">
+            <div class="flex items-baseline justify-between gap-4 font-mono text-xs">
+              <span :class="size.dim ? 'text-grey' : 'text-white'">{{ size.label }}</span>
+              <span :class="size.dim ? 'text-grey' : 'text-white'">{{ size.bytes }}</span>
+            </div>
+            <div class="h-2 rounded-full bg-slate overflow-hidden">
+              <div
+                class="h-full rounded-full"
+                :class="size.dim ? 'bg-nickel' : 'size-bar'"
+                :style="{ width: size.width }"
+              ></div>
+            </div>
+          </li>
+        </ul>
+        <p class="text-sm">
+          This site's own index &mdash; 460 chunks at 1024 dimensions, one signed
+          byte each, no per-vector scale to unpack. The build measures the
+          round-trip against the exact cosines and
+          <span class="text-white">refuses to ship above 0.01 mean |&Delta;cos|</span>;
+          this one comes in under 0.003.
+        </p>
+      </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.gate-pass {
+/*
+ * The int8 bar is a quarter of the float32 bar because the ratio is exactly
+ * four — one signed byte a dimension against four. The gradient spans the bar
+ * rather than the track behind it, so the short bar is the whole brand ramp
+ * compressed and not a blue stub that reads as a different colour.
+ */
+.gate-pass,
+.size-bar {
   background-image: linear-gradient(90deg, #476be3, #9277c7 55%, #c56161);
 }
 </style>

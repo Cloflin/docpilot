@@ -241,9 +241,24 @@ can only reduce refusals — but admissibility still applies: at least one conte
 word of the tail must appear in the retrieved evidence. `and for AWS S3
 buckets?` is refused by design when your corpus does not document S3.
 
+A follow-up asked in a language your docs are **not written in** is the one case
+where admissibility stands aside: no word of the tail could appear in the
+evidence whatever it asked, so the dense channel decides alone. That needs an
+embedder — on a vectorless site the fix is
+[`vocabulary`](/reference/config#vocabulary).
+
+The question composed against is the last one that was **answered**, not the last
+one that was asked. A refused turn is a question this corpus retrieved nothing
+for, and composing against it anchors the follow-up to a known dead end.
+
 If the reader is asking about a specific passage, quoting it is the better path —
 a selected passage composes with the follow-up in place of the previous question.
 See [The refusal gate](/concepts/the-gate#follow-ups).
+
+Open the panel with `?dpdebug=1` to see which of the two refusals this is: a
+`[docpilot] refusal` line means the gate ended the turn before the model was
+called and names the channel and the score, and `[docpilot] low-confidence or
+untraceable` means the model answered and the answer was withheld.
 
 ### A question refuses in one scope and answers in another
 

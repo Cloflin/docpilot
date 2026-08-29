@@ -100,3 +100,15 @@ export const CALIBRATION_OUT = path.join(DOCPILOT_DIR, 'calibration.json')
  * `calibrate` for weeks (see `guardFor`).
  */
 export const TUNING_OUT = path.join(DOCPILOT_DIR, 'tuning.json')
+
+/**
+ * What `docpilot vocabulary` writes and `docpilot index` reads back.
+ *
+ * A third sidecar rather than a key in one of the two above, for the authority
+ * reason `TUNING_OUT` gives: thresholds are `calibrate`'s, levers are `tune`'s,
+ * and the names a reader calls the product by are a statement about the PRODUCT
+ * — proposed by a model, edited by a person, and owned by neither of the other
+ * two commands. One document holding all three would be one hand-edit away from
+ * moving a refusal threshold.
+ */
+export const VOCABULARY_OUT = path.join(DOCPILOT_DIR, 'vocabulary.json')

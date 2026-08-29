@@ -1,7 +1,7 @@
 ---
 layout: home
 theme: dark
-title: 'DocPilot — Ask AI on any page of your site'
+title: 'DocPilot — an AI assistant on every page of your site'
 titleTemplate: false
 ---
 

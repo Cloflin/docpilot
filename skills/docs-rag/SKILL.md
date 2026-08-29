@@ -822,8 +822,26 @@ metric in any report.
   happened. The grammar is right for its own job, scoring an ANSWER's identifiers
   against cited chunks; it is not a query-side selector. Sweeping the weight would
   not have found this.
-- **A cosine threshold does not survive an embedder swap.** The chunk hash covers
-  the corpus, not the vector space, so `calibrate` records `embedModel` and
-  `index` refuses a calibration measured with a different one. The cosine WINDOW
-  is swept beside tau for the same reason: `[0.44, 0.64]` was measured on bge-m3
+- **A cosine WINDOW does not survive an embedder swap; a normalised tau does.**
+  `denseFromCosine` maps a raw cosine affinely into [0,1], so `cosFloor` and
+  `cosCeil` are the only two guard numbers that describe an embedder — `tau`,
+  `tauLexical` and the weights are in normalised units and describe the corpus.
+  The chunk hash covers the corpus, not the vector space, so `calibrate` records
+  `embedModel` and `index` refuses a mismatch. **That check is unconditional and
+  stays that way.** What `npx docpilot calibrate --transfer` adds is the one
+  legal route across it: assert the corpus hash, the vocabulary and the levers
+  are identical — under which `L`, `admissible` and `n` are bit-identical and
+  only the cosines moved — then re-fit the window on the target's own cosines at
+  an anchor set sized by the strata's own bounds, and keep tau. It stamps
+  `source: "transferred-window"`, nulls `overRefusalUB95` and `gatePrecision`
+  because no full-set sweep produced them, and refuses outright when no window
+  carries the inherited tau without over-refusing. **A window is never
+  inherited, only tau is.**
+  Measured here bge-m3 → qwen3-embedding, 271 anchors of 597, then scored on all
+  597: the transfer put the decision boundary at cosine 0.5560 against a full
+  calibration's 0.5600, cost 0.8 points of negative-catch (40.0% against 40.8%)
+  and no over-refusal at all (U 0/169, F 0/60, S 1/128 against 2/128). It is
+  still weaker evidence than the calibration it came from — prefer a real one
+  wherever the endpoint allows it.
+  The window is swept beside tau in a normal run for the same underlying reason: `[0.44, 0.64]` was measured on bge-m3
   and lands inside the positive distribution on `text-embedding-3-small`.

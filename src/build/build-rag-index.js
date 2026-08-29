@@ -24,7 +24,7 @@ import { discoverEmbedModels, embedPoolOf } from './lib/embed-discovery.js'
 import { providerFor } from '../theme/docpilot/providers.js'
 import { routeOf } from '../theme/docpilot/route.js'
 import { LEVER_NAMES } from '../theme/docpilot/retriever.js'
-import { nodeEmbedTarget, noEmbed, resolveEmbed } from '../config.js'
+import { nodeEmbedTarget, noEmbed, resolveEmbed, assertVocabulary } from '../config.js'
 import {
   settings as docPilot,
   ROOT,
@@ -33,10 +33,11 @@ import {
   CALIBRATION_OUT,
   TUNING_OUT,
   CONFIG,
+  VOCABULARY_OUT,
   fileEnv,
 } from '../cli-context.js'
 import { l2normalise, toInt8, quantisationError } from './lib/quantize.js'
-import { terms, estTokens } from '../theme/docpilot/text.js'
+import { terms, estTokens, setVocabulary, vocabularyHash } from '../theme/docpilot/text.js'
 
 
 const SHARD_SIZE = 250
@@ -474,6 +475,89 @@ async function embedAll(texts) {
 }
 
 /**
+ * THE VOCABULARY THE INDEX IS BUILT WITH — the map, resolved and installed.
+ *
+ * Two sources, and the split is the same one `guard.tau` draws over a measured
+ * threshold: `docpilot vocabulary` PROPOSES into a sidecar the author commits,
+ * and `vocabulary` in the config file is the author OVERRIDING it. Per canonical
+ * term rather than wholesale, so adding one pair by hand does not silently
+ * discard the twenty a model found.
+ *
+ * `{}` in the config is not the same statement as an omitted key: it is
+ * "declared, and empty", and it takes nothing — including the sidecar. Omitted
+ * (`null`) is "declared none" and takes the file. The same split `chat.model`
+ * draws between `null` and a name.
+ *
+ * IT IS INSTALLED, NOT ONLY RETURNED. `terms()` is module state, and every
+ * tokenisation after this line — `df.json` here, MiniSearch and the gate in the
+ * browser — has to see the same map or the index is scored against a vocabulary
+ * it was not built with. The manifest carries it onward; `assembleIndex` is the
+ * other end.
+ */
+export function vocabularyFor(opts = {}) {
+  const file = opts.file ?? VOCABULARY_OUT
+  const shown = path.relative(ROOT, file)
+  const note = opts.note ?? ((m) => console.log(`  ${m}`))
+  const own = 'own' in opts ? opts.own : docPilot.vocabulary
+
+  let fromFile = null
+  if (own && typeof own === 'object' && !Object.keys(own).length) {
+    // Declared empty. Not an oversight and not a reason to reach for a file.
+    setVocabulary(null)
+    return null
+  }
+  if (fs.existsSync(file)) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+      fromFile = doc && typeof doc === 'object' ? (doc.terms ?? doc) : null
+    } catch (e) {
+      // A malformed sidecar is a broken file, not a broken corpus. The build
+      // that reports it is still a publishable build.
+      warn(`${shown} is not readable JSON (${e.message}) — building with no vocabulary`)
+      fromFile = null
+    }
+  }
+
+  const merged = {...(fromFile || {}), ...(own || {})}
+  if (!Object.keys(merged).length) {
+    setVocabulary(null)
+    return null
+  }
+  // Shape only, and it throws: an author-written map with a cycle in it is
+  // somebody's mistake to hear about now rather than a silent drop later.
+  assertVocabulary({vocabulary: merged})
+  const report = setVocabulary(merged)
+  for (const s of report.skipped) note(`vocabulary: skipped "${s.alias}" — ${s.why}`)
+  const sources = [fromFile && `${shown}`, own && Object.keys(own).length && 'config'].filter(Boolean)
+  note(
+    `vocabulary: ${report.terms} term(s), ${report.aliases} alias(es) from ${sources.join(' + ')} ` +
+      `— hash ${vocabularyHash()}`,
+  )
+  return merged
+}
+
+/**
+ * WHICH calibration belongs to THIS index.
+ *
+ * `${evalDir}/calibration.json` is one path per project and an index directory
+ * is not. A repository that commits a second index of one corpus — the floor
+ * described in the indexing guide, or the target of a `calibrate --transfer` —
+ * has two guards and one filename to keep them in, so whichever build ran last
+ * would decide what the other one inlines.
+ *
+ * A per-index name is tried FIRST and the shared one is the fallback, which
+ * leaves every single-index project reading exactly the file it always read
+ * while giving a second index somewhere of its own to be measured into.
+ */
+export function calibrationPathFor(indexDir = OUT) {
+  const named = path.join(
+    path.dirname(CALIBRATION_OUT),
+    `calibration.${path.basename(indexDir)}.json`,
+  )
+  return fs.existsSync(named) ? named : CALIBRATION_OUT
+}
+
+/**
  * The guard the manifest ships — RAG-SPEC 5.6.
  *
  * `tau`, `tauLexical`, `wDense` and `wLexical` are set ONLY by `docpilot calibrate`
@@ -502,7 +586,7 @@ export function guardFor(hash, opts = {}) {
    * every subsequent `index` reported "no calibration" and inlined the
    * provisional guard anyway. One name, one place.
    */
-  const file = opts.file ?? CALIBRATION_OUT
+  const file = opts.file ?? calibrationPathFor()
   const shown = path.relative(ROOT, file)
   const log = opts.warn ?? warn
   const note = opts.note ?? ((m) => console.log(`  ${m}`))
@@ -575,6 +659,30 @@ export function guardFor(hash, opts = {}) {
   }
   if (g.calibratedAt !== hash) {
     return stale(`${shown} is for index ${g.calibratedAt}, this build is ${hash}`)
+  }
+  /**
+   * THE VOCABULARY IS THE THIRD THING A THRESHOLD IS BOUND TO, after the corpus
+   * and the embedder, and it is the one with no natural signal.
+   *
+   * `hash` is over chunk TEXT. Change the map and every lexical score moves
+   * while the hash does not — the same silence the embedder check two blocks
+   * down was added to break, and the same silence the stemmer shipped into: the
+   * CHANGELOG says in as many words that "nothing in the build can detect that
+   * it is due". `vocabHash` is what makes it detectable, so this is the line
+   * that turns that sentence false.
+   *
+   * A calibration written before the field existed carries `undefined`, and a
+   * build with no vocabulary produces `null`. Those are the same state — nothing
+   * declared — so they compare equal rather than reporting a stale guard on
+   * every existing deployment's first rebuild.
+   */
+  const vocabNow = 'vocabHash' in opts ? opts.vocabHash : vocabularyHash()
+  if ((doc.vocabHash ?? null) !== (vocabNow ?? null)) {
+    return stale(
+      `${shown} was measured with vocabulary ${doc.vocabHash ?? 'none'}, this build ` +
+        `tokenises with ${vocabNow ?? 'none'} — every lexical score moved and the index ` +
+        'hash cannot see it',
+    )
   }
   // The thresholds are bound to the pair (corpus, embedder), and the hash above
   // covers only the corpus — it is sha256 over chunk text and moves for no other
@@ -1035,6 +1143,13 @@ async function main() {
     pageIdx: s.paths.map((p) => idx.get(p)).filter((i) => i !== undefined),
   }))
 
+  // ── the vocabulary, installed before anything is tokenised ─────────────────
+  // Ahead of `df` on purpose and by one line: `terms()` is module state, so the
+  // frequencies below and every query the browser ever runs have to be produced
+  // by the same map or the gate measures itself against a vocabulary it cannot
+  // reproduce — RAG-SPEC 3.4.3, the same sentence text.js opens with.
+  const vocabulary = vocabularyFor()
+
   // ── document frequencies ───────────────────────────────────────────────────
   const df = new Map()
   for (const c of chunks) {
@@ -1148,6 +1263,18 @@ async function main() {
     // additive optional key is invisible to every reader that predates it.
     // null on every build that has not run `docpilot tune`, which is most of them.
     tuning: tuningFor(hash),
+    /**
+     * The map the reader's browser has to tokenise with, and a hash of it.
+     *
+     * BOTH, and the second is not redundant. `hash` above is sha256 over chunk
+     * TEXT and moves for no other reason — so a changed vocabulary produces a
+     * differently-tokenised index under an identical hash, which is exactly the
+     * blind spot the stemmer fell into and `guardFor` now reads `vocabHash` to
+     * close. null on every build that declared none, which keeps a manifest
+     * without a vocabulary byte-identical to the ones that shipped.
+     */
+    vocabulary,
+    vocabHash: vocabularyHash(),
   }
 
   const manifestJson = JSON.stringify(manifest)

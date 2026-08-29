@@ -1309,6 +1309,31 @@ describe('the halves are asserted where they are used', () => {
     expect(() => nodeEmbedTarget(c, ENV)).not.toThrow()
     expect(() => themeDocPilot(c, ENV)).toThrow(/chat\.model is not set/)
   })
+
+  /**
+   * ASSERTING AND RESOLVING HAVE TO AGREE ABOUT WHAT A PROVIDER'S DEFAULT IS.
+   *
+   * `assertChat` read `chat.model` while `resolveChat` privately held the table
+   * lookup that fills it, so an UNRESOLVED config for a provider with a default
+   * was refused — and the same object, passed through `resolveDocPilot` first,
+   * sailed through. Every door here is documented as taking a site's own
+   * `docPilot` export, and `proxyContract` says so in its header, so the refusal
+   * was about the caller and it arrived wearing a message about a missing model.
+   *
+   * The providers that are still refused are the ones the check exists for:
+   * `custom` names a HOST, has no catalogue to have a default in, and no pool.
+   */
+  it('reads the provider’s own default before refusing an unresolved config', () => {
+    const raw = (provider) => ({ enabled: true, chat: { provider }, embed: false, host: {}, i18n: {} })
+    for (const provider of ['ollama', 'openai', 'anthropic', 'openrouter', 'llamacpp']) {
+      expect(() => themeDocPilot(raw(provider), ENV), `${provider} unresolved`).not.toThrow()
+    }
+    expect(() => themeDocPilot(raw('custom'), ENV)).toThrow(/chat\.model is not set/)
+    // And the resolved form of the same object agrees, in both directions.
+    expect(() => themeDocPilot(cfg({ chat: { provider: 'custom' }, embed: false }), ENV)).toThrow(
+      /chat\.model is not set/,
+    )
+  })
 })
 
 describe('doctor only asks a catalogue that exists', () => {

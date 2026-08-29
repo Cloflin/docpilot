@@ -6,7 +6,7 @@ npx docpilot <command>
 
 Every command finds `.vitepress/config.mjs` relative to the directory you run it from and reads the `docPilot` named export. There is no second place to state which model embeds or where the docs live.
 
-The loop is `index → calibrate → lint → eval → bench`, with `import` ahead of it whenever the corpus gains a page from somewhere else, and `tune` wherever it is retrieval itself that has to move. The first two are what the panel needs to work at all; the last three are what tells you whether it works well.
+The loop is `index → calibrate → lint → eval → bench`, with `import` ahead of it whenever the corpus gains a page from somewhere else, `vocabulary` ahead of it whenever the words readers use are not the words the docs use, and `tune` wherever it is retrieval itself that has to move. The first two are what the panel needs to work at all; the last three are what tells you whether it works well.
 
 `tune` sends you back to the start. It writes a file and stops; `index` is the step that inlines a swept lever into the manifest a reader downloads, and until it runs a tuned lever is a file on disk and nothing more.
 
@@ -105,6 +105,37 @@ Whichever path ran, the report says so:
 
 The command does not index. An import changes the corpus hash, so what follows it is `index --dry`, `index`, `lint`, `eval --gate-only` and `calibrate` — the command prints that list when it writes.
 
+## `vocabulary`
+
+```bash
+npx docpilot vocabulary
+npx docpilot vocabulary --dry
+npx docpilot vocabulary --languages=ru,de --limit=30
+npx docpilot vocabulary --replace
+```
+
+Reads every title and heading in `docsDir`, asks the configured chat model which words readers are likely to use for the terms it finds, and writes `${evalDir}/vocabulary.json`. `index` inlines that file into the manifest, and [`vocabulary`](/reference/config#vocabulary) in the config file overrides it per term.
+
+It **proposes and never decides**. The file is committed and edited like the golden set: which word a reader types is a judgement about your product, and a model's guess at it is a draft. A re-run **merges** — a term already in the file keeps what the file says — so a hand-edited list survives the next run.
+
+| flag | |
+|---|---|
+| `--languages=a,b` | the languages to translate into; defaults to `en` plus your `i18n.locales` |
+| `--limit=N` | how many terms to keep; default 24, which is the cap on what the model is later shown. Asked for in the prompt and enforced on the reply, because a small model ignores the request |
+| `--replace` | take the model's list whole instead of merging the file into it |
+| `--dry` | print the proposal and write nothing |
+| `--out <path>` | somewhere other than `${evalDir}/vocabulary.json` |
+
+It reads **markdown**, not the index, so it runs before there is one — which is why it sits at the front of the loop rather than inside it.
+
+**It changes what every lexical score means.** The index hash is over chunk text and cannot see a tokenizer change, so the manifest carries a `vocabHash` beside it and `index` reports a stale guard when the two disagree. The command prints the sequence when it writes:
+
+```bash
+npx docpilot index && npx docpilot calibrate --refresh && npx docpilot index
+```
+
+A deployment with `chat: false` has no model to ask and the command says so rather than writing an empty file.
+
 ## `calibrate`
 
 ```bash
@@ -121,12 +152,21 @@ Measures the refusal thresholds against `${evalDir}/calibration.jsonl` and write
 | `--sweep-only` | sweep the cached probe scores, embed nothing |
 | `--refresh` | ignore that cache and re-embed every probe |
 | `--limit=N` | the first N probes of the set; default none |
+| `--transfer=<file>` | carry another embedder's calibration onto this index — keep its thresholds, re-fit its window |
+| `--anchors=bounded\|full` | how much of the probe set a transfer measures; `bounded` is the default and the floor |
+| `--out=<file>` | where to write; required for a transfer, which may not overwrite the file it reads |
 
 `--sweep-only` re-runs the threshold search over `${evalDir}/calibration.raw.jsonl` — the per-probe scores the last run cached — which makes trying a different selection rule free. A probe that is not in that file stops the run with the file named rather than being scored as a miss; run once without the flag to populate it. `--refresh` ignores the cache and re-embeds.
 
 `--limit=N` is the short loop while you are authoring probes, and it is a head-slice of the file rather than a sample of it. **A limited run still writes `calibration.json`**, so the thresholds it measures are the ones the next `index` inlines — which is what makes it an authoring aid and not a measurement. Re-run it whole before you rebuild.
 
 The embedder is not a flag on this command either: it comes from `docPilot.embed` through the same resolver `index` uses, so a calibration cannot be measured in a vector space the index was not built in. `DOCPILOT_EMBED_URL`, `DOCPILOT_EMBED_PROVIDER` and `DOCPILOT_EMBED_KEY` still override it, for a sweep against a second endpoint.
+
+`--transfer` does not weaken that. It runs **against the target index**, embeds against the target's own endpoint, and writes a document stamped with the target's `embedModel` — what comes from elsewhere is the calibration *file*, and what crosses from it is `tau` in normalised space. The window is re-fitted here, on this embedder's cosines.
+
+It refuses rather than resolving: a source measured on another corpus hash, another vocabulary, the other `denseMode`, a vectorless index, the same embedder as the target, a `tau` at or below `wLexical`, or an anchor draw below the n its own strata's bounds need. It refuses again if no window in the grid carries the inherited `tau` without over-refusing past what the source measured. A refused transfer leaves the previous calibration untouched, exactly as a failed run does.
+
+The result is stamped `source: "transferred-window"` and carries `overRefusalUB95` and `gatePrecision` as `null` — no full-set sweep produced them, and an anchor-scale figure in those two fields would ride into the manifest and every feedback record reading as the corpus's. `transferCheck` carries the anchor numbers with their own `n` instead.
 
 There is no `--no-embed` here — that is [`index`](#index)'s flag, and this command reads its consequences off the manifest. On an index built without vectors it calibrates the lexical threshold only: `tauLexical` is swept and held to the same refusal floor, and `tau` — the hybrid threshold — is left null in `calibration.json` and reported as unmeasurable rather than filled in with a number no probe produced.
 
