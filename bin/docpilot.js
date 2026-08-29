@@ -22,6 +22,7 @@ import path from 'node:path'
 const COMMANDS = [
   'index',
   'import',
+  'vocabulary',
   'calibrate',
   'eval',
   'bench',
@@ -40,6 +41,8 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
 
     index       build the retrieval index from your docs
     import      turn an allowlisted external page into a page of the corpus
+    vocabulary  propose the names readers use for what your docs call something
+                --languages=ru,de  --limit=N  --replace  --dry
     calibrate   measure the refusal thresholds against your corpus
     eval        run the golden set and write a report
                 --level=low|medium|high|xhigh|max|ultra scores one tier of it
@@ -58,6 +61,11 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
   retrieval that has to move — and then index again, because that is the step
   that inlines tuning.json into the manifest a reader downloads. Until it runs,
   a swept lever is a file on disk and nothing more.
+
+  "vocabulary" sits at the FRONT of that loop and reads markdown rather than the
+  index, so it runs before there is one. It rewrites how every lexical score is
+  computed, which is why calibrate follows it: the manifest carries a vocabHash
+  beside the index hash, and index reports a stale guard when the two disagree.
 
   The six tiers are cumulative — --level=medium runs low + medium, no --level
   runs everything — and eval, bench and tune all take one. A smoke-sized
@@ -150,12 +158,19 @@ const {
   embedModels,
   poolProviderOf,
   resolveChain,
+  resolveChatChain,
   nodeChatTarget,
   resolveEmbed,
+  resolveTuning,
+  capsOf,
 } = await import('../src/config.js')
 // The catalogue reader `npx docpilot index` uses, so `doctor --models` proposes
 // the same candidates the build would.
 const { discoverEmbedModels, probeEmbedEndpoint } = await import('../src/build/lib/embed-discovery.js')
+// Its answering-half sibling: what a local server has actually loaded, asked
+// through the adapters' own paths and reporting `unknown` rather than throwing,
+// so a laptop with Ollama switched off never changes what this command exits.
+const { inspectChatTarget } = await import('../src/build/lib/chat-preflight.js')
 // The adapters, for the ONE thing `doctor --models` needs from them: the path a
 // service lists its models at, and the shape of what comes back.
 const { providerFor } = await import('../src/theme/docpilot/providers.js')
@@ -467,6 +482,13 @@ if (cmd === 'feedback') {
   process.exit(await runFeedback({ docPilot: resolved, argv: rest, env }))
 }
 
+// And the same again: four flags, and a verdict — a model that would not answer
+// is a failed run, not an empty vocabulary.
+if (cmd === 'vocabulary') {
+  const { runVocabulary } = await import('../src/build/vocabulary.js')
+  process.exit(await runVocabulary({ docPilot: resolved, argv: rest, env }))
+}
+
 if (cmd === 'doctor') {
   const ready = readiness(resolved, env)
 
@@ -501,16 +523,140 @@ if (cmd === 'doctor') {
   {
     const { tried } = resolveChain(env)
     const chosen = resolved.chat.provider
-    say('chain', resolved.chat.providerAuto ? `auto → ${chosen}` : `${chosen} (named in config)`)
+    /**
+     * THE ROTATION ORDER, which is the question this command is run to answer
+     * once `chat.chain` can name more than one service. `←` becomes an ordinal
+     * so the order is readable at a glance; a single-member chain prints the
+     * bare arrow it always did, because an ordinal on a list of one is noise.
+     */
+    const chain = resolveChatChain(resolved, env)
+    const at = new Map(chain.map((m, i) => [m.id, i + 1]))
+    const many = chain.length > 1
+    say(
+      'chain',
+      many
+        ? `${resolved.chat.providerAuto ? 'auto' : chosen} → ${chain.length} will answer, in order`
+        : resolved.chat.providerAuto
+          ? `auto → ${chosen}`
+          : `${chosen} (named in config)`,
+    )
     for (const t of tried) {
       const mark = t.found ? '✓' : '·'
+      const n = at.get(t.id)
       // `←` on a row that nothing selected would read as a contradiction — the
       // dot says "not set" and the arrow says "this one". Name it instead: that
       // row is where the walk LANDED rather than what it matched.
-      const here = t.id !== chosen ? '' : t.found ? ' ←' : ' ←  nothing matched — fall-through'
+      const here = !n
+        ? ''
+        : many
+          ? ` ← ${n}`
+          : t.found
+            ? ' ←'
+            : ' ←  nothing matched — fall-through'
       console.log(
         `${PAD}${mark} ${t.id.padEnd(12)}${(t.envKey || 'no key needed').padEnd(22)}${here}`.trimEnd(),
       )
+    }
+    /**
+     * A member a key selected and the chain did not take. `resolveChatChain`
+     * drops it because there is nothing to send it, and a silent drop is exactly
+     * the "why is it not talking to that" this block exists to answer.
+     */
+    for (const t of tried) {
+      if (t.found && !at.has(t.id)) {
+        console.log(`${PAD}  ${''.padEnd(12)}${''.padEnd(22)}skipped — no model and no pool`)
+      }
+    }
+  }
+
+  /**
+   * WHAT THIS SERVICE WILL ACTUALLY DO WITH YOUR KNOBS.
+   *
+   * A capability matrix is worth nothing if reading it means opening the source,
+   * and the one fact nobody can get anywhere else is the WIRE NAME each setting
+   * turns into — `chat.maxTokens` is `options.num_predict` on Ollama and
+   * `max_completion_tokens` on GPT-5, and an author debugging a request they can
+   * see in a network tab has no way to connect it back to what they wrote.
+   *
+   * Read from the same two records the transport translates from — the adapter's
+   * `supports` and the brand's `caps` — so this cannot drift from the behaviour
+   * it describes. No network, no flag, and it NEVER changes the exit code: a
+   * knob this provider ignores is news, not a broken configuration.
+   */
+  {
+    const adapter = providerFor(nodeChatTarget(resolved, env).provider)
+    const caps = capsOf(resolved.chat.provider) || {}
+    const tuning = resolveTuning(resolved)
+    const chat = resolved.chat
+    console.log('')
+    say('knobs', `${resolved.chat.provider} · ${adapter.id} adapter`)
+
+    const wire = (knob, value, field) => {
+      if (value == null) return
+      if (field) console.log(`${PAD}✓ ${knob.padEnd(12)}${String(value).padEnd(9)}→ ${field}`)
+      else console.log(`${PAD}· ${knob.padEnd(12)}${String(value).padEnd(9)}NOT honoured by ${resolved.chat.provider}`)
+    }
+
+    // Reasoning first, and it prints even at its default, because "what does
+    // 'auto' do here" is the question this whole feature raises.
+    if (tuning.style === 'none') {
+      console.log(`${PAD}· reasoning   ${String(chat.reasoning === false ? 'false' : 'auto').padEnd(9)}${caps.mandatory ? `${resolved.chat.provider} cannot turn reasoning off` : 'not offered by this provider'}`)
+    } else {
+      const asked = chat.reasoning && typeof chat.reasoning === 'object' ? chat.reasoning.effort : null
+      const shown = chat.reasoning === false ? 'false' : (asked ?? 'auto')
+      const field = {effort: 'reasoning_effort', unified: 'reasoning:{}', thinking: 'thinking', think: 'think'}[tuning.style]
+      const moved = asked && tuning.effort && tuning.effort !== asked ? `  CLAMPED to '${tuning.effort}' — ${resolved.chat.provider} has no '${asked}'` : ''
+      console.log(`${PAD}✓ ${'reasoning'.padEnd(12)}${String(shown).padEnd(9)}→ ${field}${moved}`)
+    }
+
+    wire('temperature', chat.temperature, caps.temperature === false ? null : adapter.supports?.temperature)
+    wire('maxTokens', chat.maxTokens, adapter.supports?.maxTokens)
+    wire('numCtx', chat.numCtx, adapter.supports?.numCtx)
+    wire('verbosity', chat.verbosity, tuning.verbosity != null ? adapter.supports?.verbosity : null)
+    wire('topP', chat.topP, tuning.topP != null ? adapter.supports?.topP : null)
+    wire('seed', chat.seed, tuning.seed != null ? adapter.supports?.seed : null)
+
+    // The ceiling field is model-resolved, so it is the one line that can differ
+    // between two models on the SAME provider — and the one that turns every
+    // request into a 400 when it is wrong.
+    if (adapter.id !== 'ollama' && adapter.id !== 'anthropic' && chat.model) {
+      const field = /(^|\/)(o[1-9](\b|-)|gpt-5|codex-mini)/i.test(chat.model) ? 'max_completion_tokens' : 'max_tokens'
+      if (field !== 'max_tokens') console.log(`${PAD}  ${chat.model} takes ${field}, not max_tokens`)
+    }
+
+    if (caps.unknown) {
+      console.log(`${PAD}! ${resolved.chat.provider} names a host, not a service — DocPilot cannot know what`)
+      console.log(`${PAD}  your gateway accepts, so every knob above is sent as written`)
+    } else if (caps.modelDependent && tuning.style !== 'none') {
+      console.log(`${PAD}! support varies by model here — a level is sent and the service decides`)
+    }
+    // The interaction nobody would predict, and the one that turns an answerable
+    // question into "no provider available" on a thin free pool.
+    if (tuning.style === 'unified' && tuning.effort && resolved.chat.extraBody?.provider?.require_parameters !== false) {
+      console.log(`${PAD}! reasoning + provider.require_parameters narrows routing a second time`)
+    }
+
+    /**
+     * THE BLOCK ABOVE IS THE HEAD'S, and on a chain it is one member's answer to
+     * a question the reader asked about the deployment. Every member clamps the
+     * same neutral vocabulary to its own service, so a knob this one honours can
+     * be dropped by the next — and a knob nobody can see dropped is the
+     * "documented setting whose only reachable value is its default" defect,
+     * arriving one level up.
+     *
+     * One line per member that differs, and nothing at all when they agree.
+     */
+    const chain = resolveChatChain(resolved, env)
+    if (chain.length > 1) {
+      const shown = ['effort', 'verbosity', 'topP', 'seed', 'budgetTokens']
+      for (const m of chain.slice(1)) {
+        const t = resolveTuning(resolved, m.id)
+        const dropped = shown.filter((k) => tuning[k] != null && t[k] == null)
+        const off = t.style === 'none' && tuning.style !== 'none'
+        if (!dropped.length && !off) continue
+        const what = [...dropped, ...(off ? ['reasoning'] : [])].join(', ')
+        console.log(`${PAD}  ${m.id.padEnd(12)}drops ${what}`)
+      }
     }
   }
 
@@ -534,6 +680,16 @@ if (cmd === 'doctor') {
       console.log(`${PAD}→ ${r.upstream}${r.rewrite}`)
       const cred = r.keyless ? 'no key needed' : r.envKey ? `<${r.envKey}>` : 'NO KEY — none set'
       console.log(`${PAD}${r.header}: ${cred}`)
+      if (r.local) console.log(`${PAD}! LOCAL ADDRESS — a deployed proxy cannot reach it`)
+    }
+    /**
+     * The members with NO route — a local Ollama, which the browser calls at its
+     * own address. Printed under their own label because a five-member chain
+     * showing four routes and no account of the fifth reads as a bug here.
+     */
+    for (const d of contract.direct) {
+      say('direct', `${d.provider} → ${d.baseURL}`)
+      console.log(`${PAD}! the browser calls this itself — no proxy route, and none possible`)
     }
     if (contract.routes.length) {
       for (const n of contract.notes) console.log(`  · ${n}`)
@@ -617,18 +773,43 @@ if (cmd === 'doctor') {
       } else if (hosted && !target.apiKey) {
         say('model', `${target.model} — no key set, cannot ask ${target.id}`)
       } else {
-        try {
-          const res = await fetch(url, { headers: adapter.headers(target.apiKey) })
-          if (!res.ok) throw new Error(`HTTP ${res.status}`)
-          const ids = adapter.modelsParse(await res.json())
-          if (!ids.length) say('model', `${target.model} — ${target.id} returned no list`)
-          else if (ids.includes(target.model)) say('model', `${target.model} — served by ${target.id}`)
-          else {
-            say('model', `${target.model} — NOT in ${target.id}'s list of ${ids.length}`)
-            console.log(`${PAD}name one in chat.model, or upgrade the package`)
-          }
-        } catch (e) {
-          say('model', `${target.model} — cannot reach ${target.id} (${e.message})`)
+        /**
+         * ONE PROBE, IN ONE PLACE. This block used to hold its own `fetch`,
+         * its own error handling and its own idea of what a missing model
+         * means, and it got local servers wrong in both directions: it judged
+         * llama.cpp's placeholder against a catalogue it is not in, and it
+         * advised an Ollama user to "upgrade the package" when the thing to do
+         * is pull the model. `inspectChatTarget` answers all of it and never
+         * throws — see src/build/lib/chat-preflight.js for why it may not.
+         */
+        const seen = await inspectChatTarget(target)
+        const extra = []
+        if (seen.capabilities) {
+          extra.push(`tools ${seen.capabilities.tools ? 'yes' : 'no'}`)
+          extra.push(`thinking ${seen.capabilities.thinking ? 'yes' : 'no'}`)
+        }
+        if (seen.contextLength) extra.push(`ctx ${seen.contextLength}`)
+
+        if (seen.verdict === 'placeholder') {
+          // Not a failure and not a name to fix: this service answers with the
+          // weights it was started with, whatever the config says.
+          say('model', `${target.id} serves whatever it loaded${seen.loaded ? ` — ${seen.loaded}` : ''}`)
+          console.log(`${PAD}chat.model is a placeholder here and is ignored${extra.length ? ` · ${extra.join(' · ')}` : ''}`)
+        } else if (seen.verdict === 'served') {
+          say('model', `${target.model} — ${hosted ? `served by ${target.id}` : `pulled by ${target.id}`}`)
+          if (extra.length) console.log(`${PAD}${extra.join(' · ')}`)
+        } else if (seen.verdict === 'not-served') {
+          const n = seen.serves.length
+          say('model', `${target.model} — NOT ${hosted ? `in ${target.id}'s list of ${n}` : `pulled by ${target.id} (${n} available)`}`)
+          // The ACTIONABLE line, and it differs by service. Nothing an author
+          // types fixes a local server that has not downloaded the weights.
+          if (hosted) console.log(`${PAD}name one in chat.model, or upgrade the package`)
+          else if (target.modelAuto) console.log(`${PAD}${target.id} pull ${target.model}   — or name one you have in chat.model`)
+          else console.log(`${PAD}${target.id} pull ${target.model}`)
+        } else if (seen.serves === null) {
+          say('model', `${target.model} — cannot reach ${target.id}`)
+        } else {
+          say('model', `${target.model} — ${target.id} returned no list`)
         }
       }
     }

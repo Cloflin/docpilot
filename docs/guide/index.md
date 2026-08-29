@@ -2,10 +2,14 @@
 
 ## Overview
 
-DocPilot is a grounded Ask AI panel that mounts on any page a script tag can
+DocPilot is a grounded AI assistant that mounts on any page a script tag can
 reach — a docs site, a landing page, a help centre, an app you already ship —
-and answers from an index you build, not from the page it sits on. It consists
-of three parts:
+and answers from an index you build, not from the page it sits on. It is a chat
+rather than a search box: the reader scopes a question to one section, asks
+about a passage they selected, follows up, and keeps the thread. Everything the
+panel can do is [The assistant panel](./panel).
+
+It consists of three parts:
 
 - **A build step** that turns your markdown into a static retrieval index, and an
   adapter that mounts the panel — a Vite plugin on VitePress, which also proxies
@@ -21,8 +25,10 @@ of three parts:
   reader sees against what the host actually retrieved that turn.
 
 The rationale is in [Why DocPilot](./why), the rules the project holds itself to
-are in [Philosophy](./philosophy), and the pages it can sit on are in
-[Where it can go](./where-it-goes). What follows is the ten minutes it takes to
+are in [Philosophy](./philosophy), the pages it can sit on are in
+[Where it can go](./where-it-goes), and the case against buying a hosted answer
+service instead — with the rows those services win — is
+[How it compares](./comparison). What follows is the ten minutes it takes to
 have it running **on VitePress**.
 
 ::: tip Not VitePress? Not a docs site?
@@ -47,7 +53,7 @@ DocPilot needs **Node 20 or newer**; the package declares `engines.node: ">=20"`
 | Bun | `bun add @cloflin/docpilot` | `bunx docpilot init` |
 | Deno | `deno add npm:@cloflin/docpilot` | `deno run -A npm:@cloflin/docpilot init` |
 
-`pnpm exec`, not a bare `pnpm docpilot`: `pnpm run` executes the scripts in `package.json`, `pnpm exec` runs a bin. Every `init` line runs the bin the install line beside it just put in the project — none of them fetches the package a second time, and none of them runs the unscoped `docpilot`, which is a different name on the registry and not this package.
+`pnpm exec`, not `pnpm run docpilot`: `pnpm run` executes the scripts in `package.json`, `pnpm exec` runs a bin (a bare `pnpm docpilot` falls back to `exec` and works too). Every `init` line runs the bin the install line beside it just put in the project — none of them fetches the package a second time, and none of them runs the unscoped `docpilot`, which is a different name on the registry and not this package.
 
 `init` scaffolds the whole loop and never overwrites: `.env.example`, a starter golden set and calibration set under `docpilot/`, and the two authoring skills into `.claude/skills/`. Every file is reported as written or kept.
 
@@ -175,6 +181,8 @@ Both lines are one instruction each, and the note under them is why the block na
 
 ## Next steps
 
+- Everything the panel does, one control at a time:
+  [The assistant panel](./panel).
 - A site that is not VitePress: [Installing](/install/).
 - Which highlighter colours the code in an answer: [Syntax highlighting](/reference/highlighting).
 - Two providers instead of one, or none at all: [Choosing providers](./providers).

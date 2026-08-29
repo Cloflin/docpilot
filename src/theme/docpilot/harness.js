@@ -121,6 +121,11 @@ export async function runTurn({
   // and the name a vote is filed under — has to come from the call rather than
   // from the settings. Absent on every single-model setup.
   onModel,
+  // Which SERVICE answered, on a deployment whose environment holds more than
+  // one key. The provider-level sibling of `onModel`, and reported for the same
+  // reason: on a rotating set the settings cannot say. Nothing renders it —
+  // stepping aside for the next service is the ladder working.
+  onMember,
   onStream,
   signal,
   // What is left of the day's requests, from createBudget(). Absent for the
@@ -473,6 +478,10 @@ export async function runTurn({
         promptListLimit: config.scope?.promptListLimit ?? 12,
         prompt: config.prompt,
         product: config.product,
+        // The gate already named the mode — declared, degraded or dim-mismatch
+        // all land on the same string — and the model needs the fact more than
+        // the cause: its re-searches are BM25-only on this turn either way.
+        lexicalOnly: gateResult.mode === 'lexical-only',
       }),
     )
 
@@ -519,7 +528,12 @@ export async function runTurn({
           baseURL: config.llm.baseURL,
           model: config.llm.model,
           models: config.llm.models,
+          // THE SET, when the environment selected one. `chain[0]` restates the
+          // scalars above by construction, so a one-member chain is the same
+          // call it has always been and this key changes nothing for it.
+          chain: config.llm.chain,
           onModel,
+          onMember,
           apiKey: config.llm.apiKey,
           temperature: config.llm.temperature ?? 0.2,
           maxTokens: config.llm.maxTokens,
@@ -529,6 +543,20 @@ export async function runTurn({
           // providers.js brand-agnostic while OpenRouter still gets the
           // `require_parameters` that makes it honour a response format.
           extraBody: config.llm.extraBody,
+          /**
+           * THE AUTHOR'S DEPTH, ON A STEP THAT IS NOT THINKING ANYWAY.
+           *
+           * `enableThink: thinkable(false)` below is what decides that, and it
+           * is not the author's to raise: reasoning on an intermediate step is
+           * pure latency — the model is choosing a tool, not composing an
+           * answer, and measured, leaving it on across four steps put p50 at
+           * 215s. Nobody writing `reasoning: 'high'` is asking for that.
+           *
+           * The record still travels, because it carries `topP`, `seed`,
+           * `verbosity` and the ceiling field, none of which are about thinking.
+           * The adapters read `effort` only where `enableThink` already said yes.
+           */
+          tuning: config.llm.tuning,
           onHeaders,
           continuations: plan.continuations,
           // The turn's allowance, less what the turn has already spent AND less
@@ -603,6 +631,7 @@ export async function runTurn({
         promptListLimit: config.scope?.promptListLimit ?? 12,
         prompt: config.prompt,
         product: config.product,
+        lexicalOnly: gateResult.mode === 'lexical-only',
       }),
     )
     const timeout = AbortSignal.timeout(config.llm.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS)
@@ -612,12 +641,19 @@ export async function runTurn({
         baseURL: config.llm.baseURL,
         model: config.llm.model,
         models: config.llm.models,
+        chain: config.llm.chain,
         onModel,
+        onMember,
         apiKey: config.llm.apiKey,
         temperature: config.llm.temperature ?? 0.2,
         maxTokens: config.llm.maxTokens,
         numCtx: config.llm.numCtx,
         extraBody: config.llm.extraBody,
+        // THE ONE CALL THE AUTHOR'S LEVEL APPLIES TO — the only one whose output
+        // the reader reads. `thinkable` still wins over it, because a model
+        // without the capability cannot be asked however deeply somebody wants
+        // it to think; that is the principle `config.llm.think` was deleted for.
+        tuning: thinkable(config.llm.tuning ?? null) ?? null,
         onHeaders,
         // The call that most needs a continuation is this one: it is the only
         // one whose output the reader reads, and a `finishReason: 'length'` here

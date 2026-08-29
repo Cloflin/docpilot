@@ -58,7 +58,7 @@ Everything the panel paints goes through one of these. The second column is what
 | `--dp-text-dim` | `#5c6672` / `#98989f` | `var(--vp-c-text-2)` | `var(--ifm-color-emphasis-700)` |
 | `--dp-on-text` | `#ffffff` / `#1b1b1f` | `var(--vp-c-neutral-inverse, var(--vp-c-bg))` | `var(--ifm-background-color)` |
 | `--dp-focus` | `#1f2328` / `#dfdfd6` | `var(--vp-c-brand-1)` | `var(--ifm-color-primary)` |
-| `--dp-accent-soft` | `rgba(100,108,255,.18)` | `var(--vp-c-brand-soft)` | the primary at 18%, via `color-mix` |
+| `--dp-accent-soft` | `rgba(100,108,255,.18)` | `var(--brand-bg-active, var(--vp-c-brand-soft))` | the primary at 18%, via `color-mix` |
 | `--dp-chip` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-c-bg-alt)` | `var(--ifm-color-emphasis-100)` |
 | `--dp-code-bg` | `rgba(101,117,133,.08)` / `.16` | `var(--vp-code-block-bg)` | `var(--ifm-code-background)` |
 | `--dp-shadow` | two-layer black alpha | `var(--vp-shadow-3)` | `var(--ifm-global-shadow-lw)` |
@@ -155,7 +155,7 @@ marks its monospaced *blocks* instead of the other way round.
 
 ```js
 docPilot: {
-  ui: { trigger: 'nav', panel: 'auto', fabLabel: true, fabIcon: true },
+  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true },
 }
 ```
 
@@ -179,7 +179,9 @@ With a label it becomes a pill and grows on the **inline axis only** — `--dp-f
 
 **The hairline is the structure.** One device, one value — `1px solid var(--dp-line)` — on the drawer's edge, the popup, the selection popover, the header (transparent until the thread is scrolled), the conversation dock, the scope picker, the composer, the feedback textarea, the code card and the floating button. `outline` is the focus ring and nothing else: `2px solid var(--dp-focus)` at `2px` offset, on every control.
 
-**Buttons are pills, not links.** No border, a `--dp-wash` on hover and focus, `scale(0.96)` on press, and the inverted `--dp-text` / `--dp-on-text` pair for a toggle that is on. The two controls inside the footnote sentence, and the call-to-action under each article, keep their underline — a pill in running text breaks the line box — and take the same wash at `--dp-r-sm`.
+**Buttons are pills, not links.** No border, a `--dp-wash` on hover and focus, `scale(0.96)` on press, and the inverted `--dp-text` / `--dp-on-text` pair for a toggle that is on. The three controls inside the footnote sentence, and the call-to-action under each article, keep their underline — a pill in running text breaks the line box — and take the same wash at `--dp-r-sm`.
+
+**The footnote closes on one word.** `All docs · AI-generated. Check the linked pages. · DocPilot` — the scope button, the disclaimer once a turn exists, and a link to the project so a reader can find out what answered them. The link is the one segment that is always there; it wears `--dp-text` like the two controls beside it rather than your accent, because a coloured word would be the only one in the panel. [`ui.credit: false`](/reference/config#ui-credit) removes it.
 
 **The composer does not answer a hover.** It is a `--dp-r-field` stadium with a hairline and the page's own surface, and only focus changes it. A tinted field *and* a ring would be two devices doing one job.
 

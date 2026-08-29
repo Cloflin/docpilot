@@ -129,8 +129,10 @@ export function composePage({ title, description, source, markdown, now = Date.n
  * This package is a docs plugin: the overwhelming majority of installs never run
  * this command, and a DOM implementation in their tree to support one they do
  * not use is exactly the kind of weight that gets a dependency removed. So it is
- * an OPTIONAL peer, imported at the moment it is needed, with the install line
- * in the error rather than in a stack trace.
+ * OPTIONAL AND UNDECLARED — this package ships no peer block at all, see the
+ * 'declares no peer dependencies' gate in test/packaging.test.js — imported at
+ * the moment it is needed, with the install line in the error rather than in a
+ * stack trace.
  */
 async function parseDocument(html) {
   let parseHTML

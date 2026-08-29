@@ -1401,6 +1401,56 @@
   overflow-wrap: anywhere;
 }
 
+// ── search-only results ─────────────────────────────────────────────────────
+//
+// The source row with a second line under the link, which is the whole
+// difference: a citation row names a page the answer already used, so the title
+// is enough. A result row IS the answer, so the reader needs enough of the
+// passage to decide whether to follow it.
+//
+// The snippet goes in the second track rather than in a third row of the grid,
+// so it lines up under the title instead of under the number — hence the wrapper
+// element. `.docpilot__source` keeps its two columns and everything it already
+// says about hover, focus-within and coarse pointers.
+.docpilot__result-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.docpilot__result-snippet {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dp-text-dim);
+  overflow-wrap: anywhere;
+
+  // The reader's own words inside the passage — WEIGHT AND FULL TEXT COLOUR,
+  // not a highlighter.
+  //
+  // A tinted background was the obvious version and it is wrong twice over. The
+  // accent is the panel's one tinted surface and belongs to the linked-row state
+  // alone; spending it here would put two green signals in one row meaning
+  // different things. And a surface would have to survive the row's own hover,
+  // which paints `--dp-surface-2` behind it — the mark would disappear exactly
+  // when the reader points at it. Promoting the matched words out of the dim
+  // colour the snippet is set in says the same thing with the contrast that is
+  // already there.
+  mark {
+    background: none;
+    color: var(--dp-text);
+    font-weight: 500;
+  }
+}
+
+// One tab stop for the list, arrows within it — the roving tabindex the
+// component manages. The focused link still shows the focus ring it always did;
+// what this adds is that a keyboard reader can see WHICH row holds the stop
+// before they press anything.
+.docpilot__results .docpilot__source:focus-within {
+  background: var(--dp-surface-2);
+}
+
 // ── the passage behind a citation — ui-specs/009 ────────────────────────────
 //
 // A third track for the disclosure, on the rows that have one — the history
@@ -1800,13 +1850,21 @@
   margin: 8px 0 0;
 }
 
-// The two controls that are INLINE INSIDE A SENTENCE — the footnote reads
-// "All docs · AI-generated. Check the linked pages." A pill in running text
-// breaks the line box, so these keep their underline and take the hover wash at
-// a small radius instead: they answer a pointer the way everything else in the
-// panel does, without leaving the paragraph they belong to. ui-specs/004.
+// The three controls that are INLINE INSIDE A SENTENCE — the footnote reads
+// "All docs · AI-generated. Check the linked pages. · DocPilot". A pill in
+// running text breaks the line box, so these keep their underline and take the
+// hover wash at a small radius instead: they answer a pointer the way everything
+// else in the panel does, without leaving the paragraph they belong to.
+// ui-specs/004.
+//
+// The third is an `<a>` and the other two are buttons, which is why the reset
+// below is worth its two dead declarations: one appearance for one row, whatever
+// element each segment happens to be. `color` is the load-bearing one — an
+// unstyled link would take the host's accent and read as the only coloured thing
+// in the panel.
 .docpilot__scope,
-.docpilot__prompt-toggle {
+.docpilot__prompt-toggle,
+.docpilot__credit {
   font: inherit;
   background: none;
   border: none;

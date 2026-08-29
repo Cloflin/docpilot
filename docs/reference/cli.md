@@ -6,7 +6,7 @@ npx docpilot <command>
 
 Every command finds `.vitepress/config.mjs` relative to the directory you run it from and reads the `docPilot` named export. There is no second place to state which model embeds or where the docs live.
 
-The loop is `index → calibrate → lint → eval → bench`, with `import` ahead of it whenever the corpus gains a page from somewhere else, and `tune` wherever it is retrieval itself that has to move. The first two are what the panel needs to work at all; the last three are what tells you whether it works well.
+The loop is `index → calibrate → lint → eval → bench`, with `import` ahead of it whenever the corpus gains a page from somewhere else, `vocabulary` ahead of it whenever the words readers use are not the words the docs use, and `tune` wherever it is retrieval itself that has to move. The first two are what the panel needs to work at all; the last three are what tells you whether it works well.
 
 `tune` sends you back to the start. It writes a file and stops; `index` is the step that inlines a swept lever into the manifest a reader downloads, and until it runs a tuned lever is a file on disk and nothing more.
 
@@ -104,6 +104,37 @@ Whichever path ran, the report says so:
 | `--force` | replace a file that already exists |
 
 The command does not index. An import changes the corpus hash, so what follows it is `index --dry`, `index`, `lint`, `eval --gate-only` and `calibrate` — the command prints that list when it writes.
+
+## `vocabulary`
+
+```bash
+npx docpilot vocabulary
+npx docpilot vocabulary --dry
+npx docpilot vocabulary --languages=ru,de --limit=30
+npx docpilot vocabulary --replace
+```
+
+Reads every title and heading in `docsDir`, asks the configured chat model which words readers are likely to use for the terms it finds, and writes `${evalDir}/vocabulary.json`. `index` inlines that file into the manifest, and [`vocabulary`](/reference/config#vocabulary) in the config file overrides it per term.
+
+It **proposes and never decides**. The file is committed and edited like the golden set: which word a reader types is a judgement about your product, and a model's guess at it is a draft. A re-run **merges** — a term already in the file keeps what the file says — so a hand-edited list survives the next run.
+
+| flag | |
+|---|---|
+| `--languages=a,b` | the languages to translate into; defaults to `en` plus your `i18n.locales` |
+| `--limit=N` | how many terms to keep; default 24, which is the cap on what the model is later shown. Asked for in the prompt and enforced on the reply, because a small model ignores the request |
+| `--replace` | take the model's list whole instead of merging the file into it |
+| `--dry` | print the proposal and write nothing |
+| `--out <path>` | somewhere other than `${evalDir}/vocabulary.json` |
+
+It reads **markdown**, not the index, so it runs before there is one — which is why it sits at the front of the loop rather than inside it.
+
+**It changes what every lexical score means.** The index hash is over chunk text and cannot see a tokenizer change, so the manifest carries a `vocabHash` beside it and `index` reports a stale guard when the two disagree. The command prints the sequence when it writes:
+
+```bash
+npx docpilot index && npx docpilot calibrate --refresh && npx docpilot index
+```
+
+A deployment with `chat: false` has no model to ask and the command says so rather than writing an empty file.
 
 ## `calibrate`
 

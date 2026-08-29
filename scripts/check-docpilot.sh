@@ -361,20 +361,30 @@ entry=$(strip_comments "$ENTRY" | grep -vE '^[[:space:]]*(@use|$)' | tr '\n' ' '
 # `--dp-brand-gradient`, which belongs to the documentation SITE's own theme and
 # has nothing to do with the panel — widening this rule, or running a `--dp-`
 # replacement across `docs/`, walks straight into it.
-DOCS=docs/guide/appearance.md
-if [ ! -s "$DOCS" ]; then
-  bad "rule 10 — $DOCS is missing or empty"
-else
-  declared=$(grep -oE '^[[:space:]]*--dp-[a-z0-9-]+' "$CORE" | tr -d ' ' | sort -u)
+#
+# TWO pages now, not one. `docs/reference/theme.md` is a second published copy
+# of the same table, and it says of itself that "the published table and
+# core.scss are asserted to name exactly the same 33 properties" — a sentence
+# that was false for as long as this rule read one file. A second copy is a
+# second place to drift, and the page that promises it is checked is the worst
+# place to leave unchecked.
+declared=$(grep -oE '^[[:space:]]*--dp-[a-z0-9-]+' "$CORE" | tr -d ' ' | sort -u)
+rule10=0
+for DOCS in docs/guide/appearance.md docs/reference/theme.md; do
+  if [ ! -s "$DOCS" ]; then
+    bad "rule 10 — $DOCS is missing or empty"
+    rule10=1
+    continue
+  fi
   documented=$(grep -oE -- '--dp-[a-z0-9-]+' "$DOCS" | sort -u)
   undoc=$(comm -23 <(printf '%s\n' "$declared") <(printf '%s\n' "$documented") | tr '\n' ' ')
   unreal=$(comm -13 <(printf '%s\n' "$declared") <(printf '%s\n' "$documented") | tr '\n' ' ')
-  if [ -z "$(echo "$undoc$unreal" | tr -d ' ')" ]; then
-    ok "rule 10 — the token table and core.scss agree"
-  else
-    bad "rule 10 — undocumented:$undoc / not declared:$unreal"
+  if [ -n "$(echo "$undoc$unreal" | tr -d ' ')" ]; then
+    bad "rule 10 — $DOCS — undocumented:$undoc / not declared:$unreal"
+    rule10=1
   fi
-fi
+done
+[ "$rule10" -eq 0 ] && ok "rule 10 — both token tables and core.scss agree"
 
 # Scope enforcement — the harness must not be able to reach the index.
 if strip_comments "$HARNESS" | grep -qE '\bindex\b'; then

@@ -15,6 +15,23 @@ docs/.vitepress/cache/
 #
 # A CONSUMER's project should still ignore theirs: `docs/public/rag/` there is a
 # pure build artifact with no such tradeoff. `docpilot init` writes that entry.
+#
+# `rag-local/` is the SAME corpus embedded by a local bge-m3 at 1024 dimensions,
+# and it is committed too. It exists to be measured against: an eval run on the
+# weaker embedder is a floor, and a configuration that answers well there answers
+# at least as well on the stronger one. That comparison is only worth anything if
+# both indexes are the same corpus and both are reproducible, which is what
+# committing them buys — `test/docs-links.test.js` holds every manifest under
+# `docs/public/` to the corpus hash, so neither can drift.
+#
+# It was ignored because committing it looked like a way to ship keyword-only
+# retrieval by accident: the browser asks for the model the manifest names, and
+# OpenRouter does not serve `bge-m3`. That is a real failure and it is NOT
+# prevented by hiding the file — it is prevented by `readiness()`, which raises
+# "the index was built with X, which is not in <provider>'s free embedding pool"
+# as a hard `missing`, and by `scripts/vercel-build.sh`, which runs `doctor` and
+# turns it into a red build. Serving this index needs an embedder that serves
+# bge-m3; nothing else will get past that gate.
 
 .env
 .env.local

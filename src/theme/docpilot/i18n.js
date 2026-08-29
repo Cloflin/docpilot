@@ -138,6 +138,47 @@ const UI_EN = {
     // because it lands in somebody's ticket under text they wrote themselves.
     copyHeading: 'Sources:',
   },
+  /**
+   * SEARCH-ONLY — the copy for a panel that answers with passages.
+   *
+   * The lead is a statement about what the reader is looking at, not an apology:
+   * this mode is a choice the site made, and a panel that opened every answer by
+   * explaining what it cannot do would be worse than a search box. `noStrong` is
+   * the caveat form, chosen by the gate, and it is the only place the verdict
+   * shows — the rows render either way.
+   */
+  results: {
+    lead: 'From {scope}',
+    noStrong: 'Nothing matches this closely in {scope}. The nearest passages:',
+    // The accessible name of the list itself, for a reader arrowing into it.
+    label: 'Search results',
+    // The one case with no rows at all — same shape as a refusal, because that
+    // is what it is: the corpus has nothing, and pages are the least this can
+    // offer instead of sections.
+    empty: "I couldn't find this in {scope}.",
+  },
+  /**
+   * THE LAST RUNG OF THE ANSWER LADDER — no service answered, so the search did.
+   *
+   * Every service the environment selected was asked and none of them answered,
+   * but the retrieval this turn already did needed none of them: the corpus was
+   * searched before the first request went out. So the turn settles as the same
+   * rows a search-only site serves, and this is the sentence that says why they
+   * are there instead of an answer.
+   *
+   * IT NAMES THE CAUSE AND THEN GETS OUT OF THE WAY. "Something went wrong" is
+   * the version of this that makes a reader retry a thing that cannot work; the
+   * models being unreachable is a fact they can act on — read the passages now,
+   * come back later for prose. `error.lead` still exists one branch down, for a
+   * failure that happened before there was anything to show.
+   */
+  hybrid: {
+    lead: "The AI models aren't reachable right now — this is a search answer. The closest passages:",
+    // Under a spent daily limit, where the state already carries its own
+    // sentence and the reset time. Quieter, because it is an addition to an
+    // explanation rather than the explanation.
+    meanwhile: 'Meanwhile, the closest passages:',
+  },
   refusal: {
     closestPages: 'Closest pages',
     closestPagesElsewhere: 'Closest pages elsewhere',
@@ -310,6 +351,16 @@ const UI_EN = {
     // …and this one when a thumb up travels too.
     withRating: 'AI-generated. Check the linked pages. Your rating is sent to the docs team.',
   },
+  // Beside `disclaimer` and deliberately not inside it. Those three are one
+  // claim in three editions, chosen by what actually travels; this is a product
+  // name, and a name is not a claim. Two controls that share a line are not one
+  // string — the same reading `quote.ask` gets above.
+  credit: {
+    // Not translated, because a name is not translated. The key exists so a site
+    // that renames the panel in its own docs can rename it here too.
+    label: 'DocPilot',
+    title: 'Built with DocPilot',
+  },
   degraded: {
     lead: 'AI answers are off in this environment.',
     search: 'Search the docs',
@@ -348,6 +399,15 @@ const UI_EN = {
     instructionSaved: 'Instruction saved.',
     instructionRemoved: 'Instruction removed.',
     answerReady: 'Answer ready. {n} {n, source|sources}.',
+    // Search-only settles with links rather than prose, so the count IS the
+    // announcement. Two forms, because whether the panel is leading with a
+    // caveat is the half a reader cannot see.
+    resultsReady: '{n} {n, result|results}.',
+    resultsWeak: 'No close matches. {n} {n, result|results} shown.',
+    // The cause first, for the reader who cannot see the sentence above the
+    // rows. It is the one turn in a session where the list of links needs
+    // explaining; a search-only site's rows never do.
+    hybrid: 'The AI models are unavailable. {n} {n, result|results} shown.',
     feedbackRecorded: 'Feedback recorded.',
     feedbackSent: 'Report sent.',
     conversationOpened: 'Opened {title}.',

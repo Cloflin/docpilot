@@ -24,6 +24,10 @@ against it is arithmetic over an array of floats, and a browser does arithmetic.
 The only step that genuinely needs a network is the model call, and that one goes
 through a proxy you own.
 
+That is the argument in the abstract. Named services, side by side, sourced and
+dated — and the list of rows those services win — is
+[How it compares](./comparison).
+
 ## Why not a vector database
 
 Because the index is a build artefact, not infrastructure. It is written by

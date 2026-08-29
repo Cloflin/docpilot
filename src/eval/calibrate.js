@@ -1112,6 +1112,16 @@ function buildDoc(ctx) {
     calibratedAt: index.manifest.hash,
     embedModel: index.manifest.embedModel,
     /**
+     * The vocabulary this run tokenised with — read off the MANIFEST rather than
+     * off `text.js`'s module state, because the manifest is what the index was
+     * built with and the module state is only what happens to be installed.
+     *
+     * `guardFor` compares it. Without it a threshold measured before a map was
+     * declared inlines itself onto an index tokenised with one, and nothing
+     * anywhere says so: the index hash is over chunk text and does not move.
+     */
+    vocabHash: index.manifest.vocabHash ?? null,
+    /**
      * Whether the index this was measured on has vectors at all.
      *
      * `guard.tau: null` alone is ambiguous in the one way that matters: it is

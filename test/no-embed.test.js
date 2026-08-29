@@ -14,6 +14,8 @@ import {
   readiness,
 } from '../src/config.js'
 import { assembleIndex, loadIndex, __setIndex } from '../src/theme/docpilot/store.js'
+import { setVocabulary } from '../src/theme/docpilot/text.js'
+import { enforces } from '../src/theme/docpilot/gate.js'
 import { createRetrieval } from '../src/theme/docpilot/retriever.js'
 import { aggregate } from '../src/feedback/aggregate.js'
 import { resolveEmbed as resolveClientEmbed } from '../src/theme/docpilot/switches.js'
@@ -525,12 +527,21 @@ describe('retrieval over an index with no vector space', () => {
   })
 
   /**
-   * A scope is still a hard filter, and a scoped refusal still answers — with
-   * `wouldPassUnscoped` false, because that check is computed from the dense
-   * cosines over the whole corpus and there are none. The widen affordance
-   * therefore never renders on a lexical-only site. That is a consequence of the
-   * mode rather than a decision this file is asserting is right; it is written
-   * down so a future lexical unscoped check has a test to change.
+   * A scope is still a hard filter, and a scoped refusal now says WHICH refusal
+   * it is.
+   *
+   * This case used to pin the opposite: `wouldPassUnscoped` false and `unscopedG`
+   * null, because the check was computed from dense cosines over the whole corpus
+   * and a vectorless index has none. Its docblock recorded that as a consequence
+   * of the mode rather than a decision, and said it was written down so a future
+   * lexical unscoped check would have a test to change. This is that change.
+   *
+   * The distinction it buys is the whole point, and the two questions below are
+   * chosen to separate them: the answer to the first is one page outside the
+   * reader's scope, the answer to the second is nowhere in the corpus. Before,
+   * both refused as `no-evidence` — a reader inside a page scope was told the docs
+   * did not cover their question when what was true is that their scope did not,
+   * and the one-click widen affordance could not render at all.
    */
   it('answers inside a scope without reaching for a dense distribution', () => {
     const scoped = createRetrieval({
@@ -542,8 +553,21 @@ describe('retrieval over an index with no vector space', () => {
     expect(scoped.pages('/').map((p) => p.path)).toEqual(['/b'])
     const g = scoped.evaluate({ question: 'gamma billing invoices refunds', queryVec: STRAY })
     expect(g.pass).toBe(false)
-    expect(g.wouldPassUnscoped).toBe(false)
-    expect(g.unscopedG).toBe(null)
+    // Widening would change the verdict, so the refusal is `out-of-scope` and the
+    // affordance renders. `unscopedG` is the score behind the boolean, which a
+    // threshold sweep needs to re-derive it at another tau — RAG-SPEC 5.6 step 3.
+    expect(g.wouldPassUnscoped).toBe(true)
+    expect(g.unscopedG).toBeGreaterThan(GUARD.tauLexical)
+    // The control, and the reason the boolean is worth computing: a question the
+    // corpus cannot answer at any scope still refuses as `no-evidence`, with no
+    // widen button offering a remedy that is not one.
+    const nowhere = scoped.evaluate({ question: 'kubernetes helm chart rollout', queryVec: STRAY })
+    expect(nowhere.pass).toBe(false)
+    expect(nowhere.wouldPassUnscoped).toBe(false)
+    // An unscoped turn has nothing to widen INTO, so the check does not run and
+    // the score stays null — the same shape the dense arm has always returned.
+    const all = createRetrieval({ index: makeIndex(), scope: ALL, guard: GUARD })
+    expect(all.evaluate({ question: 'gamma billing invoices refunds', queryVec: STRAY }).unscopedG).toBe(null)
     expect(scoped.closest({ query: 'billing invoices', queryVec: STRAY, outsideScope: true })).toEqual([
       { path: '/c', title: 'Page /c', tail: 'Docs', origin: null },
     ])
@@ -1284,5 +1308,148 @@ describe("embed.fallback: 'lexical' — when the embedder will not answer", () =
       }),
     )
     expect(client.embed.lexicalOnly).toBe(false)
+  })
+})
+
+/**
+ * A QUESTION IN ANOTHER LANGUAGE, ON AN ENGLISH CORPUS, WITH NO DENSE CHANNEL.
+ *
+ * The failure this file's own comments describe and nothing measured. On a
+ * vectorless index `G = L`, and `L` is token overlap between the question and
+ * the corpus — so a Russian question about a documented feature scores zero, not
+ * because the corpus lacks the answer but because this channel cannot see it.
+ * `session.js` says so in a comment: "the panel answers I couldn't find this in
+ * the docs, which is false. It did not look."
+ *
+ * Two things close it, and they close different halves:
+ *
+ *   · `vocabulary` gives the lexical channel the reader's words, so a question
+ *     that named the same thing differently scores at all;
+ *   · `guard.mode: 'dense-only'`, which ships, stops a verdict computed from L
+ *     alone from ending the turn — because the words a map does not carry are
+ *     exactly the ones nobody thought to declare.
+ *
+ * Retrieval is exercised directly rather than through `session.submit`: what is
+ * under test is the gate's arithmetic, and a turn would add a transport to it.
+ */
+describe('a question the lexical channel cannot see', () => {
+  const ROWS = [
+    {
+      id: 'a#one',
+      path: '/a',
+      anchor: 'one',
+      title: 'Choosing providers',
+      breadcrumb: 'Guide',
+      kind: 'guide',
+      text: 'Guide — Choosing providers\nDocPilot walks the provider chain and takes the first key it finds.',
+      prev: null,
+      next: null,
+    },
+    {
+      id: 'b#one',
+      path: '/b',
+      anchor: 'one',
+      title: 'Appearance',
+      breadcrumb: 'Guide',
+      kind: 'guide',
+      text: 'Guide — Appearance\nThe panel inherits the font of the page it is mounted on.',
+      prev: null,
+      next: null,
+    },
+  ]
+
+  const GUARD = {
+    tau: 0.3,
+    tauLexical: 0.3,
+    wDense: 0.75,
+    wLexical: 0.25,
+    denseMode: 'cosine',
+    cosFloor: 0.44,
+    cosCeil: 0.64,
+    zexp: null,
+  }
+
+  let fixture = 0
+  const build = (vocabulary) =>
+    assembleIndex({
+      manifest: {
+        version: 3,
+        hash: `xlang-${++fixture}`,
+        embedModel: null,
+        dims: 0,
+        vectors: null,
+        chunkCount: ROWS.length,
+        pages: [
+          { path: '/a', title: 'Choosing providers', tail: 'Guide' },
+          { path: '/b', title: 'Appearance', tail: 'Guide' },
+        ],
+        sections: [],
+        guard: GUARD,
+        ...(vocabulary ? { vocabulary, vocabHash: 'v1' } : {}),
+      },
+      shards: [ROWS.map((r) => ({ ...r }))],
+      vectorBuffer: null,
+      dfDoc: { df: {} },
+    })
+
+  const ALL_PAGES = { kind: 'all', paths: ['/a', '/b'], label: 'All docs' }
+  const score = (question, vocabulary) => {
+    const index = build(vocabulary)
+    const retrieval = createRetrieval({ index, scope: ALL_PAGES, guard: GUARD })
+    return retrieval.evaluate({ question, queryVec: null, mode: 'lexical-only' })
+  }
+
+  afterEach(() => {
+    __setIndex(null)
+    setVocabulary(null)
+  })
+
+  it('scores zero without a map, for a question squarely about the product', () => {
+    const g = score('какой провайдер выбирает виджет')
+    expect(g.L).toBe(0)
+    expect(g.pass).toBe(false)
+  })
+
+  it('scores, and passes, once the map carries the reader’s words', () => {
+    const g = score('какой провайдер выбирает виджет', {
+      DocPilot: ['виджет'],
+      provider: ['провайдер'],
+    })
+    expect(g.L).toBeGreaterThan(0)
+    expect(g.pass).toBe(true)
+  })
+
+  /**
+   * AND THE MAP IS NOT A FREE PASS. A question the corpus genuinely has nothing
+   * for still fails, because the rewrite replaces the reader's word rather than
+   * adding ours to it — every off-domain term the question came with is still in
+   * Q, still unmatched, still scoring nothing.
+   */
+  it('still refuses an off-topic question carrying the same product noun', () => {
+    const g = score('виджет quarterly hiring headcount forecast', {
+      DocPilot: ['виджет'],
+      provider: ['провайдер'],
+    })
+    expect(g.pass).toBe(false)
+  })
+
+  /**
+   * THE SHIPPED GATE DOES NOT ACT ON ANY OF THIS, which is the second half. A
+   * verdict off `L` alone is a statement about token overlap, not about the
+   * corpus, and `dense-only` is what stops it ending a turn.
+   */
+  it('is scored but not enforced on a vectorless deployment, as shipped', () => {
+    expect(resolveDocPilot({ embed: false }, ENV).guard.mode).toBe('dense-only')
+    expect(enforces('dense-only', 'lexical-only')).toBe(false)
+    expect(enforces('dense-only', 'hybrid')).toBe(true)
+    expect(enforces('calibrated', 'lexical-only')).toBe(true)
+    expect(enforces('off', 'hybrid')).toBe(false)
+  })
+
+  /** And the build says so, because a spent request is worth one sentence. */
+  it('says what that costs on a site with no vectors', () => {
+    const notes = readiness(resolveDocPilot({ embed: false }, ENV), ENV).notes.join(' ')
+    expect(notes).toMatch(/guard\.mode is 'dense-only' and this index has no vectors/)
+    expect(notes).toMatch(/costs a model turn/)
   })
 })

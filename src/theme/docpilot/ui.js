@@ -10,6 +10,7 @@
  *     layout:       'overlay' | 'push',         // ui-specs/009
  *     prefetch:     'hover' | 'idle' | false,   // ui-specs/009
  *     firstRunHint: true | false,               // ui-specs/009
+ *     credit:       true | false,               // the `DocPilot` link in the footnote
  *     font:         string | null,              // a family list, or `--your-var`
  *     fontMono:     string | null,
  *   }
@@ -23,11 +24,12 @@
  *
  * `panel: 'auto'` is the default and means "whatever the trigger implies": a
  * list with the floating button in it opens a floating popup, a list without one
- * opens the full-height drawer that ships today. The shape of the option is
- * VitePress's own — see `resolveMode()` in theme-default's docsearch support —
- * an enum with an `auto` member plus a resolver that returns the FINISHED
- * structure. Nothing downstream re-derives `'auto'` for itself, so no two
- * readers of the setting can disagree about what it meant.
+ * opens the full-height drawer. The SHIPPED pair is therefore the floating
+ * button and the popup, because `trigger` defaults to `'fab'`. The shape of the
+ * option is VitePress's own — see `resolveMode()` in theme-default's docsearch
+ * support — an enum with an `auto` member plus a resolver that returns the
+ * FINISHED structure. Nothing downstream re-derives `'auto'` for itself, so no
+ * two readers of the setting can disagree about what it meant.
  *
  * The explicit combinations — `nav` + `popup`, `fab` + `drawer` — are carried
  * out in silence. That is what `'auto'` is for: once the implied pairing has a
@@ -79,6 +81,10 @@ export const UI_TRIGGERS = ['nav', 'screen', 'fab']
  * on screen at every width already, and a second entry point in the mobile menu
  * is exactly what choosing one placement said not to have. `['fab','screen']`
  * is how a site asks for both.
+ *
+ * `'fab'` is also the SHIPPED DEFAULT — see `UI_DEFAULTS` below — which is a
+ * change of default and not of meaning: the word still stands for the one
+ * placement, and `'nav'` still stands for two.
  *
  * `'both'` and `'none'` were in `types/config.d.ts` from the start and were
  * accepted by nothing — the resolver dropped them with a warning and fell back
@@ -145,13 +151,43 @@ const FONT_UNSAFE = /[;{}<>@*\\\u0000-\u001f]|url\s*\(/i
 const CSS_VAR_NAME = /^--[A-Za-z0-9_-]+$/
 
 export const UI_DEFAULTS = {
-  trigger: 'nav',
+  /**
+   * `'fab'` — the floating button, and the one placement that does not need
+   * somebody else's navbar.
+   *
+   * `'nav'` was the default for as long as the panel was a VitePress theme
+   * extension, where a navbar slot is a given. It is not a given anywhere else:
+   * a custom theme, a React page, a Docusaurus site with its own header — every
+   * host that has no slot for the button rendered NOTHING by default, and the
+   * only visible symptom was a panel nobody could open. `mountDocPilot` had
+   * already reached the same conclusion on its own and mounts `'fab'` by
+   * default; this is the settings half agreeing with it.
+   *
+   * A site that wants the button back in its navigation bar says
+   * `ui: { trigger: 'nav' }`, and `panel: 'auto'` returns the drawer with it.
+   */
+  trigger: 'fab',
+  /**
+   * `'auto'`, which with the default trigger resolves to `'popup'`.
+   *
+   * The pairing stays derived rather than stated: a site that moves the button
+   * into its navbar gets the drawer back from the same key it never touched.
+   */
   panel: 'auto',
   fabLabel: true,
   fabIcon: true,
   layout: 'overlay',
   prefetch: 'hover',
   firstRunHint: false,
+  /**
+   * `true` — the panel says what it is, once, at the bottom of the footnote.
+   *
+   * One word, `DocPilot`, linked to the project, after the disclaimer it shares
+   * a line with. On by default because a panel a reader cannot name is a panel
+   * they cannot ask about; a switch rather than a fixture because a docs site is
+   * somebody else's product and the last word in it is theirs.
+   */
+  credit: true,
   /**
    * `null` — and the default lives in the STYLESHEET, not here.
    *
@@ -407,6 +443,10 @@ export function resolveUi(docPilot, err = console.error) {
     // otherwise resolve silently to the default and the author would be looking
     // for a hint that never renders and never complained.
     firstRunHint: pick(ui.firstRunHint, [true, false], UI_DEFAULTS.firstRunHint, 'firstRunHint', err),
+    // Through `pick` for the same reason as the line above it: `credit: 'no'` is
+    // an author switching the link off, and resolving that silently to `true`
+    // leaves them looking at a badge they told the config to remove.
+    credit: pick(ui.credit, [true, false], UI_DEFAULTS.credit, 'credit', err),
     /**
      * The two that do not reach a component at all — `session.configure` writes
      * them onto `<html>` as `--dp-font` and `--dp-font-mono`. Resolved here

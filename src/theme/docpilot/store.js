@@ -5,6 +5,8 @@
  * never asks a question pays nothing for the feature.
  */
 
+import { setVocabulary } from './text.js'
+
 let loading = null
 
 async function fetchJson(url) {
@@ -54,6 +56,25 @@ export function assembleIndex({ manifest, shards, vectorBuffer, dfDoc }) {
   chunks.forEach((c, i) => {
     c.row = i
   })
+
+  /**
+   * THE VOCABULARY IS INSTALLED HERE, and here is the only place it can be.
+   *
+   * `terms()` is module state by construction — it is the single tokenizer for
+   * `df.json`, MiniSearch's query side and the gate's L, and a per-call argument
+   * would let one of those three miss it and score a query against a vocabulary
+   * the index was never built with. So it is set once, from the manifest, before
+   * anything in this process tokenises: `miniSearchFor` memoises its instance on
+   * the index hash and would otherwise keep one built under the old map.
+   *
+   * `eval/run.js` reaches the same artefacts through this same function, which
+   * is what keeps a report scored with the vocabulary the reader's browser has.
+   *
+   * Absent on every index built before the key existed, and `setVocabulary`
+   * reads that as "none" — the tokenizer it leaves behind is byte-identical to
+   * the one that shipped.
+   */
+  setVocabulary(manifest.vocabulary || null)
 
   return {
     manifest,

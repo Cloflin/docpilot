@@ -43,6 +43,56 @@ const repo = 'https://github.com/Cloflin/docpilot'
 const ragIndex = new URL('../public/rag/manifest.json', import.meta.url)
 
 /**
+ * THE SECOND INDEX — `DOCPILOT_EMBED_LOCAL=1`.
+ *
+ * It began as an escape hatch and is now an artefact with a job. Two of them,
+ * and they pull in the same direction:
+ *
+ * ── ITERATION ─────────────────────────────────────────────────────────────────
+ * OpenRouter's free tier meters REQUESTS, not tokens, and rebuilding this index
+ * costs about fifteen of the fifty a day. Three rebuilds in an afternoon of
+ * editing docs and the next one is an HTTP 429 — a bad afternoon, because
+ * `test/docs-links.test.js` fails while a committed index is stale and there is
+ * nothing to do but wait for midnight UTC. A local Ollama costs none of them.
+ *
+ * ── A FLOOR TO MEASURE AGAINST ────────────────────────────────────────────────
+ * bge-m3 at 1024 dimensions is a weaker embedder than the 2048-dimension pool
+ * the deploy uses, and that is what makes it useful: a retrieval configuration
+ * that answers well HERE answers at least as well there, so a run against this
+ * index is a lower bound rather than a different measurement. `npx docpilot
+ * bench` is the tool, and the comparison only means something because both
+ * indexes are the same corpus — which is what committing them both enforces.
+ *
+ * IT WRITES SOMEWHERE ELSE, and that is still the important part. A local build
+ * into `docs/public/rag/` would overwrite the deployed index with one the
+ * browser cannot use, and on a spent quota it could not be rebuilt. `indexDir`
+ * below is the whole of that guarantee.
+ *
+ * ── WHY COMMITTING IT IS SAFE ─────────────────────────────────────────────────
+ * The old answer was that `rag-local/` was gitignored, so the disagreement could
+ * not reach a commit. That was hiding the file rather than closing the failure.
+ * What actually closes it is that the deployed site is never pointed here by
+ * accident: `readiness()` raises "the index was built with bge-m3, which is not
+ * in openrouter's free embedding pool" as a hard `missing`, and
+ * `scripts/vercel-build.sh` runs `doctor`, which exits 1 on it. Serving this
+ * index takes an embedder that serves bge-m3 and nothing else gets past that.
+ *
+ *   DOCPILOT_EMBED_LOCAL=1 node bin/docpilot.js index   # ~0 API requests
+ *   DOCPILOT_EMBED_LOCAL=1 npm run docs:dev             # panel reads rag-local
+ *   DOCPILOT_EMBED_LOCAL=1 node bin/docpilot.js eval    # the floor, measured
+ *
+ * `ollama pull bge-m3` and `ollama pull qwen3:8b` are the whole of the setup.
+ */
+const env = loadEnv('', process.cwd(), '')
+
+const LOCAL_EMBED = env.DOCPILOT_EMBED_LOCAL === '1'
+
+const localRagIndex = new URL(
+  '../public/rag-local/manifest.json',
+  import.meta.url,
+)
+
+/**
  * The contract between this file and the CLI: `docpilot index`, `calibrate` and
  * `doctor` all read THIS named export, so there is no second place stating
  * which model embeds or where the docs live.
@@ -64,25 +114,43 @@ const ragIndex = new URL('../public/rag/manifest.json', import.meta.url)
  * `npx docpilot doctor --proxy` prints that contract.
  */
 export const docPilot = {
-  enabled: existsSync(ragIndex),
+  enabled: existsSync(LOCAL_EMBED ? localRagIndex : ragIndex),
   product: 'DocPilot',
-  chat: { provider: 'openrouter' },
-  embed: 'auto',
-  /**
-   * The floating button, not the navbar one, and not by preference.
-   *
-   * `@voidzero-dev/vitepress-theme` replaces VitePress's `VPNav` with its own
-   * `OSSHeader`, which offers `nav-bar-title-before` and `-after` and nothing
-   * else — `nav-bar-content-before`, the slot the navbar trigger lives in, is
-   * never rendered on this site, so `trigger: 'nav'` would silently produce no
-   * way to open the panel at all. `layout-bottom` IS rendered, by both of the
-   * theme's layouts, which is where the floating button goes. `panel` is left
-   * at `auto`, and auto follows the trigger: fab opens the popup.
-   */
+  quote: { fromAnswer: true, fromDocs: true },
+  citations: { passage: true, inCopy: true, pagesRead: true },
+  ...(LOCAL_EMBED
+    ? {
+        /**
+         * `indexDir` IS THE WHOLE OF "it writes somewhere else".
+         *
+         * The block above promises it and nothing implemented it: `indexDirOf`
+         * falls back to `${docsDir}/public/rag`, so a local build wrote over the
+         * committed index with a bge-m3 one — the exact outcome the paragraph
+         * about a spent quota describes, arrived at by the flag that exists to
+         * avoid it.
+         */
+        indexDir: 'docs/public/rag-local',
+        /**
+         * The BROWSER's half of the same statement, and it has to move with
+         * `indexDir` or the two disagree in the one place nobody looks.
+         *
+         * `hostConfig` derives `ragBase` as `${base}rag`, so without this the
+         * panel fetched `/rag/manifest.json` — the OpenRouter index — while the
+         * build wrote `rag-local/`. The flag then showed the panel working on
+         * exactly the artefact it was supposed to be replacing.
+         */
+        host: { ragBase: '/rag-local' },
+        chat: { provider: 'ollama', model: 'qwen3:8b' },
+        embed: { provider: 'ollama', model: 'bge-m3' },
+      }
+    : {
+        chat: { provider: 'openrouter' },
+        embed: 'auto',
+      }),
   ui: { trigger: 'fab' },
 }
 
-const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
+const ai = defineDocPilot(docPilot, env)
 
 /**
  * Guide and Understanding-it share one sidebar. They are two halves of the same
@@ -114,6 +182,7 @@ const sidebarForGuide = [
       { text: 'Where it can go', link: '/guide/where-it-goes' },
       { text: 'Philosophy', link: '/guide/philosophy' },
       { text: 'Why DocPilot', link: '/guide/why' },
+      { text: 'How it compares', link: '/guide/comparison' },
     ],
   },
   {
@@ -139,6 +208,7 @@ const sidebarForGuide = [
   {
     text: 'Guide',
     items: [
+      { text: 'The assistant panel', link: '/guide/panel' },
       { text: 'Choosing providers', link: '/guide/providers' },
       { text: 'Living on the free tier', link: '/guide/free-tier' },
       { text: 'Building the index', link: '/guide/indexing' },
@@ -160,6 +230,7 @@ const sidebarForGuide = [
     items: [
       { text: 'How a turn works', link: '/concepts/a-turn' },
       { text: 'The refusal gate', link: '/concepts/the-gate' },
+      { text: 'The answer ladder', link: '/concepts/the-ladder' },
       { text: 'What it guarantees', link: '/concepts/guarantees' },
     ],
   },
@@ -171,6 +242,7 @@ const sidebarForReference = [
     base: '/reference/',
     items: [
       { text: 'Configuration', link: 'config' },
+      { text: 'Theme tokens', link: 'theme' },
       { text: 'Syntax highlighting', link: 'highlighting' },
       { text: 'CLI', link: 'cli' },
       { text: 'Skills', link: 'skills' },
@@ -196,7 +268,7 @@ const config = defineConfig({
 
   title: 'DocPilot',
   description:
-    'A grounded Ask AI panel for any page of your site — docs, a landing page, a help centre, or an app you already ship. Retrieval runs in the browser, the gate refuses before the model is called, and every citation is checked.',
+    'A grounded AI assistant for any page of your site — docs, a landing page, a help centre, or an app you already ship. A real chat: scope it, quote a passage, follow up. Retrieval runs in the browser, the gate refuses before the model is called, and every citation is checked.',
   cleanUrls: true,
   lastUpdated: true,
 
@@ -209,7 +281,7 @@ const config = defineConfig({
       'meta',
       {
         property: 'og:title',
-        content: 'DocPilot | Grounded AI answers on any page of your site',
+        content: 'DocPilot | An AI assistant on every page of your site',
       },
     ],
     // VitePress emits `<meta name="description">` from `description` above but
@@ -221,7 +293,7 @@ const config = defineConfig({
       {
         property: 'og:description',
         content:
-          'Mounts on any page of any site and answers from a static index you build. Retrieval runs in the browser; the gate refuses before the model is called; every citation is checked against what was retrieved.',
+          'An AI chat that mounts on any page of any site and answers from a static index you build. Retrieval runs in the browser; the gate refuses before the model is called; every citation is checked against what was retrieved.',
       },
     ],
     ['meta', { property: 'og:site_name', content: 'DocPilot' }],
@@ -279,6 +351,8 @@ const config = defineConfig({
           title: 'DocPilot',
           items: [
             { text: 'Getting started', link: '/guide/' },
+            { text: 'The assistant panel', link: '/guide/panel' },
+            { text: 'How it compares', link: '/guide/comparison' },
             { text: 'Why DocPilot', link: '/guide/why' },
             { text: 'Building the index', link: '/guide/indexing' },
             { text: 'Configuration', link: '/reference/config' },
@@ -290,6 +364,7 @@ const config = defineConfig({
           items: [
             { text: 'How a turn works', link: '/concepts/a-turn' },
             { text: 'The refusal gate', link: '/concepts/the-gate' },
+            { text: 'The answer ladder', link: '/concepts/the-ladder' },
             { text: 'What it guarantees', link: '/concepts/guarantees' },
           ],
         },

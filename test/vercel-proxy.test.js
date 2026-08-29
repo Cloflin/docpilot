@@ -45,10 +45,58 @@ describe('vercel /ai proxy', () => {
    * export, not against what anybody remembers them to be.
    */
   describe('routes match proxyContract for this site', () => {
-    let contract
+    let docPilot
+    let contract = null
+    let contractError = null
     beforeAll(async () => {
-      const { docPilot } = await import('../docs/.vitepress/config.mjs')
-      contract = proxyContract(docPilot, { [KEY_ENV]: 'test-key' })
+      ;({ docPilot } = await import('../docs/.vitepress/config.mjs'))
+      // NOT computed eagerly. `proxyContract` asserts the configuration before it
+      // builds anything, so a chat provider this deploy cannot use surfaced as
+      // `assertChat`'s "chat.model is not set for ollama" — thrown out of a
+      // `beforeAll`, so every test in the block died at once, and a message about
+      // a MODEL for a mistake that is about the PROVIDER.
+      try {
+        contract = proxyContract(docPilot, { [KEY_ENV]: 'test-key' })
+      } catch (e) {
+        contractError = e
+      }
+    })
+
+    /**
+     * THE SENTENCE THIS SUITE SHOULD SAY, said in its own voice.
+     *
+     * This deployment exists in order to BE the `/ai` proxy: vercel.json's two
+     * rewrites and the handlers under api/ai/ are the whole of it. A LOCAL chat
+     * provider is called directly by the browser — `proxyContract` emits no route
+     * for one, because there is nothing to proxy — so the contract names zero
+     * paths while vercel.json declares two, and the equality below fails for a
+     * reason that has nothing to do with drift. Vercel has no localhost:11434 to
+     * reach in any case.
+     *
+     * A local server is a fact about one laptop. Select it with OLLAMA_BASE_URL
+     * in .env.local, which `resolveChain` reads; never by editing the file this
+     * deploy is built from.
+     */
+    const LOCAL = new Set(['ollama'])
+    it('names a hosted chat provider — this deploy reaches every service through /ai', () => {
+      const id = docPilot.chat?.provider
+      expect(
+        Boolean(id) && id !== 'auto' && !LOCAL.has(id),
+        `docs/.vitepress/config.mjs names chat.provider ${JSON.stringify(id)}. The Vercel ` +
+          'deploy IS the /ai proxy: a local provider is called directly, so proxyContract ' +
+          "emits no routes and vercel.json's two rewrites match nothing — and Vercel cannot " +
+          "reach your localhost anyway. 'auto' is refused for a second reason: these routes " +
+          'are baked from this string, and a value that resolves against the environment ' +
+          'would build a different proxy on a different machine. Select a local Ollama with ' +
+          'OLLAMA_BASE_URL in .env.local instead of editing this file.',
+      ).toBe(true)
+    })
+
+    // Kept so that `assertChat`'s own message stays reachable for a genuinely
+    // broken configuration — it is just no longer the first thing a provider
+    // flip produces, and it no longer arrives as a dead `beforeAll`.
+    it('resolves a proxy contract at all', () => {
+      expect(contractError && contractError.message, 'proxyContract refused this config').toBe(null)
     })
 
     it('rewrites exactly the paths the contract names, and no others', () => {
@@ -354,5 +402,33 @@ describe('vercel /ai proxy', () => {
         )
       }
     })
+
+    /**
+     * THE ONE RED DEPLOY A GREEN SUITE CAN STILL PRODUCE.
+     *
+     * The build script above runs `doctor`, which exits 1 when the committed
+     * index was built by an embedder the site's own configuration cannot ask for
+     * — an index built against a local Ollama's `bge-m3`, committed beside
+     * `chat: {provider: 'openrouter'}`, is the case this has actually happened
+     * in. Nothing else looks: `docs-links.test.js` compares the corpus HASH, which
+     * says the index is current, and says nothing about who embedded it.
+     *
+     * Narrowed to the index/embedder disagreement on purpose, and run against an
+     * EMPTY environment for the same reason: a missing OPENROUTER_API_KEY is also
+     * a `missing`, and it is legitimately absent on a contributor's machine and in
+     * CI. The disagreement here is a pure function of the config and the manifest,
+     * and never of a key.
+     */
+    it.skipIf(!fs.existsSync(new URL('docs/public/rag/manifest.json', root)))(
+      'commits an index the site’s own embed configuration can ask for',
+      async () => {
+        const { readiness, resolveDocPilot } = await import('../src/config.js')
+        const { docPilot } = await import('../docs/.vitepress/config.mjs')
+        const stale = readiness(resolveDocPilot(docPilot, {}), {})
+          .missing.map((m) => m.what)
+          .filter((w) => /the index /.test(w))
+        expect(stale).toEqual([])
+      },
+    )
   })
 })

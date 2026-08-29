@@ -379,3 +379,29 @@ describe('publish metadata', () => {
     expect(pinned, 'a caret on a 0.x peer pins one minor of somebody else\'s releases').toEqual([])
   })
 })
+
+/**
+ * The one URL that is written twice.
+ *
+ * `homepage` in the manifest is what npm renders on the package page; the
+ * footnote credit in `DocPilot.vue` is what a reader of somebody else's docs
+ * site clicks. They are the same address, kept in two files because neither can
+ * import the other — the theme is bundled into a browser chunk and has no
+ * business reading `package.json`.
+ *
+ * These two HAVE disagreed. A release went out with a homepage that did not
+ * resolve, and nothing failed: a manifest field is not executed, and neither is
+ * a link. This is the check that would have caught it.
+ */
+describe('the credit link and the manifest homepage', () => {
+  const linkRoot = new URL('../', import.meta.url)
+  const linkAbs = (rel) => path.join(linkRoot.pathname, rel)
+  const linkPkg = JSON.parse(fs.readFileSync(linkAbs('package.json'), 'utf8'))
+
+  it('point at the same place', () => {
+    const panel = fs.readFileSync(linkAbs('src/theme/components/DocPilot.vue'), 'utf8')
+    const found = panel.match(/const CREDIT_URL = '([^']+)'/)
+    expect(found, 'a `const CREDIT_URL` in DocPilot.vue').not.toBe(null)
+    expect(found[1], 'the footnote credit disagrees with package.json homepage').toBe(linkPkg.homepage)
+  })
+})

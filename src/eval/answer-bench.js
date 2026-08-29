@@ -356,7 +356,19 @@ async function emit() {
       { tool: 'search_docs', note: OBS_NOTE, scope: scope.label, results },
       { tool: 'system', note: finalNote(question) },
     ]
-    const messages = buildMessages({ scope: retrieval.scope, history, question, observations, addendum: '', fallback: false })
+    // The same flag the harness reads off the same field, so the bench's
+    // envelope stays byte-identical to the shipped turn's — the file's whole
+    // claim to relevance. `g.mode` rather than `vectorless`: a dim-mismatch
+    // lands on lexical-only too, and the gate is the one place that knows.
+    const messages = buildMessages({
+      scope: retrieval.scope,
+      history,
+      question,
+      observations,
+      addendum: '',
+      fallback: false,
+      lexicalOnly: g.mode === 'lexical-only',
+    })
 
     return {
       id,

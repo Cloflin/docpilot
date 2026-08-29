@@ -1,6 +1,6 @@
 {
   "name": "@cloflin/docpilot",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "type": "module",
   "description": "A grounded Ask AI panel for any page of any website — VitePress, Docusaurus, Vue, React, or a plain script tag. Hybrid search runs in the browser against a static index you build; a calibrated gate refuses before the model is called.",
   "keywords": [
@@ -27,10 +27,10 @@
     "self-hosted"
   ],
   "license": "MIT",
-  "author": "Cloflin (https://github.com/Cloflin)",
-  "homepage": "https://docpilot-nine.vercel.app/",
+  "author": "cloflin (https://github.com/cloflin)",
+  "homepage": "https://docpilot-nine.vercel.app",
   "bugs": {
-    "url": "https://github.com/Cloflin/docpilot/issues"
+    "url": "https://github.com/cloflin/docpilot/issues"
   },
   "publishConfig": {
     "access": "public"

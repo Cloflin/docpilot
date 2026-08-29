@@ -61,7 +61,7 @@ deno run -A npm:@cloflin/docpilot init
 **Node 20 or newer.** That is the `engines.node` the package declares, and the
 CLI is written against it.
 
-`pnpm exec`, not a bare `pnpm docpilot`: `pnpm run` executes scripts out of your
+`pnpm exec`, not `pnpm run docpilot`: `pnpm run` executes scripts out of your
 `package.json`, and `pnpm exec` is the one that runs an installed bin.
 
 The scope is part of the name everywhere it appears. Unscoped `docpilot` is not

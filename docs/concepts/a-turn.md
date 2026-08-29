@@ -18,11 +18,21 @@ It runs after the credential check, so a greeting with a key pasted into it is s
 
 The question is embedded once, scored against every chunk in scope, and fused with a keyword pass. The gate combines two channels into one score and compares it to a calibrated threshold. Below it, the turn ends: no model call, no generated text, and the panel shows the closest pages instead of an answer.
 
+**Retrieval is hybrid, and both halves always run.** A BM25 pass over the chunk text — MiniSearch, over the text, the title and the breadcrumb, with the title weighted — and a cosine pass over the int8 vectors produce two ranked lists, and the two are merged by **Reciprocal Rank Fusion**: each list contributes `1 / (k + rank)` to every id it names, and the sums are sorted. Ranks, not scores, which is what lets two channels with incomparable units vote in the same election. The fused pool is then re-ranked by dense cosine before the gate sees it.
+
+With no embedder configured, or with one that cannot be reached, the dense list is simply empty: BM25 runs alone and the gate switches to its lexical threshold. That is a mode, not a failure — but it is an expensive one, and [what it costs in recall](/guide/providers#no-embedder-at-all) is measured rather than guessed.
+
+::: tip Two numbers that look alike and are not
+The fusion weights both channels **equally**. The `wDense: 0.75 / wLexical: 0.25` you will find in the manifest are the **gate's** weights, not the fusion's — a different stage, scoring a different thing. [The refusal gate](/concepts/the-gate) is that stage.
+:::
+
 See [The refusal gate](/concepts/the-gate).
 
 ## 4. The primed turn
 
 Above the threshold, the host does something most retrieval loops do not: it puts the gate's own excerpts into the first message. The model starts with evidence rather than spending a step asking for it. Most turns therefore need one call, not two.
+
+When that call does not come back, [the answer ladder](/concepts/the-ladder) is what happens next: every other service the environment selected is asked in turn, and a turn where none of them answers settles as the passages retrieval already found rather than as an apology for them.
 
 ## 5. Tools, if the model wants more
 

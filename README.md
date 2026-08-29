@@ -3,11 +3,11 @@
   <img alt="DocPilot" src="docs/public/logo-light.svg" width="320">
 </picture>
 
-A grounded Ask AI panel for **any page of any site** — VitePress, Docusaurus, Vue, React, or a landing page with a `<script>` tag.
+A grounded **AI assistant** for **any page of any site** — VitePress, Docusaurus, Vue, React, or a landing page with a `<script>` tag.
 
-It mounts wherever a page can load a stylesheet and a script: a docs site, a landing page, a pricing page, a help centre, an app you already ship. What it answers **from** is the corpus you built — `npx docpilot index` walks your markdown and OpenAPI files, and `npx docpilot import <url>` pulls in an allowlisted page that lives in neither. A panel on your pricing page answers from that corpus, not from the pricing page.
+It is a chat, not a search box with better typography: scope a question to one section, ask about a passage you selected, follow up, edit what you asked, keep the thread. It mounts wherever a page can load a stylesheet and a script: a docs site, a landing page, a pricing page, a help centre, an app you already ship. What it answers **from** is the corpus you built — `npx docpilot index` walks your markdown and OpenAPI files, and `npx docpilot import <url>` pulls in an allowlisted page that lives in neither. A panel on your pricing page answers from that corpus, not from the pricing page.
 
-Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
+Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **signed int8, one byte per dimension** — 810 KB for this project's own 405-chunk index, where float32 would be 3.2 MB — and the build measures the round-trip error and refuses to ship above `0.01` mean |Δcos|. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
 ## Install
 
@@ -19,7 +19,7 @@ Retrieval runs **in the reader's browser** against a static index built at deplo
 | Bun | `bun add @cloflin/docpilot` | `bunx docpilot init` |
 | Deno | `deno add npm:@cloflin/docpilot` | `deno run -A npm:@cloflin/docpilot init` |
 
-`pnpm exec docpilot`, not `pnpm docpilot`: `pnpm run` looks for a package.json script and reports the bin as missing. Nothing here runs `dlx` or `npx` against the bare name — the unscoped `docpilot` is not this package, and nothing is published under that name today.
+`pnpm exec docpilot` is the form written here. A bare `pnpm docpilot` also works — pnpm falls back to `pnpm exec` for a name that is not a script — but `pnpm run docpilot` does not, and reports the bin as missing. Nothing here runs `dlx` or `npx` against the bare name — the unscoped `docpilot` is not this package, and nothing is published under that name today.
 
 Node 20 or newer. Every command below is written `npx docpilot …`; substitute the runner from your own row — it is the same bin either way.
 
@@ -134,6 +134,79 @@ It is a control against a weak, badly-behaved or injected **model**. It is **not
 
 Three claims this README will not make. *"It only answers from the documentation"* — it answers **with** documentation in context, and generated text can contain anything the model knows. *"Answers are grounded in their cited sources"* — citation is provenance, not entailment. *"It cannot be taken off-topic"* — the gate is a relevance floor, not an entailment check, and a question overlapping a documented subject reaches the model by design.
 
+## What the chat does
+
+Six doors open it — a floating button in the corner (the default), the navbar
+button beside your search, a row in the mobile menu, <kbd>⌘I</kbd> (bound even
+with no visible button), a call-to-action under each article, and `open()` on
+the handle from `mountDocPilot`. One setting, `ui.trigger`, picks which of them
+exist.
+
+Inside it:
+
+| | |
+|---|---|
+| **Scope** | a picker in the composer narrows the search to this page, this section, or a hand-picked list — with a filter above the list once there are more than a dozen pages |
+| **Quote** | select a passage and one button attaches it to the composer as a removable chip. On by default inside an answer, off over your own prose (`quote.fromDocs`) |
+| **Status** | six named states rather than a spinner — loading the index, searching, looking at the page list, reading a page, thinking, writing — and reasoning collapses behind "Thought for 4s" |
+| **Citations** | a **Sources** list, an optional disclosure opening the exact passage a marker was drawn from, and the sources appended to a copied answer |
+| **Refusals** | the closest pages, what was searched, how many pages were read, and one button to clear the scope and search everything |
+| **The thread** | edit a question and everything below it is discarded and answered again; ask again re-runs an answer that arrived; copy one turn, or the whole conversation as Markdown |
+| **Feedback** | two thumbs, four reasons, and a 500-character comment redacted before it leaves the browser — posted to an endpoint **you** own, or nowhere at all |
+| **The prompt** | `prompt.show` puts the assistant's own instruction, its tool definitions and the active scope in front of the reader, and `prompt.allowAppend` lets them add one of their own — sent with the question, never merged into the system prompt |
+
+Every one of them is a setting with a default and a reason, and all of them are
+in the docs under **The assistant panel**.
+
+## How it compares
+
+Algolia's Ask AI, kapa.ai, Inkeep, Mintlify's assistant and Orama are all real
+answers to this problem. **One architectural decision separates them from this
+one:** DocPilot does retrieval in the reader's browser against a static file you
+built, and every one of them does it on a server.
+
+### What each of them asks for it
+
+Quoted from the vendor's own pricing page, checked August 2026. `not published`
+means there is nothing on the page to quote — not that it is free.
+
+| | published price |
+|---|---|
+| **DocPilot** | **$0** — MIT, no vendor, no plan, no per-answer fee |
+| Algolia Ask AI | $0.50 per additional 1K search requests on Grow ($1.75 on Grow Plus), plus your own LLM key; Ask AI is not line-itemed on the pricing page |
+| kapa.ai | not published — 14-day trial, then "Talk to us" |
+| Inkeep | free, self-hosted; enterprise not published |
+| Mintlify AI | ≈$0.23 an answer past the allowance — 23 credits at $0.01 over the 10,000 included; Starter has no AI |
+| Orama | free, self-hosted (Apache 2.0); cloud price not published |
+
+**`$0` is the software, not the answers.** DocPilot bills nothing and has no
+hosted half to bill from — no account, no service, no telemetry. You bring a
+model provider key and pay them directly, or run the whole thing on OpenRouter's
+free tier: one key, no card, and a ceiling of **50 requests a day** that also
+covers rebuilding the index. See
+[Living on the free tier](docs/guide/free-tier.md).
+
+### And how it is built
+
+| | DocPilot | hosted answer services |
+|---|---|---|
+| Where retrieval runs | the reader's browser | the vendor's cloud |
+| Where the index lives | a static file on the host already serving your site | the vendor's platform |
+| Index the reader downloads | int8 vectors, one byte per dimension — 810 KB for this site's 405 chunks | n/a — the index is theirs |
+| An off-topic question costs | zero model calls, zero tokens | not documented by any of them |
+| Citations checked against what was retrieved | yes, by host code no message can reach | not documented by any of them |
+| Refusal threshold measured on **your** corpus | `npx docpilot calibrate` | not documented by any of them |
+| Self-hostable | there is nothing to host | Inkeep and Orama yes; the rest no |
+
+**Not documented is not the same as no.** Where a vendor publishes nothing about
+a mechanism, both this table and the docs say so rather than guessing, and every
+non-DocPilot cell is sourced and dated on the comparison page.
+
+The reasons to buy one of the others are on that page too, under *What DocPilot
+is worse at* — chiefly: it indexes what you can put in a directory, the reader
+downloads the index, nobody is tuning it for you, there is no analytics
+dashboard, and there is no support contract.
+
 ## Commands
 
 | | |
@@ -171,6 +244,8 @@ Choosing one of them with `embed: 'auto'` borrows **OpenRouter's free embedding 
 
 `embed: false` runs no embedder at all: the index carries no vectors and every question is retrieved by keyword. It is supported, and it costs most of the recall — measured on a 1191-chunk corpus, recall@8 fell from 0.97 to 0.41, retrieval F1 from 0.35 to 0.18, and 11 of 44 answerable questions were refused outright. Keyword matching also scores zero for a question asked in a language your corpus is not written in. Measure your own corpus with `npx docpilot eval --gate-only --lexical` before choosing it — it reads the golden set you wrote, so that comes first.
 
+`chat: false` runs no model at all — **search-only**. A question is scored against the index exactly as before and answered with the ranked passages themselves: each one an excerpt under a link to the heading it was cut from. The scope picker, the credential check and the calibrated gate all still run; what changes is that nothing is generated, so nothing can be wrong and no request is made. Paired with `embed: false` it is a deployment that holds no provider key and makes no outbound request of any kind after the page loads.
+
 See [Choosing providers](docs/guide/providers.md).
 
 ## Credentials
@@ -197,7 +272,7 @@ Point `importDir` at a directory outside your docs and the assistant will answer
 
 ## Translating it
 
-Every reader-facing string — 158 of them, in 22 groups — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
+Every reader-facing string — 170 of them, in 25 groups — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
 
 ```js
 i18n: {
@@ -213,7 +288,7 @@ Panel chrome follows the page's locale; the credential and greeting replies foll
 
 ## Documentation
 
-Full documentation — the install matrix for every host, the configuration reference, the [pluggable highlighter API](docs/reference/highlighting.md) (Shiki, Prism or highlight.js, none of them installed by default), the retrieval contract, translation, imported pages, and deploying it (nginx, containers, cache rules for the index): run `npm run docs:dev` in this repository.
+Full documentation — [the assistant panel, feature by feature](docs/guide/panel.md), [how it compares to the hosted services](docs/guide/comparison.md), the install matrix for every host, the configuration reference, the [pluggable highlighter API](docs/reference/highlighting.md) (Shiki, Prism or highlight.js, none of them installed by default), the retrieval contract, translation, imported pages, and deploying it (nginx, containers, cache rules for the index): run `npm run docs:dev` in this repository.
 
 ## License
 

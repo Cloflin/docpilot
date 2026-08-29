@@ -23,6 +23,7 @@ import {
 // keeping a second, silently drifting copy. The module imports nothing and
 // touches the network only when a request function is called.
 import {providerFor} from './theme/docpilot/providers.js'
+import {norm} from './theme/docpilot/text.js'
 // The free tier, as a pool. Imported for its LISTS and its one predicate — the
 // module fetches nothing unless `fetchFreePool` is called, which nothing here
 // does: a config file is read synchronously, and a build that reached for the
@@ -70,11 +71,73 @@ const openaiCompatible = (upstream, envKeys, extra = {}) => ({
     upstream,
     directBase: upstream,
     envKeys,
-    rewrite: (path) => path.replace(/^\/ai/, ''),
+    /**
+     * THE BASE IS A PARAMETER, and it is not decoration.
+     *
+     * `chatProxyBase` emits `/ai/<id>/v1/…` once a deployment has more than one
+     * answering member, so the rewrite that strips this package's own prefix has
+     * to strip the brand with it. Doing that with an optional `(\/[a-z0-9-]+)?`
+     * group is the obvious version and it is WRONG: the group matches `/v1`
+     * just as happily as `/groq`, so `/ai/v1/embeddings` rewrote to
+     * `/embeddings` and every single-provider deployment 404'd. Slicing a base
+     * the caller already knows cannot guess.
+     */
+    rewrite: (path, base = '/ai') => path.slice(base.length),
     header: (k) => ({authorization: `Bearer ${k}`}),
     chatModel: null,
     embedModel: null,
+    /**
+     * WHAT THIS BRAND DOES WITH THE KNOBS — the other half of the capability
+     * split, and the half that is about a company rather than about an API.
+     *
+     * The adapters know SHAPES: where a field goes in a body, what it is called
+     * on the wire. This knows which of those fields a given service will accept
+     * and which words it accepts in them, because that differs between services
+     * posting to byte-identical endpoints — Groq, xAI, OpenAI and OpenRouter all
+     * speak `/v1/chat/completions` and all four publish a different effort
+     * vocabulary. `resolveTuning` is where the two halves meet.
+     *
+     * The baseline below is the OpenAI-compatible default. A row states only its
+     * deviations, exactly the way `chatModel` and `extraBody` do.
+     *
+     *   style      how reasoning is asked for: 'effort' | 'unified' | 'thinking'
+     *              | 'think' | false
+     *   efforts    the words this service accepts, low→high. Null means "the
+     *              whole neutral scale"; anything else is clamped to it.
+     *   mandatory  reasoning cannot be turned off here, whatever an author writes
+     *   modelDependent  support varies by model, so nothing static can be
+     *              asserted about it — this is what turns a build-time refusal
+     *              into a build-time note
+     *   visible    how "think, but do not send it to me" is spelled, or false
+     *   verbosity / temperature / topP / seed   accepted at all
+     *   maxTokensField  'auto' lets the adapter decide from the model id
+     *
+     * LIKE `chatModel`, THESE ARE MEASUREMENTS AND NOT PROMISES. Providers add
+     * and retire parameters; `npx docpilot doctor` prints what this table
+     * believes so a stale belief is visible without a reader hitting it.
+     */
     ...extra,
+    // AFTER the spread, so a row's `caps` MERGES with the baseline instead of
+    // replacing it. A row states its deviations; everything it does not mention
+    // is the OpenAI-compatible default above.
+    caps: {
+        style: 'effort',
+        efforts: null,
+        mandatory: false,
+        modelDependent: true,
+        visible: false,
+        // Whether a THINKING BUDGET IN TOKENS can be expressed at all. Most
+        // services take a level and nothing else, so `chat.reasoning.budgetTokens`
+        // has nowhere to go on them — and a number an author wrote that lands
+        // nowhere is exactly what this table exists to catch at build time.
+        budget: false,
+        verbosity: false,
+        temperature: true,
+        topP: true,
+        seed: true,
+        maxTokensField: 'auto',
+        ...extra.caps,
+    },
 })
 
 const PROVIDERS = {
@@ -82,22 +145,36 @@ const PROVIDERS = {
     openai: openaiCompatible('https://api.openai.com', ['OPENAI_API_KEY'], {
         chatModel: 'gpt-4o-mini',
         embedModel: 'text-embedding-3-small',
+        // The full published scale, and `verbosity` — which is a real top-level
+        // chat-completions field here and nowhere else this table knows. Support
+        // is per-model (`minimal` is GPT-5-only and gone again at 5.1; `o1-mini`
+        // takes no effort at all), so it stays `modelDependent`.
+        caps: {verbosity: true},
     }),
     together: openaiCompatible('https://api.together.xyz', ['TOGETHER_API_KEY'], {
         chatModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
         embedModel: 'BAAI/bge-large-en-v1.5',
+        caps: {efforts: ['low', 'medium', 'high']},
     }),
     fireworks: openaiCompatible('https://api.fireworks.ai/inference', ['FIREWORKS_API_KEY'], {
         chatModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
         embedModel: 'nomic-ai/nomic-embed-text-v1.5',
+        // Validates the value rather than ignoring an unknown one, so the clamp
+        // matters here more than it does on a service that shrugs.
+        caps: {efforts: ['low', 'medium', 'high', 'xhigh', 'max']},
     }),
     mistral: openaiCompatible('https://api.mistral.ai', ['MISTRAL_API_KEY'], {
         chatModel: 'mistral-small-latest',
         embedModel: 'mistral-embed',
+        // The schema publishes the whole scale; the guide documents only the two
+        // ends of it. Declared as the schema has it, and left model-dependent.
+        caps: {efforts: ['minimal', 'low', 'medium', 'high', 'xhigh']},
     }),
     nebius: openaiCompatible('https://api.studio.nebius.com', ['NEBIUS_API_KEY'], {
         chatModel: 'meta-llama/Llama-3.3-70B-Instruct',
         embedModel: 'BAAI/bge-en-icl',
+        // In the OpenAPI schema and in no guide anywhere, so per-model behaviour
+        // is genuinely undocumented rather than merely varied.
     }),
 
     /**
@@ -138,20 +215,74 @@ const PROVIDERS = {
         freePool: {chat: FREE_CHAT, embed: FREE_EMBED},
         extraBody: {provider: {require_parameters: true}},
         rateLimited: true,
+        /**
+         * The UNIFIED shape — `reasoning: {effort | max_tokens | exclude}` —
+         * which is OpenRouter's own normalisation across every upstream it
+         * routes to, and the reason it is a style of its own rather than the
+         * flat `reasoning_effort` its endpoint also accepts.
+         *
+         * `exclude` is how "think, but do not send it to me" is spelled here.
+         * `include_reasoning` is the deprecated alias for the same thing.
+         *
+         * ⚠️ IT INTERACTS WITH `require_parameters` ABOVE. That flag narrows
+         * routing to upstreams honouring every parameter sent, and OpenRouter
+         * counts `reasoning` among them — so asking for reasoning narrows the
+         * pool a second time, and can turn an answerable question into "no
+         * provider available". `doctor` prints the caveat when both are on.
+         */
+        caps: {style: 'unified', visible: 'exclude', verbosity: true, budget: true},
     }),
 
     // ── chat only ────────────────────────────────────────────────────────────
+    /**
+     * `deepseek-chat` and `deepseek-reasoner` were ALIASES, and DeepSeek retired
+     * both on 2026-07-24; a request naming one now errors. That is the failure
+     * the paragraph above this table warns about, arriving exactly as described —
+     * a string in a package is not a promise from a service, and this one aged
+     * into a 400 for every deployment that named nothing.
+     *
+     * `deepseek-v4-flash` is the successor with a thinking mode; `-pro` is the
+     * larger sibling. Verify against the current catalogue when you touch this:
+     * `npx docpilot doctor --models` is the check that does not need a reader to
+     * hit it first.
+     */
     deepseek: openaiCompatible('https://api.deepseek.com', ['DEEPSEEK_API_KEY'], {
-        chatModel: 'deepseek-chat',
+        chatModel: 'deepseek-v4-flash',
+        // THREE LEVELS, AND NO `medium` — the clearest case for clamping there
+        // is. An author's `medium` posted verbatim here is a word this service
+        // has never heard of. Sampling parameters are accepted and then ignored
+        // in thinking mode, which is not an error and is worth nobody's build.
+        caps: {efforts: ['low', 'high', 'max']},
     }),
     groq: openaiCompatible('https://api.groq.com/openai', ['GROQ_API_KEY'], {
         chatModel: 'llama-3.3-70b-versatile',
+        // Two vocabularies on one service: the GPT-OSS models take low/medium/
+        // high, the Qwen ones take `none` and `default` and nothing else. The
+        // union is declared and the difference is left to `modelDependent`,
+        // because a static verdict here would be wrong for half the catalogue.
+        //
+        // `reasoning_format` is how invisibility is spelled — and it must be
+        // `parsed` or `hidden` whenever tools or JSON mode are in play, which
+        // for this package is always.
+        caps: {efforts: ['low', 'medium', 'high'], visible: 'reasoning_format'},
     }),
     xai: openaiCompatible('https://api.x.ai', ['XAI_API_KEY'], {
         chatModel: 'grok-4',
+        /**
+         * `mandatory` — reasoning cannot be turned off on a Grok reasoning
+         * model, in so many words, so `chat.reasoning: false` is a request this
+         * service will not honour. Not an error: declining to think is always an
+         * honourable thing to ask for, and a provider that cannot is reported
+         * rather than refused.
+         *
+         * `xhigh` is silently downgraded to `high` on models that lack it, which
+         * is the one place a wrong level costs nothing.
+         */
+        caps: {efforts: ['low', 'medium', 'high', 'xhigh'], mandatory: true},
     }),
     cerebras: openaiCompatible('https://api.cerebras.ai', ['CEREBRAS_API_KEY'], {
         chatModel: 'llama-3.3-70b',
+        caps: {efforts: ['low', 'medium', 'high'], visible: 'reasoning_format'},
     }),
 
     // The escape hatch. Assumed to embed, because a self-hosted vLLM or a
@@ -163,6 +294,13 @@ const PROVIDERS = {
     custom: openaiCompatible('http://localhost:8000', ['CUSTOM_API_KEY'], {
         embedModel: 'BAAI/bge-m3',
         baseUrlEnv: 'CUSTOM_BASE_URL',
+        keyless: true,
+        // A HOST, not a service — so every capability here is a guess, and the
+        // honest thing is to send the most widely-copied spelling and say out
+        // loud that this package cannot know. `doctor` prints exactly that.
+        // Refusing a knob would be this file deciding what somebody else's
+        // gateway accepts, which is the mistake `chatModel: null` above avoids.
+        caps: {unknown: true},
     }),
 
     /**
@@ -177,30 +315,97 @@ const PROVIDERS = {
      *
      * `LLAMACPP_BASE_URL` is what puts this in the chain, because a local server
      * has no key to be detected by. See `resolveChain`.
+     *
+     * `adapter: 'llamacpp'` rather than the `'openai'` this used to inherit. The
+     * body is the same body — that adapter is a spread of the openai one — but
+     * llama-server publishes `/props`, which names the weights it actually
+     * loaded, and takes `chat_template_kwargs`, which OpenAI has never had.
+     * Offering either from the shared adapter would offer it to api.openai.com.
+     *
+     * `modelPlaceholder` states in DATA what the paragraph above says in prose,
+     * so `doctor` can stop reporting `'local'` as a model this service does not
+     * serve and stop advising an author to name a different one. Nothing is
+     * wrong; there is simply no catalogue here to be in.
      */
     llamacpp: openaiCompatible('http://localhost:8080', ['LLAMACPP_API_KEY'], {
+        adapter: 'llamacpp',
         chatModel: 'local',
+        modelPlaceholder: true,
         embedModel: 'local',
         baseUrlEnv: 'LLAMACPP_BASE_URL',
         keyless: true,
+        // llama-server takes the flat `reasoning_effort` — including `none`,
+        // which disables thinking outright — and a `reasoning_budget` in tokens
+        // that no other OpenAI-shaped service has. `reasoning_format` is how the
+        // trace is kept out of the reply. Not `modelDependent`: whatever this
+        // server loaded, the SERVER parses these fields, not the model.
+        caps: {
+            efforts: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+            visible: 'reasoning_format',
+            // `reasoning_budget` in tokens, which no other OpenAI-shaped service
+            // in this table has — and one of the two reasons llama.cpp earned an
+            // adapter of its own rather than riding the shared one.
+            budget: true,
+            modelDependent: false,
+        },
     }),
 
     // ── the two that are not plain OpenAI clones ─────────────────────────────
     gemini: openaiCompatible('https://generativelanguage.googleapis.com', ['GEMINI_API_KEY'], {
-        rewrite: (path) => path.replace(/^\/ai\/v1/, '/v1beta/openai'),
+        rewrite: (path, base = '/ai') => path.slice(base.length).replace(/^\/v1/, '/v1beta/openai'),
         directBase: null,
         chatModel: 'gemini-2.5-flash',
         embedModel: 'text-embedding-004',
+        // The compatibility surface takes the flat `reasoning_effort`. Google's
+        // own `thinking_config` says the same things in a nested shape and the
+        // two may NOT both be sent — so this package speaks the compatible one
+        // and leaves the other to `chat.extraBody`, where an author who wants
+        // `include_thoughts` can reach it.
+        //
+        // Reasoning cannot be switched off on 2.5 Pro or the 3.x line, so `false`
+        // is reported rather than promised. `mandatory` is not set, because it is
+        // false for 2.5 Flash — the model this table names.
+        caps: {efforts: ['minimal', 'low', 'medium', 'high']},
     }),
     anthropic: {
         adapter: 'anthropic',
         upstream: 'https://api.anthropic.com',
         directBase: 'https://api.anthropic.com',
         envKeys: ['ANTHROPIC_API_KEY'],
-        rewrite: (path) => path.replace(/^\/ai/, ''),
+        rewrite: (path, base = '/ai') => path.slice(base.length),
         header: (k) => ({'x-api-key': k, 'anthropic-version': '2023-06-01'}),
         chatModel: 'claude-sonnet-4-6',
         embedModel: null,
+        /**
+         * The one service whose SAMPLING half is the exception rather than its
+         * reasoning half.
+         *
+         * `temperature` and `top_p` are not gone — they are deprecated and
+         * version-gated: models after Opus 4.6 accept the identity values (1.0
+         * and >= 0.99) for backwards compatibility and reject everything else
+         * with a 400. Since this package's whole reason for setting temperature
+         * is to pin it BELOW the default, "accepted at 1.0" is indistinguishable
+         * from unsupported, and declaring it false is the truthful summary.
+         *
+         * `seed` was never a parameter of this API at all.
+         *
+         * `style: 'thinking'` is its own shape twice over — the field is
+         * `thinking`, and how it is spelled inside depends on the model era. The
+         * adapter decides that from the model string; see `THINKING_LEGACY`.
+         */
+        caps: {
+            style: 'thinking',
+            efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+            // Only on the LEGACY shape — `{type: 'enabled', budget_tokens: N}` —
+            // which models after Opus 4.6 reject outright in favour of adaptive
+            // thinking steered by `output_config.effort`. So a budget is
+            // expressible here and is model-dependent, which is a note rather
+            // than a refusal. The adapter picks the shape from the model string.
+            budget: true,
+            temperature: false,
+            topP: false,
+            seed: false,
+        },
     },
 }
 
@@ -234,6 +439,38 @@ const OLLAMA_BASE_URL_ENV = 'OLLAMA_BASE_URL'
  * constants rather than a table row.
  */
 const LOCAL_CHAT_MODEL = 'qwen3:8b'
+
+/**
+ * Ollama's capabilities, in a constant because Ollama has no `PROVIDERS` row —
+ * it is the keyless local case this file handles separately, and this is the
+ * same courtesy `LOCAL_BASE_URL` and `LOCAL_CHAT_MODEL` above already extend.
+ *
+ * `think` takes a boolean OR a level, which is the only style in this file that
+ * is both — `false` turns it off and a word sets the depth, in one field. Four
+ * words rather than the neutral six: there is no `minimal` and no `xhigh`.
+ *
+ * `modelDependent` is TRUE and it is load-bearing here in a way it is nowhere
+ * else: sending `think` to a model without the thinking capability is an error
+ * rather than a no-op, and Ollama is the one service that will TELL you which
+ * it has — `/api/show` publishes a capability list, which `detectCapabilities`
+ * reads. Nothing static should second-guess an answer the server will give.
+ */
+const OLLAMA_CAPS = {
+    style: 'think',
+    efforts: ['low', 'medium', 'high', 'max'],
+    mandatory: false,
+    modelDependent: true,
+    visible: false,
+    budget: false,
+    verbosity: false,
+    temperature: true,
+    topP: true,
+    seed: true,
+    maxTokensField: 'num_predict',
+}
+
+/** What a provider will accept — the table's answer, or Ollama's constant. */
+export const capsOf = (id) => (id === 'ollama' ? OLLAMA_CAPS : hostedOf(id)?.caps ?? null)
 
 /**
  * The two localhost entries can be somewhere else, and the environment is where
@@ -341,18 +578,27 @@ export const CHAIN = [
  */
 const CHAIN_FALLBACK = 'openrouter'
 
+/**
+ * Where the walk lands when the environment selected nothing.
+ *
+ * `chat.preferLocal` moves it to the local Ollama, and this is the half of that
+ * key that makes it worth having: an author on a laptop wants "nothing
+ * configured" to mean the server they are running, and 0.3.2 took that away for
+ * a good reason — from inside a build a laptop running Ollama and a CI box that
+ * has never heard of it are indistinguishable, so GUESSING it was wrong. Being
+ * TOLD it is not a guess. The default is unchanged and the sentence 0.3.2 wrote
+ * still holds for it.
+ */
+const fallbackFor = (chat = {}) => (chat.preferLocal ? 'ollama' : CHAIN_FALLBACK)
+
 /** The env var that selects a chain member — a key, or an address. */
 function chainKeyNameOf(id, env) {
     const hosted = hostedOf(id)
-    // Ollama is the one member with no entry in `PROVIDERS`: it is the keyless
-    // local case the whole file treats separately.
     if (!hosted) return OLLAMA_BASE_URL_ENV
-    // A keyless local server is selected by WHERE it is, not by a credential.
     if (hosted.keyless) return hosted.baseUrlEnv || null
     return hosted.envKeys.find((name) => env[name]) || hosted.envKeys[0] || null
 }
 
-/** Whether this environment selects `id` — a key for it, or an address for it. */
 function chainHas(id, env) {
     const hosted = hostedOf(id)
     if (!hosted) return Boolean(env[OLLAMA_BASE_URL_ENV])
@@ -360,17 +606,6 @@ function chainHas(id, env) {
     return Boolean(keyOf(env, id))
 }
 
-/**
- * Which provider this environment resolves to, and what was tried on the way.
- *
- * `tried` is carried rather than recomputed by every caller because three of
- * them need the same list and would drift: `logDocPilot` prints it at startup,
- * `readiness` turns an empty environment into one actionable sentence, and
- * `doctor` shows it without a build.
- *
- * @param {Record<string, string|undefined>} [env]
- * @returns {{id: string, tried: Array<{id: string, envKey: string|null, found: boolean}>}}
- */
 export function resolveChain(env = {}) {
     const tried = CHAIN.map((id) => ({
         id,
@@ -407,6 +642,184 @@ const canEmbed = (id) => (id === 'ollama' ? true : Boolean(PROVIDERS[id]?.embedM
  * places for it to stop agreeing.
  */
 const embedModelOf = (id) => (id === 'ollama' ? LOCAL_EMBED_MODEL : hostedOf(id)?.embedModel ?? null)
+
+/**
+ * The answering half's sibling of the line above: the provider's own chat model,
+ * from the table, with Ollama's in a constant for the same reason.
+ *
+ * Split out for the same reason too, and it fixed a real asymmetry. `resolveChat`
+ * held this ternary privately, so `assertChat` — which reads `chat.model` alone —
+ * REFUSED an unresolved configuration that `resolveChat` would have completed one
+ * line later. The five doors that assert (`themeDocPilot`, `nodeChatTarget`,
+ * `nodeEmbedTarget`, `devProxy`, `proxyContract`) are all documented as taking a
+ * site's own `docPilot` export, and one of them, `proxyContract`, says so in its
+ * header — so the refusal was about the CALLER rather than about the config, and
+ * it arrived wearing a message about a missing model.
+ */
+/**
+ * THE NEUTRAL EFFORT SCALE — the one vocabulary an author writes, ordered from
+ * least thinking to most.
+ *
+ * It is a union of real vocabularies rather than an invention: OpenAI and
+ * OpenRouter publish exactly these six words (plus `none`, which this package
+ * spells `false`, because "off" is a different kind of answer from "how deep").
+ * Every other service accepts a subset, and no two subsets agree — xAI has four,
+ * DeepSeek has three and no `medium` at all, Groq's Qwen path has `none` and
+ * `default` and nothing else. So a level is CLAMPED to what the configured
+ * service accepts rather than posted as written; see `clampEffort`.
+ *
+ * `off` is deliberately not a member. A scale that contains its own absence
+ * makes `reasoning: 'none'` and `reasoning: false` two spellings of one thing,
+ * and one of them would have to be the one the docs mean.
+ */
+const EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+
+/**
+ * The nearest level this service actually accepts.
+ *
+ * A single normalised enum posted verbatim WILL be invalid somewhere — that is
+ * not a risk, it is arithmetic, because the vocabularies genuinely differ. So
+ * the neutral word is ranked, and the closest rank the provider publishes wins.
+ *
+ * TIES GO DOWN, which is the cheaper and slower-to-surprise direction: an
+ * author who asked for `medium` on a service that offers only `low` and `high`
+ * gets `low`, and pays for what they asked for rather than more. `doctor` prints
+ * the substitution, so the clamp is never silent to anyone who looks.
+ */
+function clampEffort(effort, accepted) {
+    if (!effort) return null
+    if (!accepted?.length) return effort
+    if (accepted.includes(effort)) return effort
+    const want = EFFORTS.indexOf(effort)
+    if (want < 0) return null
+    let best = null
+    let bestGap = Infinity
+    for (const candidate of accepted) {
+        const rank = EFFORTS.indexOf(candidate)
+        if (rank < 0) continue // `none`, `default` and other non-scale words
+        const gap = Math.abs(rank - want) * 2 + (rank > want ? 1 : 0) // ties go down
+        if (gap < bestGap) {
+            bestGap = gap
+            best = candidate
+        }
+    }
+    return best
+}
+
+/**
+ * `chat.reasoning`, normalised — the author's five spellings collapsed to three
+ * shapes every reader downstream can branch on without re-parsing.
+ *
+ *   null                              'auto' — DocPilot decides, as it always did
+ *   false                             never ask for reasoning
+ *   {effort, budgetTokens, visible}   everything else
+ *
+ * `'auto'` is the shipped default rather than `true`, and that is a statement
+ * about honesty rather than caution: `## All defaults` in the reference is an
+ * EXECUTED block, so the value printed there has to be the behaviour that
+ * actually ships — and what ships is a harness that asks for reasoning on the
+ * final call and never on a loop step, for a measured reason.
+ *
+ * `true` means `medium`: an author writing it is saying yes rather than naming a
+ * depth, and the neutral middle is the least surprising reading of yes.
+ */
+function resolveReasoning(value) {
+    if (value === false || value === 'none' || value === 'off') return false
+    if (value == null || value === 'auto') return null
+    if (value === true) return {effort: 'medium', budgetTokens: null, visible: true}
+    if (typeof value === 'string') {
+        if (!EFFORTS.includes(value)) {
+            throw new Error(
+                `[docpilot] chat.reasoning: '${value}' is not a level this package knows.\n` +
+                    `  Write one of: ${EFFORTS.join(', ')}\n` +
+                    '  — or false to never ask for reasoning, or leave it unset to let\n' +
+                    '  DocPilot decide (it asks on the answer and never on a search step).',
+            )
+        }
+        return {effort: value, budgetTokens: null, visible: true}
+    }
+    if (typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(
+            `[docpilot] chat.reasoning takes a level, false, or an object — not ${typeof value}.\n` +
+                `  Levels: ${EFFORTS.join(', ')}\n` +
+                "  Object: {effort: 'high', budgetTokens: 4096, visible: true}",
+        )
+    }
+    const effort = value.effort == null || value.effort === 'auto' ? null : value.effort
+    if (effort && !EFFORTS.includes(effort)) {
+        throw new Error(
+            `[docpilot] chat.reasoning.effort: '${effort}' is not a level this package knows.\n` +
+                `  Write one of: ${EFFORTS.join(', ')}`,
+        )
+    }
+    const budgetTokens = value.budgetTokens == null ? null : Number(value.budgetTokens)
+    if (budgetTokens != null && (!Number.isFinite(budgetTokens) || budgetTokens <= 0)) {
+        throw new Error('[docpilot] chat.reasoning.budgetTokens must be a positive number of tokens.')
+    }
+    return {effort, budgetTokens, visible: value.visible !== false}
+}
+
+/**
+ * WHERE THE TWO HALVES OF THE CAPABILITY SPLIT MEET.
+ *
+ * The author writes one provider-neutral vocabulary. Each service accepts its
+ * own. This turns the first into the second — clamping the effort, dropping what
+ * the brand cannot take, choosing which spelling of "hide the trace" applies —
+ * and hands the transport a record that names SHAPES and never a company.
+ *
+ * That last part is the whole reason this lives here rather than in an adapter.
+ * `providers.js` is deliberately brand-blind ("the client knows adapters, not
+ * brands"), and a branch on `provider === 'openrouter'` inside it would be a
+ * second place the provider table has to live. So the browser is handed
+ * `{style: 'unified'}` — a fact about a body — and never the name of who serves
+ * it.
+ *
+ * NOTHING HERE IS A REFUSAL. Refusing is `assertChatKnobs`'s job, it happens at
+ * build time where somebody is looking, and it happens before this runs. By the
+ * time a value reaches this function the only question left is how to spell it.
+ */
+export function resolveTuning(docPilot, id = docPilot.chat?.provider) {
+    const chat = docPilot.chat || {}
+    // The PROVIDER is a parameter because a chain has more than one and each
+    // clamps the same neutral vocabulary differently. Defaulted to the head, so
+    // every caller that predates `chat.chain` reads exactly what it always did.
+    const caps = capsOf(id) || {}
+    const reasoning = chat.reasoning === undefined ? null : chat.reasoning
+    const style = caps.style ?? 'effort'
+
+    // A brand that spells reasoning in no way at all gets nothing, whatever was
+    // asked for — and `false` on a service that cannot stop thinking is the same
+    // shape from the other side: there is no field to send.
+    const askable = style !== false && !(reasoning === false && caps.mandatory)
+
+    return {
+        style: askable ? style : 'none',
+        // Already clamped, so no reader downstream needs the vocabulary table.
+        effort: askable && reasoning ? clampEffort(reasoning.effort, caps.efforts) : null,
+        // A token budget only reaches services that measure thinking in tokens.
+        budgetTokens: askable && reasoning ? (reasoning.budgetTokens ?? null) : null,
+        off: askable && reasoning === false,
+        // `visible: false` is a REQUEST NOT TO BE SENT the trace, which is a
+        // different thing from not thinking, and cheaper output on a panel that
+        // is not showing it. Only two spellings of it exist across this table.
+        hide: Boolean(askable && reasoning && reasoning.visible === false && caps.visible),
+        visibleStyle: caps.visible || null,
+        verbosity: caps.verbosity ? (chat.verbosity ?? null) : null,
+        topP: caps.topP ? (chat.topP ?? null) : null,
+        seed: caps.seed ? (chat.seed ?? null) : null,
+        // `temperature` is NOT here, and its absence is deliberate. It has
+        // travelled as a first-class call parameter since before any of this
+        // existed, and the anthropic adapter has always dropped it on the floor
+        // for the documented reason. A second home for it here would be two
+        // sources for one value; `assertChatKnobs` is where a temperature set
+        // beside a provider that ignores it gets said out loud.
+        maxTokensField: caps.maxTokensField ?? 'auto',
+    }
+}
+
+const chatModelOf = (docPilot) =>
+    docPilot.chat.model ??
+    (docPilot.chat.provider === 'ollama' ? LOCAL_CHAT_MODEL : hostedOf(docPilot.chat.provider)?.chatModel ?? null)
 
 /**
  * The ordered list of models a half falls back through when the author named
@@ -457,6 +870,288 @@ function freeChatPool(docPilot) {
     return Boolean(chatModels(docPilot))
 }
 
+/** The members selected by an ADDRESS rather than a credential. */
+const SELF_HOSTED_IDS = new Set(['custom', 'llamacpp', 'ollama'])
+
+/**
+ * Which rung of the ladder a provider sits on: 0 an account that is billed, 1 a
+ * provider's own free catalogue, 2 a server of your own.
+ *
+ * `CHAIN` is ordered by what one key covers, which is the right question for
+ * picking ONE provider and the wrong one for ordering a set to walk. Walking it
+ * verbatim spends the reader's question on a 50-a-day tier while a funded key
+ * sits two positions below it, and the tier's ceiling is shared by every reader
+ * of the site — so a free member sinks beneath every billed one, and a local
+ * server sinks beneath both. Within a tier the order is `CHAIN`'s, untouched.
+ *
+ * A MODEL THE AUTHOR NAMED KEEPS ITS PROVIDER BILLED, and that is what makes
+ * this safe to apply by default. `chat: {model: 'anthropic/claude-sonnet-4'}`
+ * beside an OpenRouter key is a paid deployment — the free catalogue answers
+ * only where nothing was named — and sinking it would hand the model to
+ * whichever provider sorted above it, which is a 404 for a name nobody typed
+ * there. So a named model or a written list flattens every hosted member to
+ * tier 0, and the sort changes nothing for a configuration that names one: it
+ * fires exactly where the whole question is "which of these keys, in what
+ * order", which is the zero-config path.
+ */
+function ladderTier(id, chat = {}) {
+    /**
+     * `chat.preferLocal` INVERTS exactly this line and nothing else.
+     *
+     * A tier is an ordering, not a selection: a local server still has to be
+     * selected by its address, so this moves a member that is already in the set
+     * and can never conjure one. That is what keeps the resolver a pure function
+     * of the settings and the environment — the property this file refuses to
+     * give up, because a resolver that decided what a default meant by reaching
+     * out would give CI a different configuration from the laptop beside it.
+     */
+    if (SELF_HOSTED_IDS.has(id)) return chat.preferLocal ? -1 : 2
+    // A provider with no free catalogue bills the account whatever it sends.
+    if (!freePoolFor(id, 'chat')) return 0
+    // `chat.model` and `chat.models` reach the head, and the head is whichever
+    // member sorts first — so a member that COULD receive them is a member that
+    // could be billed, and it does not sink.
+    if (ownChatModels({chat})) return 0
+    return authorNamedModel(chat) ? 0 : 1
+}
+
+/**
+ * Whether the author named a chat model, asked of a chat record that may be raw
+ * or resolved.
+ *
+ * Both are handed to `ladderTier` and they do not agree on `model`: `resolveChat`
+ * fills the provider table's default in, so a resolved zero-config record reads
+ * `model: 'gpt-4o-mini'` where the author typed nothing. Reading the field alone
+ * ordered the head by one answer and the set by the other — the two callers this
+ * function exists to keep in step. `modelAuto` is the resolved record's own word
+ * for it and is absent from the raw one, where the field IS the author's.
+ */
+const authorNamedModel = (chat) =>
+    chat.modelAuto === undefined ? !isAutoModel(chat.model) : !chat.modelAuto
+
+/**
+ * The selected provider ids, billed first — a stable sort, `CHAIN`'s order
+ * preserved inside each tier.
+ *
+ * Exported because two callers must agree to the letter: `resolveChatChain`
+ * builds the set from it and `resolveChat` picks the head from it, and a head
+ * chosen by a different rule than the set is a `chain[0]` that is not the head
+ * — the one property `themeDocPilot` builds the whole emitted `llm` block on.
+ */
+export function ladderOrder(ids, chat = {}) {
+    return ids
+        .map((id, i) => ({id, i, tier: ladderTier(id, chat)}))
+        .sort((a, b) => a.tier - b.tier || a.i - b.i)
+        .map((e) => e.id)
+}
+
+/**
+ * The provider an unpinned `chat.provider` resolves to.
+ *
+ * `resolveChain` alone until a set is being walked: choosing ONE provider is the
+ * question that ordered `CHAIN`, and its answer is unchanged for every
+ * deployment that declines rotation. Where a set IS being walked the head is the
+ * first member of it, and picking it by a different rule than `resolveChatChain`
+ * uses would break `chain[0] === head`.
+ */
+function autoProvider(chat, env) {
+    const {id, tried} = resolveChain(env)
+    const found = tried.filter((t) => t.found).map((t) => t.id)
+    // Nothing selected: the fall-through answers, exactly as it does for a
+    // single provider — and it is asked BEFORE `chain` is consulted, because
+    // which provider answers an empty environment is not a question about
+    // rotation. See `fallbackFor`.
+    if (!found.length) return fallbackFor(chat)
+    if (chat.chain !== 'auto') return id
+    return ladderOrder(found, chat)[0]
+}
+
+/**
+ * WHICH SERVICES MAY ANSWER, in order — the provider-level sibling of
+ * `chatModels`.
+ *
+ * The argument is the one `chat.models` already makes about models, moved up a
+ * level: a 429, a retired id or a rejected key is a statement about ONE service,
+ * and a deployment with a second key in its environment should not spend a
+ * reader's question on the first one's bad afternoon. `CHAIN` is already ordered
+ * embed-capable-first, so walking it in order is also the order that keeps one
+ * key covering both halves wherever it can.
+ *
+ * IT FIRES ONLY WHERE `chat.provider` IS ALSO `'auto'`. "A provider you name is
+ * never overridden" predates this key, is what `providerAuto` records, and is
+ * what every pinned deployment relies on — so a named provider is the whole set,
+ * and naming one is how rotation is declined. `chain: false` declines it without
+ * naming one.
+ *
+ * `own` IS LOAD-BEARING and is the reason this returns objects rather than ids.
+ * A member with neither a model nor a pool — `custom`, whose `chatModel` is null
+ * because it names a HOST and cannot have a catalogue default — is a
+ * build-stopping error when an author wrote it down and a silent skip with a
+ * note when the environment produced it. A stray `CUSTOM_API_KEY` set for
+ * something else must not be able to fail somebody's docs build; that is the
+ * same rule `readiness` states for itself.
+ *
+ * NOTHING HERE TOUCHES THE NETWORK, for the reason `resolveChain` gives: a
+ * resolver that reached out to decide what a default means is a build that fails
+ * offline and answers differently on two machines.
+ *
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {Array<{id: string, slug: string, model: string|null, models: string[]|null,
+ *   baseURL: string|null, upstream: string|null, keyEnv: string|null, own: boolean}>}
+ */
+export function resolveChatChain(docPilot, env = {}) {
+    const chat = docPilot.chat || {}
+    /**
+     * NO MEMBERS, because nothing answers — search-only.
+     *
+     * Answered here rather than by each caller, because a chain is the question
+     * "which services may answer" and the honest answer is "none". Without it
+     * the fall-through below builds a one-member chain around `provider: null`,
+     * and every consumer then reports that member as real: `proxyContract`
+     * printed a `direct` entry telling the deployer that "null" has no route and
+     * the browser calls `http://localhost:11434` itself — a production warning
+     * about a request no part of this mode makes.
+     */
+    if (chat.searchOnly) return []
+    const written = chat.chain
+    const head = chat.provider
+
+    // The author's own set. A named provider LEADS it rather than being replaced
+    // by it — `chat: {provider: 'openai', chain: ['groq']}` reads as "openai,
+    // then groq" — and is deduped out of the tail so it is not asked twice.
+    if (Array.isArray(written) && written.length) {
+        const specs = written.map((e) => (typeof e === 'string' ? {provider: e} : {...e}))
+        const ordered = chat.providerAuto ? specs : [{provider: head}, ...specs]
+        const seen = new Set()
+        return ordered
+            .filter((s) => {
+                if (!s || !s.provider) return false
+                const slug = typeof s.name === 'string' && s.name.trim() ? s.name.trim() : s.provider
+                return !seen.has(slug) && seen.add(slug)
+            })
+            .map((s, i) => member(s, docPilot, env, i === 0 && s.provider === head, true))
+    }
+
+    // Every member this environment SELECTS, in CHAIN order. Only reachable with
+    // an unpinned provider, and only once `chain` ships as `'auto'` — until then
+    // this branch is what an author opts into by writing the word.
+    if (written === 'auto' && chat.providerAuto) {
+        const found = resolveChain(env).tried.filter((t) => t.found)
+        // Nothing selected is a real outcome and resolves exactly as it does
+        // today: the fall-through, alone. See `CHAIN_FALLBACK`.
+        //
+        // BILLED FIRST, then a free catalogue, then a server of your own — see
+        // `ladderTier`. `resolveChat` sorts the same list by the same function
+        // to pick the head, so `i === 0` below is that head.
+        const ids = found.length ? ladderOrder(found.map((t) => t.id), chat) : [fallbackFor(chat)]
+        const all = ids.map((id, i) => member({provider: id}, docPilot, env, i === 0, false))
+        /**
+         * A member with nothing to send is dropped HERE and refused in
+         * `assertChat` when an author wrote it down. `custom` is the case: its
+         * `chatModel` is null because it names a HOST and cannot have a
+         * catalogue default, so a stray `CUSTOM_API_KEY` set for something else
+         * would otherwise fail somebody's docs build — a fault they did not
+         * cause and cannot find. `readiness` says so instead.
+         *
+         * Never empty: the head survives whatever happens, because a chain that
+         * resolved to nothing is a panel with no answering half at all, and that
+         * is `assertChat`'s sentence to say rather than this function's.
+         */
+        const usable = all.filter(sendable)
+        return usable.length ? usable : [all[0]]
+    }
+
+    // `false`, and `'auto'` beside a provider the author named: one member, and
+    // it is the head this file has always resolved. Byte-identical to the
+    // configuration that shipped before this key existed.
+    return [member({provider: head}, docPilot, env, true, true)]
+}
+
+/**
+ * One member, filled from its own spec, then from the head's settings, then from
+ * the provider table.
+ *
+ * `chat.model` and `chat.models` reach the HEAD and no other member, because a
+ * model name never crosses providers — `gpt-4o-mini` posted to Groq is a 404 for
+ * a model nobody typed. Every later member falls to its own table default, or to
+ * its own free pool where it has one.
+ */
+function member(spec, docPilot, env, isHead, own) {
+    const id = spec.provider
+    /**
+     * `chatModelOf` rather than `chat.model`, even for the head, so this asks the
+     * same question `assertChat` answers: "is there a model to send?", not "did
+     * the author type one?". On a RESOLVED config the two agree, because
+     * `resolveChat` has already filled the table default in. On a raw one — which
+     * `themeDocPilot` accepts, and a hand-written themeConfig is — reading the
+     * field alone reported every provider with a table default as having nothing
+     * to send.
+     */
+    const model =
+        spec.model !== undefined
+            ? spec.model
+            : chatModelOf({chat: {provider: id, model: isHead ? docPilot.chat.model : null}})
+    const models =
+        spec.models !== undefined
+            ? spec.models
+            : isHead
+              ? chatModels(docPilot)
+              : isAutoModel(model)
+                ? freePoolFor(id, 'chat')
+                : null
+    const baseURL =
+        spec.baseURL !== undefined && spec.baseURL !== null
+            ? spec.baseURL
+            : isHead
+              ? docPilot.chat.baseURL
+              : id === 'ollama'
+                ? env[OLLAMA_BASE_URL_ENV] || LOCAL_BASE_URL
+                : null
+    return {
+        id,
+        slug: typeof spec.name === 'string' && spec.name.trim() ? spec.name.trim() : id,
+        model: isAutoModel(model) ? null : model,
+        models: models && models.length ? [...models] : null,
+        baseURL,
+        upstream: (SELF_HOSTED_IDS.has(id) && baseURL) || null,
+        keyEnv: typeof spec.apiKeyEnv === 'string' && spec.apiKeyEnv.trim() ? spec.apiKeyEnv.trim() : null,
+        own: Boolean(own),
+    }
+}
+
+/**
+ * Whether this member has a model to post at all — a name, or a pool to walk.
+ *
+ * The same question `assertChat` asks of the head, asked of one member: "is
+ * there a model to send?", not "did the author type one?".
+ */
+const sendable = (m) => Boolean(m.model || (m.models && m.models.length))
+
+/**
+ * WHERE THE BROWSER POSTS a member's chat request.
+ *
+ * The prefix appears exactly when there is more than one member, and that
+ * condition is the migration: every pinned provider, and every environment with
+ * one key, keeps the bare `/ai/v1/…` this package has always emitted, so no
+ * hand-written nginx breaks on upgrade. A second member is a real flip, and
+ * `proxyContract` is what prints it — `docs/guide/production.md` already tells a
+ * reader to re-read the contract when the environment changes.
+ *
+ * Two providers on ONE adapter is what forces this. `openrouter` and `groq` are
+ * both the `openai` adapter, so both ask for `/ai/v1/chat/completions` and would
+ * collide on a single path. The prefix also fixes something quieter: `POOLS` in
+ * llm.js is keyed `provider|baseURL`, so under a shared `/ai` a sticky choice and
+ * a cooldown learned about one brand would be applied to the other.
+ *
+ * IT PUTS A BRAND ID IN THE PAGE, and `targetOf` says a paragraph above that the
+ * client knows adapters rather than brands. That doctrine loses here and it is
+ * worth saying why rather than hiding it: two brands on one adapter need two
+ * addresses, and there is no way to spell the second one that does not name it.
+ * The invariant that actually matters is untouched — the KEY still never crosses
+ * into the page, which is what `test/chain.test.js` pins.
+ */
+const chatProxyBase = (slug, members) => (members > 1 ? `/ai/${slug}` : '/ai')
+
 /**
  * The embed pool — read by the INDEXER and by nothing in the browser.
  *
@@ -498,6 +1193,60 @@ export function poolProviderOf(docPilot, half) {
  * missing key it was never going to send.
  */
 export const noEmbed = (docPilot) => docPilot.embed === false || docPilot.embed === 'none'
+
+/**
+ * The no-chat spelling — the same two words, for the other half.
+ *
+ * `chat: false` is SEARCH-ONLY MODE: the index is built, the scope picker works,
+ * the gate still scores, and what a question returns is the ranked passages
+ * themselves rather than an answer written about them. No model is called, so
+ * there is no key to hold, no token to spend and no sentence to be wrong.
+ *
+ * It is the third answer to the question `embed: false` answers second. A corpus
+ * that may not be sent anywhere has no embedder; a site that may not send its
+ * READERS' questions anywhere — or that simply wants a better site search and
+ * was never asking for prose — has no chat model either. Both together are a
+ * deployment with no credential and no outbound request at all after the page
+ * loads.
+ *
+ * Exported for the same reason as `noEmbed`: several layers have to know the
+ * answer BEFORE they would otherwise resolve a provider. `resolveChat` spreads
+ * its argument over `DEFAULTS.chat`, and `{...DEFAULTS.chat, ...false}` is
+ * `DEFAULTS.chat` — an author writing one word to switch the half off would be
+ * handed the shipped provider back with nothing anywhere saying so. That is the
+ * failure `resolveDocPilot` already guards `budget` against, in the same words.
+ */
+export const noChat = (docPilot) => docPilot.chat === false || docPilot.chat === 'none'
+
+/**
+ * The chat half switched off, with EVERY key stated.
+ *
+ * The same doctrine the no-embed arm of `resolveEmbed` is written under, and for
+ * the same mechanism: this object is JSON round-tripped into themeConfig,
+ * `JSON.stringify` deletes an undefined key, and session.js then fills the hole
+ * from its own defaults — so an omitted key here becomes a live Ollama in the
+ * reader's browser rather than an absence.
+ *
+ * `searchOnly` is the flag every other layer reads, exactly as `lexicalOnly` is
+ * for the embed half. Nothing infers the mode from `provider: null`.
+ */
+const SEARCH_ONLY_CHAT = {
+    provider: null,
+    providerAuto: false,
+    chain: false,
+    model: null,
+    modelAuto: false,
+    models: null,
+    baseURL: null,
+    temperature: null,
+    maxTokens: null,
+    numCtx: null,
+    reasoning: false,
+    verbosity: null,
+    topP: null,
+    seed: null,
+    searchOnly: true,
+}
 
 /**
  * The embedder, resolved.
@@ -671,9 +1420,23 @@ export function resolveEmbed(docPilot) {
     }
 }
 
-function keyOf(env, id) {
+/**
+ * The key for one member, by NAME.
+ *
+ * `keyEnv` is the member's own variable and outranks the table's, which is what
+ * makes two of one service at two addresses reachable with two credentials: the
+ * table has exactly one name per provider and no rotation, so without this a
+ * second endpoint could only ever be reached with the first one's key.
+ *
+ * It is looked up whether or not it is set, deliberately. An author who named
+ * `GW_EU_KEY` and did not export it wants "that variable is empty" rather than
+ * "here is the other one" — falling back to the table would send the wrong
+ * account's credential to a host they pointed somewhere else.
+ */
+function keyOf(env, id, keyEnv = null) {
     const hosted = hostedOf(id)
     if (!hosted) return null
+    if (keyEnv) return env[keyEnv] || null
     for (const name of hosted.envKeys) if (env[name]) return env[name]
     return null
 }
@@ -748,16 +1511,67 @@ export function nodeEmbedTarget(docPilot, env = {}) {
  */
 export function nodeChatTarget(docPilot, env = {}) {
     assertProviders(docPilot)
+
+    /**
+     * No target, in the shape the caller already destructures — the chat half's
+     * copy of `nodeEmbedTarget`'s lexical-only exit, for the same reason.
+     *
+     * A `baseURL` here would be somewhere a CLI COULD post, and the point of this
+     * mode is that there is nothing it should post. Left to fall through, the
+     * lines below read an unrecognised provider as the local one and hand back a
+     * plausible Ollama at localhost:11434 — a transport nothing configured, that
+     * every caller would be right to use.
+     */
+    if (docPilot.chat.searchOnly) {
+        return {
+            searchOnly: true,
+            id: null,
+            provider: null,
+            baseURL: null,
+            model: null,
+            models: null,
+            apiKey: null,
+            maxTokens: null,
+            numCtx: null,
+            modelAuto: false,
+            modelPlaceholder: false,
+            extraBody: null,
+        }
+    }
+
     const hosted = hostedOf(docPilot.chat.provider)
     return {
         id: docPilot.chat.provider,
         provider: hosted ? hosted.adapter : 'ollama',
-        baseURL: hosted ? directBaseOf(hosted, env) : docPilot.chat.baseURL || LOCAL_BASE_URL,
-        model: docPilot.chat.model,
+        // The author's own address first, for the three ids that name a HOST
+        // rather than a service — the same rule `member` states at length. Without
+        // it every Node-side caller (`docpilot vocabulary`, `eval`, `doctor
+        // --models`) posted to the table's constant while the proxy posted where
+        // the config said.
+        baseURL: hosted
+            ? (SELF_HOSTED_IDS.has(docPilot.chat.provider) && docPilot.chat.baseURL) ||
+              directBaseOf(hosted, env)
+            : docPilot.chat.baseURL || LOCAL_BASE_URL,
+        model: chatModelOf(docPilot),
         models: chatModels(docPilot),
         apiKey: keyOf(env, docPilot.chat.provider),
         maxTokens: docPilot.chat.maxTokens,
         numCtx: docPilot.chat.numCtx,
+        // WHOSE NAME THIS IS — the chat half's `modelAuto`, and the same
+        // distinction the embed half has carried since discovery arrived. Without
+        // it `doctor` cannot tell "you named a model this server does not have"
+        // from "our default is stale for your machine", and only one of those two
+        // sentences is worth printing at somebody.
+        //
+        // `resolveChat` computes it, because only that function sees the value
+        // before the table default is written over it. The fallback is for an
+        // UNRESOLVED config, which every door here is documented as taking.
+        modelAuto: docPilot.chat.modelAuto ?? (!docPilot.chat.model || isAutoModel(docPilot.chat.model)),
+        // A HOST that answers with whatever it loaded — llama-server. `doctor`
+        // reads it to stop reporting the placeholder as a missing catalogue
+        // entry. A CLI fact; `themeDocPilot` names its keys one by one, so it
+        // never reaches the browser.
+        modelPlaceholder: Boolean(hosted?.modelPlaceholder),
         // The same body fragment the browser gets — and the same override —
         // for the same reason: without `require_parameters` OpenRouter may route
         // `docpilot import`'s annotation pass to an upstream that ignores the
@@ -839,7 +1653,23 @@ export {resolveSuggestions} from './theme/docpilot/switches.js'
 /** The client half: safe to compile into the bundle, carries no credential. */
 export function themeDocPilot(docPilot, env = {}) {
     assertProviders(docPilot)
-    const chat = targetOf(docPilot.chat)
+    const searchOnly = docPilot.chat.searchOnly === true
+    /**
+     * NOT `targetOf` when there is no chat model, for the reason spelled out on
+     * the embed half a dozen lines down: `targetOf` reads a provider it does not
+     * recognise as the local one, so a null provider comes back as an Ollama at
+     * localhost:11434. On the embed half that costs a connection refused per
+     * question; here it would cost the whole mode — session.js would hold a
+     * plausible-looking transport and there would be nothing to stop it using it.
+     *
+     * Every key the answering branch emits is stated null, not omitted. This
+     * object is serialised into themeConfig by `JSON.stringify`, which deletes an
+     * undefined key, and session.js fills what is missing from its own defaults —
+     * so the whole block is written out rather than replaced by a null, and the
+     * readers that dereference `config.llm.*` keep finding an object.
+     */
+    const chat = searchOnly ? null : targetOf(docPilot.chat)
+    const chain = searchOnly ? [] : resolveChatChain(docPilot, env)
     const embedCfg = resolveEmbed(docPilot)
     // NOT `targetOf` when there is no embedder, and the structure says so rather
     // than a comment alone: `targetOf` reads a provider it does not recognise as
@@ -849,7 +1679,36 @@ export function themeDocPilot(docPilot, env = {}) {
     const embed = embedCfg.lexicalOnly ? null : targetOf(embedCfg)
     return {
         enabled: docPilot.enabled,
-        llm: {
+        /**
+         * SEARCH-ONLY — no model is ever called, and the panel answers with the
+         * passages themselves.
+         *
+         * Emitted as its own key rather than inferred from `llm.provider === null`
+         * for the same reason `embed.lexicalOnly` is: a mode read off the absence
+         * of a value is a mode that turns itself on the first time something else
+         * goes missing.
+         */
+        searchOnly,
+        llm: searchOnly
+            ? {
+                  provider: null,
+                  baseURL: null,
+                  model: null,
+                  models: null,
+                  temperature: null,
+                  maxTokens: null,
+                  numCtx: null,
+                  reasoning: null,
+                  verbosity: null,
+                  topP: null,
+                  seed: null,
+                  tuning: null,
+                  extraBody: null,
+                  rateLimited: false,
+                  freePool: false,
+                  chain: [],
+              }
+            : {
             provider: chat.provider,
             baseURL: chat.baseURL,
             model: docPilot.chat.model,
@@ -875,6 +1734,27 @@ export function themeDocPilot(docPilot, env = {}) {
             temperature: docPilot.chat.temperature,
             maxTokens: docPilot.chat.maxTokens,
             numCtx: docPilot.chat.numCtx,
+            /**
+             * THE FOUR NEUTRAL KNOBS, AND THE ONE RECORD THAT SAYS HOW TO SPELL
+             * THEM — the whole of the connector config as the browser sees it.
+             *
+             * `reasoning`, `verbosity`, `topP` and `seed` cross as the author
+             * wrote them, because the panel shows the reasoning box and the
+             * settings row reads them. `tuning` is what the TRANSPORT reads: the
+             * same request already clamped to the configured service's own
+             * vocabulary, with everything that service cannot take removed, and
+             * carrying a body SHAPE (`style: 'unified'`) rather than the name of
+             * a company. That is what lets providers.js stay brand-blind.
+             *
+             * Emitted as one nested object rather than eight flat keys, because
+             * it is one answer to one question and the eight are meaningless
+             * apart.
+             */
+            reasoning: docPilot.chat.reasoning ?? null,
+            verbosity: docPilot.chat.verbosity ?? null,
+            topP: docPilot.chat.topP ?? null,
+            seed: docPilot.chat.seed ?? null,
+            tuning: resolveTuning(docPilot),
             // Named here rather than spread, on the same terms as every other
             // key in this block: `targetOf` answers for the EMBED half too, and
             // a request-body fragment meant for chat completions has no business
@@ -889,7 +1769,42 @@ export function themeDocPilot(docPilot, env = {}) {
             // by accident. See `freeChatPool` for the deployment that made the
             // difference expensive.
             freePool: freeChatPool(docPilot),
-        },
+            /**
+             * THE SET, one self-contained target per member — `chat.chain`
+             * resolved, in the order the transport walks it.
+             *
+             * `chain[0]` IS the head above, by construction, so every key that
+             * was a scalar here is still a scalar and nothing that reads
+             * `config.llm.model` changes. A single-member chain — the shipped
+             * default, and every pinned provider — makes this a one-element
+             * array whose contents restate the eight keys above it.
+             *
+             * Each member carries its OWN adapter, address, body fragment and
+             * clamped tuning record, because that is what changes between
+             * members: one neutral vocabulary goes in and each service gets the
+             * spelling it accepts. No key crosses, exactly as above — the
+             * browser reaches every hosted member through a same-origin path
+             * and the reverse proxy attaches the credential.
+             */
+            chain: chain.map((m) => {
+                const hosted = hostedOf(m.id)
+                return {
+                    provider: hosted ? hosted.adapter : 'ollama',
+                    baseURL: hosted ? chatProxyBase(m.slug, chain.length) : m.baseURL || LOCAL_BASE_URL,
+                    model: m.model,
+                    models: m.models,
+                    extraBody: extraBodyOf(docPilot.chat.extraBody, hosted),
+                    tuning: resolveTuning(docPilot, m.id),
+                    rateLimited: Boolean(hosted?.rateLimited),
+                    // The same question `freeChatPool` answers for the head,
+                    // asked of one member: is this one answering off a provider's
+                    // OWN free catalogue, which is the only case with a daily
+                    // REQUEST ceiling worth rationing against. An author's own
+                    // list is not one, however many `:free` ids are in it.
+                    freePool: !ownChatModels(docPilot) && Boolean(freePoolFor(m.id, 'chat')),
+                }
+            }),
+              },
         // `lexicalOnly` on BOTH arms, because the key has to exist either way:
         // session.js branches on `cfg.embed.lexicalOnly` to decide whether to
         // embed the question at all, and an omitted key is an undefined one that
@@ -992,15 +1907,34 @@ export function devProxy(docPilot, env = {}) {
     // which is why `route` builds an anchored key rather than a bare string.
     const embedId = resolveEmbed(docPilot).provider
     const embedHosted = hostedOf(embedId)
+    // The embed half is a provider, not a chain member: it never rotates, so it
+    // has no slug, no member address and no member key. `{id}` is the whole of
+    // what `route` reads for it.
     route(
         routes,
         embedHosted ? providerFor(embedHosted.adapter).embedUrl('/ai') : '/ai/v1/embeddings',
-        embedId,
+        {id: embedId},
         env,
     )
-    const chatId = docPilot.chat.provider
-    const chatHosted = hostedOf(chatId)
-    if (chatHosted) route(routes, providerFor(chatHosted.adapter).chatUrl('/ai'), chatId, env)
+    /**
+     * ONE CHAT ROUTE PER MEMBER, and the prefix appears only where there is more
+     * than one — see `chatProxyBase`. A single-member chain, which is the shipped
+     * default and every pinned provider, mounts exactly the one route this
+     * function has always mounted.
+     *
+     * The prefixed paths do not nest in one another, so the "most specific
+     * first" ordering above now only separates embed from chat.
+     */
+    const chain = resolveChatChain(docPilot, env)
+    for (const m of chain) {
+        const hosted = hostedOf(m.id)
+        // A local Ollama has no `PROVIDERS` row and no route: the browser calls
+        // it directly. `route` returns early for the same reason, but skipping
+        // here keeps the base out of the arithmetic.
+        if (!hosted) continue
+        const base = chatProxyBase(m.slug, chain.length)
+        route(routes, providerFor(hosted.adapter).chatUrl(base), m, env, base)
+    }
     return Object.keys(routes).length ? routes : undefined
 }
 
@@ -1019,14 +1953,28 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  * being proxied. `proxyContract` asks production for the same thing in words
  * ("match these paths EXACTLY").
  */
-function route(routes, path, providerId, env) {
-    const hosted = hostedOf(providerId)
+/**
+ * @param {Record<string, any>} routes
+ * @param {string} path
+ * @param {{id: string, upstream?: string|null, keyEnv?: string|null}} m
+ * @param {Record<string, string|undefined>} env
+ * @param {string} [base]
+ */
+function route(routes, path, m, env, base = '/ai') {
+    const hosted = hostedOf(m.id)
     if (!hosted) return // a local provider is called directly, with no proxy
-    const key = keyOf(env, providerId)
+    const key = keyOf(env, m.id, m.keyEnv)
     routes[`^${escapeRe(path)}(?:\\?.*)?$`] = {
-        target: upstreamOf(hosted, env),
+        // The member's own address first: a chain entry that names one is naming
+        // where THIS member is, and the table's constant is what the ones that
+        // name none fall back to.
+        target: m.upstream || upstreamOf(hosted, env),
         changeOrigin: true,
-        rewrite: hosted.rewrite,
+        // BOUND, not passed through: Vite calls `rewrite` with the path alone,
+        // so a rewrite that defaulted its base would strip `/ai` from a route
+        // mounted at `/ai/<id>` and hand the upstream a path with a brand still
+        // on the front of it.
+        rewrite: (p) => hosted.rewrite(p, base),
         configure(proxy) {
             proxy.on('proxyReq', (proxyReq) => {
                 // Exactly what `proxyContract` requires of a production proxy,
@@ -1069,6 +2017,7 @@ export function proxyContract(docPilot, env = {}) {
     assertProviders(docPilot)
     const embed = resolveEmbed(docPilot)
     const routes = []
+    const direct = []
     // Most specific first, exactly as in `devProxy`: a proxy matching by prefix
     // in declaration order would otherwise send embeddings to the chat provider.
     //
@@ -1077,22 +2026,78 @@ export function proxyContract(docPilot, env = {}) {
     // `/ai/v1/chat/completions` for Anthropic, whose adapter posts to
     // `/ai/v1/messages` — an exact-match proxy built to the contract 404s every
     // question, in production, on a provider the README lists as supported.
-    for (const [half, id] of [
-        ['embed', embed.provider],
-        ['chat', docPilot.chat.provider],
-    ]) {
+    /**
+     * ONE EMBED ROUTE, THEN ONE CHAT ROUTE PER MEMBER.
+     *
+     * The embed half stays unprefixed because it is single by decision — two
+     * embedding models are two vector spaces — so there is nothing to
+     * disambiguate. The chat half gains `/ai/<id>` exactly when a deployment has
+     * more than one answering member; see `chatProxyBase`.
+     */
+    const chain = resolveChatChain(docPilot, env)
+    /**
+     * The embed half is a provider, not a chain member: it never rotates, so it
+     * has no slug of its own, no member address and no member key. Stated as a
+     * member-shaped record so one loop reads both halves.
+     *
+     * @type {Array<{half: string, m: {id: string, slug: string, upstream?: string|null,
+     *   keyEnv?: string|null, baseURL?: string|null}, base: string}>}
+     */
+    const legs = [
+        {half: 'embed', m: {id: embed.provider, slug: embed.provider}, base: '/ai'},
+        ...chain.map((m) => ({half: 'chat', m, base: chatProxyBase(m.slug, chain.length)})),
+    ]
+    for (const {half, m, base} of legs) {
+        const id = m.id
         const hosted = hostedOf(id)
-        if (!hosted) continue
+        if (!hosted) {
+            /**
+             * A member the browser calls ITSELF — a local Ollama, which has no
+             * `PROVIDERS` row and is reached at its own address rather than
+             * through `/ai`.
+             *
+             * Carried rather than skipped, because a five-member chain printing
+             * four routes with nothing accounting for the fifth reads as a bug in
+             * this function. It is also the member with the sharpest production
+             * edge, and `notes` below is where that gets said.
+             */
+            if (half === 'chat') {
+                direct.push({provider: id, baseURL: m.baseURL || LOCAL_BASE_URL})
+            }
+            continue
+        }
         const adapter = providerFor(hosted.adapter)
-        const p = half === 'embed' ? adapter.embedUrl('/ai') : adapter.chatUrl('/ai')
+        const p = half === 'embed' ? adapter.embedUrl(base) : adapter.chatUrl(base)
         const header = Object.keys(hosted.header('x'))[0]
         routes.push({
             path: p,
             provider: id,
-            upstream: upstreamOf(hosted, env),
-            rewrite: hosted.rewrite(p),
+            /**
+             * WHICH MEMBER this route serves, where the provider id no longer
+             * says it on its own. Equal to `provider` for every member that
+             * named no `name`, which is every one written before this existed.
+             */
+            name: m.slug,
+            // The member's own address, or the table's. See `route`.
+            upstream: m.upstream || upstreamOf(hosted, env),
+            rewrite: hosted.rewrite(p, base),
             header,
-            envKey: keyNameOf(env, id) || null,
+            /**
+             * The whole header SHAPE, names only — `header` above is the first of
+             * them and is kept because callers read it. Anthropic needs
+             * `x-api-key` AND `anthropic-version`, so a proxy built from one name
+             * sends a request that 400s on a service this package lists as
+             * supported.
+             */
+            headers: Object.keys(hosted.header('x')),
+            /**
+             * Whether this upstream is an address only the machine that resolved
+             * it can reach. A fact about the resolved value rather than a guess
+             * about the deployment, which is why it is computed rather than
+             * inferred from the provider id.
+             */
+            local: isLocalAddress(m.upstream || upstreamOf(hosted, env)),
+            envKey: keyNameOf(env, id, m.keyEnv) || null,
             // A server you started rather than an account you have. Without
             // this the contract reads `NO KEY — none set` beside a self-hosted
             // llama.cpp, which sends the reader looking for a credential the
@@ -1107,7 +2112,49 @@ export function proxyContract(docPilot, env = {}) {
         'rate-limit by IP and set a request body ceiling — this endpoint spends money',
     ]
     if (routes.length) notes.push('allow only your own origin: the browser calls this same-origin')
-    return {routes, notes}
+    /**
+     * THE TWO THINGS A CHAIN CAN CONTAIN THAT A DEPLOYED PROXY CANNOT SERVE.
+     *
+     * Both are reported and neither is removed. Dropping a member because this
+     * machine judged its address unreachable would be `resolveChain` reading the
+     * network, which this file refuses in so many words: a resolver that reached
+     * out would give CI a different configuration from the laptop beside it.
+     */
+    for (const r of routes.filter((r) => r.local)) {
+        notes.push(
+            `${r.provider} → ${r.upstream} is a LOCAL address — a deployed proxy cannot reach it ` +
+                'unless it runs on that host. It works in `vitepress dev`.',
+        )
+    }
+    for (const d of direct) {
+        notes.push(
+            `${d.provider} has no route at all: the browser calls ${d.baseURL} itself. That works on ` +
+                'the machine running it and nowhere else — an https page cannot fetch http://localhost, ' +
+                'and a local server sends no CORS headers.',
+        )
+    }
+    return {routes, direct, notes}
+}
+
+/**
+ * An address only the machine that resolved it can reach.
+ *
+ * Read by `proxyContract` to turn "your chain contains a local server" from
+ * something a reader discovers in production into a line printed on the build.
+ * Deliberately generous — a false positive prints one extra sentence, a false
+ * negative is a deploy that 502s every question.
+ */
+function isLocalAddress(url) {
+    let host
+    try {
+        host = new URL(url).hostname.toLowerCase()
+    } catch {
+        return false
+    }
+    if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true
+    if (host === '::1' || host === '[::1]') return true
+    if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host)) return true
+    return /^172\.(1[6-9]|2\d|3[01])\./.test(host)
 }
 
 /**
@@ -1198,7 +2245,239 @@ function assertKnown(half, id) {
  */
 function assertProviders(docPilot) {
     assertChat(docPilot)
+    assertChatKnobs(docPilot)
     assertEmbed(docPilot)
+    assertVocabulary(docPilot)
+    assertGuard(docPilot)
+    assertChatTypes(docPilot)
+}
+
+/** The three values `gate.enforces` knows. A fourth silently meant `'calibrated'`. */
+export const GUARD_MODES = ['dense-only', 'calibrated', 'off']
+
+/** What `chat.verbosity` may be. Documented as a union and never checked as one. */
+export const VERBOSITY_LEVELS = ['low', 'medium', 'high']
+
+/**
+ * The two settings whose TYPE was documented and never enforced.
+ *
+ * Both reach the browser verbatim — `resolveTuning` passes `verbosity` through
+ * and `chatModels` spreads the array into `themeConfig` — so a typo was not a
+ * build failure, it was a field in the bundle. `verbosity: 'enormous'` shipped
+ * as `verbosity: 'enormous'`, and `models: [null, 42]` reached `orderCandidates`,
+ * which filters the falsy and keeps the number.
+ */
+function assertChatTypes(docPilot) {
+    const chat = docPilot.chat || {}
+    if (chat.searchOnly) return
+    if (chat.verbosity != null && !VERBOSITY_LEVELS.includes(chat.verbosity)) {
+        throw new Error(
+            `[docpilot] chat.verbosity is ${JSON.stringify(chat.verbosity)}, which is not one of\n` +
+                `  ${VERBOSITY_LEVELS.map((v) => `'${v}'`).join(', ')}. It is a soft ceiling on the\n` +
+                '  answer\'s length, where chat.maxTokens is the hard one.',
+        )
+    }
+    const models = (where, list) => {
+        if (list == null) return
+        if (!Array.isArray(list)) {
+            throw new Error(`[docpilot] ${where} must be an array of model ids, in the order to try them.`)
+        }
+        for (const m of list) {
+            if (typeof m !== 'string' || !m.trim()) {
+                throw new Error(
+                    `[docpilot] ${where} holds ${JSON.stringify(m)}, which is not a model id.\n` +
+                        '  Every entry is a name the provider knows, and the order is the order\n' +
+                        '  they are tried in.',
+                )
+            }
+        }
+    }
+    models('chat.models', chat.models)
+    if (Array.isArray(chat.chain)) {
+        for (const e of chat.chain) {
+            if (e && typeof e === 'object') models(`chat.chain member "${e.name || e.provider}" models`, e.models)
+        }
+    }
+}
+
+/**
+ * `guard.mode`, checked.
+ *
+ * It was read as `mode !== 'off'` and a typo therefore behaved as the strictest
+ * setting — the safe direction, and still the wrong one: an author who wrote
+ * `'lenient'` got the opposite of what they asked for and nothing anywhere said
+ * so. Silence about a REFUSAL threshold is the expensive kind.
+ */
+export function assertGuard(docPilot) {
+    const mode = docPilot.guard?.mode
+    if (mode === undefined || GUARD_MODES.includes(mode)) return
+    throw new Error(
+        `[docpilot] guard.mode is ${JSON.stringify(mode)}, which is not one of\n` +
+            `  ${GUARD_MODES.map((m) => `'${m}'`).join(', ')}.\n` +
+            "  'dense-only' refuses only where a dense channel scored the verdict,\n" +
+            "  'calibrated' always refuses, 'off' never does. All three still score\n" +
+            '  every turn and record it.',
+    )
+}
+
+/**
+ * `baseURL` NAMES A HOST YOU RUN, and only the three ids that mean one accept it.
+ *
+ * It was read by nobody on `custom` and `llamacpp` — the reference promised it
+ * outranked the environment and the proxy posted to the table's constant — and
+ * making it work raised the other half of the question: what does it mean beside
+ * `openai`? Rerouting a branded provider's traffic somewhere else on the
+ * strength of one line is a surprise nobody asked for, and silently ignoring it
+ * is the failure this file has just finished fixing in the other direction.
+ *
+ * So it is refused by name, and the message says which key does mean that:
+ * `custom` is the id for a service that copied somebody's API.
+ */
+function assertAddresses(docPilot) {
+    const say = (where, id, value) => {
+        throw new Error(
+            `[docpilot] ${where} is set to ${JSON.stringify(value)}, and "${id}" is a service with\n` +
+                '  an address of its own — the browser reaches it through your proxy and the\n' +
+                "  proxy posts to the provider. `baseURL` names a host YOU run, so it is read\n" +
+                "  for 'ollama', 'llamacpp' and 'custom' only.\n" +
+                `    chat: {provider: 'custom', baseURL: ${JSON.stringify(value)}, model: '…'}`,
+        )
+    }
+    const chat = docPilot.chat || {}
+    if (chat.searchOnly) return
+    if (chat.baseURL && chat.provider && hostedOf(chat.provider) && !SELF_HOSTED_IDS.has(chat.provider)) {
+        say('chat.baseURL', chat.provider, chat.baseURL)
+    }
+    if (!Array.isArray(chat.chain)) return
+    for (const e of chat.chain) {
+        if (!e || typeof e !== 'object' || !e.baseURL) continue
+        if (hostedOf(e.provider) && !SELF_HOSTED_IDS.has(e.provider)) {
+            say(`chat.chain member "${e.name || e.provider}" baseURL`, e.provider, e.baseURL)
+        }
+    }
+}
+
+/** A slug goes into a URL path, so it is held to the class the rewrite assumes. */
+export const SLUG = /^[a-z0-9][a-z0-9-]*$/
+
+/**
+ * `chat.chain`'s member NAMES, checked before anything asks what a member can
+ * send.
+ *
+ * Two faults, and both were silent before a slug existed:
+ *
+ *   · A REPEATED NAME. `resolveChatChain` dedupes, so the second entry vanished
+ *     — and `readiness` then printed a member count that matched neither the
+ *     routes nor the array the author wrote. Two entries of one service used to
+ *     be the only way to reach two of its endpoints, so the thing somebody would
+ *     reach for was also the thing that did nothing.
+ *   · A NAME THAT CANNOT BE A PATH. It is rendered into `/ai/<slug>/…` and
+ *     matched by an anchored regexp on the other end; a slash or a space there
+ *     builds a proxy contract whose routes cannot be matched, and the failure
+ *     lands in production on the first question.
+ *
+ * Only the AUTHOR's array is checked, on the rule this file keeps everywhere: a
+ * member the environment produced carries no `name` and cannot collide.
+ */
+function assertChainNames(docPilot) {
+    const written = docPilot.chat?.chain
+    if (!Array.isArray(written)) return
+    const seen = new Set()
+    for (const entry of written) {
+        if (!entry || typeof entry === 'string') {
+            // A bare id is its own slug and cannot be misspelled into a path.
+            const slug = typeof entry === 'string' ? entry : null
+            if (slug && seen.has(slug)) {
+                throw new Error(
+                    `[docpilot] chat.chain names "${slug}" twice. One member per name — give the\n` +
+                        '  second one a name of its own if you meant two of the same service:\n' +
+                        `    {name: '${slug}-2', provider: '${slug}', baseURL: '…', apiKeyEnv: '…'}`,
+                )
+            }
+            if (slug) seen.add(slug)
+            continue
+        }
+        const named = typeof entry.name === 'string' ? entry.name.trim() : ''
+        if (entry.name !== undefined && !SLUG.test(named)) {
+            throw new Error(
+                `[docpilot] chat.chain member name ${JSON.stringify(entry.name)} cannot be a URL path.\n` +
+                    '  It is rendered into /ai/<name>/… and matched exactly by your proxy, so it is\n' +
+                    '  lowercase letters, digits and hyphens, starting with a letter or a digit.',
+            )
+        }
+        const slug = named || entry.provider
+        if (!slug) continue
+        if (seen.has(slug)) {
+            throw new Error(
+                `[docpilot] chat.chain names "${slug}" twice. One member per name — two of the same\n` +
+                    '  service need two names, and each may carry its own address and key:\n' +
+                    `    {name: '${slug}-eu', provider: '${entry.provider}', baseURL: '…', apiKeyEnv: 'X_KEY'}\n` +
+                    `    {name: '${slug}-us', provider: '${entry.provider}', baseURL: '…', apiKeyEnv: 'Y_KEY'}`,
+            )
+        }
+        seen.add(slug)
+    }
+}
+
+/**
+ * The declared vocabulary, checked where the author can still fix it.
+ *
+ * `setVocabulary` in text.js reports and never throws, deliberately: it runs in
+ * the reader's browser over a manifest, and an exception there would take the
+ * panel down for a bad line in a file nobody in that session can edit. This is
+ * the other half of that split — the same entries, refused by name, at the one
+ * moment somebody is looking at the config.
+ *
+ * The SHAPE is what is checked and the CONTENT is not. Whether `виджет` is a
+ * good alias for `DocPilot` is a judgement about somebody's product, and this
+ * file has no standing to have an opinion about it.
+ *
+ * @param {{vocabulary?: Record<string, string[]>|null}} docPilot
+ */
+export function assertVocabulary(docPilot) {
+    const map = docPilot.vocabulary
+    if (map == null) return
+    if (typeof map !== 'object' || Array.isArray(map)) {
+        throw new Error(
+            '[docpilot] vocabulary must be an object mapping the documentation\'s own\n' +
+                '  term to the names readers call it by:\n' +
+                "    vocabulary: {DocPilot: ['widget', 'виджет', 'ассистент']}",
+        )
+    }
+    for (const [canonical, aliases] of Object.entries(map)) {
+        if (!Array.isArray(aliases)) {
+            throw new Error(
+                `[docpilot] vocabulary["${canonical}"] must be an array of strings — the names\n` +
+                    '  readers use for that term. One name is still an array of one.',
+            )
+        }
+        for (const alias of aliases) {
+            if (typeof alias !== 'string' || !alias.trim()) {
+                throw new Error(
+                    `[docpilot] vocabulary["${canonical}"] holds ${JSON.stringify(alias)}, which is not\n` +
+                        '  a name. Every entry is a string a reader might type.',
+                )
+            }
+        }
+    }
+    /**
+     * A term on both sides is a cycle: the phrase pass writes the canonical and
+     * the token pass rewrites it again. `setVocabulary` drops those silently
+     * because it cannot afford to throw; here they are somebody's mistake and
+     * get said out loud.
+     */
+    const canonicals = new Set(Object.keys(map).map((k) => norm(k).trim()))
+    for (const [canonical, aliases] of Object.entries(map)) {
+        for (const alias of aliases) {
+            if (canonicals.has(norm(alias).trim())) {
+                throw new Error(
+                    `[docpilot] vocabulary["${canonical}"] names "${alias}", which is itself a term\n` +
+                        '  in this map. A name is a canonical or an alias, never both — the\n' +
+                        '  rewrite would have a cycle in it.',
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -1211,6 +2490,13 @@ function assertProviders(docPilot) {
  * being assembled.
  */
 function assertChat(docPilot) {
+    // Nothing to be true, on the same terms as `assertEmbed`'s lexical-only exit:
+    // `assertKnown` would be handed a null provider, decide it is not one this
+    // build knows, and stop the build with the list of providers to choose from —
+    // advice for a mistake nobody made, on the one configuration that deliberately
+    // names no chat model at all.
+    if (docPilot.chat.searchOnly) return
+
     assertKnown('chat', docPilot.chat.provider)
 
     // A provider named with no model behind it. Legal where a pool answers the
@@ -1218,13 +2504,135 @@ function assertChat(docPilot) {
     // else, because the alternative is a 400 in the reader's browser naming a
     // model that appears nowhere in the config file. This became reachable the
     // day `resolveChat` stopped handing Ollama's default to other providers.
-    if (!docPilot.chat.model && !chatModels(docPilot)) {
+    //
+    // `chatModelOf` rather than `chat.model`, so that this asks the same question
+    // `resolveChat` answers: "is there a model to send?", not "did the author type
+    // one?". The providers this still refuses are exactly the providers that have
+    // no default of their own and no pool — `custom`, which names a HOST and so
+    // cannot have a catalogue default, is the case the paragraph above is about.
+    if (!chatModelOf(docPilot) && !chatModels(docPilot)) {
         throw new Error(
             `[docpilot] chat.model is not set for "${docPilot.chat.provider}", and that\n` +
                 '  provider has no free pool to fall back through. Name the model —\n' +
                 `    chat: {provider: '${docPilot.chat.provider}', model: '…'}\n` +
                 '  — or give it your own ordered pool with chat.models.',
         )
+    }
+
+    /**
+     * The same question, asked of every member the AUTHOR wrote into
+     * `chat.chain`. It refuses here and only here: a member the ENVIRONMENT
+     * produced is dropped by `resolveChatChain` with a note, because a stray key
+     * set for something else must not be able to fail a docs build.
+     *
+     * Every id is checked first, so `chain: ['grok']` reports the typo rather
+     * than reporting that a provider nobody has heard of carries no model.
+     */
+    assertChainNames(docPilot)
+    assertAddresses(docPilot)
+    for (const m of resolveChatChain(docPilot)) {
+        assertKnown('chat.chain', m.id)
+        if (m.own && !sendable(m)) {
+            throw new Error(
+                `[docpilot] chat.chain names "${m.id}", and that provider has neither a\n` +
+                    '  default model nor a free pool to fall back through. Say what to send it —\n' +
+                    `    chat: {chain: [{provider: '${m.id}', model: '…'}]}\n` +
+                    '  — or drop it from the chain.',
+            )
+        }
+    }
+}
+
+/**
+ * A KNOB THE SERVICE WILL NOT TAKE — refused at build time, by name.
+ *
+ * The alternative to refusing is dropping it in silence, and that is strictly
+ * worse: the author believes it took. A documented setting whose only reachable
+ * value is its default is the defect rule 11 exists to catch, and one that is
+ * reachable, written down, and discarded on the way out is the same defect
+ * wearing a disguise.
+ *
+ * A config file is read at build time and that is the only moment anyone is
+ * looking, which is the same argument `assertChat` above makes for itself.
+ *
+ * THREE THINGS IT DELIBERATELY DOES NOT REFUSE:
+ *
+ *   · `reasoning: false`, anywhere. Declining to think is always an honourable
+ *     request; on a service that cannot stop (xAI) it is reported, never denied.
+ *   · Anything at all on `custom`, which names a HOST rather than a service.
+ *     This file cannot know what somebody else's gateway accepts, and guessing
+ *     that it does not is the mistake `chatModel: null` on that row avoids.
+ *   · Support that varies BY MODEL. A pool moves the model between requests, so
+ *     a static verdict would be a lie half the time. Those go to
+ *     `readiness().notes`, which no build and no publish can fail on.
+ */
+function assertChatKnobs(docPilot) {
+    const chat = docPilot.chat || {}
+    // No service to refuse a knob, and no knob: `SEARCH_ONLY_CHAT` states every
+    // one of them null or false.
+    if (chat.searchOnly) return
+    const caps = capsOf(chat.provider)
+    if (!caps || caps.unknown) return
+    const id = chat.provider
+
+    const refuse = (what, value, why) => {
+        throw new Error(
+            `[docpilot] chat.${what} is set to ${JSON.stringify(value)}, and "${id}" does not\n` +
+                `  accept it — ${why}\n` +
+                `  Drop the key, or say it yourself with chat.extraBody if you know better.`,
+        )
+    }
+
+    if (chat.verbosity != null && !caps.verbosity) {
+        refuse('verbosity', chat.verbosity, 'the field belongs to OpenAI\'s chat-completions surface.')
+    }
+    /**
+     * TEMPERATURE, which the providers table has always printed a `—` for and
+     * nothing has ever refused.
+     *
+     * `docs/guide/providers.md` states the rule for that column in one sentence:
+     * a `—` means the service has nowhere to put the knob, and naming it there
+     * stops the build rather than being dropped in silence. Anthropic's cell is
+     * `—`, its API rejects sampling parameters outright, and the adapter drops
+     * the value on the way out. Two pages of documentation and a comment beside
+     * `resolveTuning` all said this branch existed; it did not.
+     *
+     * IT COMPARES AGAINST THE SHIPPED VALUE rather than against null, and that is
+     * forced rather than chosen: every other knob here defaults to `null`, so
+     * `!= null` reads as "the author wrote it". `temperature` ships as 0.2, and
+     * an author who writes exactly 0.2 is asking for the value they would have
+     * got anyway — indistinguishable from silence, and refusing it would stop a
+     * build over a request that changes nothing.
+     */
+    if (!caps.temperature && chat.temperature != null && chat.temperature !== DEFAULTS.chat.temperature) {
+        refuse('temperature', chat.temperature, 'sampling parameters are rejected there rather than ignored.')
+    }
+    if (chat.topP != null && !caps.topP) {
+        refuse('topP', chat.topP, 'sampling parameters are rejected there rather than ignored.')
+    }
+    if (chat.seed != null && !caps.seed) {
+        refuse('seed', chat.seed, 'that API has no seed parameter at all.')
+    }
+
+    // `reasoning` is an object here only when the author asked FOR something —
+    // `resolveReasoning` has already turned 'auto' into null and off into false.
+    const asked = chat.reasoning && typeof chat.reasoning === 'object' ? chat.reasoning : null
+    if (!asked) return
+    if (caps.style === false) {
+        refuse('reasoning', chat.reasoning, 'it exposes no way to ask for reasoning.')
+    }
+    if (asked.budgetTokens != null && !caps.budget) {
+        refuse(
+            'reasoning.budgetTokens',
+            asked.budgetTokens,
+            'it measures thinking in levels rather than in tokens — name an effort instead.',
+        )
+    }
+    // A level that survives the clamp is a level this service can be asked for;
+    // one that does not means the vocabulary and the request do not overlap at
+    // all, which only happens where a provider publishes no scale words.
+    if (asked.effort && !clampEffort(asked.effort, caps.efforts)) {
+        refuse('reasoning.effort', asked.effort, 'it publishes no effort levels this maps onto.')
     }
 }
 
@@ -1271,9 +2679,13 @@ function assertEmbed(docPilot) {
     )
 }
 
-function keyNameOf(env, id) {
+function keyNameOf(env, id, keyEnv = null) {
     const hosted = hostedOf(id)
     if (!hosted) return null
+    // A member's own name is reported whether or not it is SET: the contract's
+    // job is to say which variable the proxy has to read, and "you have not set
+    // it yet" is exactly the deployment this is printed for.
+    if (keyEnv) return keyEnv
     return hosted.envKeys.find((name) => env[name]) || null
 }
 
@@ -1359,7 +2771,17 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
     }
 
     const embed = resolveEmbed(docPilot)
-    console.log(`[docpilot] chat   ${describe(docPilot.chat, env, chatModels(docPilot))}`)
+    if (docPilot.chat.searchOnly) {
+        // Same argument as the lexical-only line below: `describe` would print a
+        // provider, a route and a key check for a half that has none of the
+        // three, and somebody reading this block to find out why no answer was
+        // written needs the mode named in the line they are already reading.
+        console.log(
+            '[docpilot] chat   none — chat: false, search-only (no model is called; the panel answers with passages)',
+        )
+    } else {
+        console.log(`[docpilot] chat   ${describe(docPilot.chat, env, chatModels(docPilot))}`)
+    }
     if (embed.lexicalOnly) {
         // `describe` would print a provider, a route and a key check for a half
         // that has none of the three, and a reader debugging retrieval on this
@@ -1550,6 +2972,61 @@ export const DEFAULTS = {
          */
         provider: 'auto',
         /**
+         * WHICH SERVICES MAY ANSWER, in order — the provider-level form of the
+         * argument `models` below makes about models.
+         *
+         * `'auto'` — the shipped value — is every member of `CHAIN` this
+         * environment selects, billed accounts first, walked in order until one
+         * answers. `false` is one provider, chosen once, which is what every
+         * deployment did before this key existed; an ARRAY is your own set,
+         * where an entry is a provider id or an object carrying what to send
+         * that member.
+         *
+         * IT SHIPS ON because an environment holding two keys and spending a
+         * reader's question on the one having a bad afternoon is a failure the
+         * deployment already paid to avoid, and because the shape it resolves to
+         * is unchanged for almost everyone: an environment with ONE key selects
+         * one member, and a one-member chain is the scalar configuration this
+         * file has always emitted, to the byte. What changes is the environment
+         * that selects several — which now walks them in `ladderTier` order
+         * rather than stopping at the first.
+         *
+         * IT FIRES ONLY WHERE `provider` IS ALSO `'auto'`. A provider written
+         * down is never overridden — that promise predates this key — so naming
+         * one is how rotation is declined, and `false` is how it is declined
+         * without naming one.
+         *
+         * THE EMBED HALF DOES NOT ROTATE and cannot: two embedding models are
+         * two vector spaces, the indexer picks one, and the manifest binds every
+         * reader's browser to it for the life of the index.
+         *
+         * `resolveChatChain` is the resolver.
+         */
+        chain: 'auto',
+        /**
+         * PREFER A SERVER OF YOUR OWN — the opt-in half of the decision 0.3.2 made.
+         *
+         * Off, and off is the only honest default: from inside a build a laptop
+         * running Ollama and a CI box that has never heard of it look identical, so
+         * a package that guessed produced a connection refused everywhere but one
+         * machine. That is what `chat.provider: 'auto'` was introduced to stop.
+         *
+         * Written, it is not a guess, and it says two things:
+         *
+         *   · `custom`, `llamacpp` and `ollama` sort to the FRONT of the ladder
+         *     rather than the back, so a local server answers before a billed
+         *     account rather than after every one of them;
+         *   · an environment that selects NOTHING falls through to a local Ollama
+         *     instead of to OpenRouter's free tier.
+         *
+         * It never SELECTS a member: a local server is still reached by its address
+         * — `OLLAMA_BASE_URL`, `LLAMACPP_BASE_URL`, `CUSTOM_BASE_URL` — except on
+         * the fall-through, which is the case with nothing to select. `readiness`
+         * says so when this is set and nothing local was selected, because a key
+         * that silently does nothing is the failure this whole area is about.
+         */
+        preferLocal: false,
+        /**
          * Null — the PROVIDER's default, from the provider table, once one is
          * chosen. `qwen3:8b` lived here and was a statement about Ollama being
          * inherited by every other service; it is `LOCAL_CHAT_MODEL` now, beside
@@ -1594,6 +3071,36 @@ export const DEFAULTS = {
         // window and drops the system block off the front, which surfaces as an
         // unexplained refusal. Sent only on the ollama transport.
         numCtx: 8192,
+        /**
+         * HOW HARD THE MODEL SHOULD THINK, in one provider-neutral word.
+         *
+         *   'auto'   the default — DocPilot decides, which means it asks on the
+         *            answer and never on a search step
+         *   false    never ask
+         *   a level  'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+         *   an object {effort, budgetTokens, visible}
+         *
+         * `'auto'` rather than `true`, because this block is executed by the
+         * reference docs and has to state the behaviour that actually ships.
+         * Every service spells this differently and none accepts all six words;
+         * the level is clamped to what the configured one takes, and `doctor`
+         * prints the substitution.
+         */
+        reasoning: 'auto',
+        /**
+         * How long the ANSWER should be — a soft ceiling, where `maxTokens` is
+         * the hard one. Honoured by one service in this table today, which is
+         * what the capability matrix in the providers guide is for.
+         */
+        verbosity: null,
+        /** Nucleus sampling. Null everywhere, so nothing is sent unless asked. */
+        topP: null,
+        /**
+         * The stronger form of the argument `temperature: 0.2` already makes: the
+         * same question asked twice should not produce two different sets of
+         * steps. Not every service accepts one — Anthropic never had the field.
+         */
+        seed: null,
     },
     /**
      * Who embeds the corpus, and whether anyone does.
@@ -1739,7 +3246,31 @@ export const DEFAULTS = {
      * is not a setting, for the same reason history.js's byte ceiling is not.
      */
     feedback: {send: 'both', comment: true, confirm: true},
-    guard: {mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers: 3},
+    guard: {mode: 'dense-only', tau: null, tauLexical: null, supportMinIdentifiers: 3},
+    /**
+     * THE DOCUMENTATION'S OWN NAME FOR THINGS READERS CALL BY OTHER NAMES.
+     *
+     *   vocabulary: {DocPilot: ['widget', 'виджет', 'ассистент', 'чат']}
+     *
+     * A plugin that is also an assistant, a chat and a widget has four names
+     * before anybody translates one, and the lexical channel knows only the one
+     * the docs happened to use — so `L` is 0 and the gate refuses a question
+     * about the product before any model is asked. This is the map that closes
+     * that, and `terms()` in text.js is where it is applied, to both sides of
+     * the index at once.
+     *
+     * NULL RATHER THAN AN EMPTY OBJECT, because the two are not the same
+     * statement: null is "this site declared none" and takes the sidecar
+     * `${evalDir}/vocabulary.json` that `docpilot vocabulary` writes, while `{}`
+     * is "declared, and empty" and takes nothing. The same split `chat.model`
+     * draws between `null` and a name.
+     *
+     * SERVER-ONLY. The browser gets it from the manifest, because the manifest
+     * is what the index was BUILT with — a themeConfig copy could disagree with
+     * it, and a query tokenised against a vocabulary the index does not have is
+     * the one failure this whole feature exists to prevent.
+     */
+    vocabulary: null,
     scope: {enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true},
     /**
      * The reader's own conversations, kept on their device.
@@ -1776,9 +3307,17 @@ export const DEFAULTS = {
      *
      * `panel: 'auto'` follows the trigger — a list with `fab` in it opens the
      * floating popup, a list without one opens the full-height drawer. Both
-     * crossed pairs are legal and are carried out in silence. `fabLabel` / `fabIcon` describe the floating
+     * crossed pairs are legal and are carried out in silence. The SHIPPED pair
+     * is `fab` + popup: the floating button is the only placement that does not
+     * need a slot in somebody else's navigation bar, so it is the only one that
+     * renders on every host. `ui: { trigger: 'nav' }` puts the button back in
+     * the navbar, and `'auto'` returns the drawer with it.
+     * `fabLabel` / `fabIcon` describe the floating
      * placement only: `true` takes the shipped words through i18n, a string
      * takes those words verbatim, `false` drops that half. See
+     * `credit` is the one word of attribution the panel carries: `DocPilot`,
+     * linked to the project, at the end of the footnote. `false` removes it.
+     *
      * `font` / `fontMono` are the one pair here that reaches the STYLESHEET
      * rather than a component: `session.configure` writes them onto `<html>`
      * as `--dp-font` and `--dp-font-mono`, which is the only layer that
@@ -1788,13 +3327,14 @@ export const DEFAULTS = {
      * this is the only place the shipped set is stated.
      */
     ui: {
-        trigger: 'nav',
+        trigger: 'fab',
         panel: 'auto',
         fabLabel: true,
         fabIcon: true,
         layout: 'overlay',
         prefetch: 'hover',
         firstRunHint: false,
+        credit: true,
         /**
          * The panel wears the page's own font and ships none of its own —
          * `--dp-font` is `inherit`. These two are for the site whose face the
@@ -1868,8 +3408,24 @@ export const DEFAULTS = {
  * looks identical from here. `themeDocPilot` completeness is asserted against this
  * list in the test suite, so a new setting either reaches the panel or is
  * written down here as not reaching it.
+ *
+ * A DOTTED ENTRY names one key inside a group whose other keys DO cross.
+ * `chat.preferLocal` is the case: it is an input to resolution, wholly consumed
+ * by `resolveChat` and `resolveChatChain`, and what the browser receives is the
+ * RESULT — `llm.chain`, already ordered. Emitting the input beside its own
+ * output is the same noise `providerAuto` is kept out for, and that one is kept
+ * out by not being in `DEFAULTS` at all, which is not available to a key an
+ * author writes.
  */
-export const SERVER_ONLY = ['docsDir', 'indexDir', 'evalDir', 'importDir', 'sources']
+export const SERVER_ONLY = [
+    'docsDir',
+    'indexDir',
+    'evalDir',
+    'importDir',
+    'sources',
+    'vocabulary',
+    'chat.preferLocal',
+]
 
 /**
  * Settings the THEME reads that `docPilot` deliberately does not carry.
@@ -1957,7 +3513,7 @@ function resolveChat(chat = {}, env = {}) {
      * emits one by one, so it never reaches the browser.
      */
     const providerAuto = !named.provider || named.provider === 'auto'
-    const provider = providerAuto ? resolveChain(env).id : named.provider
+    const provider = providerAuto ? autoProvider(named, env) : named.provider
     const merged = {
         ...named,
         providerAuto,
@@ -1989,14 +3545,46 @@ function resolveChat(chat = {}, env = {}) {
     // the head of it. Normalise once, here, and every reader downstream sees the
     // same null the omitted case produces.
     if (isAutoModel(merged.model)) merged.model = null
-    // The provider's own default, and only where the author named nothing. A
-    // pooled provider keeps the null it just normalised to — `chatModels` reads
-    // that as "you choose" and walks the free pool, which is the answer there.
-    if (merged.model == null) {
-        merged.model =
-            merged.provider === 'ollama' ? LOCAL_CHAT_MODEL : hostedOf(merged.provider)?.chatModel ?? null
+    /**
+     * WHOSE NAME THE MODEL IS, recorded here because the line below is about to
+     * make the two cases indistinguishable — exactly the reason `providerAuto`
+     * exists three fields up, and computed for the same reason at the same
+     * moment: after normalisation, before the fill.
+     *
+     * `doctor` is the caller. "You named a model this server does not have" and
+     * "our default is stale for your machine" want different sentences and
+     * different advice, and after `merged.model` is filled nothing can tell them
+     * apart. Deliberately NOT in `DEFAULTS`: nothing can set it, it is an output
+     * of this function, and `themeDocPilot` names the keys it emits one by one,
+     * so it never reaches the browser.
+     */
+    /**
+     * WHOSE NAME THE MODEL IS, recorded before the line below makes the two
+     * cases indistinguishable — exactly the reason `providerAuto` exists, and
+     * computed at the same moment for the same reason: after normalisation,
+     * before the fill.
+     *
+     * `doctor` is the caller. "You named a model this server does not have" and
+     * "our default is stale for your machine" want different sentences and
+     * different advice. Deliberately NOT in `DEFAULTS`: nothing can set it, it
+     * is an output of this function, and `themeDocPilot` names the keys it emits
+     * one by one, so it never reaches the browser.
+     */
+    const modelAuto = merged.model == null
+    return {
+        ...merged,
+        modelAuto,
+        // The provider's own default, and only where the author named nothing.
+        // A pooled provider keeps the null it just normalised to — `chatModels`
+        // reads that as "you choose" and walks the free pool, which is the
+        // answer there.
+        model: modelAuto ? chatModelOf({chat: merged}) : merged.model,
+        // The author's five spellings collapsed to three shapes, once, here — so
+        // that `resolveTuning`, `assertChatKnobs` and `doctor` all read the same
+        // object rather than each re-parsing the union. Throws on a level this
+        // package does not know, which is a build-time error on purpose.
+        reasoning: resolveReasoning(merged.reasoning),
     }
-    return merged
 }
 
 export function resolveDocPilot(settings = {}, env = {}) {
@@ -2007,7 +3595,14 @@ export function resolveDocPilot(settings = {}, env = {}) {
         // object is the author's or this file's; `chat.provider` may also be the
         // deployment's, which is what makes an install with nothing but a key in
         // `.env.local` a working install.
-        chat: resolveChat(settings.chat, env),
+        //
+        // GUARDED BEFORE THE RESOLVER, never inside it. `resolveChat` opens with
+        // `{...DEFAULTS.chat, ...chat}`, and spreading `false` yields the
+        // defaults — so `chat: false` would resolve to the shipped provider, walk
+        // the environment for a key, and hand the author back the exact
+        // configuration they wrote one word to switch off. Same shape, same
+        // reason, as the `budget` union three keys down.
+        chat: noChat(settings) ? SEARCH_ONLY_CHAT : resolveChat(settings.chat, env),
         // `embed` is a union — the string 'auto' or an object — so a spread
         // would turn 'auto' into an object of numbered characters.
         embed: settings.embed ?? DEFAULTS.embed,
@@ -2017,6 +3612,11 @@ export function resolveDocPilot(settings = {}, env = {}) {
         // that decides which origins may become a link in the answer panel.
         sources: settings.sources ?? DEFAULTS.sources,
         guard: {...DEFAULTS.guard, ...(settings.guard || {})},
+        // Assigned whole, never merged, for `sources`' reason one block up: a
+        // half-merged vocabulary is a vocabulary nobody wrote, and deleting an
+        // alias has to be able to delete it. `null` is preserved as null so the
+        // indexer can tell "declared none" from "declared empty".
+        vocabulary: settings.vocabulary ?? DEFAULTS.vocabulary,
         scope: {...DEFAULTS.scope, ...(settings.scope || {})},
         history: {...DEFAULTS.history, ...(settings.history || {})},
         // Merged, NOT resolved — same split as `ui` below. A flat pair of
@@ -2139,6 +3739,30 @@ export function readiness(docPilot, env = {}) {
      * fall-through, and the useful half of saying so is what it costs to finish:
      * one free key, no model to choose, both halves covered.
      */
+    /**
+     * `chat.preferLocal` IS SET AND MOVED NOTHING.
+     *
+     * The key only reorders; a local server is still selected by its address. So
+     * an author who wrote it and did not export `OLLAMA_BASE_URL` gets exactly
+     * the resolution they would have got without it, and — because the panel
+     * works, answering off whatever cloud key is around — nothing in the build
+     * or in the browser looks wrong. That is the silent shape this whole area
+     * exists to refuse, so it is said here.
+     *
+     * Not said on the fall-through, where the key DID do something: an empty
+     * environment under `preferLocal` resolves to the local Ollama, which is the
+     * outcome that was asked for.
+     */
+    if (docPilot.chat.preferLocal && !SELF_HOSTED_IDS.has(docPilot.chat.provider)) {
+        notes.push(
+            'chat.preferLocal is set and no local server was selected, so it moved nothing — ' +
+                `the chain still leads with ${docPilot.chat.provider}. It reorders a member that ` +
+                'is already in the set; a local one is selected by its ADDRESS. Set ' +
+                `${OLLAMA_BASE_URL_ENV} or LLAMACPP_BASE_URL, or pin it with ` +
+                "chat: {provider: 'ollama'}.",
+        )
+    }
+
     if (docPilot.chat.providerAuto && docPilot.chat.provider === CHAIN_FALLBACK && !keyOf(env, CHAIN_FALLBACK)) {
         notes.push(
             "chat.provider is 'auto' and no provider key was found in the environment, so both " +
@@ -2149,6 +3773,86 @@ export function readiness(docPilot, env = {}) {
                 `${OLLAMA_BASE_URL_ENV} selects a local Ollama, and chat: {provider: 'ollama'} pins ` +
                 'it whatever the environment holds.',
         )
+    }
+
+    /**
+     * WHAT A CHAIN COSTS, said on the build rather than discovered in
+     * production. Three notes, and each one is a thing the config file cannot
+     * show because it is a consequence rather than a setting.
+     */
+    const chain = resolveChatChain(docPilot, env)
+    if (chain.length > 1) {
+        const names = chain.map((m) => m.id).join(' → ')
+        notes.push(`chat.chain — ${chain.length} services may answer, in this order: ${names}.`)
+
+        /**
+         * THE ONE THAT COSTS MONEY QUIETLY.
+         *
+         * Every rationing rule is gated on a daily allowance it can DEFEND, and
+         * a chain that mixes a free tier with a metered account has N allowances
+         * against one counter. So rationing switches off — which is
+         * `budgetPlan`'s own doctrine, that scarcity is observed and never
+         * assumed — and the consequence is that a spent free tier rotates to a
+         * paid one and starts billing with nothing on screen saying so.
+         */
+        const free = chain.filter((m) => !ownChatModels(docPilot) && freePoolFor(m.id, 'chat'))
+        /**
+         * BILLED means a third party charges for it, which is narrower than "not
+         * free". A local Ollama or llama.cpp is a server the deployer started —
+         * it costs nothing per request and belongs in neither column, so calling
+         * it metered would be the same small lie this file refuses elsewhere.
+         */
+        const billed = chain.filter((m) => {
+            const hosted = hostedOf(m.id)
+            return hosted && !hosted.keyless && !free.includes(m)
+        })
+        if (free.length && billed.length && !(docPilot.budget?.dailyLimit > 0)) {
+            const ids = billed.map((m) => m.id)
+            notes.push(
+                `chat.chain mixes a free tier (${free.map((m) => m.id).join(', ')}) with an account ` +
+                    `that bills per token (${ids.join(', ')}), so per-day rationing is OFF: ` +
+                    'budget.oneShotBelow and budget.rotateAbove need one allowance to defend and this ' +
+                    `deployment has more than one. Once the free tier's day is spent, questions ` +
+                    `rotate to ${ids[0]} and are billed. Set budget.dailyLimit to state one ceiling ` +
+                    'for the whole chain if you want the rationing back.',
+            )
+        }
+
+        // The self-hosted three, which are addresses rather than accounts. The
+        // proxy contract carries the same fact per route; this is the half a
+        // reader sees without asking for it.
+        const contract = proxyContract(docPilot, env)
+        const localIds = [
+            ...contract.routes.filter((r) => r.local).map((r) => r.provider),
+            ...contract.direct.map((d) => d.provider),
+        ]
+        if (localIds.length) {
+            const one = localIds.length === 1
+            notes.push(
+                `chat.chain contains ${localIds.join(', ')}, which ${one ? 'lives' : 'live'} at an ` +
+                    `address rather than behind an account. ${one ? 'It answers' : 'They answer'} in ` +
+                    '`vitepress dev`; a deployed site reaches ' +
+                    `${one ? 'it' : 'them'} only from a proxy running on that host, and a local ` +
+                    'Ollama is called by the browser itself and so cannot be reached from an https ' +
+                    'page at all. `npx docpilot doctor --proxy` prints which is which.',
+            )
+        }
+    }
+    if (docPilot.chat.chain === 'auto' && docPilot.chat.providerAuto) {
+        // Why a key that IS set selected nothing. `resolveChatChain` drops a
+        // member with no model and no pool, and a silent drop is the defect that
+        // rule reports rather than commits.
+        const dropped = resolveChain(env)
+            .tried.filter((t) => t.found)
+            .map((t) => t.id)
+            .filter((id) => !chain.some((m) => m.id === id))
+        if (dropped.length) {
+            notes.push(
+                `chat.chain skipped ${dropped.join(', ')}: a key or base URL is set, but that provider has ` +
+                    'no default model and no free pool, so there is nothing to send it. Name one with ' +
+                    `chat: {chain: [{provider: '${dropped[0]}', model: '…'}]} to put it back.`,
+            )
+        }
     }
 
     /**
@@ -2171,6 +3875,61 @@ export function readiness(docPilot, env = {}) {
                 'A question asked in a language the corpus is not written in scores zero. ' +
                 'Reproduce with `npx docpilot eval --gate-only --lexical`.',
         )
+        /**
+         * WHAT THE SHIPPED GATE DOES ON THIS SHAPE, and what it costs.
+         *
+         * `dense-only` is the default and this is the only deployment it changes:
+         * a failing verdict computed from L alone no longer ends the turn, because
+         * L is 0 for a reader asking in another language or by another name and a
+         * refusal built on that says the corpus has nothing when the truth is that
+         * this channel cannot tell. The price is a model turn spent on a question
+         * the corpus really has nothing for — which on a shared free tier is one
+         * of fifty a day for the whole site, so it is worth saying rather than
+         * discovering.
+         */
+        if (docPilot.guard.mode === 'dense-only' && !noChat(docPilot)) {
+            notes.push(
+                "guard.mode is 'dense-only' and this index has no vectors, so the gate scores " +
+                    'every turn and ends none of them — the model decides whether a question is ' +
+                    'answerable, which is the judgement it can make and the lexical channel ' +
+                    'cannot. It costs a model turn on questions the corpus has nothing for. ' +
+                    "Write guard: {mode: 'calibrated'} to refuse before the request instead, " +
+                    'and see `vocabulary` for the half of this a map closes.',
+            )
+        }
+    }
+
+    /**
+     * SEARCH-ONLY, said out loud — including the half of it that costs something.
+     *
+     * The first sentence is what the author asked for. The second is the one that
+     * has to be here: with `chat: false` and `embed: 'auto'` the corpus is still
+     * posted to an embedding service at build time, and the `embed.borrowed` note
+     * below cannot say so, because `borrowed` records which CHAT provider had no
+     * embeddings endpoint and in this mode there is no chat provider to name. A
+     * deployment that switched the model off to stop sending anything anywhere
+     * would otherwise find that out from an audit rather than from the build.
+     */
+    if (docPilot.chat.searchOnly) {
+        notes.push(
+            'chat: false — search-only. No model is called on any turn: a question is ' +
+                'scored against the index and answered with the passages themselves, ' +
+                'linked to their headings. The gate still runs, and decides whether the ' +
+                'panel leads with matches or with "no strong matches".',
+        )
+        if (embed.lexicalOnly) {
+            notes.push(
+                'chat: false with embed: false — this deployment holds no provider key and ' +
+                    'makes no outbound request after the page loads. The index is static ' +
+                    'files; retrieval runs in the reader\'s browser.',
+            )
+        } else {
+            notes.push(
+                `no model answers questions, but the corpus is still embedded at BUILD time by ` +
+                    `"${embed.provider}" — the whole of it is sent there once per \`docpilot index\`. ` +
+                    'Set `embed: false` as well for a deployment that sends nothing anywhere.',
+            )
+        }
     }
 
     /**

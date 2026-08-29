@@ -7,9 +7,442 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
-## Unreleased
+## 0.4.0 — 2026-08-28
+
+### Breaking
+
+**One default moved, and one more joins it below.** Neither changes what an
+answer contains.
+
+**`guard.mode` ships as `'dense-only'` instead of `'calibrated'`.** On a site
+with an embedder the two are the same gate, request for request; on one without,
+a failing verdict no longer ends the turn — it picks the copy above the rows and
+the model decides. `guard: {mode: 'calibrated'}` keeps the old behaviour, and the
+reasoning is under **Added** below.
+
+**`ui.trigger` moves too**, and that one changes where the panel is opened from
+out of the box. A project that had already written it is unaffected — an explicit
+value always wins.
+
+- **`ui.trigger` is now `'fab'`.** It was `'nav'`. The panel opens from the
+  floating button and answers in the popup rather than from the button beside
+  search. Write `ui: { trigger: 'nav' }` to keep the navbar placement and its
+  mobile row, or `'auto'` to get the drawer back with it. Note that an explicit
+  `ui` object that never named `trigger` takes the new default like an omitted
+  one does. The reasoning, and the rest of the trigger vocabulary, are under
+  **Changed** below.
+
+### Added
+
+**The vocabulary — the documentation's own name for what readers call something
+else.**
+
+A plugin that is also an assistant, a chat and a widget has four names before
+anybody translates one, and the lexical channel knows only the one the docs
+happened to use. A reader who types *виджет* against a corpus that says
+*DocPilot* shares no token with it, so lexical coverage `L` is 0 — and where
+there is no dense channel that is the whole score, so the gate refused a question
+about the product before any model was asked. `session.js` has carried the
+sentence for it in a comment for two releases: *the panel answers "I couldn't
+find this in the docs", which is false. It did not look.*
+
+```js
+vocabulary: {
+  DocPilot: ['widget', 'виджет', 'ассистент', 'чат'],
+  'chat.chain': ['fallback', 'фоллбек'],
+}
+```
+
+`npx docpilot vocabulary` writes the first draft: it reads every title and
+heading in the corpus, asks the configured model which words readers are likely
+to use for them — in the languages your site is asked in — and writes
+`${evalDir}/vocabulary.json`. It **proposes and never decides**, the file is
+committed and edited like the golden set, and a re-run merges rather than
+replacing. The config key overrides it per term.
+
+**It rewrites, and it never adds.** What the gate scores is the question with the
+reader's word replaced by the documentation's, exactly as if they had typed the
+second one — nothing removed either, which is what keeps `gate.js`'s sign
+intact: an off-topic question padded with product nouns still carries every
+off-domain term it came with, so `L` cannot saturate on a rewrite.
+
+It lives in `terms()`, the single tokenizer for `df.json`, MiniSearch's query
+side and the gate's `L` — so index and query are rewritten by the same code by
+construction, and a rewrite can only ever add matches. Two passes: declared
+phrases over the surface stream, longest match first, so `ии чат` is recognised
+whole; then single names again after stemming, so `виджеты` and `виджета` reach
+what `виджет` reached. Identifiers are untouched unless the map names them, on
+the same rule `stemLite` already keeps.
+
+On a turn with no dense channel the pairs are sent in the system block, so the
+model's own `search_docs` calls query the documentation's word. On a hybrid turn
+they are not — the embedder already bridges the two and the tokens are the
+excerpts'. `LEXICAL_DOC`'s old advice to try *a different concrete term, not a
+synonym* was right while a synonym was a word the index had never heard of; a
+declared pair is in the index on both sides, so the rule is now about which word
+rather than about avoiding the move.
+
+**And it is detectable when it goes stale**, which the stemmer was not. Every
+lexical score moves when the map does, and the index hash is sha256 over chunk
+TEXT — the CHANGELOG below says in as many words that *nothing in the build can
+detect that it is due*. The manifest carries a `vocabHash` beside the index hash
+now, `calibrate` writes it into `calibration.json`, and `index` reports a stale
+guard when the two disagree. A calibration from before the field existed and a
+build with no vocabulary compare equal, so no existing deployment is told to
+recalibrate for nothing.
+
+**`guard.mode: 'dense-only'` — the gate scores every turn and ends only the ones
+it can judge.**
+
+The verdict is always computed and always recorded; this decides whether a
+failing one refuses before the model is called. With no embedder `G = L`, and
+`L` is token overlap between the question and the corpus: it is 0 for a reader
+asking in another language, and 0 for one calling the product by a name the docs
+do not use. A refusal built on that says the corpus has nothing when the truth is
+that the channel cannot tell. The vocabulary closes the second of those; nothing
+closes the first, because the words a map does not carry are exactly the ones
+nobody thought to declare.
+
+So on a vectorless turn the verdict picks the copy and the **model** decides
+whether the question is answerable — the judgement it can actually make, holding
+a refusal contract of its own that withdraws an uncited answer before the reader
+sees it. On a site with an embedder nothing changes at all. What it costs where
+it does change is a model turn on a question the corpus has nothing for, which on
+a shared free tier is one of fifty a day for the whole site; `readiness` says so,
+and `'calibrated'` is the value for a deployment that would rather not.
+
+**`chat.chain` reaches two of one service, at two addresses, with two keys.**
+
+A member is identified by a **name** now, and it defaults to the provider id — so
+every chain written before this resolves to the paths it always did, and two
+entries of one service become sayable the moment you name them:
+
+```js
+chat: {
+  chain: [
+    { name: 'gw-eu', provider: 'custom', baseURL: 'https://eu.gw.internal', apiKeyEnv: 'GW_EU_KEY', model: 'qwen3-8b' },
+    { name: 'gw-us', provider: 'custom', baseURL: 'https://us.gw.internal', apiKeyEnv: 'GW_US_KEY', model: 'qwen3-8b' },
+    'openrouter',
+  ],
+}
+```
+
+Three silences closed at once. The second `{provider: 'custom'}` used to be
+deduped away without a word; a repeat is now refused by name. `baseURL` on a
+self-hosted member was read by nobody — the emitted client base is the proxy path
+and the proxy's upstream came from the table and one env var — while the
+reference claimed *a value written here outranks all of them*; it does now, for
+`ollama`, `llamacpp` and `custom`, and stops the build beside a branded provider,
+which has an address of its own. And `apiKeyEnv` names the variable holding a
+member's key, never the value: a key in a config file is a key in the browser
+bundle, which is what `THEME_ONLY` has always forbidden.
+
+The name keys the proxy route, the credential, and the cooldown the transport
+learns — so a blip on one gateway no longer demotes the other, which under a
+shared `provider|baseURL` key it did.
+
+**`chat.preferLocal` — a server of your own answers first.**
+
+The opt-in half of the decision 0.3.2 made. `custom`, `llamacpp` and `ollama`
+sort to the front of the ladder rather than the back, and an environment that
+selects nothing falls through to a local Ollama instead of to OpenRouter's free
+tier.
+
+It **reorders and never selects**: a local server is still reached by its
+address, because from inside a build a laptop running one and a CI box that has
+never heard of one are the same environment — the argument that took the old
+default away. That argument is about guessing, and says nothing about an author
+who writes it down. `readiness` reports the key when it moved nothing, because a
+setting that silently does what it would have done anyway is the failure this
+whole area exists to refuse.
+
+### Fixed
+
+**Four knobs that were documented and unenforced, and four sentences that were
+documented and untrue.**
+
+- **`chat.temperature` beside a provider that rejects it stops the build.**
+  `docs/guide/providers.md` states the rule for that column outright — a `—`
+  means naming the knob there stops the build rather than being dropped in
+  silence — Anthropic's cell is `—`, its API rejects sampling parameters, and
+  nothing refused it. The shipped 0.2 is exempt: it is indistinguishable from
+  asking for nothing.
+- **`chat.verbosity` and `guard.mode` are checked against their vocabularies**,
+  and **`chat.models` against being an array of model ids.** All three reached
+  the browser verbatim, so a typo was not a build failure — it was a field in the
+  bundle. `guard.mode: 'lenient'` behaved as the strictest setting, which is the
+  safe direction and still the wrong one.
+- **The selector for `custom` is `CUSTOM_BASE_URL`**, and both provider tables
+  said `CUSTOM_API_KEY`. The key authorises; the address is what puts it in the
+  chain, because a host you run has no credential to be found by.
+- **`LLAMACPP_API_KEY` is supported and was in no documentation at all** — the
+  guide said *no config file entry, no key*.
+- **`chat.maxTokens` reaches Ollama**, and the reference still said that adapter
+  sends no token ceiling. It has since 0.3.2; `providers.md` was already right
+  and `config.md` was stale.
+- **`chat.extraBody` has a row in the parameters table.** It has no `DEFAULTS`
+  entry — `undefined` and `null` mean different things to `extraBodyOf`, so
+  neither can be shipped as the value — which also meant the table-completeness
+  test could not see that it was missing.
+
+**The answer ladder — a turn never ends empty-handed.**
+
+`chat.chain` ships as `'auto'`: every provider the environment holds a key for is
+walked, not just the first. The resolved set is sorted before it is walked —
+billed accounts, then a provider's own free catalogue, then a server of your own,
+with the chain table's order kept inside each tier. That table is ordered by what
+one key covers, which is the right question for choosing one provider and the
+wrong one for ordering a set: walking it verbatim spends a reader's question on a
+50-a-day allowance shared by the whole site while a funded key sits two rows
+below it. A model you named keeps its provider billed and flattens the tiers back
+to the table's order, so `chat: {model: 'anthropic/claude-sonnet-4'}` beside an
+OpenRouter key does not sink. An environment with one key still resolves to one
+member and one route, unchanged to the byte.
+
+Rotating across a service is wider than rotating inside a pool, and deliberately
+so — every exclusion the pool makes is an argument about the same host and the
+same account, and none of them survives a provider boundary. A `401`, a network
+failure carrying no status, and the DAY's `429` all rotate to the next provider;
+only the last member's daily `429` escapes, so `rate-limited` still settles with
+the reset the service named. Abort and a step timeout rotate nowhere, and nothing
+rotates once a delta has been painted — across services as well as within a pool.
+A member that stepped aside goes to the back of the order for its cooldown, never
+out of it, and there is no sticky sibling to that map: a sticky member would let
+one blip promote a free tier above the billed account the deployment configured
+first.
+
+None of it is visible. A service stepping aside for the next one is the ladder
+working rather than a fault to report, so there is no badge and no notice;
+`?dpdebug=1` prints `turn.ladder = {provider, index, freePool}` and a feedback
+record carries it. Priority is configured with the surfaces that already exist —
+the `chat.chain` array for providers, a member object for a non-head member's
+models, `chat.model` and `chat.models` for the head's — and no new knob was added.
+
+**The last rung is the search-only product, reached at runtime.**
+
+A turn where no service answered used to print *The AI service didn't respond*
+over a finished retrieval: the question embedded, both channels searched, the
+gate scored, every ranked passage sitting in memory, and not one of those needed
+a model. It settles as `state: 'results'` with `turn.hybrid` now — the same rows
+a [`chat: false`](https://docpilot-nine.vercel.app/reference/config#chat-false)
+site serves, each a verbatim excerpt under a link to the heading it was cut from,
+under one sentence that names the cause and gets out of the way: *The AI models
+aren't reachable right now — this is a search answer. The closest passages:* —
+with Retry and Search the docs beneath them.
+
+A failure BEFORE retrieval has no rows to show and is still the transport error
+it always was. A spent daily limit keeps `rate-limited` and its own copy, because
+the service did answer and what it answered was a schedule, and it now lists the
+passages too under a quieter *Meanwhile, the closest passages:*.
+
+[The answer ladder](https://docpilot-nine.vercel.app/concepts/the-ladder) is the
+page, and the two `hybrid` strings join the i18n keys.
+
+**`chat: false` — search-only, and no model at all.**
+
+The other half of `embed: false`. A question is scored against the index exactly
+as before and answered with the ranked passages themselves: each an excerpt under
+a link to the heading it was cut from. No model is called on any turn, so there is
+no key to hold, no token to spend and no sentence that can be wrong. `'none'` is
+the accepted alias, as it is for `embed`.
+
+Everything ahead of the answer is unchanged — the scope picker, the credential
+settle, the greeting reply, the calibrated gate. What the gate does is different
+on purpose: it is an empty-state signal here rather than a suppressor. The
+refusal contract exists because a model writing from weak evidence produces
+something plausible and wrong; nothing is generated in this mode, so the rows are
+shown either way and the verdict only chooses the sentence above them.
+
+Paired with `embed: false` it is a deployment holding no provider credential and
+making no outbound request of any kind after the page loads. `npx docpilot
+doctor` prints `chat none — search-only`, asks for no chat route in `--proxy`,
+and says out loud that `embed: 'auto'` still posts the corpus at build time —
+switching the model off is not by itself a site that sends nothing anywhere.
+
+
+**`ui.font` and `ui.fontMono`** — the face for a site the panel cannot inherit
+one from: a `<body>` that names no font, a theme that sets one on its article
+container alone, a design system that keeps it in a variable.
+
+```js
+ui: { font: 'Inter, system-ui, sans-serif' }   // the family list itself
+ui: { font: '--brand-font' }                   // the variable you already have
+ui: { font: 'var(--brand-font, Inter)' }       // the same, fallback and all
+```
+
+A bare `--name` is wrapped into `var(--name)` — that wrapper is the one part of
+the value with no decision in it.
+
+Both are written onto `<html>` as inline custom properties, which is **the only
+layer that outranks a host adapter**: `vitepress.scss` maps `--dp-font` to the
+site's own family on `:root`, so a rule of ours at the same specificity would
+lose on the host where naming a face is most likely to be the point. Overriding
+the token in CSS is unchanged and stays the right move when the value depends on
+something only a stylesheet knows — a media query, a `[data-theme]`, a container.
+
+A value that could end the declaration or open another — `;` `{` `}` `<` `>` `@`
+`*` `\` or `url()` — is reported on stderr during the build and dropped, on the
+same terms as every other cosmetic setting: a typo must not be able to fail a
+docs build.
 
 ### Changed
+
+**The panel ships on the floating button and the popup.** `ui.trigger` defaults
+to `'fab'` instead of `'nav'`, and `ui.panel` — still `'auto'` — follows it to
+`'popup'`.
+
+The old default was a VitePress assumption wearing the clothes of a general one:
+a navbar slot exists in that theme and nowhere else, so a custom theme, a React
+page or any host rendering its own header got no button at all, with nothing on
+stdout to explain it. `mountDocPilot` had already settled the same question its
+own way and mounts `'fab'` by default; this is the settings half agreeing.
+
+**A site that wants the navbar button back writes one key:**
+
+```js
+ui: { trigger: 'nav' }   // the button beside search, its mobile row, and the drawer
+```
+
+`'auto'` returns the drawer with it, so the shape does not have to be named
+either. Everything else is unchanged: `'nav'` still means both navbar
+placements, `['nav','fab']` still opens the popup, and every explicit
+`ui.trigger` a site already wrote resolves to exactly what it resolved to
+before. An explicit `ui` that never named `trigger` is not covered by that and
+was never meant to be — `ui: { credit: false }` took the old default and takes
+the new one, exactly as an omitted `ui` does.
+
+The fallback for an unrecognised `ui.trigger` moves with the default — a typo
+now leaves the floating button rather than the navbar one, and still says so on
+stderr.
+
+**Lexical retrieval, for the deployments that have nothing else.**
+
+Five changes, all of which matter most where there is no dense channel to cover
+for them:
+
+- **A per-page cap replaces MMR when there is no query vector.** At the shipped
+  `MMR_LAMBDA` of 1.0 the redundancy term is multiplied by zero, so the same-page
+  indicator that was supposed to diversify a vectorless result set was dead code
+  and one page could take every slot. `PAGE_CAP` (2) shapes the head of the set
+  and backfills rather than returning a short one.
+- **A scoped refusal now says WHICH refusal it is.** `wouldPassUnscoped` was
+  computed from dense cosines, which a vectorless index does not have — so every
+  scoped refusal read as *not in the docs* even when the answer sat one directory
+  away, and the one-click widen could not render at all. It has a lexical arm now,
+  against the same `tauLexical` and moving no primary score.
+- **`kind` intersects at candidate generation** rather than over an
+  already-truncated fused pool, and the scope predicate moved into the search
+  itself.
+- **`path` and `anchor` are searchable.** Two fields every chunk has carried since
+  the first build and nothing ever indexed, so a half-remembered route reached a
+  page only through its prose.
+- **The model is told what search is.** On a lexical-only turn the system message
+  gains one block: search matches words, not meaning — query with exact
+  identifiers and the documentation's vocabulary, in the documentation's
+  language. Without it the model's `search_docs` re-queries paraphrased
+  semantically, which on BM25 alone re-scores the same words the same way, spends
+  the step, and reads as "not in the docs". Sent only where it is true; published
+  by the §14 prompt disclosure on lexical-only deployments; covered by the prompt
+  hash either way.
+
+`BM25_K`, `BM25_B`, `BM25_D`, `BOOST_TITLE`, `BOOST_BREADCRUMB`, `BOOST_PATH`,
+`BOOST_ANCHOR` and `PAGE_CAP` join the sweepable levers at their shipped values,
+so the one scoring function a lexical-only site has can finally be measured.
+None of them is writable from a manifest: they can move `L`, and `L` is half of
+`G`.
+
+**Light suffix stripping, in the one tokenizer.**
+
+`terms()` now strips inflectional endings — Russian and Ukrainian cases, English
+plurals. `конфигурации` and `конфигурацию` were two unrelated tokens to BM25 and
+one word to every reader who typed either; the only thing bridging them was
+`fuzzy: 0.2`, which is an edit-distance accident rather than a rule.
+
+Names are never touched: a token carrying a digit, `.`, `/`, `#`, `_`, `$` or `-`
+is returned as it is, so `plugin.init`, `v2` and `/getting-started` survive whole.
+`-ing` and `-ed` were built, measured and dropped — they collided `index` with
+`indexing` and `bill` with `billing`, and did not unify `configure` with
+`configured` anyway. Index and query are stripped by the same code, so this can
+only add matches.
+
+Measured on this corpus as a side effect: the vocabulary merges from 4,873 types
+to 4,373, the terms lost to `df.json`'s 4,000-entry cap fall from 873 to 373, and
+the kept entries cover 98.75% of postings rather than 97.16%.
+
+**If you run lexical-only, re-index and re-calibrate.** Ranking feeds the gate's
+evidence, and `tau` was calibrated against the old distribution — RAG-SPEC 5.6.
+Nothing in the build can detect that it is due, because the index hash is over
+chunk text and none of this touches it:
+
+```
+npx docpilot index && npx docpilot calibrate --refresh && npx docpilot index
+```
+
+**The panel says what it is.**
+
+The footnote under the composer closes on one linked word — `DocPilot` — after
+the scope button and the AI disclaimer it already carried:
+
+```
+All docs · AI-generated. Check the linked pages. · DocPilot
+```
+
+It is there from the first open rather than from the first answer, because the
+moment a reader wonders what is about to answer them is the moment the thread is
+still empty. `ui.credit: false` removes it; `i18n` key `credit.label` renames it
+in place.
+
+The separators in that row became conditional at the same time. With
+`scope.enabled: false` and no turn yet, both earlier segments are absent, and the
+row used to open with a hanging `· ` — rare enough to survive unnoticed while the
+disclaimer was the only thing behind it.
+
+**One vocabulary for reasoning, and a capability matrix behind it.**
+
+`chat.reasoning` asks for thinking in one provider-neutral word — `'auto'`,
+`false`, a level from `minimal` through `max`, or `{effort, budgetTokens,
+visible}` — and DocPilot spells it the way the configured service does.
+`chat.verbosity`, `chat.topP` and `chat.seed` join it.
+
+The levels do not survive contact with reality unchanged, and that is the point:
+no two services publish the same vocabulary. OpenAI and OpenRouter have six
+words, xAI has four, DeepSeek has three and no `medium` at all. What you write is
+ranked and the nearest word the configured provider actually accepts is sent,
+ties going down; `npx docpilot doctor` prints the substitution.
+
+A knob a provider is KNOWN to reject stops the build by name rather than being
+dropped on the way out — `chat.verbosity` beside `anthropic` says so, and names
+`chat.extraBody` as the way to say it anyway. Support that varies by MODEL is a
+note instead, because a pool moves the model between requests and a static
+verdict would be a lie half the time. `custom` names a host rather than a
+service, so nothing there is refused at all.
+
+`npx docpilot doctor` grew a `knobs` block printing, for the configured provider,
+what each setting becomes on the wire — the one fact about a knob that was
+available nowhere else. The full matrix is in the providers guide.
+
+**`docpilot doctor --models` now answers for local servers.**
+
+It compared the name in the table against a catalogue, which is right for a
+hosted service, wrong for llama.cpp — whose `chatModel` is a placeholder the
+server ignores — and unhelpful for Ollama, where the fix is `ollama pull` rather
+than an edit. It reads llama-server's `/props` for the weights actually loaded,
+Ollama's capability list for what the model can do, and prints the command that
+helps. A local server that is switched off is reported and never fails a build.
+
+
+**The shipped instructions were rewritten — shorter, and one rule wider.**
+
+Every rule in the default system instruction was recast in fewer words: 1,488
+characters where 0.3.3's were 2,096, with the `Rules:` header dropped and every
+line tightened. One rule gained meaning rather than losing it — the confidence-0
+rule now names what it always covered: *That includes other products and general
+programming.*
+
+Nothing a site wrote moves: `prompt.override` still replaces the block whole and
+`prompt.extend` still appends to it. `promptHash` changes for every deployment,
+hybrid ones included, so reports from 0.3.3 are not comparable with reports from
+this release — `docpilot eval` says so rather than diffing them.
 
 **The panel wears your font. It no longer ships one of its own.**
 
@@ -36,32 +469,46 @@ monospaced *blocks* instead of the reverse. The two text buttons under those
 blocks were monospaced by the same inheritance and are not any more.
 `test/styles.test.js` pins the whole list of places that ask for the face.
 
-### Added
+### Fixed
 
-**`ui.font` and `ui.fontMono`** — the face for a site the panel cannot inherit
-one from: a `<body>` that names no font, a theme that sets one on its article
-container alone, a design system that keeps it in a variable.
+**`chat.maxTokens` reaches Ollama.** It was resolved, documented and threaded the
+whole way down, and then dropped — the adapter's destructure never named it — so
+every Ollama deployment ran on the server's own default ceiling whatever the site
+configured, and an answer cut off there looked like a model failing rather than a
+setting nobody was honouring. It is `options.num_predict` now.
 
-```js
-ui: { font: 'Inter, system-ui, sans-serif' }   // the family list itself
-ui: { font: '--brand-font' }                   // the variable you already have
-ui: { font: 'var(--brand-font, Inter)' }       // the same, fallback and all
-```
+**`chat.extraBody` reaches every adapter.** It was read by the OpenAI-shaped one
+alone, so an Ollama or Anthropic site could write it, see it validated, see it
+emitted into the page, and post a body without it. On Ollama its `options` merge
+with the adapter's rather than replacing them, so `num_ctx` survives.
 
-A bare `--name` is wrapped into `var(--name)` — that wrapper is the one part of
-the value with no decision in it.
+**OpenAI's reasoning models could not answer at all.** `max_tokens` is deprecated
+on `/v1/chat/completions` and rejected outright by the o-series and the GPT-5
+line, so `chat: {provider: 'openai', model: 'gpt-5-mini'}` failed every question
+with a 400 that the panel rendered as "I couldn't find this in the docs".
+`max_completion_tokens` is sent to the models that require it.
 
-Both are written onto `<html>` as inline custom properties, which is **the only
-layer that outranks a host adapter**: `vitepress.scss` maps `--dp-font` to the
-site's own family on `:root`, so a rule of ours at the same specificity would
-lose on the host where naming a face is most likely to be the point. Overriding
-the token in CSS is unchanged and stays the right move when the value depends on
-something only a stylesheet knows — a media query, a `[data-theme]`, a container.
+**Anthropic can think about its answer.** Thinking was suppressed on every final
+call, because manual extended thinking cannot ride with a forced tool call and
+the answer's shape is pinned with one. Adaptive thinking does support forced
+tools, so on a current model the two now travel together. Models at Opus 4.5 and
+earlier reject adaptive and keep the budgeted shape; the adapter picks from the
+model name, because a package that posts one shape everywhere is wrong for half
+the catalogue in opposite directions.
 
-A value that could end the declaration or open another — `;` `{` `}` `<` `>` `@`
-`*` `\` or `url()` — is reported on stdout during the build and dropped, on the
-same terms as every other cosmetic setting: a typo must not be able to fail a
-docs build.
+**`deepseek-chat` was retired by DeepSeek on 2026-07-24** and was still this
+package's default for that provider. It is `deepseek-v4-flash`.
+
+**An unterminated `<think>` no longer loses a good answer.** The strict-schema
+path stripped paired tags only, so a reply whose reasoning was cut off mid-trace
+came back as "could not read the response" — while the identical reply parsed on
+the fallback transport. The repair runs only after a parse has already failed, so
+an answer that merely mentions the tag is left alone.
+
+**`assertChat` and `resolveChat` agree about a provider's default model.** An
+unresolved config for a provider that has one was refused, while the same object
+passed through `resolveDocPilot` first was accepted — a refusal about the caller
+wearing a message about a missing model.
 
 ## 0.3.3 — 2026-08-27
 

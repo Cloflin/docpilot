@@ -140,6 +140,38 @@ export function assertWeights(guard) {
   }
 }
 
+/**
+ * WHETHER THE VERDICT ENDS THE TURN — the gate's other question, and the one
+ * `guard.mode` answers.
+ *
+ * The verdict is ALWAYS scored and always recorded. This decides only whether a
+ * failing one refuses before the model is called, and the three values differ in
+ * where they draw that line:
+ *
+ *   · `'calibrated'` — always. The behaviour that shipped, kept for a deployment
+ *     that wants the refusal contract enforced whatever the channel.
+ *   · `'dense-only'` — only where there is a dense channel to have scored it
+ *     with. THE DEFAULT, and the reason is arithmetic rather than taste: with no
+ *     embedder G is L alone, and L is token overlap between the question and the
+ *     corpus. A reader who asks in a language the corpus is not written in, or
+ *     who calls the product by a name the docs do not use, scores L = 0 for a
+ *     question that is squarely about the product — and the panel then answers
+ *     "I couldn't find this in the docs", which is false. It did not look.
+ *     `vocabulary` closes the second of those; nothing closes the first. So on a
+ *     vectorless turn the verdict picks the copy and the MODEL decides whether
+ *     the question is answerable, which is the judgement it can actually make.
+ *   · `'off'` — never. Every question reaches the model on every deployment.
+ *
+ * WHAT IT COSTS, on the one deployment shape it changes: a question the corpus
+ * has nothing for now spends a model turn before that is known. On a shared free
+ * tier that is one of fifty a day for the whole site. `readiness` says so.
+ */
+export function enforces(guardMode, retrievalMode) {
+  if (guardMode === 'off') return false
+  if (guardMode === 'dense-only') return retrievalMode !== 'lexical-only'
+  return true
+}
+
 export function verdict({ D, L, mode, guard }) {
   if (mode === 'lexical-only') {
     return { G: L, threshold: guard.tauLexical, pass: L >= guard.tauLexical }
