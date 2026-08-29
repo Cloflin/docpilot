@@ -28,6 +28,8 @@ Two things this does not do. It does not travel to a **vectorless** deployment: 
 
 Whether a corpus is written in a script is a share of its vocabulary, not the presence of a letter: five words of a Russian UI sample on one i18n page put twenty Cyrillic letters into this site's own index, which is enough to fool a test that only asks whether a letter appears.
 
+**The result rows follow the winning channel.** When the composed query is what scored, it is also what the passage list under the answer is ranked by — otherwise the verdict's sentence sits over the results of a search the gate did not run. It costs no extra request; both halves were computed for the verdict. In [search-only](/reference/config#chat-false), where the rows *are* the answer, that is the whole of the follow-up's benefit.
+
 **A quoted passage is the same mechanism with a better antecedent.** When the reader selects text in an answer and asks about it, that passage — not the previous question — is what the follow-up composes with: they have pointed at exactly what `this` refers to. It never joins the raw question, and that is deliberate. A passage lifted out of an answer matches the corpus by construction, so folding it into the query would drive lexical coverage to near 1 on a channel with no admissibility test behind it, and any question at all would clear the gate while wearing a quote. Through the composed channel the same three bounds still hold: the lexical weight is below the threshold, the score is a maximum, and admissibility is measured against the reader's **own** words — so *«I selected the scope picker, now what's the weather in Paris»* is inadmissible and refuses on the raw channel.
 
 ## Five settled turns, five causes

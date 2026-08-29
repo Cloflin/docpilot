@@ -410,6 +410,34 @@ describe('a search-only turn, end to end', () => {
   })
 
   /**
+   * THE ROWS ARE THE ANSWER HERE, so they are owed the query the verdict used.
+   *
+   * The gate scores two channels and the panel prints one list. Ranking that
+   * list on the raw tail after the composed channel won puts "nothing here
+   * matched strongly" — or its absence — over the results of a search the gate
+   * did not perform, and in this mode there is no prose behind the rows to
+   * recover from it.
+   *
+   * The control matters as much as the case: when the raw question is what
+   * scored, the rows stay its own, so this is not the antecedent leaking into
+   * every follow-up's results.
+   */
+  it('ranks the rows on the composed query when that is what the gate scored', async () => {
+    await session.submit('the alpha widget')
+    await session.submit('and the sprocket registry?')
+    const composed = lastTurn()
+    expect(composed.gate.channel).toBe('composed')
+    expect(composed.results.map((r) => r.href)).toEqual(['/a#one', '/b#one'])
+
+    session.state.turns = []
+    await session.submit('the alpha widget')
+    await session.submit('and for billing?')
+    const raw = lastTurn()
+    expect(raw.gate.channel).toBe('raw')
+    expect(raw.results.map((r) => r.href)).toEqual(['/c#one'])
+  })
+
+  /**
    * The widen affordance, which in this mode depends on the retriever's lexical
    * unscoped check: before it, `wouldPassUnscoped` was computed from dense
    * cosines that a vectorless index does not have, so a scoped search-only turn

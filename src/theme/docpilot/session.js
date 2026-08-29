@@ -1349,6 +1349,17 @@ export async function submit(question, { quote = '' } = {}) {
   let retrieval = null
   let queryVec = null
   let g = null
+  /**
+   * The composed channel's query, hoisted beside `g` because the rows are built
+   * after the verdict and outside the block that scored it.
+   *
+   * NO INITIALISER on the vector. `undefined` means "there is no second query to
+   * score" and `null` means "score it with no vector", and `evaluate()` reads
+   * the difference — writing `= null` here would announce a composed channel on
+   * every first turn in the corpus.
+   */
+  let composedQuery = null
+  let composedVec
 
   /**
    * The ranked passages, as reader-facing rows — the answer in search-only mode,
@@ -1376,9 +1387,28 @@ export async function submit(question, { quote = '' } = {}) {
   }
 
   function fillResults(turn) {
-    turn.results = resultRows(retrieval.search({ query: q, queryVec, k: RESULTS_K }), {
-      index: state.index,
-    })
+    /**
+     * The rows follow the VERDICT's query, not the raw question.
+     *
+     * The gate scores two channels and the panel prints one list, and when the
+     * composed channel is what scored, rows ranked on the tail alone are a
+     * different search from the one the sentence above them reports: "nothing
+     * here matched strongly" sits over the results of a query the gate did not
+     * use. In search-only that list IS the answer, and «а я могу его
+     * стилизировать?» ranked alone retrieves the tail's noise while the gate
+     * had the appearance page in hand.
+     *
+     * Costs no request: both halves were computed for the verdict.
+     */
+    const composedWon = g?.channel === 'composed'
+    turn.results = resultRows(
+      retrieval.search({
+        query: composedWon ? composedQuery : q,
+        queryVec: composedWon ? composedVec : queryVec,
+        k: RESULTS_K,
+      }),
+      { index: state.index },
+    )
     /**
      * THE EMPTY-STATE SIGNAL, and it is NOT the refusal policy.
      *
@@ -1506,12 +1536,12 @@ export async function submit(question, { quote = '' } = {}) {
      * being refused on the one deployment shape that cannot fall back to a
      * dense channel.
      */
-    let composedVec
+    composedQuery = antecedent ? `${antecedent}\n${q}` : null
     if (antecedent && mode === 'lexical-only') {
       composedVec = null
     } else if (antecedent && queryVec) {
       try {
-        composedVec = await embed(`${antecedent}\n${q}`, cfg, signal)
+        composedVec = await embed(composedQuery, cfg, signal)
       } catch (e) {
         // Same reason as the query embedding above: cancellation has to keep
         // travelling outward, where the turn ends as aborted.
