@@ -35,6 +35,8 @@ import { pathToFileURL } from 'node:url'
 
 import { assembleIndex } from '../theme/docpilot/store.js'
 import { embedQuery } from '../theme/docpilot/embed.js'
+import { providerFor } from '../theme/docpilot/providers.js'
+import { embeddingsOf } from '../build/build-rag-index.js'
 import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { wilsonUpper95 } from './metrics.js'
 import { nodeEmbedTarget } from '../config.js'
@@ -480,13 +482,105 @@ function contiguousScope(pages, targetN, startIdx) {
   return { kind: 'section', paths, label: `ladder n≈${targetN}`, n: total }
 }
 
+/**
+ * The probe texts, embedded in batches before the loop below asks for them.
+ *
+ * `embedQuery` sends one text per request, which is the right shape for a reader
+ * typing a question and the wrong one for a calibration: a bounded transfer
+ * draws 271 anchors, 47 of which carry a previous turn and cost a second embed,
+ * so the run is 318 requests against a free tier that allows 50 a day. The same
+ * texts at the batch size `docpilot index` has always used are ten.
+ *
+ * IT IS A CACHE AND NEVER A SECOND CODE PATH. Every failure here returns
+ * quietly, leaving the map short, and `embed` below falls through to
+ * `embedQuery` exactly as it did — so a provider that will not batch degrades to
+ * the loop that already worked rather than to an error, and the endpoint
+ * diagnosis stays in the one place that words it well.
+ *
+ * The vectors have to be `embedQuery`'s to the bit, which is why the scaling
+ * below is copied from it rather than taken from the indexer's `l2normalise`:
+ * that one stops at the unit vector, and it is the ×127 into the int8 domain
+ * that makes the runtime dot product a cosine without a per-query rescale.
+ */
+const PREFETCHED = new Map<string, Float64Array>()
+
+/** `embedQuery`'s tail, verbatim — see the note above about the ×127. */
+function scaleToIndexDomain(vec: ArrayLike<number> & Iterable<number>) {
+  let sum = 0
+  for (const v of vec) sum += v * v
+  const norm = Math.sqrt(sum) || 1
+  const out = new Float64Array(vec.length)
+  for (let i = 0; i < vec.length; i++) out[i] = (vec[i] / norm) * 127
+  return out
+}
+
+const RETRYABLE_BATCH = new Set([408, 409, 429, 500, 502, 503, 504])
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+async function prefetchEmbeddings(texts, index) {
+  const model = index.manifest.embedModel
+  const p = providerFor(EMBED_PROVIDER)
+  if (!p.embedUrl || !model) return
+
+  /**
+   * The QUERY prefix. `build-rag-index` applies `search_document: ` across the
+   * same asymmetry, so reusing its batch helper here would embed every probe as
+   * though it were a chunk — right vectors, wrong side, and nothing downstream
+   * could see it.
+   */
+  const prefix = /nomic/i.test(model) ? 'search_query: ' : ''
+  const want = [...new Set<string>(texts)]
+  const BATCH = 32
+  const requests = Math.ceil(want.length / BATCH)
+
+  for (let i = 0; i < want.length; i += BATCH) {
+    const slice = want.slice(i, i + BATCH)
+    let vectors = null
+    for (let attempt = 1; attempt <= 3 && !vectors; attempt++) {
+      let res
+      try {
+        res = await fetch(p.embedUrl(EMBED_BASE), {
+          method: 'POST',
+          headers: p.headers(EMBED_KEY),
+          body: JSON.stringify(p.embedBody(model, slice.map((t) => `${prefix}${t}`))),
+        })
+      } catch {
+        return // unreachable: the probe loop words that failure, and words it better
+      }
+      if (res.ok) {
+        const json = await res.json().catch(() => null)
+        const got = embeddingsOf(json, EMBED_PROVIDER === 'ollama')
+        // A short batch is a provider that silently dropped inputs. Guessing
+        // which ones came back is how a probe gets somebody else's vector.
+        if (got?.length === slice.length && got.every((v) => v?.length)) vectors = got
+        else return
+      } else if (RETRYABLE_BATCH.has(res.status) && attempt < 3) {
+        const after = Number(res.headers.get('retry-after'))
+        await sleep(
+          Math.min(Number.isFinite(after) && after > 0 ? after * 1000 : 1000 * 2 ** (attempt - 1), 20000),
+        )
+      } else return
+    }
+    if (!vectors) return
+    slice.forEach((t, j) => PREFETCHED.set(t, scaleToIndexDomain(vectors[j])))
+    process.stdout.write(`\r  embedded ${Math.min(i + BATCH, want.length)}/${want.length} probe texts…`)
+  }
+  if (want.length) {
+    process.stdout.write(
+      `\r  embedded ${want.length} probe texts in ${requests} request(s), ${BATCH} at a time\n`,
+    )
+  }
+}
+
 async function embed(text, index) {
-  const vec = await embedQuery(text, {
-    provider: EMBED_PROVIDER,
-    baseURL: EMBED_BASE,
-    model: index.manifest.embedModel,
-    apiKey: EMBED_KEY,
-  })
+  const vec =
+    PREFETCHED.get(text) ??
+    (await embedQuery(text, {
+      provider: EMBED_PROVIDER,
+      baseURL: EMBED_BASE,
+      model: index.manifest.embedModel,
+      apiKey: EMBED_KEY,
+    }))
   if (vec.length !== index.manifest.dims) {
     die(
       `embed model mismatch: ${EMBED_PROVIDER} returned ${vec.length} dims, the index is ` +
@@ -1090,6 +1184,25 @@ async function main() {
         /* a truncated cache line is a cache miss, not an error */
       }
     }
+  }
+
+  /**
+   * Every text the loop below is about to embed, fetched in batches, once.
+   *
+   * Cache hits are left out because they cost nothing; `--sweep-only` is left
+   * out because it embeds nothing at all and dies on its first miss instead; and
+   * a `--no-embed` index is left out because it has no dense channel to measure.
+   * The composed follow-up text is built here by the same expression
+   * `probeOne` uses, so the two ask for the same string or the map simply misses.
+   */
+  if (!SWEEP_ONLY && index.manifest.vectors !== null) {
+    const pending = []
+    for (const rec of probes) {
+      if (cache.has(sigOf(rec, hash, lev, embedIdentity))) continue
+      pending.push(rec.question)
+      if (rec.prev_question) pending.push(`${rec.prev_question}\n${rec.question}`)
+    }
+    if (pending.length) await prefetchEmbeddings(pending, index)
   }
 
   const rows = []

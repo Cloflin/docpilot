@@ -396,6 +396,25 @@ otherwise: `bin/build-web.js` builds `src/web.ts`, and
 `scripts/check-docpilot.sh` reads `src/theme/docpilot/harness.ts`. Output
 filenames are unchanged.
 
+**`docpilot calibrate` embeds its probes in batches of 32.** It sent one request
+per probe, which is the shape `embedQuery` has for a reader typing a question and
+the wrong one for a calibration: 597 probes plus the 45 that carry a previous
+turn are 642 requests against a free tier that allows fifty a day. The same texts
+at the batch size `docpilot index` has always used are twenty-one, and a
+transfer's bounded anchor draw — 271 probes, 304 texts — is ten rather than three
+hundred and four. That is the difference between an operation you can run and one
+you can only schedule.
+
+It is a cache in front of the loop rather than a second code path. The batch is
+fetched before the probe loop starts, every failure in it returns quietly, and
+any text the map does not hold falls through to the `embedQuery` call that was
+already there — so a provider that will not batch degrades to the behaviour it
+had, and the endpoint diagnosis stays in the one place that words it well. The
+prefix is the QUERY one: reusing the indexer's batch helper would have embedded
+every probe with `search_document: `, which is right for a chunk and wrong for a
+question. Checked against the single-request path on this corpus, the vectors are
+bit-identical and the chosen `tau`, `tauLexical` and window do not move.
+
 **The documentation caught up with the corpus and the panel.**
 
 - `docs/guide/indexing.md` says the corpus is `.md` and `.mdx` alike plus your
