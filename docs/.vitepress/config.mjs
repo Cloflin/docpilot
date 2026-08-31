@@ -309,7 +309,7 @@ const sidebarForReference = [
 /**
  * `vitepress dev`, reading the package's SOURCE instead of its build.
  *
- * `exports` names `dist/` since 0.6.0, and going through it is the whole point
+ * `exports` names `dist/` since 1.0.0, and going through it is the whole point
  * of importing this package by name here — a subpath that stops resolving must
  * fail this site's build rather than someone else's install. But `dist/` is
  * emitted, so under `dev` that same virtue means an edit to `src/` is invisible

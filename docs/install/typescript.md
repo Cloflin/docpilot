@@ -112,7 +112,7 @@ package becomes a breaking change to somebody's build. The hand-written surface
 says only what this package promises. `DocPilot` is `DefineComponent<{}>` there
 on purpose.
 
-What changed at 0.6.0 is that the code now has to AGREE with it. Each module
+What changed at 1.0.0 is that the code now has to AGREE with it. Each module
 imports its own published interface and attaches it at the point of definition —
 `useHost(): HostBinding`, `resolveDocPilot(settings: DocPilotSettings)` — so
 `npm run typecheck` compares the implementation against the contract rather than

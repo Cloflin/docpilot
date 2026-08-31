@@ -92,7 +92,7 @@ const checkArtifact = (rel, named) => {
 
 /**
  * A wildcard subpath names a PATTERN, so there is no single file to stat. It
- * became checkable here at 0.6.0, when `./theme/components/*.vue` moved from
+ * became checkable here at 1.0.0, when `./theme/components/*.vue` moved from
  * `src/` — which this loop skips — into the emitted tree. Expanded rather than
  * skipped, because an empty `dist/theme/components/` is precisely the shape of
  * failure this file exists to stop: every subpath still resolves, `npm publish`

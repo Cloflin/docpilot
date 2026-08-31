@@ -1,14 +1,15 @@
 # The gate, on every push and every pull request.
 #
-# Until 0.6.0 nothing ran here: `publish.yml` triggers on tags alone, so
+# Until 1.0.0 nothing ran here: `publish.yml` triggers on tags alone, so
 # `prepublishOnly` was the first and only time `check → typecheck → vitest` ever
 # executed, on the maintainer's machine, at release. That was defensible while
 # the package shipped its source and every test read that source. It stopped
-# being defensible the moment `dist/` became load-bearing: sixteen of the
-# nineteen `exports` subpaths resolve into a gitignored directory now, four tests
-# spawn `node` against a built artefact, and `npm run verify` builds before it
-# checks. All of which means a warm working tree can pass a suite that a fresh
-# clone fails, which is the one failure mode a local habit cannot catch.
+# being defensible the moment `dist/` became load-bearing: twenty-two of the
+# twenty-three `exports` subpaths resolve into a gitignored directory now, four
+# tests spawn `node` against a built artefact, and `npm run verify` builds
+# before it checks. All of which means a warm working tree can pass a suite
+# that a fresh clone fails, which is the one failure mode a local habit cannot
+# catch.
 #
 # TWO NODE VERSIONS, AND THE OLDER ONE IS THE POINT. `engines.node` promises
 # `>= 20`. Node strips TypeScript types natively from 22.18 onward, so a stray

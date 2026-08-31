@@ -25,12 +25,13 @@ const shipped = (rel) =>
 
 describe('packaging', () => {
   // `dist/` is built by `prepare`, so it may legitimately be absent — but only
-  // WHOLESALE. Sixteen of the nineteen subpaths resolve into it since 0.6.0, so
-  // a blanket skip on every `dist/` path would leave this test asserting almost
-  // nothing about the export map; and a dist/ that exists with a hole in it is
-  // exactly the shape `scripts/check-publish.js` was written to catch. Since
-  // `npm run verify` builds before it tests, the skip is only reachable from a
-  // bare `vitest run` on a tree whose `prepare` has never run.
+  // WHOLESALE. Twenty-two of the twenty-three subpaths resolve into it since
+  // 1.0.0, so a blanket skip on every `dist/` path would leave this test
+  // asserting almost nothing about the export map; and a dist/ that exists
+  // with a hole in it is exactly the shape `scripts/check-publish.js` was
+  // written to catch. Since `npm run verify` builds before it tests, the skip
+  // is only reachable from a bare `vitest run` on a tree whose `prepare` has
+  // never run.
   const distBuilt = fs.existsSync(abs('dist'))
   const built = (rel) => rel.startsWith('dist/') && !distBuilt
 

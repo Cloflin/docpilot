@@ -5,7 +5,7 @@
  * emits into `dist/` are what it inferred from the code. Neither is redundant —
  * the hand-written one says
  * what is PROMISED and the generated one says what is THERE — but they have to
- * agree, and until 0.6.0 nothing made them. Seven places where they had drifted
+ * agree, and until 1.0.0 nothing made them. Seven places where they had drifted
  * apart were found the day this file was written, including a `nodeEmbedTarget`
  * declared twice with different return types and a `scope.filter` union that
  * named two string values the code drops.
@@ -52,7 +52,7 @@ type _resolveEmbed = Assert<
 type _indexDirOf = Assert<Satisfies<typeof GenConfig.indexDirOf, typeof HandConfig.indexDirOf>>
 type _assertGuard = Assert<Satisfies<typeof GenConfig.assertGuard, typeof HandConfig.assertGuard>>
 
-// The host binding — `HOST_KEY` was a bare `symbol` here until 0.6.0.
+// The host binding — `HOST_KEY` was a bare `symbol` here until 1.0.0.
 type _HOST_KEY = Assert<Satisfies<typeof GenHost.HOST_KEY, typeof HandHost.HOST_KEY>>
 type _useHost = Assert<Satisfies<ReturnType<typeof GenHost.useHost>, ReturnType<typeof HandHost.useHost>>>
 type _hostConfig = Assert<

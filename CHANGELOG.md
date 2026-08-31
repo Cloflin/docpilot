@@ -7,6 +7,454 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 1.0.0 — 2026-08-31
+
+### Breaking
+
+**The five shipped Vue components are now `<script setup lang="ts">`, and your
+build transpiles them — ours does not.** This is the one most likely to stop an
+upgrade, so it goes first. `bin/build-js.js` copies the components into `dist/`
+verbatim rather than compiling them, because `.vue` is not TypeScript and `tsc`
+does not see it; the annotations therefore survive into the file your bundler
+reads. Every consumer of `@cloflin/docpilot/theme`, `/theme-without-styles`,
+`/mount` and `/vue` pulls them in.
+
+A Vite host is unaffected — `@vitejs/plugin-vue` hands a `lang="ts"` block to
+esbuild, which covers VitePress and Nuxt, and Vue CLI 5 does the same. A webpack
+build whose `vue-loader` rule handles JavaScript script blocks only now fails to
+parse: add `ts-loader`, or `babel-loader` with `@babel/preset-typescript`, to
+that rule. `DocPilotTrigger.vue` uses
+`withDefaults(defineProps<{ variant?: string }>(), { variant: 'nav' })`, a
+type-only macro a JavaScript-only compiler cannot handle at all. The script-tag
+install is untouched: `dist/docpilot.web.js` is prebuilt and carries none of
+this.
+
+**Every code entry point resolves into `dist/` now, and `src/` holds
+TypeScript.**
+
+```jsonc
+// before                              // after
+".":       "./src/index.js",           ".":       "./dist/index.js",
+"./theme": "./src/theme/index.js",     "./theme": "./dist/theme/index.js",
+"./vue":   "./src/adapters/vue.js",    "./vue":   "./dist/adapters/vue.js",
+```
+
+Sixteen of the twenty-three `exports` subpaths moved like that. Six already
+resolved into `dist/` — the five CSS entries and `./web` — so twenty-two of the
+twenty-three now do, every one except `./package.json`. `sideEffects` moved with
+them. No subpath was added, removed or renamed, and the `types` conditions are
+unchanged: they still name the hand-written `types/*.d.ts`.
+
+Be clear about who this reaches. `@cloflin/docpilot/src/…` was never a supported
+path — 0.5.0's `exports` map had no `./src/*` subpath, no `"./*"` fallback and no
+`main` field, so Node ESM and every exports-honouring bundler already refused it
+with `ERR_PACKAGE_PATH_NOT_EXPORTED`. What breaks is tooling that goes around
+`exports` by filesystem path: a bundler alias, a Vite `resolve.alias`, a Jest
+`moduleNameMapper`, a Storybook glob, a patch-package patch. Rewrite those to
+name `dist/`. `files` is unchanged and still ships `src/`, but that directory now
+holds 88 `.ts`, 5 `.vue` and 5 `.scss` files and no `.js` at all; globs targeting
+`src/**/*.vue` or `src/**/*.scss` are fine.
+
+**The package no longer works without a built `dist/`, and the build step fails
+open.**
+
+```json
+"prepare": "npm run build",
+"build":   "node bin/build-css.js && node bin/build-js.js && node bin/build-web.js"
+```
+
+`prepare` was the CSS and web builds; it is the whole build now, and the new
+`bin/build-js.js` is what writes `dist/`. A registry install is fine — the
+tarball carries `dist/`. A git dependency, a `file:` dependency, a workspace link
+or a vendored checkout runs `prepare` instead, and `bin/build-js.js` resolves
+`tsc` through `createRequire`: when TypeScript is missing it prints a skip notice
+and exits 0 unless `npm_command` is `publish` or `pack`. That install produces a
+package whose every subpath points into a directory nothing wrote. Make sure
+`typescript` is installed before `prepare` runs — do not combine those install
+shapes with `--omit=dev`.
+
+In a repo checkout, run `npm run build:js` before `node bin/docpilot.js`. Every
+dynamic import and all six `ENTRY` paths in the launcher moved from `../src/` to
+`../dist/`, which is why `docs:index` gained that prefix. `docpilot`,
+`docpilot --help` and an unknown command still exit before the first import and
+need no build.
+
+**The corpus moves, so `index → calibrate → eval` is owed on upgrade.** Four
+changes, none of which a committed `calibration.json` can survive by assumption:
+
+- **`.mdx` files enter the walk.** It matched `.md` only, which is why the
+  shipped Docusaurus adapter mounted a panel over a corpus holding none of that
+  site's pages; it is `/\.mdx?$/` now, and `routeOf` and `externalIdFor` strip
+  `.mdx` so an MDX page routes to `/guide/install`. Run
+  `find <docsDir> -name '*.mdx'` before upgrading: a `guide.md` beside a
+  `guide.mdx` produces two pages at `/guide` and the build dies on
+  `duplicate chunk id`, and any `.mdx` your generator ignores — a `_partials/`
+  include, a draft — now enters as a page. `routeOf` is also a public export
+  from `/mount`, `/vue`, `/host` and `/web`, and it strips `.html` and `.htm`
+  too; exactly one extension goes, so `a.htm.md` still becomes `/a.htm`.
+- **A new `stripMdx` pass runs first inside `normaliseMarkdown`, ahead of
+  `applyLlmTags`, over every page rather than only over `.mdx`.** Unindented
+  top-level `import`/`export` module statements are deleted to bracket balance,
+  along with whole-line `{/* … */}` comments; fenced blocks are untouched, and
+  the start regex is anchored so a four-space-indented sample survives too. Two
+  guards keep prose that merely begins with the word *import* or *export*. On
+  this repository the pass changes exactly one file and zero chunks; the exposure
+  elsewhere is a `.md` page carrying a bare module statement outside a fence,
+  which in VitePress lives inside a `<script setup>` block `stripVue` already
+  removed.
+- **The lexical scanner changed the order of case-folding and splitting.**
+  `surfaceTokens` was `norm(s)` — NFKC, strip format characters, lowercase —
+  followed by the split; it is now a case-preserving `rawTokens(s)` with
+  `.toLowerCase()` applied per token. For characters whose lowercase form
+  introduces a combining mark the tokens differ: `İstanbul` gave
+  `["i", "stanbul"]` and now gives one token, `i` followed by U+0307. Latin, CJK,
+  Cyrillic and identifier-shaped input are byte-identical. Nothing hashes the
+  scanner, so no guard fires and an unreindexed site keeps loading — it just
+  retrieves slightly differently on those terms. Re-index.
+- **OpenAPI discovery matches `/\.ya?ml$/i` where it matched `/\.ya?ml$/`, and
+  two specs sharing a basename stop the build.** A spec claims
+  `/reference/<basename>`, and while every spec came from one directory listing
+  that was nearly safe — but the filesystem only ever enforced unique filenames,
+  not unique basenames. `api.yaml` beside `api.yml` in the default
+  `${docsDir}/public/openapi` collided silently in 0.5.0, second wins; it now
+  dies naming both files, with `openapi` left at its default. An uppercase
+  `API.YAML` that was skipped before is now indexed, and can collide the same
+  way. Rename one; which should win is not a decision this package can make.
+
+**Three settings default to on, and two of them persist where 0.5.x persisted
+nothing.**
+
+```js
+// all three ship as `true`; write any of these to keep exactly what 0.5.x did
+composer: { draft: false }              // no sessionStorage draft, as before
+history:  { saveOnUnload: false }       // an unfinished turn is dropped, as before
+ui:       { waitingEscalation: false }  // one motionless status word, as before
+```
+
+The features are described under **Added**. What matters here is that an existing
+config takes all three without editing. `composer.draft` adds a `sessionStorage`
+key, `docpilot:draft`, that nothing wrote before — the text is passed through
+`redactSecrets()` first, and a mount with either switch off actively removes the
+key rather than merely declining to write it. `history.saveOnUnload` writes the
+same `docpilot:history` archive 0.5.0 already wrote after every settled turn, so
+it adds a new write *moment* rather than new storage. Both are additionally gated
+on `history.enabled`, so a site that had already turned history off gets neither.
+If your site makes a statement about what the panel keeps, read it again.
+
+`ui.waitingEscalation` adds two i18n keys, `status.stillWorking` and
+`status.takingAWhile` — the reader-facing string count went 171 to 173 and the
+`status` group from 7 keys to 9. Translation tables merge over the English
+defaults, so nothing breaks, but a localised deployment that believed it had
+complete coverage renders two English strings at the 8 s and 25 s marks until it
+adds them.
+
+**Five declared types were corrected against what the code has been doing, and a
+JavaScript consumer sees none of it.** The conformance gate under **Added** found
+seven drifted places; these are the five that reject source a 0.5.x TypeScript
+project could have written. Every runtime shape is unchanged.
+
+- **`scope.filter` is `'auto' | boolean`**, where it was
+  `'auto' | 'always' | 'never'`. `SCOPE_FILTERS` has been `['auto', true, false]`
+  for two releases and `pick()` logged an error and fell back to `'auto'` for
+  either string, so a config that wrote `filter: 'always'` was already being
+  ignored at runtime and now also fails `tsc`. Write `true` for *always* and
+  `false` for *never*. `docs/reference/config.md` dropped its standing caveat
+  about the mismatch in the same commit.
+- **`DocPilotThemeConfig.vocabulary` is gone.** It was declared on the client
+  half for exactly one release and `themeDocPilot` never emitted it:
+  `vocabulary` is `SERVER_ONLY`, folded into the index at build time and read
+  back off the manifest. `DocPilotThemeConfig` has no index signature, so an
+  object literal still setting the key fails excess-property checking — which
+  lands on code that *wrote* it more than on code that read it, a reader having
+  always got `undefined` and probably noticed. Delete the line;
+  `DocPilotSettings.vocabulary` and `VocabularySettings` are untouched, and that
+  is where it always belonged.
+- **`HOST_KEY` is `InjectionKey<() => HostBinding>`**, not a bare `symbol`. The
+  contract was always a factory — `inject` runs inside setup and the value it
+  yields is called there, which is what `mountDocPilot` and the Vue adapter both
+  provide — but `symbol` let a consumer provide a plain binding and fail at
+  runtime. Write `provide(HOST_KEY, () => binding)`. The runtime value is the
+  same `Symbol.for('docpilot.host')`.
+- **`resolveEmbed()` returns the new `ResolvedEmbed`, not `EmbedSettings`.**
+  `EmbedSettings` is what an author writes, all fields optional; the resolved
+  shape states its absent values as explicit `null` and carries `modelAuto` and
+  the `lexicalOnly` discriminant every caller branches on. Under
+  `strictNullChecks`, `const e: EmbedSettings = resolveEmbed(cfg)` now errors on
+  `provider`; with strict off it errors on `fallback`. Type the slot as
+  `ResolvedEmbed`, newly exported from `@cloflin/docpilot/config`.
+- **`ResolvedUi` gained a required `waitingEscalation: boolean`, and both arms of
+  `DocPilotResult['embed']` gained `modelAuto`.** Anywhere you build one of those
+  objects by hand, add the field.
+
+**`expand_section` changed the system prompt, so `promptHash` moved.** `TOOLS_DOC`
+is an input to the hash. Eval reports and stored-turn `promptHash` values from
+before this release are not comparable with ones after it.
+
+### Added
+
+**`docpilot index` can index a site that is already built — `--html-dir`.**
+
+The indexer walked markdown, and the only route for HTML was
+`docpilot import <url>`: one page per invocation, over the network, past a
+`sources.allow` allowlist. That is the wrong shape for Hugo, Jekyll, MkDocs,
+Astro or Next, which have a `dist/` and no markdown the panel can read.
+
+```sh
+npx docpilot index --html-dir=dist
+npx docpilot index --html-dir=dist --html-select='main article' --sitemap=dist/sitemap.xml
+```
+
+`--html-dir` walks `.html` and `.htm` under a directory, skipping what a build
+puts beside its pages — `assets`, `static`, `_next`, `_astro`, `node_modules`,
+`.git` and any dot-directory — and routes each page through the same `routeOf`
+markdown uses. `--html-select` is a CSS selector that overrides `pickMain` and,
+when it matches nothing, warns and skips the page rather than falling back.
+`--sitemap` reads a *local* `sitemap.xml` as a route filter; nothing is fetched.
+`--html-base` resolves relative links found inside those pages. Both
+`--flag value` and `--flag=value` spellings are accepted.
+
+Markdown wins any route collision — an HTML page whose route a markdown page
+already claims is skipped and counted as shadowed — so pointing this at the
+`dist/` of the site you are already indexing does almost nothing. A page found
+this way carries no `origin`, so it needs no `sources.allow` entry. It needs an
+HTML parser: `npm i -D linkedom`, the same optional dependency `import` has
+always asked for, now behind one `parseDocument()` with one install message
+because there are two callers.
+
+**Where the OpenAPI specs live is a setting — `docPilot.openapi`.**
+
+```js
+docPilot: {
+  openapi: null,                                  // the shipped value
+  openapi: ['api/', 'legacy/v1/orders.yaml', 'specs/*.yaml'],
+}
+```
+
+A list of paths from the project root: a directory, a single file, or a `*` in
+the file name — not in a directory name, which is reported. `null` keeps the
+behaviour that predates the setting, `${docsDir}/public/openapi`, exactly. It is
+server-only, so it joins the withheld-from-client list, which goes from five keys
+to six. A path you wrote that does not exist stops the build; the default
+directory is still allowed to be absent.
+
+**`expand_section` — the model can ask for the section next to one it holds.**
+
+`fetch_section` returns exactly one chunk and an answer routinely straddles a
+chunker boundary, starting at the end of one section and finishing at the start
+of the next. The retriever's automatic short-chunk expansion already existed but
+ran only during ranking, only under `EXPAND_BELOW_TOKENS`, only forward, and was
+invisible to the model. This is a fifth entry in `TOOLS`, declared straight after
+`fetch_section`, so it reaches both the provider schema and the published
+`TOOLS_DOC` automatically. It takes an `id` the model already has and a
+`direction` of `next` or `prev`, defaulting to `next`; an id-only call means
+*next*.
+
+It is same-page by construction, always costs a step — a free one would be an
+unbounded walk — and is capped at two per turn. The backward pointer is derived
+at load into a `prevOf` map rather than written into the index, so no shipped
+index goes stale and the corpus hash does not move. Scope is the choke point: an
+out-of-scope id returns `out-of-scope` rather than confirming the section exists.
+
+**Identifiers are searchable by their parts — `DOCPILOT_SPLIT_IDENTIFIERS=1`.**
+
+`surfaceTokens` keeps `. _ / - # $` inside a token, so `docPilot.sources.allow`
+was one term and a reader typing *sources allow* matched nothing; and
+`getUserName` had been lowercased to `getusername` before anything could see the
+camel boundary. The scanner is split into a case-preserving `rawTokens` and a
+lowercasing `surfaceTokens`, and a new `identifierParts()` emits the lowercased
+parts of any token carrying an internal separator or an internal capital, with
+acronyms kept whole — `HTTPServer` gives `http`, `server` — and a part equal to
+the whole token dropped. `terms()` appends them after the phrase pass, so nothing
+is replaced and an exact query loses no weight.
+
+It is a build-time environment flag rather than a config key, and **off by
+default**, because the `calibrate`/`eval` measurement that would justify a
+default change has not been taken. Turning it on is stamped into
+`manifest.tokenizer`, reinstalled in the browser by `store.ts`, and folded into
+`vocabularyHash()` — which returns `'<hash>+split'`, or `'none+split'` where it
+used to return `null` — so the existing stale-calibration guard fires against a
+calibration measured under the other tokeniser instead of being silently reused.
+
+**A reload no longer throws away an answer that was still streaming —
+`history.saveOnUnload`.**
+
+`saveCurrent()` ran once per settled turn and once per vote, so reloading at
+second three of an answer lost every token already paid for. `saveIfRunning()` is
+bound to `pagehide` and to `visibilitychange` on `hidden` through a new
+reference-counted `unload.ts`, modelled on `hotkey.js` because HMR unmounts
+twice; `beforeunload` is deliberately avoided, since it disqualifies the page
+from the back/forward cache. The restored turn arrives as `aborted` — rendered as
+*Stopped.* with *Ask again* — because `slimTurn` already downgrades a
+non-terminal state. **The stream is not resumed and cannot be**: what comes back
+is what had already reached the browser, which is the half that was paid for.
+Default `true`, additionally gated on `history.enabled`.
+
+**The composer keeps a half-typed question across a reload — `composer.draft`.**
+
+It was a plain `ref('')`, so a reflex reload emptied a question written against
+the 1000-character ceiling. It debounces at 400 ms into `sessionStorage` under
+`docpilot:draft` — paired with `docpilot:conversation` rather than the
+localStorage archive, because a draft belongs to one tab — and is restored at
+mount only into an empty composer, before `applyDeepLink` so `?dp-ask=` still
+wins. `redactSecrets()` runs before the write, closing the one path that reached
+storage ahead of the redaction machinery. Default `true`, additionally gated on
+`history.enabled`.
+
+**The status line escalates at 8 s and 25 s — `ui.waitingEscalation`.**
+
+`statusLabel` was a pure function of the phase and `DEFAULT_STEP_TIMEOUT_MS` is
+120000, so a provider that accepted the connection and then said nothing held the
+reader in front of a motionless word for two minutes. A new pure module,
+`status.ts`, exports `waitingKey({elapsedMs, quiet, escalate})` with
+`STILL_WORKING_MS = 8000` and `TAKING_A_WHILE_MS = 25000`; the component reads
+the existing one-second `tick` rather than adding a timer, and there is
+deliberately no third step. The escalation runs only while the newest turn has
+neither `answerText` nor `thought`, which makes the second step's sentence true
+by construction rather than by observation. Default `true`.
+
+**The hand-written `types/` are checked against the declarations `tsc` emits.**
+
+Until now nothing compared the two descriptions of this package to each other.
+`typings/conformance.d.ts` imports both sides of five surfaces — index, config,
+host, mount, highlight — and asserts assignability rather than equality with a
+`Satisfies<Generated, Promised>` helper, so the generated side may be narrower
+but not a different shape. Seven places where they had drifted were found the day
+it was written, including a `nodeEmbedTarget` declared twice with different
+return types and the `scope.filter` union above. It lives in its own
+`tsconfig.conformance.json` because it reads a gitignored `dist/`, and putting it
+in `tsconfig.json` would make `npm run typecheck` fail on a fresh clone. Two new
+scripts wire it up: `typecheck:dist`, and `verify`, which is now
+`check → build:js → typecheck → conformance → test`.
+
+**Fifteen config exports that were importable and undeclared now have
+declarations**, so they no longer type-error on the way in: twelve functions —
+`capsOf`, `resolveTuning`, `chatModels`, `embedModels`, `poolProviderOf`,
+`noEmbed`, `noChat`, `proxyContract`, `indexDirOf`, `manifestPathOf`,
+`assertGuard`, `assertVocabulary` — and three constants, `GUARD_MODES`,
+`VERBOSITY_LEVELS` and `SLUG`. Seven of them are read by `bin/docpilot.js`
+itself, in one destructured import of the compiled config.
+
+**Three resolved-side types are named and exported: `ResolvedEmbed`,
+`ResolvedChat`, `ResolvedDocPilot`.** The first is described under **Breaking**.
+`ResolvedChat` omits `chain` from `ChatSettings` and re-adds it resolved,
+alongside `providerAuto`, `modelAuto` and `searchOnly`. `ResolvedDocPilot` is
+what `bin/docpilot.js` puts on the global and every CLI command reads; note that
+only its `chat` half is swapped in — `embed` stays a union that still admits the
+authored `EmbedConfig`, so it needs narrowing before you read `.provider` off it.
+
+**The gate runs on every push and every pull request —
+`.github/workflows/ci.yml`.** `publish.yml` triggers on a `v*` tag only, so
+`prepublishOnly` was the single place the suite had ever run. One `verify` job on
+Node 20 and 24 — the floor from `engines.node`, and what `publish.yml` releases
+on — running `npm ci` (not `--ignore-scripts`: `prepare` is what writes `dist/`,
+and `verify` resolves the package through `exports` into it), then
+`npm run verify`, then `npm run build` and `node scripts/check-publish.js` for
+the size floors and the export-map walk that stand between a green suite and a
+tarball that fails on import.
+
+**Five new test files** cover the ground the release added: `expand-section`,
+`identifier-tokens`, `mdx-openapi`, `html-dir` and `ir`. Two are worth naming for
+what they pin rather than what they cover — `identifier-tokens` asserts that
+splitting is off by default and that `vocabularyHash()` carries the flag, so the
+existing stale-calibration guard fires instead of a second guard nobody would
+remember to add; and `expand-section` asserts the harness always charges for an
+expansion, honours the cap of two, and makes what it emitted citable.
+
+### Changed
+
+**`tsconfig.json` only checks and `tsconfig.build.json` only emits.**
+
+That split is what made a file-by-file migration possible. The check config keeps
+`noEmit` and `checkJs` and now includes `src/**/*.ts` plus the two declaration
+trees, where it had named four `.js` files by hand. The build config extends it,
+flips `noEmit` and `checkJs` the other way, and adds `declaration`, `sourceMap`,
+`noEmitOnError`, `rootDir` and `outDir`. It takes `src/**/*.ts` **and**
+`src/**/*.js`, so `dist/` was complete at every commit of the migration, while
+the check config saw only what had been written to be checked — `checkJs` off
+there and on here, which is the whole trick. `strict` and `noImplicitAny` are
+unchanged from 0.5.0; both are still off.
+
+Three compiler options were added as shipping constraints rather than as style.
+`verbatimModuleSyntax`, because a type-only import inside a `.vue` block is
+erased by `tsc` but survives a consumer's per-file esbuild transform and lands as
+a runtime *does not provide an export named* error — requiring `import type`
+makes that unshippable. `erasableSyntaxOnly`, which bans `enum`, `namespace` and
+parameter properties so that an emitted file is its source minus the annotations
+and nothing else, which is what let each conversion commit be reviewed as a diff
+of `dist/`. And `allowArbitraryExtensions`, so the five new `*.d.vue.ts` siblings
+can act as declarations for the `.vue` files beside them — `moduleResolution:
+NodeNext` resolves a relative `./DocPilot.vue` on disk and never consults the
+`declare module '*.vue'` wildcard, which answers for bare specifiers only.
+
+**Every script that touches the package builds JavaScript first.** `build` gained
+`bin/build-js.js`; `prepare` became `npm run build`; `verify` became
+`check && build:js && typecheck && tsc -p tsconfig.conformance.json && test`;
+`docs:index` gained a `build:js` prefix. `build:js` and `typecheck:dist` are new.
+`prepublishOnly` is unchanged in text and now runs the JavaScript build twice.
+Two build inputs were renamed for the TypeScript source and would fail outright
+otherwise: `bin/build-web.js` builds `src/web.ts`, and
+`scripts/check-docpilot.sh` reads `src/theme/docpilot/harness.ts`. Output
+filenames are unchanged.
+
+**The documentation caught up with the corpus and the panel.**
+
+- `docs/guide/indexing.md` says the corpus is `.md` and `.mdx` alike plus your
+  OpenAPI specs, explains that MDX module syntax is stripped before chunking
+  while component text is kept, and adds a section telling Hugo, Jekyll, MkDocs
+  and Astro users to build and run `npx docpilot index --html-dir=dist`.
+- `docs/guide/history.md` no longer says only that reloading brings the
+  conversation back. It says the restored conversation includes an answer still
+  being written, returning as a stopped turn with *Ask again*, and that the
+  request is not resumed — only what already reached the browser. The storage
+  table gains `docpilot:draft` under `sessionStorage`.
+- `docs/reference/config.md` gains `composer.draft`, `history.saveOnUnload`,
+  `ui.waitingEscalation` and `openapi`, each with its own why-the-default
+  section, in the pasteable `DEFAULTS` block, the scan table and the prose.
+- `docs/reference/cli.md` documents `--html-dir` and its companions, and
+  `DOCPILOT_SPLIT_IDENTIFIERS`.
+- `docs/concepts/a-turn.md` lists `expand_section` among the tools a turn can
+  call, framed as a failure shape rather than a capability.
+- `docs/install/typescript.md` explains that `exports` resolves into `dist/`, and
+  why `types/` stays hand-written even though `tsc` now emits declarations: a
+  generated declaration pins the whole internal shape and makes a rename a
+  breaking change.
+- `skills/docs-rag/SKILL.md` restates the pipeline sentence for `{md,mdx}` plus
+  `docPilot.openapi` plus a directory of already-built HTML, and adds
+  `expand_section` to the tokens that may never appear in `DocPilot.vue`, holding
+  the new tool name to the same layering rule as the others.
+
+**The measured figures moved with the corpus**: 460 chunks to 471, 920 KB to
+942 KB, 942,080 bytes to 964,608, and 171 reader-facing strings to 173. They are
+hand-maintained in the README, the comparison and panel guides, the i18n key
+table and three VitePress theme components, and all of them moved together. The
+`status` group in `docs/guide/i18n.md` goes from 7 keys to 9, which is the
+i18n-facing record of `ui.waitingEscalation`.
+
+### Fixed
+
+**Enter no longer sends the question while an IME is composing.** The keydown
+handler was `e.key === 'Enter' && !e.shiftKey`. In Japanese, Chinese and Korean
+input Enter also commits a candidate, several times a sentence, so every commit
+sent a half-typed question and spent a request against an allowance the whole
+site shares. `if (e.isComposing || e.nativeEvent?.isComposing) return` is now
+first in the handler, which puts `ArrowUp` — edit-last-question — under the same
+guard. This is a defect rather than a preference, so it gets no config key and
+there is nothing to turn off.
+
+**`scripts/check-publish.js` expands wildcard `exports` subpaths instead of
+skipping them.** The loop stat-ed every target beginning `./dist/` as a literal
+path and skipped the rest, so `./theme/components/*.vue` was never checked while
+it lived under `src/` — and could not have been, being a pattern. A target
+containing `*` is now split, read from the directory and checked file by file,
+failing with *matches no file — exports[…] resolves to nothing*. An empty
+`dist/theme/components/` is precisely the shape of failure that script exists to
+stop: every subpath still resolves, `npm publish` is green, and the theme imports
+five components that are not there. Everything else in it is unchanged — the
+500-byte CSS floor, the 100,000-byte web-bundle floor, the explicit
+`dist/docpilot.web.js` check for the script-tag install, the non-empty
+`dist/web/` chunk check, the `publishConfig.access` assertion and the
+CHANGELOG-against-version match.
+
 ## 0.5.0 — 2026-08-29
 
 ### Added

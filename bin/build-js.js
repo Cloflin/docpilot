@@ -2,7 +2,7 @@
 /**
  * The modules, compiled — `src/**` to `dist/**`, plus the five components.
  *
- * WHAT CHANGED, AND WHY THE OLD POLICY IS GONE. Until 0.6.0 this file did not
+ * WHAT CHANGED, AND WHY THE OLD POLICY IS GONE. Until 1.0.0 this file did not
  * exist and could not have: `exports` pointed straight at `./src/*.js`, the
  * package shipped its source unbundled, and a build step for it would have
  * changed the artifact every consumer receives. That reasoning was right for as
@@ -39,11 +39,11 @@ const watch = process.argv.includes('--watch')
  * A missing compiler is a skip; a missing compiler during a RELEASE is not.
  *
  * The same gate `build-css.js` and `build-web.js` carry, for the failure that
- * is now the worst of the three: sixteen of the nineteen `exports` subpaths
- * resolve into `dist/` after 0.6.0, so a tarball built without this step is a
- * package that installs and then fails on `import`. `npm_command` is what
- * separates a release from a contributor's install; npm sets it and nothing
- * here does.
+ * is now the worst of the three: twenty-two of the twenty-three `exports`
+ * subpaths resolve into `dist/` after 1.0.0, so a tarball built without this
+ * step is a package that installs and then fails on `import`. `npm_command`
+ * is what separates a release from a contributor's install; npm sets it and
+ * nothing here does.
  */
 const require = createRequire(import.meta.url)
 let tscBin

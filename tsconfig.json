@@ -1,7 +1,7 @@
 {
   "// why": [
-    "TWO JOBS, AND THEY MOVED APART AT 0.6.0. This file CHECKS; tsconfig.build.json",
-    "EMITS. Until 0.6.0 there was no second file and no emit at all, because",
+    "TWO JOBS, AND THEY MOVED APART AT 1.0.0. This file CHECKS; tsconfig.build.json",
+    "EMITS. Until 1.0.0 there was no second file and no emit at all, because",
     "`exports` pointed straight at ./src/*.js and a build step would have changed",
     "the artifact every consumer receives. That is no longer true: the source is",
     "TypeScript, so the artifact HAS to be compiled, and `exports` now names",

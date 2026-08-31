@@ -659,7 +659,7 @@ export interface DocPilotThemeConfig {
   feedback?: FeedbackSettings
   guard?: GuardSettings
   /**
-   * REMOVED at 0.6.0 — it was declared here and `themeDocPilot` never
+   * REMOVED at 1.0.0 — it was declared here and `themeDocPilot` never
    * emitted it. `vocabulary` is SERVER_ONLY: the map is folded into the
    * index at build time and the browser reads it from the manifest, so
    * there was never a value on this object to read. The precedent is
@@ -878,7 +878,7 @@ export declare function logDocPilot(
  * ── The fifteen that were exported and never declared ────────────────────────
  *
  * Every one of these is reachable as `import {…} from '@cloflin/docpilot/config'`
- * and, until 0.6.0, every one of them type-errored on the way in. Nine are read
+ * and, until 1.0.0, every one of them type-errored on the way in. Nine are read
  * by `bin/docpilot.js`, `scripts/vercel-build.sh`'s doctor path or the eval
  * CLIs, so they were public in fact long before they were public in writing.
  *
