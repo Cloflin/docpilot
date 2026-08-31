@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import { srcText } from './helpers/source.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -233,7 +234,7 @@ describe('what the model is told', () => {
   })
 
   it('drops the old advice to avoid synonyms, which this contradicts', () => {
-    const src = fs.readFileSync(new URL('../src/theme/docpilot/prompt.js', import.meta.url), 'utf8')
+    const src = srcText('src/theme/docpilot/prompt.js')
     expect(src).not.toMatch(/try a different concrete term, not a synonym/)
   })
 })

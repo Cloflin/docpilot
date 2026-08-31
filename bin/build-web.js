@@ -169,7 +169,7 @@ const output = await build({
      */
     sourcemap: false,
     lib: {
-      entry: path.join(root, 'src/web.js'),
+      entry: path.join(root, 'src/web.ts'),
       name: 'DocPilot',
       formats: ['es', 'iife'],
       fileName: (format) => (format === 'es' ? 'docpilot.web.mjs' : 'docpilot.web.js'),

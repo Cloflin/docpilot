@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { srcText } from './helpers/source.js'
 
 import { resolveDocPilot, themeDocPilot } from '../src/config.js'
 import { assembleIndex, __setIndex } from '../src/theme/docpilot/store.js'
@@ -219,7 +219,7 @@ describe('a turn no service could answer', () => {
    * `submit` and only its text can say it is still there.
    */
   it('keeps the transport error for a failure with nothing retrieved', () => {
-    const src = readFileSync(new URL('../src/theme/docpilot/session.js', import.meta.url), 'utf8')
+    const src = srcText('src/theme/docpilot/session.js')
     const catchBlock = src.slice(src.indexOf('} catch (e) {', src.indexOf('const started = performance.now()')))
     // The hybrid arm is GUARDED on retrieval having happened...
     expect(catchBlock).toMatch(/\} else if \(retrieval && !turn\.answerText\) \{/)
@@ -263,8 +263,8 @@ describe('a turn no service could answer', () => {
  * reader as an unexplained list of links.
  */
 describe('what the panel does with it', () => {
-  const panel = readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
-  const i18n = readFileSync(new URL('../src/theme/docpilot/i18n.js', import.meta.url), 'utf8')
+  const panel = srcText('src/theme/components/DocPilot.vue')
+  const i18n = srcText('src/theme/docpilot/i18n.js')
 
   it('leads a hybrid turn with the reason, and offers Retry on it alone', () => {
     expect(panel).toMatch(/turn\.hybrid\s*\n?\s*\?[\s\S]{0,120}hybrid\.lead/)
@@ -297,7 +297,7 @@ describe('what the panel does with it', () => {
    * meaning in the reader's copy would make every one of them unsearchable.
    */
   it('does not call any of it a fallback', () => {
-    const ladder = readFileSync(new URL('../src/theme/docpilot/llm.js', import.meta.url), 'utf8')
+    const ladder = srcText('src/theme/docpilot/llm.js')
     const hybridCopy = i18n.slice(i18n.indexOf('hybrid: {'), i18n.indexOf('refusal: {'))
     expect(hybridCopy).not.toMatch(/fallback/i)
     expect(ladder.match(/memberRotatable|orderMembers|walkOne/g)?.length).toBeGreaterThan(0)

@@ -1,0 +1,54 @@
+# The gate, on every push and every pull request.
+#
+# Until 0.6.0 nothing ran here: `publish.yml` triggers on tags alone, so
+# `prepublishOnly` was the first and only time `check → typecheck → vitest` ever
+# executed, on the maintainer's machine, at release. That was defensible while
+# the package shipped its source and every test read that source. It stopped
+# being defensible the moment `dist/` became load-bearing: sixteen of the
+# nineteen `exports` subpaths resolve into a gitignored directory now, four tests
+# spawn `node` against a built artefact, and `npm run verify` builds before it
+# checks. All of which means a warm working tree can pass a suite that a fresh
+# clone fails, which is the one failure mode a local habit cannot catch.
+#
+# TWO NODE VERSIONS, AND THE OLDER ONE IS THE POINT. `engines.node` promises
+# `>= 20`. Node strips TypeScript types natively from 22.18 onward, so a stray
+# `.ts` left on a path that a plain `node` executes — an eval command spawned as
+# a child process, the CLI's own dynamic imports — runs fine on a maintainer's
+# Node 24 and dies on the floor this package promises to support. Node 20 is
+# what notices.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor from `engines.node`, and what `publish.yml` releases on.
+        node: ['20', '24']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # Not `--ignore-scripts`: `prepare` is what writes `dist/`, and `verify`
+      # resolves the package through `exports` into it.
+      - run: npm ci
+
+      # check -> build:js -> typecheck -> conformance -> vitest. The build is in
+      # there because `test/docs-links.test.js` imports the docs config, which
+      # imports this package by name, which now resolves into `dist/`.
+      - run: npm run verify
+
+      # The packaging story end to end: the CSS and the self-contained bundle
+      # that `verify` leaves out, then the size floors and the export-map walk
+      # that stand between a green suite and a tarball that fails on import.
+      - run: npm run build
+      - run: node scripts/check-publish.js

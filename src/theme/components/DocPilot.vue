@@ -1202,9 +1202,19 @@
   </Teleport>
 </template>
 
-<script setup>
-import { computed, h, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+<script setup lang="ts">
+import {
+  computed,
+  h,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  watch,
+  type FunctionalComponent,
+} from 'vue'
 import * as session from '../docpilot/session.js'
+import type { Turn } from '../docpilot/session.js'
 import { useHost, hostConfig } from '../docpilot/host.js'
 import { promptDocument, clampQuote } from '../docpilot/prompt.js'
 import { sectionFor } from '../docpilot/scope.js'
@@ -1217,6 +1227,9 @@ import { FILTER_AUTO_ABOVE } from '../docpilot/switches.js'
 import { hasDailyAllowance } from '../docpilot/budget.js'
 import { terms } from '../docpilot/text.js'
 import { atBottom as isAtBottom, createFollower } from '../docpilot/follow.js'
+import { bindUnload, unbindUnload } from '../docpilot/unload.js'
+import { waitingKey } from '../docpilot/status.js'
+import { redactSecrets } from '../docpilot/credentials.js'
 
 const s = session.state
 const { theme, route, lang, router } = useHost()
@@ -1234,8 +1247,8 @@ const i18nTree = computed(() => resolveI18n(s.config.i18n))
 const uiLocale = computed(() => normaliseLocale(lang.value, i18nTree.value))
 const T = (path, vars) => translate(i18nTree.value, uiLocale.value, path, vars)
 
-const panel = ref(null)
-const thread = ref(null)
+const panel = ref<HTMLElement | null>(null)
+const thread = ref<HTMLElement | null>(null)
 const mobile = ref(false)
 // Not the same question as `mobile`. A narrow window is about how much room
 // there is; this is about what the platform draws over a selection — see
@@ -1283,7 +1296,7 @@ const syncAtBottom = () => {
   if (el) atBottom.value = isAtBottom(el)
 }
 
-const onThreadScroll = (e) => {
+const onThreadScroll = (e: Event) => {
   scrolled.value = e.target.scrollTop > 0
   // Whatever moved the thread — a wheel, a finger, a scrollbar, PageUp, a
   // screen reader — this is where the follower hears about it. An autoscroll
@@ -1306,11 +1319,11 @@ const input = ref('')
 const draft = ref('')
 const editing = ref(false)
 const announced = ref('')
-let trigger = null
-let mql = null
-let coarseMql = null
+let trigger: HTMLElement | null = null
+let mql: MediaQueryList | null = null
+let coarseMql: MediaQueryList | null = null
 // The selection watcher's five listeners, released as one — see `ask.bind`.
-let unbindAsk = null
+let unbindAsk: (() => void) | null = null
 
 const scopeLabel = session.scopeLabel
 const offersSection = session.offersSection
@@ -1334,6 +1347,14 @@ onMounted(() => {
   coarseMql = window.matchMedia('(pointer: coarse)')
   syncPointer()
   coarseMql.addEventListener('change', syncPointer)
+
+  // What the page keeps when it goes away — ui-specs/012. Bound here rather than
+  // in `open()` because a turn outlives the panel (ui-specs/010): the thing that
+  // has to survive leaving is the TURN, and it runs whether the panel is on
+  // screen or not. The component is resident — the polite region lives outside
+  // the `v-if` for the same reason — so this listener's life is the panel's life
+  // on the page.
+  bindUnload(onLeaving)
 
   // Read on mount, not in the ref's initialiser: `localStorage` does not exist
   // during SSR, and the default is `true` so a server render and the first
@@ -1386,6 +1407,9 @@ onMounted(() => {
   unbindAsk = ask.bind(onSelectionAccepted)
 
   session.configure(theme.value, route.value, lang.value)
+
+  // The composer's own text, before the deep link that may replace it.
+  restoreDraft()
 
   // `?dp-ask=` — ui-specs/009. After `configure`, because the switch that
   // governs it arrives with the config; the question lands in `pendingQuestion`
@@ -1444,11 +1468,13 @@ watch(lang, (l) => session.setLang(l))
 onBeforeUnmount(() => {
   mql?.removeEventListener('change', sync)
   coarseMql?.removeEventListener('change', syncPointer)
+  unbindUnload()
   unbindAsk?.()
   unbindAsk = null
   // The announce queue outlives one drain, so its timer has to be cancelled
   // here as well: a pending callback would write into a ref whose component
   // has gone.
+  clearTimeout(draftTimer)
   clearTimeout(announceTimer)
   announceQueue.length = 0
   clearTimeout(typeTimer)
@@ -1472,7 +1498,7 @@ watch(route, (r) => (s.currentPath = r))
  */
 const ANNOUNCE_MS = 500
 const announceQueue = []
-let announceTimer = null
+let announceTimer: ReturnType<typeof setTimeout> | null = null
 
 function drainAnnounce() {
   const next = announceQueue.shift()
@@ -1865,7 +1891,7 @@ const pickFlat = computed(() => pickGroups.value.flatMap((g) => g.pages))
  * is re-sorted by `orderedPages` and, once the filter lands, re-filtered as well;
  * an index would silently come to mean a different row.
  */
-const activePick = ref(null)
+const activePick = ref<any>(null)
 
 /**
  * The one row in the tab order.
@@ -1906,9 +1932,9 @@ function pickClicked(i) {
  * is a decision; this jumps to a row and is a reflex.
  */
 let typeBuf = ''
-let typeTimer = null
+let typeTimer: ReturnType<typeof setTimeout> | null = null
 
-function onPickKeydown(e, i) {
+function onPickKeydown(e: KeyboardEvent, i: number) {
   const pages = pickFlat.value
   const last = pages.length - 1
   switch (e.key) {
@@ -2025,11 +2051,11 @@ const canSend = computed(() => input.value.trim().length > 0)
 // The measurement itself, separate from the handler: the inline question editor
 // opens with text already in it and has to size itself once before any input
 // event exists to carry it.
-const fit = (el) => {
+const fit = (el: HTMLTextAreaElement) => {
   el.style.height = 'auto'
   el.style.height = `${el.scrollHeight}px`
 }
-const grow = (e) => fit(e.target)
+const grow = (e: Event) => fit(e.target as HTMLTextAreaElement)
 function send() {
   if (s.busy) return session.stop()
   if (!canSend.value) return
@@ -2055,7 +2081,26 @@ function submitText(q, quoted = '') {
   closeAsk()
   session.submit(q, { quote: quoted })
 }
-function onKeydown(e) {
+/**
+ * Enter sends, Shift+Enter breaks the line — and neither of those is true while
+ * an IME is open. ui-specs/012.
+ *
+ * In Japanese, Chinese and Korean, Enter is ALSO how a candidate is committed,
+ * several times per sentence. Without the first line every one of those commits
+ * sent a half-typed question and spent a request against a daily allowance the
+ * whole site shares. That is a defect rather than a preference, so it has no
+ * switch: nobody configures a keyboard to eat their own sentence.
+ *
+ * BOTH reads are needed. `isComposing` is a property of the native event, and
+ * whether Vue's wrapper forwards it is not something this component should have
+ * to know — an undefined on one path and the real flag on the other cost
+ * nothing to check together.
+ *
+ * The guard is FIRST, before the branch as well as before the send, because a
+ * reader mid-composition is not asking to edit their previous question either.
+ */
+function onKeydown(e: KeyboardEvent) {
+  if (e.isComposing || e.nativeEvent?.isComposing) return
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     send()
@@ -2103,7 +2148,7 @@ function editLastQuestion(e) {
  * furniture in the text.
  */
 const quote = ref('')
-const askEl = ref(null)
+const askEl = ref<HTMLTextAreaElement | null>(null)
 
 /**
  * The answer node BOTH ends of the selection are inside, or null.
@@ -2189,7 +2234,7 @@ function dropQuote() {
  * The text itself comes from the store — see `passageFor`, which prefers the
  * chunk THIS turn put in front of the model and falls back to the index by id.
  */
-const openPassage = ref(null)
+const openPassage = ref<string | null>(null)
 const passage = (turn, src) => session.passageFor(turn, src)
 const passageHtml = (turn, src) => session.passageHtml(turn, src)
 const togglePassage = (id) => (openPassage.value = openPassage.value === id ? null : id)
@@ -2288,7 +2333,7 @@ async function copyQuestion(turn) {
  * `editing` and `draft` are already the prompt instruction's, which is the same
  * pattern one layer down.
  */
-const editingId = ref(null)
+const editingId = ref<string | null>(null)
 const editDraft = ref('')
 const canSaveEdit = computed(() => editDraft.value.trim().length > 0)
 
@@ -2361,7 +2406,7 @@ function retryTurn(turn) {
   session.retryTurn(turn)
 }
 
-function onEditKeydown(e) {
+function onEditKeydown(e: KeyboardEvent) {
   if (e.key !== 'Enter' || e.shiftKey) return
   e.preventDefault()
   const turn = s.turns.find((t) => t.id === editingId.value)
@@ -2599,6 +2644,77 @@ const oneShot = computed(() => s.budgetMode === 'one-shot')
  * keeps the note honest after it has been armed — the budget can refill
  * mid-session, and "Running low" beside "40 of 50 left" is simply false.
  */
+/**
+ * ── the composer's draft — ui-specs/012 ──────────────────────────────────────
+ *
+ * `sessionStorage`, paired with `docpilot:conversation` rather than with the
+ * `localStorage` archive, and for that key's own reason: a draft belongs to the
+ * tab that is typing it. Two tabs are two questions.
+ *
+ * REDACTED BEFORE IT IS WRITTEN, and this is the part that is not optional. A
+ * pasted key is caught before a turn exists, and every path that writes to
+ * storage redacts first — the draft is the one text in this panel that reaches
+ * disk BEFORE any of that machinery has seen it, which makes it the exact shape
+ * of hole every other path has closed.
+ *
+ * GATED ON `history.enabled` AS WELL. That setting is published as "stops
+ * recording AND clears what is already stored"; a draft surviving it would make
+ * the sentence false. Which is also why a mount with either switch off REMOVES
+ * the key rather than merely declining to write one.
+ */
+const DRAFT_KEY = 'docpilot:draft'
+let draftTimer: ReturnType<typeof setTimeout> | null = null
+
+const draftsOn = () => s.config.composer.draft && s.config.history.enabled
+
+function keepDraft(text) {
+  try {
+    const clean = draftsOn() ? redactSecrets(text || '').clean : ''
+    if (clean) sessionStorage.setItem(DRAFT_KEY, clean)
+    else sessionStorage.removeItem(DRAFT_KEY)
+  } catch {
+    /* private mode — the draft does not survive, and nothing else changes */
+  }
+}
+
+/**
+ * Read once, at mount, and only into an EMPTY composer.
+ *
+ * Before `applyDeepLink`, which is the precedence that matters: `?dp-ask=` is an
+ * intent the reader expressed a second ago by following a link, and a draft is
+ * one they left behind. The deep link drains through `pendingQuestion` and
+ * overwrites this.
+ */
+function restoreDraft() {
+  try {
+    if (!draftsOn()) return sessionStorage.removeItem(DRAFT_KEY)
+    const saved = sessionStorage.getItem(DRAFT_KEY)
+    if (saved && !input.value) input.value = saved
+  } catch {
+    /* see above */
+  }
+}
+
+watch(input, (v) => {
+  clearTimeout(draftTimer)
+  // Clearing is IMMEDIATE, writing is debounced. `send()` empties the field, and
+  // a reader who leaves inside the debounce window would otherwise come back to
+  // a draft of the question they had just asked.
+  if (!v) return keepDraft('')
+  draftTimer = setTimeout(() => keepDraft(v), 400)
+})
+
+/**
+ * The page is going away — ui-specs/012. Both halves of "keep what you have":
+ * the turn that is still streaming, and the sentence still in the field, whose
+ * debounce has not fired yet.
+ */
+function onLeaving() {
+  session.saveIfRunning()
+  clearTimeout(draftTimer)
+  keepDraft(input.value)
+}
+
 const BUDGET_LOW_KEY = 'docpilot:budget-low'
 const budgetLowSaid = ref(false)
 const budgetLowDue = computed(() => oneShot.value && !!budgetLine.value)
@@ -2626,7 +2742,7 @@ const feedbackLive = computed(
 // resolution the number is read at, so it is also the tick rate — a rAF loop
 // here would re-render the thread 60 times a second to move a digit once.
 const tick = ref(0)
-let tickTimer = null
+let tickTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   () => s.busy,
   (busy) => {
@@ -2660,7 +2776,7 @@ const thoughtBox = () => {
   const last = s.turns[s.turns.length - 1]
   return last ? panel.value?.querySelector(`#dp-thoughts-${last.id}`) : null
 }
-const onThoughtScroll = (turn, e) => {
+const onThoughtScroll = (turn: Turn, e: Event) => {
   // Only the live box follows anything, so only the live box can unfollow.
   if (turn === s.turns[s.turns.length - 1]) thoughtFollow.read(e.target)
 }
@@ -2684,6 +2800,25 @@ watch(
 const statusLabel = computed(() => {
   const p = s.status
   if (!p) return ''
+
+  /**
+   * A wait long enough to be worth naming outranks the phase — ui-specs/012.
+   *
+   * `tick` is READ, not used: it already advances once a second while a turn
+   * runs (the reasoning counter needs it), and touching it here is what makes
+   * this computed re-evaluate on that same beat instead of on a timer of its
+   * own. `waitingKey` returns null while anything is painting, which is why the
+   * phase below stays the normal answer.
+   */
+  void tick.value
+  const turn = s.turns[s.turns.length - 1]
+  const key = waitingKey({
+    elapsedMs: turn ? performance.now() - turn.startedAt : 0,
+    quiet: !!turn && !turn.answerText && !turn.thought,
+    escalate: s.config.ui.waitingEscalation,
+  })
+  if (key) return T(key)
+
   if (p.phase === 'reading') {
     return p.label ? T('status.readingPage', { label: p.label }) : T('status.reading')
   }
@@ -2758,7 +2893,7 @@ function goSource(href) {
 // opens it in the new tab the markup already asks for, and the panel stays where
 // it is — closing the drawer for a tab the reader did not navigate to would lose
 // the thread for nothing. Everything else is SPA navigation, as before.
-function onSourceClick(e, src) {
+function onSourceClick(e: MouseEvent, src: any) {
   if (src.origin) return
   e.preventDefault()
   goSource(src.href)
@@ -2820,7 +2955,7 @@ function markQuery(snippet, question) {
 const resultCursor = ref({})
 const resultFocus = (turn) => resultCursor.value[turn.id] || 0
 
-function onResultsKey(e, turn) {
+function onResultsKey(e: KeyboardEvent, turn: Turn) {
   const n = turn.results.length
   if (!n) return
   const at = resultFocus(turn)
@@ -2841,9 +2976,9 @@ function onResultsKey(e, turn) {
 // The answer is v-html, so its links have no Vue handlers of their own: without
 // this delegation a citation marker is a full page load out of the SPA, which
 // on mobile also drops the panel it was opened from.
-const linkedCite = ref(null)
+const linkedCite = ref<HTMLElement | null>(null)
 
-function onAnswerClick(e) {
+function onAnswerClick(e: MouseEvent) {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
   const btn = e.target.closest?.('[data-copy-code]')
   if (btn) return copyCode(btn)
@@ -2883,7 +3018,7 @@ async function copyCode(btn) {
 
 // Pointing at a marker lights the row it goes to. UI-SPEC 573: no timer, no
 // coarse-pointer branch — a touch that lands on the marker navigates anyway.
-function onCiteEnter(e) {
+function onCiteEnter(e: MouseEvent) {
   const cite = e.target.closest?.('.docpilot__cite')
   linkedCite.value = cite ? Number(cite.dataset.cite) : null
 }
@@ -2932,7 +3067,7 @@ const REASONS = ['wrong', 'incomplete', 'not-in-docs', 'bad-links']
  * here rather than redrawn. Everything else is the 16×16 default it always was,
  * and the `viewBox` is stated so the symbol maps 1:1 into it either way.
  */
-const Icon = (props) => {
+const Icon: FunctionalComponent<{ name: string; filled?: boolean }> = (props) => {
   const { box, size } = { ...GLYPH_DEFAULTS, ...(GLYPH_BOX[props.name] || {}) }
   return h(
     'svg',

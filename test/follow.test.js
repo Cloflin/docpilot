@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { srcText } from './helpers/source.js'
 import { atBottom, createFollower } from '../src/theme/docpilot/follow.js'
 import { autoThought, toggleThought } from '../src/theme/docpilot/session.js'
 
@@ -162,7 +162,7 @@ describe('session — the reasoning disclosure', () => {
    * the pair — the way `onStream` used to — fails here.
    */
   it('writes `thoughtOpen` from exactly two places', () => {
-    const src = readFileSync(new URL('../src/theme/docpilot/session.js', import.meta.url), 'utf8')
+    const src = srcText('src/theme/docpilot/session.js')
     const writes = src.match(/turn\.thoughtOpen\s*=/g) || []
     expect(writes.length, 'autoThought and toggleThought, and nothing else').toBe(2)
     expect(src).toContain('if (turn.thoughtChoice === null) turn.thoughtOpen = open')

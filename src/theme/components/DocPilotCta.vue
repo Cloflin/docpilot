@@ -4,7 +4,7 @@
   </p>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * The end-of-article entry point — UI-SPEC 14.
  *

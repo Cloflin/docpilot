@@ -1,0 +1,17 @@
+{
+  "// why": [
+    "The conformance gate, in its own config for one reason: it reads dist/, and",
+    "dist/ is gitignored. Putting it in tsconfig.json would make `npm run",
+    "typecheck` fail on a fresh clone that has not built yet, which turns the",
+    "repository's first command into a confusing error.",
+    "",
+    "`npm run verify` builds before it checks, so this runs there with everything",
+    "in place. What it proves is in the head of typings/conformance.d.ts."
+  ],
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "checkJs": false
+  },
+  "include": ["typings/conformance.d.ts", "typings/ambient.d.ts", "types/**/*.d.ts"]
+}

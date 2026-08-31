@@ -81,7 +81,7 @@ while it streams. The rest of the contract is on
 The declarations are wired through conditional exports:
 
 ```json
-"./mount": { "types": "./types/mount.d.ts", "default": "./src/mount.js" }
+"./mount": { "types": "./types/mount.d.ts", "default": "./dist/mount.js" }
 ```
 
 Which means your `tsconfig.json` needs a resolver that reads `exports`:
@@ -101,11 +101,20 @@ working there, but nothing below it.
 
 ## Why hand-written and not generated
 
-The package ships its source, unbundled: `exports` points straight at
-`./src/*.js`, and a compile step would change the artifact every consumer
-receives. Generating declarations from the JSDoc would also mean turning `strict`
-on over a tree that has shipped without it, and what came out would be mostly
-`any` with the internals leaking through — worse documentation than none.
+The source is TypeScript and `tsc` does emit declarations, into `dist/`. They are
+not what you import: `exports` names `types/` for every subpath, and those files
+are written by hand.
 
-So the public surface is written once, by hand, and `npm run typecheck` in this
-repository checks it against the code.
+The reason is that the two describe different things. A generated declaration
+states the whole internal shape of whatever produced it — a 3000-line component,
+a resolver with fourteen private helpers — and pins it, so a rename inside the
+package becomes a breaking change to somebody's build. The hand-written surface
+says only what this package promises. `DocPilot` is `DefineComponent<{}>` there
+on purpose.
+
+What changed at 0.6.0 is that the code now has to AGREE with it. Each module
+imports its own published interface and attaches it at the point of definition —
+`useHost(): HostBinding`, `resolveDocPilot(settings: DocPilotSettings)` — so
+`npm run typecheck` compares the implementation against the contract rather than
+against itself. Seven places where the two had drifted apart were found and
+fixed in the commit that introduced the rule.

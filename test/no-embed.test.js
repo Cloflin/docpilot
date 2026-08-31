@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { srcText } from './helpers/source.js'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -878,7 +879,7 @@ describe('the client config — a union resolved at both ends', () => {
 })
 
 describe('the turn — a declared mode is not an outage', () => {
-  const src = readFileSync(new URL('../src/theme/docpilot/session.js', import.meta.url), 'utf8')
+  const src = srcText('src/theme/docpilot/session.js')
 
   /**
    * `degraded` drives the reader-facing `refusal.degraded` and `degraded.lead`,
@@ -1021,7 +1022,7 @@ describe('votes from a site that was built this way', () => {
  * above disagrees about.
  */
 describe('the build — what a lexical-only index writes', () => {
-  const src = readFileSync(new URL('../src/build/build-rag-index.js', import.meta.url), 'utf8')
+  const src = srcText('src/build/build-rag-index.js')
 
   // The config alone is enough; the flag is the one-off override. Read before
   // the target is resolved, so a build that names an embedder it will not use
@@ -1077,7 +1078,7 @@ describe('the build — what a lexical-only index writes', () => {
 describe('the eval commands — all three loaders, not two', () => {
   const readers = ['run.js', 'calibrate.js', 'answer-bench.js'].map((f) => [
     f,
-    readFileSync(new URL(`../src/eval/${f}`, import.meta.url), 'utf8'),
+    srcText(`src/eval/${f}`),
   ])
 
   it.each(readers)('%s reads no blob a vectorless manifest does not name', (_f, src) => {
@@ -1118,10 +1119,7 @@ describe('the eval commands — all three loaders, not two', () => {
  * this one either.
  */
 describe('embed: false — the panel may say so under the composer', () => {
-  const panel = readFileSync(
-    new URL('../src/theme/components/DocPilot.vue', import.meta.url),
-    'utf8',
-  )
+  const panel = srcText('src/theme/components/DocPilot.vue')
 
   it('is silent on the shipped defaults', () => {
     const client = themeDocPilot(cfg({ chat: { provider: 'ollama', model: 'x' }, embed: false }))
@@ -1168,10 +1166,7 @@ describe('embed: false — the panel may say so under the composer', () => {
   })
 
   it('has copy that names the mode rather than a failure', () => {
-    const shipped = readFileSync(
-      new URL('../src/theme/docpilot/i18n.js', import.meta.url),
-      'utf8',
-    )
+    const shipped = srcText('src/theme/docpilot/i18n.js')
     expect(shipped).toContain(
       "noEmbedder: 'No embedding model — search matches words only.',",
     )
@@ -1192,10 +1187,7 @@ describe('embed: false — the panel may say so under the composer', () => {
  * ~1000 lines above already cover what a vectorless index does.
  */
 describe("embed.fallback: 'lexical' — when the embedder will not answer", () => {
-  const src = readFileSync(
-    new URL('../src/build/build-rag-index.js', import.meta.url),
-    'utf8',
-  )
+  const src = srcText('src/build/build-rag-index.js')
 
   /**
    * The key describes WHAT TO DO, not WHICH embedder — so it must not decide

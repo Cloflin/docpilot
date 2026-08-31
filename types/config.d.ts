@@ -316,6 +316,8 @@ export interface CitationsSettings {
 export interface ComposerSettings {
   editLastOnArrowUp?: boolean
   deepLink?: boolean
+  /** The composer's text survives a reload, in `sessionStorage` — ui-specs/012. */
+  draft?: boolean
 }
 
 /**
@@ -400,7 +402,13 @@ export interface ScopeSettings {
   /** Only `'all'`; a build-time default of `page` would narrow every first question. */
   default?: 'all'
   promptListLimit?: number
-  filter?: 'auto' | 'always' | 'never'
+  /**
+   * `'auto'` shows the filter once the corpus is long enough to need one; a
+   * boolean decides it outright. The strings `'always'` and `'never'` were
+   * declared here for two releases and never read — `switches.js` accepts
+   * `['auto', true, false]` and the panel branches on `typeof mode === 'boolean'`.
+   */
+  filter?: 'auto' | boolean
   groupBySection?: boolean
 }
 
@@ -408,6 +416,8 @@ export interface HistorySettings {
   enabled?: boolean
   maxConversations?: number
   exportThread?: boolean
+  /** An unfinished turn is written down when the page goes away — ui-specs/012. */
+  saveOnUnload?: boolean
 }
 
 export interface PromptSettings {
@@ -439,6 +449,8 @@ export interface UiSettings {
   layout?: 'overlay' | 'push'
   prefetch?: 'hover' | 'idle' | false
   firstRunHint?: boolean
+  /** The status line escalates at 8s and 25s while nothing arrives — ui-specs/012. */
+  waitingEscalation?: boolean
   /**
    * Whether a turn outlives the panel it was asked in — ui-specs/010.
    *
@@ -492,6 +504,7 @@ export interface ResolvedUi {
   layout: 'overlay' | 'push'
   prefetch: 'hover' | 'idle' | false
   firstRunHint: boolean
+  waitingEscalation: boolean
   background: 'notify' | 'open' | false
   credit: boolean
   /**
@@ -534,6 +547,13 @@ export interface DocPilotSettings {
   evalDir?: string
   importDir?: string | null
   sources?: { allow: string[] } | null
+  /**
+   * Where the OpenAPI specs are, as paths from the project root: a directory, a
+   * file, or a `*` in the FILE NAME. `null` is the default and means
+   * `${docsDir}/public/openapi`, which is where they had to be before this key
+   * existed.
+   */
+  openapi?: string[] | null
   chat?: ChatConfig
   embed?: EmbedConfig
   /**
@@ -638,7 +658,14 @@ export interface DocPilotThemeConfig {
   feedbackEndpoint?: string | null
   feedback?: FeedbackSettings
   guard?: GuardSettings
-  vocabulary?: VocabularySettings | null
+  /**
+   * REMOVED at 0.6.0 — it was declared here and `themeDocPilot` never
+   * emitted it. `vocabulary` is SERVER_ONLY: the map is folded into the
+   * index at build time and the browser reads it from the manifest, so
+   * there was never a value on this object to read. The precedent is
+   * `suggestions`, which was declared-and-never-emitted for a release and
+   * is the defect `defineDocPilot` was extracted to make impossible.
+   */
   scope?: ScopeSettings
   history?: HistorySettings
   prompt?: PromptSettings
@@ -707,7 +734,24 @@ export declare function resolveDocPilot(
   settings?: DocPilotSettings,
   env?: Record<string, string | undefined>,
 ): Required<DocPilotSettings>
-export declare function resolveEmbed(settings: DocPilotSettings): EmbedSettings
+/**
+ * The embed half, resolved. NOT `EmbedSettings`, which is what an author writes:
+ * `lexicalOnly` is the discriminant every caller branches on — `themeDocPilot`
+ * and `nodeEmbedTarget` both do — and it exists only on the way out.
+ */
+export interface ResolvedEmbed {
+  provider: ProviderId | null
+  model: string | null
+  models?: string[] | null
+  baseURL: string | null
+  /** Whose name `model` is: the author's, or the provider table's. */
+  modelAuto: boolean
+  /** True on `embed: false` — the search runs on the lexical channel alone. */
+  lexicalOnly?: boolean
+  fallback: string | null
+}
+
+export declare function resolveEmbed(settings: DocPilotSettings): ResolvedEmbed
 export declare function resolveSuggestions(settings: DocPilotSettings): SuggestionsSettings
 export declare function readiness(
   settings: Required<DocPilotSettings>,
@@ -829,3 +873,99 @@ export declare function logDocPilot(
   env: Record<string, string | undefined>,
   ready: Readiness,
 ): void
+
+/**
+ * ── The fifteen that were exported and never declared ────────────────────────
+ *
+ * Every one of these is reachable as `import {…} from '@cloflin/docpilot/config'`
+ * and, until 0.6.0, every one of them type-errored on the way in. Nine are read
+ * by `bin/docpilot.js`, `scripts/vercel-build.sh`'s doctor path or the eval
+ * CLIs, so they were public in fact long before they were public in writing.
+ *
+ * They are declared, not hidden: marking them internal would need `stripInternal`
+ * and a decision about what the CLI's own surface is, which is a larger question
+ * than "does the declaration match the code".
+ */
+
+/** The capability table for a provider — what it can be asked for. */
+export declare function capsOf(id: ProviderId): Record<string, unknown> | null
+
+/** The author's neutral knobs, clamped to what one service accepts. */
+export declare function resolveTuning(
+  settings: DocPilotSettings,
+  id?: ProviderId,
+): Record<string, unknown>
+
+/** The chat models a config names, in ask order. */
+export declare function chatModels(settings: DocPilotSettings): string[] | null
+
+/** The embed models a config names, in ask order. */
+export declare function embedModels(settings: DocPilotSettings): string[] | null
+
+/** Which provider's free pool backs this half, or null when none does. */
+export declare function poolProviderOf(
+  settings: DocPilotSettings,
+  half: 'chat' | 'embed',
+): ProviderId | null
+
+/** `embed: false` / `embed: 'none'` — the lexical-only build. */
+export declare function noEmbed(settings: DocPilotSettings): boolean
+
+/** `chat: false` / `chat: 'none'` — the search-only panel. */
+export declare function noChat(settings: DocPilotSettings): boolean
+
+/** What the dev proxy promises the browser, for the readiness report. */
+export declare function proxyContract(
+  settings: DocPilotSettings,
+  env?: Record<string, string | undefined>,
+): Record<string, unknown>
+
+/** Where the built index is written and read — `indexDir`, resolved. */
+export declare function indexDirOf(settings: DocPilotSettings): string
+
+/** The manifest inside it. */
+export declare function manifestPathOf(settings: DocPilotSettings): string
+
+/** The three legal `guard.mode` values. */
+export declare const GUARD_MODES: readonly string[]
+
+/** The three legal `chat.verbosity` values. */
+export declare const VERBOSITY_LEVELS: readonly string[]
+
+/** Throws when `guard` is inconsistent — a build-time check, not a runtime one. */
+export declare function assertGuard(settings: DocPilotSettings): void
+
+/** The shape an index directory name has to have. */
+export declare const SLUG: RegExp
+
+/** Throws when a term is both a canonical and an alias. */
+export declare function assertVocabulary(settings: DocPilotSettings): void
+
+/**
+ * The chat half, resolved — the shape `resolveDocPilot` hands back, which is a
+ * SUPERSET of what an author writes.
+ *
+ * Three fields exist only on the way out. `providerAuto` and `modelAuto` record
+ * WHOSE name a value is, because the resolver is allowed to walk past its own
+ * default and not past somebody's sentence; `searchOnly` is what `chat: false`
+ * becomes, and every layer downstream reads that rather than inferring the mode
+ * from `provider: null`. `chain` changes meaning too: an author writes
+ * `'auto' | false | member[]` and reads back the resolved selection.
+ */
+export interface ResolvedChat extends Omit<ChatSettings, 'chain'> {
+  chain: string | false | Array<ChainMember | ProviderId>
+  providerAuto: boolean
+  modelAuto: boolean
+  searchOnly?: boolean
+}
+
+/**
+ * Settings after `resolveDocPilot` — what `bin/docpilot.js` puts on the global
+ * and every CLI command reads. Distinct from `DocPilotSettings`, which is what a
+ * project WRITES: every key is present here, and the two halves that carry a
+ * resolution have their own types above.
+ */
+export type ResolvedDocPilot = Omit<Required<DocPilotSettings>, 'chat' | 'embed'> & {
+  chat: ResolvedChat
+  embed: ResolvedEmbed | EmbedConfig
+}

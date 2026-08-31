@@ -41,6 +41,8 @@ export interface DocPilotResult {
         baseURL: string | null
         model: string | null
         models: string[] | null
+        /** Whose name `model` is — see `config.d.ts`, which declares the same arm. */
+        modelAuto: boolean
         apiKey: string | null
       }
     | {
@@ -50,6 +52,7 @@ export interface DocPilotResult {
         baseURL: null
         model: null
         models: null
+        modelAuto: false
         apiKey: null
       }
   plugin(): DocPilotVitePlugin

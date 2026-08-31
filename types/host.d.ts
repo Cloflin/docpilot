@@ -5,7 +5,7 @@
  * source FILE path, a concept only a markdown-driven generator has, and every
  * host knows its own route.
  */
-import type { Ref } from 'vue'
+import type { InjectionKey, Ref } from 'vue'
 import type { DocPilotThemeConfig } from './config.js'
 
 export interface HostSelectors {
@@ -43,8 +43,14 @@ export interface StandaloneHost {
   update(next: { theme?: unknown; route?: string; lang?: string }): void
 }
 
-/** Per-app override, for two panels on one page bound to different hosts. */
-export declare const HOST_KEY: symbol
+/**
+ * Per-app override, for two panels on one page bound to different hosts.
+ *
+ * A FACTORY is what goes in, not a binding: `inject` runs inside setup and the
+ * value it yields is called there. `mountDocPilot` and the Vue adapter both
+ * provide `standaloneHost.factory`.
+ */
+export declare const HOST_KEY: InjectionKey<() => HostBinding>
 
 /**
  * Install a host. A FACTORY, not a value — it runs inside a component's setup,

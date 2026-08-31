@@ -48,7 +48,7 @@
   </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * Quoting a passage from the DOCUMENTATION — ui-specs/009, `quote.fromDocs`.
  *

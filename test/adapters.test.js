@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { srcText } from './helpers/source.js'
 import fs from 'node:fs'
 import { createApp, h, ref } from 'vue'
 import docpilotPlugin from '../src/adapters/docusaurus/index.js'
@@ -15,7 +16,7 @@ import { getHighlighter, setHighlighter } from '../src/theme/docpilot/highlight.
  * way `packaging.test.js` already asserts the shape of `theme.js`. The Node half
  * of the Docusaurus plugin has no such import and is exercised directly.
  */
-const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+const read = srcText
 
 /**
  * Both files state their own rules in prose directly above the code that keeps
@@ -90,7 +91,13 @@ describe('the Docusaurus plugin', () => {
     const modules = docpilotPlugin(context, {}).getClientModules()
     const client = modules.find((m) => m.endsWith('client.js'))
     expect(client).toBeTruthy()
-    expect(fs.existsSync(client)).toBe(true)
+    // `.js` is the spelling in BOTH trees — it is what the emitted module is
+    // called and what a `.ts` source is imported as — and this suite loads the
+    // source. So the file behind the path is `client.ts` here and `client.js`
+    // in the tarball, and either one satisfies what this is asserting: that the
+    // plugin hands Docusaurus a path with a module at the end of it.
+    const exists = fs.existsSync(client) || fs.existsSync(client.replace(/\.js$/, '.ts'))
+    expect(exists, client).toBe(true)
   })
 
   it('can be told to bring no styles', () => {

@@ -307,7 +307,7 @@ describe('docpilot CLI: scaffolded levels and the command tables', () => {
     expect(src).toMatch(/const COMMANDS = \[[^\]]*'tune',[^\]]*\]/s)
     // Routed: without this line `docpilot tune` dies of ERR_MODULE_NOT_FOUND on
     // `undefined` instead of saying anything a reader can act on.
-    expect(src).toMatch(/tune: '\.\.\/src\/eval\/tune\.js'/)
+    expect(src).toMatch(/tune: '\.\.\/dist\/eval\/tune\.js'/)
   })
 
   it('spells the six tiers out in the help, in levels.js order', async () => {

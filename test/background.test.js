@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import fs from 'node:fs'
+import { srcText } from './helpers/source.js'
 
 import { resolveDocPilot, themeDocPilot } from '../src/config.js'
 import { assembleIndex, __setIndex } from '../src/theme/docpilot/store.js'
@@ -255,7 +255,7 @@ describe('ui.background — a turn that outlives the panel', () => {
  * the claim is about a source shape that no fixture in this package can reach.
  */
 describe('ui.background — close is not stop', () => {
-  const src = fs.readFileSync(new URL('../src/theme/docpilot/session.js', import.meta.url), 'utf8')
+  const src = srcText('src/theme/docpilot/session.js')
   const body = (name) => {
     const at = src.indexOf(`export function ${name}() {`)
     expect(at, `${name}() is exported from session.js`).toBeGreaterThan(-1)

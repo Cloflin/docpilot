@@ -34,7 +34,7 @@ ENTRY=src/theme/styles/docpilot.scss
 DOCUCSS=src/theme/styles/docusaurus.scss
 ADAPTERS="$VPCSS $DOCUCSS"
 SCSS_ALL="$CORE $ADAPTERS"
-HARNESS=src/theme/docpilot/harness.js
+HARNESS=src/theme/docpilot/harness.ts
 
 fail=0
 ok()   { printf '  ok    %s\n' "$1"; }

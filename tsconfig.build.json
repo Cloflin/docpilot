@@ -1,0 +1,38 @@
+{
+  "// why": [
+    "EMIT ONLY. This file compiles; tsconfig.json checks. The split is what",
+    "makes a file-by-file migration possible: this config takes the whole of",
+    "src/ — the TypeScript and the JavaScript that has not converted yet — so",
+    "dist/ is COMPLETE at every commit, while tsconfig.json checks only what has",
+    "been written to be checked. One config could not do both without either",
+    "failing on findings in code that ships and works, or shipping a dist/ with",
+    "holes in it.",
+    "",
+    "checkJs is therefore OFF here and ON there, and that is the whole trick.",
+    "",
+    "noEmitOnError, because a dist/ built from a tree that does not compile is a",
+    "package that installs and then fails on import — the exact failure shape",
+    "scripts/check-publish.js exists to catch, arriving one step earlier.",
+    "",
+    "declarationMap is off: exports[*].types names the hand-written types/, so a",
+    "map into dist/*.d.ts would lead somewhere no consumer navigates from."
+  ],
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "checkJs": false,
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": true,
+    "noEmitOnError": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "// include": [
+    "typings/ambient.d.ts by name, not typings/**: conformance.d.ts imports from",
+    "dist/, which would drag the emitted declarations in as INPUTS and make every",
+    "one of them a file this build refuses to overwrite (TS5055). It is checked by",
+    "tsconfig.conformance.json, after this has run."
+  ],
+  "include": ["src/**/*.ts", "src/**/*.js", "typings/ambient.d.ts"]
+}

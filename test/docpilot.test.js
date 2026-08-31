@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+import { srcText, distEntry, isSource } from './helpers/source.js'
 
 import {
   stripImages,
@@ -45,6 +46,8 @@ import {
   toPlainText,
 } from '../src/theme/docpilot/markdown.js'
 import { GLYPHS, SYMBOLS, symbolId } from '../src/theme/docpilot/glyphs.js'
+import { waitingKey, STILL_WORKING_MS, TAKING_A_WHILE_MS } from '../src/theme/docpilot/status.js'
+import { bindUnload, unbindUnload, unloadRefCount } from '../src/theme/docpilot/unload.js'
 import { highlight, __setHighlighterForTests } from '../src/theme/docpilot/highlight.js'
 import { identifiers, computeSupport } from '../src/theme/docpilot/support.js'
 import {
@@ -242,7 +245,7 @@ describe('normalise — llm content tags', () => {
  * its own documented settings with "not in the docs". A spec claims one route.
  */
 describe('the index — which /reference/ routes a spec claims', () => {
-  const src = fs.readFileSync(new URL('../src/build/build-rag-index.js', import.meta.url), 'utf8')
+  const src = srcText('src/build/build-rag-index.js')
 
   it('skips no route on a project that publishes no spec', () => {
     // The blanket prefix skip and the comment that justified it. `kindFor` still
@@ -253,9 +256,23 @@ describe('the index — which /reference/ routes a spec claims', () => {
   })
 
   it('derives the claimed routes from the spec filenames', () => {
-    expect(src).toMatch(/specRoutes = new Set\(specs\.map\(/)
+    // `docPilot.openapi` made the spec list a set of PATHS rather than the
+    // contents of one directory, so the name is now the basename of each. What
+    // this rule is about did not move: the route is the file name.
+    expect(src).toMatch(/const specNameOf = \(f\) => path\.basename\(f\)/)
+    expect(src).toMatch(/specRoutes = new Set\(\[\.\.\.specByName\.keys\(\)\]\.map\(/)
     // Resolved above the markdown loop, which needs the answer before it decides.
     expect(src.indexOf('const specRoutes')).toBeLessThan(src.indexOf('for (const file of files)'))
+  })
+
+  /**
+   * Two directories may now be configured, and the filesystem no longer keeps
+   * basenames unique for free. `v1/api.yaml` beside `v2/api.yaml` both claim
+   * `/reference/api`: the second overwrites the first's page entry while both
+   * sets of chunks stay in the index, which is a corpus nobody can reason about.
+   */
+  it('refuses two specs whose basenames claim one route', () => {
+    expect(src).toMatch(/two OpenAPI specs claim \/reference\//)
   })
 })
 
@@ -1564,7 +1581,7 @@ describe('009 — tables in an answer', () => {
 })
 
 describe('009 — the three defects with no DOM', () => {
-  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+  const read = srcText
   const panel = read('src/theme/components/DocPilot.vue')
 
   /**
@@ -1778,10 +1795,7 @@ describe('009 — the passage renders as markdown', () => {
   // The panel has no DOM here, so the binding is asserted the way 008's row
   // placement is: by reading the source and stating the contract it keeps.
   describe('the disclosure that shows it', () => {
-    const panel = fs.readFileSync(
-      new URL('../src/theme/components/DocPilot.vue', import.meta.url),
-      'utf8',
-    )
+    const panel = srcText('src/theme/components/DocPilot.vue')
     const region = panel.slice(panel.indexOf('class="docpilot__passage"'))
 
     it('renders the html and not the interpolated source', () => {
@@ -1836,7 +1850,7 @@ describe('toPlainText', () => {
 })
 
 describe('009 — a copied answer carries its sources', () => {
-  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const panel = srcText('src/theme/components/DocPilot.vue')
 
   // `[1]` pasted into a ticket with nothing behind it is worse than no citation
   // at all, because it looks like provenance.
@@ -1918,7 +1932,7 @@ describe('009 — ?dp-ask= fills the composer and does not send it', () => {
 })
 
 describe('009 — the prefetch split', () => {
-  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+  const read = srcText
   const store = read('src/theme/docpilot/session.js')
 
   /**
@@ -1985,7 +1999,7 @@ describe('009 — the prefetch split', () => {
 })
 
 describe('009 — quoting the documentation itself', () => {
-  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+  const read = srcText
   const quote = read('src/theme/components/DocPilotQuote.vue')
 
   /**
@@ -2047,7 +2061,7 @@ describe('009 — quoting the documentation itself', () => {
  * enough for the project that opted in.
  */
 describe('009 — an empty panel under a narrow scope', () => {
-  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const panel = srcText('src/theme/components/DocPilot.vue')
 
   // The reason the blank state existed, and the reason it was right: the
   // built-in three fall outside a narrow scope and the gate refuses all of them.
@@ -2076,7 +2090,7 @@ describe('009 — an empty panel under a narrow scope', () => {
 })
 
 describe('009 — follow-up questions', () => {
-  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const panel = srcText('src/theme/components/DocPilot.vue')
   const fn = panel.match(/function followUps\(turn\) \{[\s\S]*?\n\}/)[0]
 
   // ChatGPT ships these and its readers write custom instructions to suppress
@@ -2108,7 +2122,7 @@ describe('009 — follow-up questions', () => {
 })
 
 describe('009 — the first-visit hint', () => {
-  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const panel = srcText('src/theme/components/DocPilot.vue')
 
   it('is off by default — it paints something nobody asked for', () => {
     expect(themeDocPilot(resolveDocPilot({})).ui.firstRunHint).toBe(false)
@@ -2145,7 +2159,7 @@ describe('009 — the first-visit hint', () => {
  * checks.
  */
 describe('the credit link in the footnote', () => {
-  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const panel = srcText('src/theme/components/DocPilot.vue')
   const collect = () => {
     const messages = []
     const err = (message) => messages.push(message)
@@ -2214,7 +2228,7 @@ describe('the credit link in the footnote', () => {
 
 /** ui-specs/009, wave 6 — working the thread, and the panel beside the docs. */
 describe('009 — working the thread', () => {
-  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const panel = srcText('src/theme/components/DocPilot.vue')
 
   /**
    * ChatGPT's own behaviour, and readline's before it. The EMPTY condition is
@@ -2239,7 +2253,7 @@ describe('009 — working the thread', () => {
   it('leaves a confirmation the eye can see, in two truthful forms', () => {
     expect(panel).toContain("T(feedbackLive ? 'feedback.thanksSent' : 'feedback.thanks')")
     expect(panel).toContain('turn.feedbackDone')
-    const session = fs.readFileSync(new URL('../src/theme/docpilot/session.js', import.meta.url), 'utf8')
+    const session = srcText('src/theme/docpilot/session.js')
     // Set BEFORE the "nothing to amend" early return: the reader pressed Send
     // either way, and the verdict was recorded when they pressed the thumb.
     const fn = session.match(/export function submitFeedback\(turn\) \{[\s\S]*?\n\}/)[0]
@@ -2272,7 +2286,7 @@ describe('009 — working the thread', () => {
 })
 
 describe('009 — the picker at corpus scale', () => {
-  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const panel = srcText('src/theme/components/DocPilot.vue')
 
   // A text input is not an option, so it cannot live inside the listbox.
   it('puts the filter outside the listbox and binds it with aria-controls', () => {
@@ -2313,9 +2327,9 @@ describe('009 — the picker at corpus scale', () => {
 })
 
 describe('009 — the panel beside the docs', () => {
-  const adapter = fs.readFileSync(new URL('../src/theme/styles/vitepress.scss', import.meta.url), 'utf8')
-  const core = fs.readFileSync(new URL('../src/theme/styles/core.scss', import.meta.url), 'utf8')
-  const panel = fs.readFileSync(new URL('../src/theme/components/DocPilot.vue', import.meta.url), 'utf8')
+  const adapter = srcText('src/theme/styles/vitepress.scss')
+  const core = srcText('src/theme/styles/core.scss')
+  const panel = srcText('src/theme/components/DocPilot.vue')
 
   // The SUBJECT is the host's element; our class only says when. That is rule
   // 2 of the adapter, and the reason the core may not carry this rule at all.
@@ -2357,7 +2371,7 @@ describe('009 — the panel beside the docs', () => {
  */
 describe('rule 11 — every action has a switch', () => {
   const root = new URL('../', import.meta.url)
-  const read = (f) => fs.readFileSync(new URL(f, root), 'utf8')
+  const read = srcText
 
   const leavesOf = (node, prefix = '') => {
     const out = []
@@ -2389,7 +2403,7 @@ describe('rule 11 — every action has a switch', () => {
     const walk = (dir) => {
       for (const entry of fs.readdirSync(new URL(dir, root), { withFileTypes: true })) {
         if (entry.isDirectory()) walk(`${dir}${entry.name}/`)
-        else if (/\.(js|vue)$/.test(entry.name)) out.push(`${dir}${entry.name}`)
+        else if (isSource(entry.name)) out.push(`${dir}${entry.name}`)
       }
     }
     walk('src/theme/')
@@ -2574,7 +2588,9 @@ describe('rule 11 — every action has a switch', () => {
       resolveDocPilot({
         quote: { fromAnswer: false, fromDocs: false },
         citations: { passage: false, inCopy: false, pagesRead: false },
-        composer: { editLastOnArrowUp: false, deepLink: false },
+        // `draft` is 012's, not 009's — named here only so the `toEqual`
+        // below can stay exact about the whole group.
+        composer: { editLastOnArrowUp: false, deepLink: false, draft: false },
         suggestions: { scoped: false, followUps: false },
         scope: { filter: false, groupBySection: false },
         history: { exportThread: false },
@@ -2584,7 +2600,7 @@ describe('rule 11 — every action has a switch', () => {
     )
     expect(off.quote).toEqual({ fromAnswer: false, fromDocs: false })
     expect(off.citations).toEqual({ passage: false, inCopy: false, pagesRead: false })
-    expect(off.composer).toEqual({ editLastOnArrowUp: false, deepLink: false })
+    expect(off.composer).toEqual({ editLastOnArrowUp: false, deepLink: false, draft: false })
     expect(off.suggestions.scoped).toBe(false)
     expect(off.suggestions.followUps).toBe(false)
     expect(off.scope.filter).toBe(false)
@@ -2594,11 +2610,46 @@ describe('rule 11 — every action has a switch', () => {
     expect(off.ui.prefetch).toBe(false)
   })
 
+  /**
+   * The same clause for 012's three, which are a separate spec and get a
+   * separate test rather than being folded into the one above: a reader
+   * bisecting a regression wants to know WHICH set of switches stopped working.
+   */
+  it('every 012 switch can be turned off, and off means what it says', () => {
+    const off = themeDocPilot(
+      resolveDocPilot({
+        composer: { draft: false },
+        history: { saveOnUnload: false },
+        ui: { waitingEscalation: false },
+      }),
+    )
+    expect(off.composer.draft).toBe(false)
+    expect(off.history.saveOnUnload).toBe(false)
+    expect(off.ui.waitingEscalation).toBe(false)
+
+    // And they are ON without being asked for, which is the half a default
+    // moving would break silently.
+    const on = themeDocPilot(resolveDocPilot({}))
+    expect(on.composer.draft).toBe(true)
+    expect(on.history.saveOnUnload).toBe(true)
+    expect(on.ui.waitingEscalation).toBe(true)
+  })
+
   // A defect is not a feature: the four fixes of 009 ship with no key, and this
-  // says so rather than leaving it to be noticed.
+  // says so rather than leaving it to be noticed. The IME guard of 012 joins
+  // them below for the same reason.
   it('gives the four defects no switch', () => {
     const leaves = leavesOf(DEFAULTS).join(' ')
-    for (const notAKnob of ['tableScroll', 'rovingTabindex', 'listRole', 'announceQueue']) {
+    for (const notAKnob of [
+      'tableScroll',
+      'rovingTabindex',
+      'listRole',
+      'announceQueue',
+      // ui-specs/012 — Enter during IME composition. Nobody configures a
+      // keyboard to eat their own sentence.
+      'imeGuard',
+      'composing',
+    ]) {
       expect(leaves).not.toContain(notAKnob)
     }
   })
@@ -3370,6 +3421,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      waitingEscalation: true,
       background: 'notify',
       credit: true,
       theme: 'auto',
@@ -3552,6 +3604,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      waitingEscalation: true,
       background: 'notify',
       credit: true,
       theme: 'auto',
@@ -3569,6 +3622,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      waitingEscalation: true,
       background: 'notify',
       credit: true,
       theme: 'auto',
@@ -3876,6 +3930,7 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      waitingEscalation: true,
       background: 'notify',
       credit: true,
       theme: 'auto',
@@ -3896,6 +3951,7 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      waitingEscalation: true,
       background: 'notify',
       credit: true,
       theme: 'auto',
@@ -3913,6 +3969,7 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      waitingEscalation: true,
       background: 'notify',
       credit: true,
       theme: 'auto',
@@ -3934,6 +3991,7 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      waitingEscalation: true,
       background: 'notify',
       credit: true,
       theme: 'auto',
@@ -3955,6 +4013,7 @@ describe('ui — from settings to the browser', () => {
       layout: 'overlay',
       prefetch: 'hover',
       firstRunHint: false,
+      waitingEscalation: true,
       background: 'notify',
       credit: true,
       theme: 'auto',
@@ -4412,7 +4471,7 @@ describe('i18n — the components go through the table', () => {
     'src/theme/components/DocPilotTrigger.vue',
     'src/theme/components/DocPilotCta.vue',
   ]
-  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+  const read = srcText
 
   it('every key the components ask for exists in the table', () => {
     for (const f of FILES) {
@@ -4469,6 +4528,7 @@ describe('i18n — the components go through the table', () => {
     for (const token of [
       'search_docs',
       'fetch_section',
+      'expand_section',
       'list_pages',
       'maxIterations',
       'qwen3',
@@ -4758,7 +4818,7 @@ describe('brand neutrality of the shipped defaults', () => {
 
   it('names no product of its own, in copy or in comments', () => {
     for (const f of FILES) {
-      const src = fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+      const src = srcText(f)
       expect(src.match(/stripo/gi) || [], f).toEqual([])
     }
   })
@@ -6473,7 +6533,7 @@ describe('i18n — the documented key table matches the shipped one', () => {
       ['docs/.vitepress/theme/ChatFeatures.vue', `replaceable, in ${g} groups.`],
     ]
     const stale = claims
-      .filter(([f, claim]) => !fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8').includes(claim))
+      .filter(([f, claim]) => !srcText(f).includes(claim))
       .map(([f, claim]) => `${f} no longer says "${claim}"`)
     expect(stale, `the key tree is ${n} leaves in ${g} groups — update the pages that print it`).toEqual([])
   })
@@ -6602,8 +6662,8 @@ describe('excerptWindow', () => {
    * hand-copy, and the two had already drifted on the budget constant.
    */
   it('is the only place either caller cuts an excerpt', () => {
-    const harness = fs.readFileSync('src/theme/docpilot/harness.js', 'utf8')
-    const bench = fs.readFileSync('src/eval/answer-bench.js', 'utf8')
+    const harness = srcText('src/theme/docpilot/harness.js')
+    const bench = srcText('src/eval/answer-bench.js')
     for (const src of [harness, bench]) {
       expect(src).toContain('excerptWindow')
       expect(src).not.toMatch(/\.slice\(0,\s*(SEARCH_CHARS|FETCH_CHARS)\)/)
@@ -9113,7 +9173,7 @@ describe('resolveLevers — the env layer is read at CALL time', () => {
 })
 
 describe('docpilot tune — the sweep refuses what it cannot honestly measure', () => {
-  const TUNE = path.resolve('src/eval/tune.js')
+  const TUNE = distEntry('src/eval/tune.js')
 
   /**
    * A child process, because every one of these is a property of the COMMAND —
@@ -9291,7 +9351,7 @@ describe('docpilot tune — the sweep refuses what it cannot honestly measure', 
 })
 
 describe('docpilot tune — a narrowed sweep may not overwrite the shipped artefact', () => {
-  const TUNE = path.resolve('src/eval/tune.js')
+  const TUNE = distEntry('src/eval/tune.js')
   const GUARD = {
     tau: 0.3,
     tauLexical: 0.3,
@@ -9641,7 +9701,7 @@ describe('the eval commands — a value-taking flag written without its =', () =
   // `bareValueFlag` being right is half of it; the module has to CALL it, before
   // `parseLevelArg` runs at module scope and defaults the tier away.
   it('run.js refuses at module scope, above the flags it guards', () => {
-    const src = fs.readFileSync('src/eval/run.js', 'utf8')
+    const src = srcText('src/eval/run.js')
     const check = src.indexOf('const BARE = bareValueFlag(process.argv)')
     expect(check).toBeGreaterThan(-1)
     expect(src).toContain('die(`--${BARE} takes a value: --${BARE}=${VALUE_FLAGS[BARE]}`)')
@@ -9657,7 +9717,7 @@ describe('the eval commands — a value-taking flag written without its =', () =
   describe('bench emit, as a process', () => {
     const bench = async (...args) => {
       const { spawnSync } = await import('node:child_process')
-      const r = spawnSync(process.execPath, ['src/eval/answer-bench.js', ...args], {
+      const r = spawnSync(process.execPath, [distEntry('src/eval/answer-bench.js'), ...args], {
         cwd: process.cwd(),
         encoding: 'utf8',
       })
@@ -9707,7 +9767,7 @@ describe('the eval commands — retrieval is built from the manifest levers', ()
   const FILES = ['run.js', 'calibrate.js', 'answer-bench.js']
 
   it.each(FILES)('%s passes manifest.tuning at every createRetrieval', (file) => {
-    const src = fs.readFileSync(`src/eval/${file}`, 'utf8')
+    const src = srcText(`src/eval/${file}`)
     const calls = src.match(/createRetrieval\(\{[^}]*\}/g) || []
     expect(calls.length).toBeGreaterThan(0)
     for (const call of calls) expect(call).toContain('tuning: index.manifest.tuning')
@@ -9858,7 +9918,7 @@ describe('bench emit — the emitted tasks carry the levers they were primed und
 
   const emit = async (dir, config) => {
     const { spawnSync } = await import('node:child_process')
-    const entry = path.resolve(process.cwd(), 'src/eval/answer-bench.js')
+    const entry = distEntry('src/eval/answer-bench.js')
     const r = spawnSync(process.execPath, [entry, 'emit', `--config=${config}`], {
       cwd: dir,
       encoding: 'utf8',
@@ -10549,5 +10609,164 @@ describe('normalise — FAQ islands, heading links and nested fences', () => {
     const { text } = normaliseMarkdown(src)
     expect(text).toContain('body two')
     expect(text).toContain('body three')
+  })
+})
+
+/**
+ * The waiting escalation — ui-specs/012.
+ *
+ * Arithmetic on two numbers and a boolean, which is why it is a module rather
+ * than a `computed`: the panel's job is to turn the key into a string, and the
+ * decision is testable without a DOM.
+ */
+describe('status — how long the reader has been waiting', () => {
+  const at = (elapsedMs, over = {}) =>
+    waitingKey({ elapsedMs, quiet: true, escalate: true, ...over })
+
+  it('says nothing at all before the first step', () => {
+    expect(at(0)).toBe(null)
+    expect(at(STILL_WORKING_MS - 1)).toBe(null)
+  })
+
+  it('names the wait once attention on a dialogue has run out', () => {
+    expect(at(STILL_WORKING_MS)).toBe('status.stillWorking')
+    expect(at(TAKING_A_WHILE_MS - 1)).toBe('status.stillWorking')
+  })
+
+  it('escalates once the wait is no longer ordinary', () => {
+    expect(at(TAKING_A_WHILE_MS)).toBe('status.takingAWhile')
+    expect(at(90_000)).toBe('status.takingAWhile')
+  })
+
+  /**
+   * The first number lands before Nielsen's ten-second limit, which is the whole
+   * argument for it — past that people switch tasks. Held as a claim rather than
+   * left in a comment: a later edit that pushes it out is a different feature.
+   */
+  it('lands the first step inside the ten seconds it was chosen for', () => {
+    expect(STILL_WORKING_MS).toBeLessThan(10_000)
+    expect(TAKING_A_WHILE_MS).toBeGreaterThan(STILL_WORKING_MS)
+    // And well inside the 120s step timeout, so the second step is still a
+    // report on a turn that may yet succeed.
+    expect(TAKING_A_WHILE_MS).toBeLessThan(120_000)
+  })
+
+  /**
+   * THE CONDITION THAT MAKES THE SECOND STRING TRUE. "The answer has not started
+   * yet" is not an observation this could get wrong — it is the gate. The moment
+   * anything paints, the phase label is the reader's signal again.
+   */
+  it('says nothing once something has painted', () => {
+    expect(at(90_000, { quiet: false })).toBe(null)
+  })
+
+  it('says nothing when the switch is off', () => {
+    expect(at(90_000, { escalate: false })).toBe(null)
+  })
+
+  /** A turn with no clock yet — the panel passes 0, a caller may pass nothing. */
+  it('says nothing rather than guessing when there is no elapsed time', () => {
+    expect(at(undefined)).toBe(null)
+    expect(waitingKey(null)).toBe(null)
+  })
+})
+
+/**
+ * The unload listener — ui-specs/012, and the same invariant `hotkey.js` has.
+ *
+ * One listener however many times the panel mounts, and a double unbind — which
+ * is what HMR does on every save — must not drive the count negative and leave
+ * the page unlistened.
+ */
+describe('unload — one listener, counted', () => {
+  const target = () => {
+    const on = new Map()
+    return {
+      on,
+      addEventListener: (t, fn) => on.set(t, (on.get(t) || 0) + 1) && void fn,
+      removeEventListener: (t) => on.set(t, (on.get(t) || 0) - 1),
+    }
+  }
+
+  afterEach(() => {
+    while (unloadRefCount() > 0) unbindUnload()
+  })
+
+  it('binds once however many mounts ask', () => {
+    const w = target()
+    const d = { ...target(), visibilityState: 'visible' }
+    bindUnload(() => {}, w, d)
+    bindUnload(() => {}, w, d)
+    bindUnload(() => {}, w, d)
+    expect(unloadRefCount()).toBe(3)
+    expect(w.on.get('pagehide')).toBe(1)
+    expect(d.on.get('visibilitychange')).toBe(1)
+  })
+
+  it('releases only on the last unmount', () => {
+    const w = target()
+    const d = { ...target(), visibilityState: 'visible' }
+    bindUnload(() => {}, w, d)
+    bindUnload(() => {}, w, d)
+    unbindUnload()
+    expect(w.on.get('pagehide')).toBe(1)
+    unbindUnload()
+    expect(w.on.get('pagehide')).toBe(0)
+    expect(d.on.get('visibilitychange')).toBe(0)
+  })
+
+  it('clamps at zero, so HMR cannot leave a page unlistened', () => {
+    unbindUnload()
+    unbindUnload()
+    expect(unloadRefCount()).toBe(0)
+  })
+
+  it('does nothing at all without a window — SSR imports this file', () => {
+    bindUnload(() => {}, null)
+    expect(unloadRefCount()).toBe(0)
+  })
+})
+
+/**
+ * What the reader is told when a turn fails — ui-specs/012.
+ *
+ * The `error` state renders one fixed, translated line. `turn.error` holds the
+ * transport's own message for the debug path and reaches no node, and `slimTurn`
+ * does not carry it to disk. All of that is true today by construction rather
+ * than by decision, which is exactly the kind of property that stops being true
+ * in a diff nobody reads twice.
+ */
+describe('an upstream message never reaches the reader', () => {
+  const vue = srcText('src/theme/components/DocPilot.vue')
+  const template = vue.slice(0, vue.search(/<script setup[^>]*>/))
+
+  it('binds `turn.error` to nothing in the template', () => {
+    expect(template).not.toContain('turn.error')
+  })
+
+  it('renders the error state as one fixed string', () => {
+    expect(template).toContain("<p class=\"docpilot__lead\" role=\"alert\">{{ T('error.lead') }}</p>")
+  })
+
+  it('does not write it to disk either', () => {
+    const kept = slimTurn({
+      id: 't',
+      question: 'q',
+      state: 'error',
+      answerText: 'half an answer',
+      error: 'upstream said: invalid_api_key for account 12345',
+      sources: [],
+    })
+    expect(JSON.stringify(kept)).not.toContain('invalid_api_key')
+  })
+
+  /**
+   * And the reason it holds no upstream text to leak in the first place:
+   * `degradedReason` was written and read nowhere, so it is gone — the call 009
+   * made about `llm.think` rather than exempting it.
+   */
+  it('keeps no reason on the store', () => {
+    const src = srcText('src/theme/docpilot/session.js')
+    expect(src).not.toContain('degradedReason')
   })
 })

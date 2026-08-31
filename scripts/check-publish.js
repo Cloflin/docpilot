@@ -90,9 +90,38 @@ const checkArtifact = (rel, named) => {
   }
 }
 
+/**
+ * A wildcard subpath names a PATTERN, so there is no single file to stat. It
+ * became checkable here at 0.6.0, when `./theme/components/*.vue` moved from
+ * `src/` — which this loop skips — into the emitted tree. Expanded rather than
+ * skipped, because an empty `dist/theme/components/` is precisely the shape of
+ * failure this file exists to stop: every subpath still resolves, `npm publish`
+ * is green, and the theme imports five components that are not there.
+ */
+const expand = (rel) => {
+  const [dir, tail] = rel.split('*')
+  let entries = []
+  try {
+    entries = fs.readdirSync(abs(dir))
+  } catch {
+    return null
+  }
+  return entries.filter((e) => e.endsWith(tail)).map((e) => `${dir}${e}`)
+}
+
 for (const [name, target] of leaves) {
   if (!target.startsWith('./dist/')) continue
-  checkArtifact(target.slice(2), `exports["${name}"]`)
+  const rel = target.slice(2)
+  if (!rel.includes('*')) {
+    checkArtifact(rel, `exports["${name}"]`)
+    continue
+  }
+  const matches = expand(rel)
+  if (!matches?.length) {
+    fail(`${rel} matches no file — exports["${name}"] resolves to nothing`, 'npm run build')
+    continue
+  }
+  for (const match of matches) checkArtifact(match, `exports["${name}"]`)
 }
 
 /**

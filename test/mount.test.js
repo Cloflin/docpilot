@@ -490,3 +490,285 @@ describe('the live region', () => {
     expect(document.querySelectorAll('.docpilot__sr[aria-live="polite"]').length).toBe(1)
   })
 })
+
+/**
+ * The composer, and the two things ui-specs/012 changed about it.
+ *
+ * Both need a real `<textarea>` and a real `sessionStorage`, so they are here
+ * rather than in the source-text suite: what is asserted is what a keystroke
+ * does, not what the file says about it.
+ *
+ * TWO FIXTURE FACTS, both of them consequences of this file making no requests.
+ *
+ * The composer is three render passes below the flag `open()` sets — a Teleport
+ * inside a `v-if` — so one `nextTick` finds the root and an empty section.
+ *
+ * And the composer lives in the `v-else` of `s.degraded`. The suite is offline
+ * by construction, so `ensureIndex` fails and the panel correctly swaps the
+ * field for the "AI answers are off here" block. Clearing the flag after the
+ * mount is what puts this file in front of the control it is about; the degraded
+ * path is somebody else's test.
+ */
+describe('the composer — ui-specs/012', () => {
+  const field = () => document.querySelector('.docpilot__field textarea')
+
+  const openPanel = async (config = CONFIG) => {
+    panel = mountDocPilot({ config })
+    panel.open()
+    // A MACROTASK, not a tick. `open()` awaits `ensureIndex()`, whose fetch is
+    // rejected by this file's offline stub, and that rejection lands in a
+    // microtask AFTER any number of `nextTick`s — so clearing the flag before it
+    // arrives clears nothing.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    session.state.degraded = false
+    await nextTick()
+    await nextTick()
+  }
+
+  /**
+   * `isComposing` is not settable through `KeyboardEvent`'s init dictionary in
+   * happy-dom — it is a getter on the prototype — so the flag is defined on the
+   * instance. That is what a browser hands the listener, and it is the only part
+   * of the event this guard reads.
+   *
+   * The event is returned because `defaultPrevented` is the assertion: `send()`
+   * calls `preventDefault()` before it consults anything else, so "did Enter
+   * reach the send path" is answerable without running a turn.
+   */
+  const enter = (el, composing) => {
+    const e = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    Object.defineProperty(e, 'isComposing', { value: composing })
+    el.dispatchEvent(e)
+    return e
+  }
+
+  const type = async (el, text) => {
+    el.value = text
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+  }
+
+  beforeEach(() => {
+    session.state.degraded = false
+    try {
+      sessionStorage.clear()
+    } catch {
+      /* nothing to clear */
+    }
+  })
+
+  /**
+   * THE DEFECT. In Japanese, Chinese and Korean, Enter is how a candidate is
+   * committed — several times a sentence — and every one of those commits was
+   * sending a half-typed question and spending a request against a daily
+   * allowance the whole site shares.
+   */
+  it('does not send on Enter while an IME is composing', async () => {
+    await openPanel()
+    const ta = field()
+    await type(ta, 'にほんご')
+    const e = enter(ta, true)
+    await nextTick()
+    expect(e.defaultPrevented).toBe(false)
+    // And the sentence is still there to go on composing into.
+    expect(ta.value).toBe('にほんご')
+  })
+
+  /** The control, so the test above is about composing rather than about Enter. */
+  it('still takes Enter when nothing is composing', async () => {
+    await openPanel()
+    const ta = field()
+    await type(ta, 'how do I authenticate?')
+    expect(enter(ta, false).defaultPrevented).toBe(true)
+  })
+
+  /** ArrowUp is under the same guard: mid-composition is not "edit my last one". */
+  it('does not open the last question’s editor while composing', async () => {
+    await openPanel()
+    const ta = field()
+    const up = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })
+    Object.defineProperty(up, 'isComposing', { value: true })
+    ta.dispatchEvent(up)
+    await nextTick()
+    expect(up.defaultPrevented).toBe(false)
+  })
+
+  /**
+   * The draft, and the half of it that is not a convenience: a key pasted into
+   * the composer and never sent has to reach storage as the mask. `pagehide` is
+   * used rather than waiting out the debounce because it is also the flush path,
+   * so one assertion covers both.
+   */
+  it('keeps the draft, redacted, when the page goes away', async () => {
+    await openPanel()
+    const secret = 'sk-or-v1-0123456789abcdef0123456789abcdef'
+    await type(field(), `where do I put ${secret}?`)
+    window.dispatchEvent(new Event('pagehide'))
+    const kept = sessionStorage.getItem('docpilot:draft')
+    expect(kept).toContain('YOUR_SECRET_KEY')
+    expect(kept).not.toContain(secret)
+  })
+
+  it('reads the draft back into an empty composer on mount', async () => {
+    sessionStorage.setItem('docpilot:draft', 'half a question about tokens')
+    await openPanel()
+    expect(field().value).toBe('half a question about tokens')
+  })
+
+  /**
+   * `history: { enabled: false }` is published as "stops recording AND clears
+   * what is already stored". A draft outliving it would make that sentence
+   * false, so the switch does not merely decline to write.
+   */
+  it('clears a draft left behind when history is off', async () => {
+    sessionStorage.setItem('docpilot:draft', 'a question from a previous visit')
+    await openPanel({ ...CONFIG, history: { enabled: false } })
+    expect(sessionStorage.getItem('docpilot:draft')).toBe(null)
+    expect(field().value).toBe('')
+  })
+
+  it('writes no draft when the switch is off', async () => {
+    await openPanel({ ...CONFIG, composer: { draft: false } })
+    await type(field(), 'a question nobody wants kept')
+    window.dispatchEvent(new Event('pagehide'))
+    expect(sessionStorage.getItem('docpilot:draft')).toBe(null)
+  })
+})
+
+/**
+ * A turn that was still being written when the page went away — ui-specs/012.
+ *
+ * The whole chain is real here, and that is the point of putting it in this
+ * file: a `pagehide` on the window, through `unload.js`, into
+ * `session.saveIfRunning`, through `slimTurn`, and out into a `localStorage` the
+ * test then reads. Every other suite in the package would have to mock at least
+ * two of those.
+ */
+describe('history.saveOnUnload — ui-specs/012', () => {
+  const ARCHIVE = 'docpilot:history'
+
+  const streaming = (text) => {
+    session.state.busy = true
+    session.state.turns.push({
+      id: 'unload-1',
+      question: 'how do I authenticate?',
+      answerText: text,
+      state: 'streaming',
+      startedAt: 0,
+      sources: [],
+    })
+    return session.state.turns[session.state.turns.length - 1]
+  }
+
+  const archived = () => {
+    try {
+      return localStorage.getItem(ARCHIVE) || ''
+    } catch {
+      return ''
+    }
+  }
+
+  const leave = () => window.dispatchEvent(new Event('pagehide'))
+
+  beforeEach(async () => {
+    session.state.busy = false
+    session.state.turns.length = 0
+    session.state.conversationId = null
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+    } catch {
+      /* nothing to clear */
+    }
+    panel = mountDocPilot({ config: CONFIG })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+
+  afterEach(() => {
+    session.state.busy = false
+    session.state.turns.length = 0
+  })
+
+  /**
+   * The defect: everything already streamed was thrown away, on a request that
+   * had already been paid for.
+   */
+  it('writes an unfinished turn down, with what had already streamed', () => {
+    streaming('the first half of an answer')
+    leave()
+    expect(archived()).toContain('the first half of an answer')
+  })
+
+  /**
+   * `slimTurn` settles a mid-flight turn as `aborted`, which is the state
+   * `stop()` produces — so the restored turn renders as **Stopped.** and
+   * `canRetry` offers **Ask again**, both of them for free.
+   */
+  it('settles it as `aborted`, which is what stop() produces', () => {
+    streaming('half an answer')
+    leave()
+    expect(JSON.parse(archived())).toMatchObject({
+      conversations: [{ turns: [{ state: 'aborted' }] }],
+    })
+  })
+
+  /**
+   * `visibilitychange` is bound beside `pagehide` because mobile Safari can
+   * discard a tab without firing the latter — and it fires on every tab switch,
+   * app switch and screen lock. Without the marker, a reader who swaps apps
+   * while an answer streams rewrites the archive on every swipe.
+   */
+  it('does not rewrite the archive when nothing has been added', () => {
+    streaming('half an answer')
+    leave()
+    const once = archived()
+    leave()
+    expect(archived()).toBe(once)
+  })
+
+  /** But more text IS worth a second write: a hidden tab can come back. */
+  it('writes again once more has arrived', () => {
+    const turn = streaming('half an answer')
+    leave()
+    turn.answerText = 'half an answer, and then the rest of it'
+    leave()
+    expect(archived()).toContain('and then the rest of it')
+  })
+
+  it('writes nothing when no turn is running', () => {
+    session.state.busy = false
+    leave()
+    expect(archived()).toBe('')
+  })
+
+  /**
+   * A turn with no text yet has nothing worth an archive row — `slimTurn`
+   * returns null for it — and this is what keeps a reader who reloads two
+   * seconds after asking from finding an empty conversation in their history.
+   */
+  it('writes no row for a turn that has nothing in it yet', () => {
+    streaming('')
+    leave()
+    expect(archived()).not.toContain('unload-1')
+  })
+
+  /** Off is the behaviour that shipped before this key existed. */
+  it('writes nothing with the switch off', async () => {
+    panel.destroy()
+    panel = mountDocPilot({ config: { ...CONFIG, history: { saveOnUnload: false } } })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    streaming('half an answer nobody will see again')
+    leave()
+    expect(archived()).toBe('')
+  })
+
+  /** And `history.enabled` still outranks it, as it outranks every other key here. */
+  it('writes nothing with the archive off', async () => {
+    panel.destroy()
+    panel = mountDocPilot({ config: { ...CONFIG, history: { enabled: false } } })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    streaming('half an answer')
+    leave()
+    expect(archived()).toBe('')
+  })
+})

@@ -69,7 +69,7 @@
   </button>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import * as session from '../docpilot/session.js'
 import { useHost } from '../docpilot/host.js'
@@ -87,7 +87,12 @@ import { resolveUi } from '../docpilot/ui.js'
  *   screen — a text row in the mobile nav menu
  *   fab    — floating, bottom right, the popup's own opener
  */
-const props = defineProps({ variant: { type: String, default: 'nav' } })
+// `string`, not the union of the three kinds. The branch below DEGRADES on an
+// unknown variant rather than throwing — this renders on every page of a docs
+// build — and a union type would make that branch unreachable for TypeScript
+// callers while JavaScript callers still reach it. The union lives where it
+// belongs: in the published `types/components.d.ts`.
+const props = withDefaults(defineProps<{ variant?: string }>(), { variant: 'nav' })
 
 const KINDS = ['nav', 'screen', 'fab']
 

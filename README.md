@@ -7,7 +7,7 @@ A grounded **AI assistant** for **any page of any site** — VitePress, Docusaur
 
 It is a chat, not a search box with better typography: scope a question to one section, ask about a passage you selected, follow up, edit what you asked, keep the thread. It mounts wherever a page can load a stylesheet and a script: a docs site, a landing page, a pricing page, a help centre, an app you already ship. What it answers **from** is the corpus you built — `npx docpilot index` walks your markdown and OpenAPI files, and `npx docpilot import <url>` pulls in an allowlisted page that lives in neither. A panel on your pricing page answers from that corpus, not from the pricing page.
 
-Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **signed int8, one byte per dimension** — 920 KB for this project's own 460-chunk index, where float32 would be 3.6 MB — and the build measures the round-trip error and refuses to ship above `0.01` mean |Δcos|. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
+Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **signed int8, one byte per dimension** — 930 KB for this project's own 465-chunk index, where float32 would be 3.6 MB — and the build measures the round-trip error and refuses to ship above `0.01` mean |Δcos|. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
 ## Install
 
@@ -192,7 +192,7 @@ covers rebuilding the index. See
 |---|---|---|
 | Where retrieval runs | the reader's browser | the vendor's cloud |
 | Where the index lives | a static file on the host already serving your site | the vendor's platform |
-| Index the reader downloads | int8 vectors, one byte per dimension — 920 KB for this site's 460 chunks | n/a — the index is theirs |
+| Index the reader downloads | int8 vectors, one byte per dimension — 930 KB for this site's 465 chunks | n/a — the index is theirs |
 | An off-topic question costs | zero model calls, zero tokens | not documented by any of them |
 | Citations checked against what was retrieved | yes, by host code no message can reach | not documented by any of them |
 | Refusal threshold measured on **your** corpus | `npx docpilot calibrate` | not documented by any of them |
@@ -272,7 +272,7 @@ Point `importDir` at a directory outside your docs and the assistant will answer
 
 ## Translating it
 
-Every reader-facing string — 171 of them, in 25 groups — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
+Every reader-facing string — 173 of them, in 25 groups — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
 
 ```js
 i18n: {

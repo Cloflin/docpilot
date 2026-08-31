@@ -14,7 +14,7 @@ Output goes to `docs/public/rag/` — a manifest, sharded chunk text, a quantise
 
 ## What gets indexed
 
-Markdown under your docs directory, plus any OpenAPI YAML in `public/`, plus — when `importDir` is set — a second corpus root outside the site. See [Imported pages](/guide/imported-pages). Chunking follows heading structure: sections split at `##` and `###`, short sections merge, long ones split with overlap, and every chunk carries a context line naming the page and section it came from.
+Markdown under your docs directory — `.md` and `.mdx` alike — plus your OpenAPI specs, plus — when `importDir` is set — a second corpus root outside the site. See [Imported pages](/guide/imported-pages). Chunking follows heading structure: sections split at `##` and `###`, short sections merge, long ones split with overlap, and every chunk carries a context line naming the page and section it came from.
 
 Two content tags let you steer what the assistant sees without changing what a reader sees:
 
@@ -37,6 +37,28 @@ A `<FaqAccordion :items="[…]">` island is not prose, and it is not indexed as 
 That path obeys `<llm-exclude>` like every other. It is worth stating because it is exactly where the promise above used to be false: the FAQ was lifted off the raw page *before* the tag pass ran, so wrapping an island in `<llm-exclude>` excluded nothing. The tag pass never saw the island, the tag itself was then deleted from the prose stream, and the page looked correctly redacted while the Q&A was already on its way to becoming an indexed, citable chunk. Excluding too much is recoverable; publishing something an author marked private is not.
 
 **A fenced sample of the component is documentation, not an island.** A page that shows `<FaqAccordion :items="[{ question: 'Sample question?', … }]" />` inside a fenced `vue` block used to produce a real `#faq-1` chunk asserting a question and an answer the page never gave. A fabricated chunk is worse than a missing one — nothing downstream can tell it from a real one, and it is retrieved, quoted and cited like any other. The sample now stays in the prose chunk verbatim, as the documentation it is.
+
+### `.mdx`, and where the specs live {#mdx-and-specs}
+
+`.mdx` is walked with `.md` and routed the same way: `docs/guide/install.mdx` is `/guide/install`. The module syntax MDX adds — `import`, `export`, the `{/* … *` + `/}` comment — is removed before chunking, because `import Tabs from '@theme/Tabs'` at the top of every page is a sentence that appears everywhere and means nothing. The components themselves keep their text: `<Tabs>` loses its brackets exactly as `<em>` does.
+
+Specs are found through [`openapi`](/reference/config#openapi), which takes a directory, a file, or a `*` in the file name:
+
+```js
+openapi: ['api/openapi.yaml']
+```
+
+The default is still `docs/public/openapi/`, so a project that already put its spec there needs to write nothing. Each spec claims `/reference/<basename>`, and two specs whose file names collide stop the build rather than quietly sharing a route.
+
+### A site without markdown {#built-site}
+
+If your documentation is not markdown at all — Hugo, Jekyll, MkDocs, Astro, Next, a Blade or Twig template, a help centre on somebody else's platform — build it and point the indexer at the output:
+
+```bash
+npx docpilot index --html-dir=dist
+```
+
+The pages are extracted with the same rule [`import`](/reference/cli#import) uses, cited by the route they are served at, and skipped wherever a markdown page already claims that route. `--html-select` names the body when the page has no `<main>`; `--sitemap` limits the walk to the routes your site actually publishes. Full flags in [the CLI reference](/reference/cli#html-dir).
 
 ## Blocks a chunk is never cut through
 
@@ -176,7 +198,7 @@ quantisation err 0.00262 mean |Δcos|
 
 Above `0.01` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.
 
-For scale: this documentation site indexes 460 chunks at 2048 dimensions, so its vector blob is 942,080 bytes — 920 KB, where float32 would have been 3.6 MB.
+For scale: this documentation site indexes 465 chunks at 2048 dimensions, so its vector blob is 952,320 bytes — 930 KB, where float32 would have been 3.6 MB.
 
 ## Scale
 

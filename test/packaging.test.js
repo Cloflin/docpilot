@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { srcText } from './helpers/source.js'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -23,8 +24,15 @@ const shipped = (rel) =>
   })
 
 describe('packaging', () => {
-  // `dist/` is built by `prepare`, so it may legitimately be absent here.
-  const built = (rel) => rel.startsWith('dist/')
+  // `dist/` is built by `prepare`, so it may legitimately be absent — but only
+  // WHOLESALE. Sixteen of the nineteen subpaths resolve into it since 0.6.0, so
+  // a blanket skip on every `dist/` path would leave this test asserting almost
+  // nothing about the export map; and a dist/ that exists with a hole in it is
+  // exactly the shape `scripts/check-publish.js` was written to catch. Since
+  // `npm run verify` builds before it tests, the skip is only reachable from a
+  // bare `vitest run` on a tree whose `prepare` has never run.
+  const distBuilt = fs.existsSync(abs('dist'))
+  const built = (rel) => rel.startsWith('dist/') && !distBuilt
 
   /**
    * The one build output whose CSS is wrapped in a cascade layer, asserted
@@ -160,8 +168,8 @@ describe('packaging', () => {
     expect(pkg.sideEffects).toEqual([
       '*.css',
       '*.scss',
-      './src/theme/index.js',
-      './src/web.js',
+      './dist/theme/index.js',
+      './dist/web.js',
     ])
     for (const f of [
       'src/theme/components/DocPilotTrigger.vue',
@@ -183,7 +191,7 @@ describe('packaging', () => {
       fs.readdirSync(abs(dir), { withFileTypes: true }).flatMap((e) =>
         e.isDirectory()
           ? walk(`${dir}/${e.name}`)
-          : /\.(js|mjs)$/.test(e.name)
+          : /\.(js|mjs|ts)$/.test(e.name)
             ? [`${dir}/${e.name}`]
             : [],
       )
@@ -196,7 +204,11 @@ describe('packaging', () => {
         .split('\n')
         .some((line) => /^import\s+['"][^'"]+\.(css|scss)['"]/.test(line))
       if (!bare) continue
-      expect(declared.has(`./${f}`), `${f} imports a stylesheet but is not in sideEffects`).toBe(true)
+      // `sideEffects` names what the consumer resolves, which is the emitted
+      // module; this walk reads the source that produces it. Map one onto the
+      // other rather than declaring both.
+      const emitted = f.replace(/^src\//, 'dist/').replace(/\.ts$/, '.js')
+      expect(declared.has(`./${emitted}`), `${f} imports a stylesheet but is not in sideEffects`).toBe(true)
     }
   })
 
@@ -212,7 +224,7 @@ describe('packaging', () => {
    * looks wrong. This package's own docs site is exactly that shape.
    */
   it('resolves the parent layout through `extends`, not just off the theme', () => {
-    const src = fs.readFileSync(abs('src/theme/theme.js'), 'utf8')
+    const src = srcText('src/theme/theme.js')
     const line = src.match(/const Parent =.*/)?.[0] || ''
     expect(line, 'withDocPilot no longer resolves a parent Layout').toBeTruthy()
     expect(line).toContain('theme.extends?.Layout')
@@ -354,21 +366,44 @@ describe('publish metadata', () => {
    * The runtime half of the same decision: with no peer block, a module that is
    * missing has to say so ITSELF. These two are build-time and are the ones a
    * consumer meets by accident — an OpenAPI file appears in `public/`, or
-   * somebody runs `docpilot import` — so each names its install command in the
-   * error it throws rather than failing on an unresolved import three frames up.
+   * somebody runs `docpilot import` or `index --html-dir` — so each names its
+   * install command in the error it throws rather than failing on an unresolved
+   * import three frames up.
+   *
+   * `linkedom` moved from `import.js` into `lib/dom.js` when the second HTML
+   * reader arrived. The file named here is THE ONE PLACE the import is written,
+   * and that is what makes the message a consumer sees a single string rather
+   * than one per caller: a third reader that re-implements the try/catch instead
+   * of importing this module fails the second half of this test.
    */
   it('names the install command where an optional module is actually needed', () => {
     const cases = [
       ['src/build/lib/openapi-chunker.js', '@scalar/openapi-parser'],
-      ['src/build/import.js', 'linkedom'],
+      ['src/build/lib/dom.js', 'linkedom'],
     ]
     for (const [file, mod] of cases) {
-      const src = fs.readFileSync(abs(file), 'utf8')
+      const src = srcText(file)
       expect(src, `${file} does not import ${mod} lazily`).toContain(`await import('${mod}')`)
       expect(src, `${file} does not name an install command for ${mod}`).toMatch(
         new RegExp(`npm i[^\\n]*${mod.replace('/', '\\/')}`),
       )
     }
+
+    // One writer, one message. `test/` is excluded: the suite parses HTML with
+    // linkedom directly and always will — it is a devDependency there, which is
+    // exactly the situation this rule is protecting a CONSUMER from.
+    const strays = []
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name)
+        if (e.isDirectory()) walk(p)
+        else if (/\.(js|ts)$/.test(e.name) && !p.endsWith(path.join('lib', 'dom.ts'))) {
+          if (fs.readFileSync(p, 'utf8').includes("import('linkedom')")) strays.push(p)
+        }
+      }
+    }
+    walk(abs('src'))
+    expect(strays, 'linkedom is imported outside src/build/lib/dom.ts').toEqual([])
   })
 
   /**
@@ -424,7 +459,7 @@ describe('the credit link and the manifest homepage', () => {
   const linkPkg = JSON.parse(fs.readFileSync(linkAbs('package.json'), 'utf8'))
 
   it('point at the same place', () => {
-    const panel = fs.readFileSync(linkAbs('src/theme/components/DocPilot.vue'), 'utf8')
+    const panel = srcText('src/theme/components/DocPilot.vue')
     const found = panel.match(/const CREDIT_URL = '([^']+)'/)
     expect(found, 'a `const CREDIT_URL` in DocPilot.vue').not.toBe(null)
     expect(found[1], 'the footnote credit disagrees with package.json homepage').toBe(linkPkg.homepage)

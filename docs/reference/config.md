@@ -43,6 +43,7 @@ export const docPilot = {
   evalDir: 'docpilot',
   importDir: null,
   sources: null,
+  openapi: null,
   chat: { provider: 'auto', chain: 'auto', preferLocal: false, model: null, baseURL: null, models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192, reasoning: 'auto', verbosity: null, topP: null, seed: null },
   embed: 'auto',
   topK: null,
@@ -51,22 +52,22 @@ export const docPilot = {
   suggestions: { questions: [], scoped: true, followUps: false },
   quote: { fromAnswer: true, fromDocs: false },
   citations: { passage: false, inCopy: true, pagesRead: false },
-  composer: { editLastOnArrowUp: true, deepLink: true },
+  composer: { editLastOnArrowUp: true, deepLink: true, draft: true },
   feedbackEndpoint: null,
   feedback: { send: 'both', comment: true, confirm: true },
   guard: { mode: 'dense-only', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
   vocabulary: null,
   scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
-  history: { enabled: true, maxConversations: 20, exportThread: true },
+  history: { enabled: true, maxConversations: 20, exportThread: true, saveOnUnload: true },
   prompt: { show: false, allowAppend: false, appendMaxChars: 500, override: null, extend: '' },
-  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, background: 'notify', credit: true, theme: 'auto', font: null, fontMono: null },
+  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, waitingEscalation: true, background: 'notify', credit: true, theme: 'auto', font: null, fontMono: null },
   host: { base: null, ragBase: null, article: null, search: null, content: null },
   i18n: { translations: {}, locales: {} },
 }
 ```
 
 **This block is checked against the code.** A test walks `DEFAULTS` in
-`src/config.js` and fails unless it equals what is written here — the same
+`src/config.ts` and fails unless it equals what is written here — the same
 discipline the [i18n key table](/guide/i18n#the-keys) is held to. A default that
 moves without this page moving cannot ship.
 
@@ -100,7 +101,7 @@ The block above is what you paste; this is what you scan. Each name links to the
 section below that says *why* the default is what it is.
 
 **Both views are checked against the code.** The table's Default column is
-executed and compared to `DEFAULTS` in `src/config.js` by the same test that
+executed and compared to `DEFAULTS` in `src/config.ts` by the same test that
 holds the block — a setting with no row, a row for a setting that does not exist,
 and a default written down wrong all fail the suite. Types and descriptions are
 written by hand; only the values are mechanical.
@@ -116,6 +117,7 @@ written by hand; only the values are mechanical.
 | [`evalDir`](#evaldir) | `string` | `'docpilot'` | Holds the golden set, the calibration set and the reports — a statement about your corpus, resolved from the project root — *server-only — the CLI reads it, the panel never sees it* |
 | [`importDir`](#importdir) | `string \| null` | `null` | A second corpus root that is indexed but never routed — its pages carry a mandatory frontmatter `source:` as their citation — *server-only, and it must sit outside `docsDir` or VitePress publishes the pages anyway* |
 | [`sources`](#sources) | `{ allow: string[] } \| null` | `null` | The https origins a page may name in `source:`, each optionally narrowed to a path prefix; `null` forbids `source:` outright — *server-only, and assigned whole rather than merged, so a partial object is the entire allowlist* |
+| [`openapi`](#openapi) | `string[] \| null` | `null` | Where the OpenAPI specs are, as paths from the project root — a directory, a file, or a `*` in the file name; `null` means `${docsDir}/public/openapi` — *server-only, and each spec claims `/reference/<basename>`, so two entries sharing a basename claim one route and the build says so* |
 | [`chat.provider`](#chat-provider) | `ProviderId \| 'auto'` | `'auto'` | Picks which service answers and where the request is sent; `'auto'` reads the environment and takes the first key it finds along [the chain](#the-provider-chain) — *fifteen ids, listed under [Choosing providers](/guide/providers); a misspelled one stops the build instead of quietly becoming a local Ollama* |
 | [`chat.chain`](#chat-chain) | `'auto' \| false \| Array<ProviderId \| ChainMember>` | `'auto'` | Which SERVICES may answer, in order — the provider-level form of `chat.models`; `'auto'` is every member of [the chain](#the-provider-chain) the environment selects, billed accounts before free tiers, an array is your own set, `false` is one provider chosen once — *fires only where `chat.provider` is also `'auto'`, so naming a provider is how rotation is declined; the embed half never rotates* |
 | [`chat.preferLocal`](#chat-preferlocal) | `boolean` | `false` | Puts a server of your own — `custom`, `llamacpp`, `ollama` — at the FRONT of the ladder instead of the back, and makes an environment that selects nothing fall through to a local Ollama rather than to OpenRouter's free tier — *it reorders, it never selects: a local server is still reached by its address, and `readiness` says so when this moved nothing* |
@@ -150,6 +152,7 @@ written by hand; only the values are mechanical.
 | [`citations.pagesRead`](#citations-pagesread) | `boolean` | `false` | Names the pages a refused turn actually read, under the line that already counts them, turning that claim into something checkable — *built at turn time, so refusals archived while it was off never gain the list* |
 | [`composer.editLastOnArrowUp`](#composer-editlastonarrowup) | `boolean` | `true` | `↑` in an empty composer reopens the last question for editing, caret at the end — ChatGPT's behaviour and readline's before it |
 | [`composer.deepLink`](#composer-deeplink) | `boolean` | `true` | Reads `?dp-ask=` into the composer and deliberately does not submit, so a link can hand a reader a question and spend no turn — *`false` disables the companion `&dp-scope=page` as well* |
+| [`composer.draft`](#composer-draft) | `boolean` | `true` | Keeps the composer's text in `sessionStorage` so a reload does not empty it, redacted on the same rule a question is — *gated on `history.enabled` too: "record nothing" means nothing* |
 | [`feedbackEndpoint`](#feedbackendpoint) | `string \| null` | `null` | Where a thumbs-up or thumbs-down POSTs as JSON; `null` keeps every vote in localStorage for console export |
 | [`feedback.send`](#feedback-send) | `'both' \| 'down' \| 'up' \| 'none'` | `'both'` | Which verdicts leave the device — `'down'` for complaints only, `'none'` keeps the thumbs on screen but sends nothing — *inert without `feedbackEndpoint`; an unrecognised value logs and falls back to `'both'`* |
 | [`feedback.comment`](#feedback-comment) | `boolean` | `true` | Offers a free-text box beside the down-vote reason buttons; `false` keeps the buttons and drops the box — *the box is hidden anyway when there is no `feedbackEndpoint` or `send` is `'none'`* |
@@ -162,11 +165,12 @@ written by hand; only the values are mechanical.
 | [`scope.enabled`](#scope) | `boolean` | `true` | Shows the scope picker; `false` removes it and every question then searches the whole corpus |
 | [`scope.default`](#scope) | `'all'` | `'all'` | The scope a reader's first question starts in — whole-corpus is the only accepted value, since a narrowed default hides pages silently — *anything else is reported to the console and reset to `'all'` at configure() time* |
 | [`scope.promptListLimit`](#scope) | `number` | `12` | How many page paths a narrowed scope names in the system prompt before it states a count instead |
-| [`scope.filter`](#scope-filter) | `'auto' \| boolean` | `'auto'` | A search field above the page list; `'auto'` shows it once the corpus passes twelve pages, `true` or `false` decide it outright — *the .d.ts says `'always'` or `'never'` — the code takes booleans and drops those strings* |
+| [`scope.filter`](#scope-filter) | `'auto' \| boolean` | `'auto'` | A search field above the page list; `'auto'` shows it once the corpus passes twelve pages, `true` or `false` decide it outright |
 | [`scope.groupBySection`](#scope-groupbysection) | `boolean` | `true` | Groups the picker's pages under their sidebar section headings instead of showing one flat list — *suspended while the filter field has text, so a filtered list stays flat* |
 | [`history.enabled`](#history-enabled) | `boolean` | `true` | Keeps past threads in the reader's `localStorage` and lists them in the panel switcher, so a reload or a new tab loses nothing — *`false` also clears what is already stored, on the reader's next visit* |
 | [`history.maxConversations`](#history-maxconversations) | `number` | `20` | How many threads the switcher holds before the oldest falls off the end; raise it for a longer archive — *A 512KB localStorage ceiling in history.js trims underneath it, so this is a cap and not a guarantee* |
 | [`history.exportThread`](#history-exportthread) | `boolean` | `true` | Adds a header button that copies the whole conversation as Markdown, with sources per `citations.inCopy` — *not gated on `history.enabled` — the live thread still exports* |
+| [`history.saveOnUnload`](#history-saveonunload) | `boolean` | `true` | Writes an unfinished turn down when the page goes away, so a reload keeps what had already streamed — *the one write that happens mid-stream, and it obeys `history.enabled`* |
 | [`prompt.show`](#prompt-show-prompt-allowappend) | `boolean` | `false` | `true` publishes the system instruction verbatim in a disclosure the reader can open from the composer row — *off also forces `allowAppend` off and clears any addendum the reader saved* |
 | [`prompt.allowAppend`](#prompt-show-prompt-allowappend) | `boolean` | `false` | Lets a reader add a standing line of their own for the session; it rides as a separate user message, never in the system prompt — *ignored unless `prompt.show` is true and `appendMaxChars` is non-zero* |
 | [`prompt.appendMaxChars`](#prompt-appendmaxchars) | `number` | `500` | Caps that reader line as a `maxlength` on the field, so the limit shows before it bites; `0` switches appending off — *the field only — what is sent is clamped at a hard-coded 500 in prompt.js* |
@@ -179,6 +183,7 @@ written by hand; only the values are mechanical.
 | [`ui.layout`](#ui-layout) | `'overlay' \| 'push'` | `'overlay'` | How the panel treats the page beneath it — `'push'` pads the content aside so docs and answer sit side by side — *does nothing below 960px, where the panel is already edge to edge* |
 | [`ui.prefetch`](#ui-prefetch) | `'hover' \| 'idle' \| false` | `'hover'` | When the retrieval index is downloaded — `'idle'` pays up front, `false` waits until the panel is opened — *skipped entirely when the browser reports `saveData` or a 2G-class connection* |
 | [`ui.firstRunHint`](#ui-firstrunhint) | `boolean` | `false` | Shows one dismissible line on a first visit, naming the gesture nobody discovers: selecting a passage to ask about it — *withheld when both `quote` switches are off* |
+| [`ui.waitingEscalation`](#ui-waitingescalation) | `boolean` | `true` | Escalates the status line at 8s and 25s while nothing has arrived, so a silent provider is not indistinguishable from a broken panel — *neither step names a cause or promises a retry* |
 | [`ui.background`](#ui-background) | `'notify' \| 'open' \| false` | `'notify'` | Whether a turn outlives the panel it was asked in — `'notify'` marks the trigger with a dot when it settles, `'open'` brings the panel back with the answer in place — *`false` abandons it on close; the composer's Stop always ends a turn regardless* |
 | [`ui.credit`](#ui-credit) | `boolean` | `true` | One word at the end of the footnote — `DocPilot`, linked to the project — so a reader can find out what answered them — *`false` removes it; the disclaimer beside it is not affected* |
 | [`ui.theme`](#ui-theme) | `'auto' \| 'light' \| 'dark' \| 'system'` | `'auto'` | Which colour scheme the panel wears — `'auto'` follows the page, `'light'` and `'dark'` pin it against both your site's toggle and the reader's OS — *a pinned panel wears DocPilot's own palette, not your site's, because a host has no dark value to read while it is in light mode* |
@@ -296,6 +301,33 @@ trusted with a URL scheme. A path narrows the origin at a segment boundary.
 
 `sources` is assigned whole, never merged: a half-merged allowlist is one whose
 contents nobody wrote.
+
+## openapi
+
+- **Type:** `string[] | null`
+- **Default:** `null` — `${docsDir}/public/openapi`
+- **Related:** [`docsDir`](#docsdir)
+
+Where your OpenAPI specs live. Each one is chunked per operation and claims the
+route `/reference/<basename>`, which is the behaviour that predates this setting;
+what the setting adds is the ability to leave the file where it already is.
+
+```js
+openapi: ['api/openapi.yaml']       // one file
+openapi: ['api']                    // every .yaml and .yml in a directory
+openapi: ['specs/v*.yaml']          // a name pattern
+openapi: ['api', 'partners/api.yaml']
+```
+
+`*` is the only metacharacter and it matches inside the **file name** only — a
+`*` in a directory segment stops the build rather than quietly matching nothing,
+because a spec that was configured and never indexed leaves a documented
+`/reference/` route with nothing behind it. A path you wrote that does not exist
+stops the build for the same reason; the default directory is allowed to be
+absent, because most projects publish no spec at all.
+
+Chunking a spec needs a parser, which is an optional dependency —
+`npm i -D @scalar/openapi-parser`.
 
 ## chat
 
@@ -1588,6 +1620,31 @@ Overrides for the calibrated thresholds. Use `npx docpilot calibrate` instead.
 guard: { mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers: 3 }
 ```
 
+
+### composer.draft
+
+The composer keeps what is in it across a reload. `sessionStorage`, under
+`docpilot:draft`.
+
+A question against the thousand-character ceiling is a minute of somebody's
+writing, and until now a reflex `⌘R` or a link followed and come back from
+emptied the field. The draft belongs to the **tab**, which is why it is paired
+with `docpilot:conversation` rather than with the `localStorage` archive: two
+tabs are two questions.
+
+**It is redacted before it is written**, on the same rule and with the same
+function as a question — a pasted key is caught before a turn exists, and the
+draft is the one text in the panel that would otherwise reach storage before that
+machinery has seen it.
+
+**It obeys [`history.enabled`](#history-enabled) as well as this key.** That
+setting is documented as *stops recording and clears what is already stored*, and
+a draft outliving it would make the sentence false — so either switch off both
+declines to write and removes what is there.
+
+`?dp-ask=` wins over a restored draft: a link the reader followed a second ago is
+a newer intention than a sentence they walked away from.
+
 ### guard.mode, guard.supportMinIdentifiers
 
 **`mode` decides whether a failing verdict ENDS the turn.** It never decides
@@ -1769,6 +1826,29 @@ and reassembling one out of four separate copies is the work this removes. It
 honours [`citations.inCopy`](#citations-incopy), so an exported thread and an
 exported answer agree about provenance.
 
+
+### history.saveOnUnload
+
+An answer that is still being written is written down when the page goes away.
+
+Everything else in this package is saved once per settled turn and once per vote,
+never mid-stream, because a per-token write would serialise the whole
+conversation on every frame. This is the one exception, and it exists because the
+alternative is worse than the write: a reload at second three of an answer
+otherwise loses every token of it, on a request that has already been paid for —
+which on the free tier is one of fifty for the day, spent on nothing.
+
+What comes back is the turn as `stop()` leaves one: the text that had arrived,
+**Stopped.** above it, **Ask again** below it. The stream itself is not resumed
+and cannot be — that needs a buffer on a server, and this package has no server.
+
+Bound to `pagehide` and to `visibilitychange`, never to `beforeunload`. The write
+is idempotent for one turn, because `visibilitychange` fires on every tab switch
+and every screen lock.
+
+Off means an interrupted answer is lost, which is the behaviour before this key
+existed. It also obeys [`history.enabled`](#history-enabled).
+
 ### history.maxConversations
 
 The length of that list; the oldest falls off the end. A byte ceiling applies
@@ -1907,6 +1987,36 @@ passage offers to ask about it.
 **Off by default** — it paints something nobody asked for on a first visit. It is
 also withheld when both [`quote`](#quote) switches are off, because a hint naming
 a gesture the panel does not answer is worse than no hint.
+
+
+### ui.waitingEscalation
+
+While nothing has arrived, the status line says how long that has been true.
+
+The line is otherwise a pure function of what the panel is doing —
+`Searching the docs`, `Thinking`, `Writing the answer` — and a provider that
+accepts the connection and then says nothing does not move it. The step timeout
+is two minutes, so the reader can be left in front of a motionless word with no
+way to tell it apart from a panel that has crashed.
+
+Two steps, and no third:
+
+| after | what it says |
+|---|---|
+| 8s | *Still working* |
+| 25s | *Still working — the answer has not started yet* |
+
+**Neither names a cause and neither promises a retry.** The panel often *is*
+about to try another model, but a chain with one member never rotates, a named
+model flattens the tiers, and a self-hosted server has nowhere to go — a line
+that is false on three shipped configurations is worse than a vaguer one true on
+all of them.
+
+The escalation runs only while nothing has painted: the moment answer text or
+reasoning appears, the phase label is back and the second step's sentence is no
+longer reachable. It is not announced — the reasoning counter and the settled
+answer already speak, and three messages about one wait is what the polite
+region's queue exists to prevent.
 
 ### ui.background
 
@@ -2364,10 +2474,10 @@ what once put a paying deployment on one request per turn. None of the three
 names who is answering, so the browser still knows adapters and transports rather
 than vendors.
 
-Five keys are deliberately withheld — `docsDir`, `indexDir`, `evalDir`,
-`importDir` and `sources`. They describe the build, not the panel, and the
-allowlist in particular has already done its work by then: the origin it approved
-is baked into `manifest.pages[].origin`.
+Six keys are deliberately withheld — `docsDir`, `indexDir`, `evalDir`,
+`importDir`, `sources` and `openapi`. They describe the build, not the panel, and
+the allowlist in particular has already done its work by then: the origin it
+approved is baked into `manifest.pages[].origin`.
 
 That list is asserted, not remembered: a test walks every key of `DEFAULTS` and
 fails unless it is either emitted to the client or named in `SERVER_ONLY`. A

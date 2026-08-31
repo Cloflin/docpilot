@@ -40,6 +40,9 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
   docpilot <command>
 
     index       build the retrieval index from your docs
+                --html-dir=dist  also index a site that is already built —
+                any generator, no markdown needed; --html-select=<css> names
+                the body, --sitemap=<file> limits it to published routes
     import      turn an allowlisted external page into a page of the corpus
     vocabulary  propose the names readers use for what your docs call something
                 --languages=ru,de  --limit=N  --replace  --dry
@@ -163,19 +166,19 @@ const {
   resolveEmbed,
   resolveTuning,
   capsOf,
-} = await import('../src/config.js')
+} = await import('../dist/config.js')
 // The catalogue reader `npx docpilot index` uses, so `doctor --models` proposes
 // the same candidates the build would.
-const { discoverEmbedModels, probeEmbedEndpoint } = await import('../src/build/lib/embed-discovery.js')
+const { discoverEmbedModels, probeEmbedEndpoint } = await import('../dist/build/lib/embed-discovery.js')
 // Its answering-half sibling: what a local server has actually loaded, asked
 // through the adapters' own paths and reporting `unknown` rather than throwing,
 // so a laptop with Ollama switched off never changes what this command exits.
-const { inspectChatTarget } = await import('../src/build/lib/chat-preflight.js')
+const { inspectChatTarget } = await import('../dist/build/lib/chat-preflight.js')
 // The adapters, for the ONE thing `doctor --models` needs from them: the path a
 // service lists its models at, and the shape of what comes back.
-const { providerFor } = await import('../src/theme/docpilot/providers.js')
+const { providerFor } = await import('../dist/theme/docpilot/providers.js')
 const { CONFIG_CANDIDATES, findConfig, parseUiFlags, validateUi, uiSnippet, UI_QUESTIONS } =
-  await import('../src/cli-init.js')
+  await import('../dist/cli-init.js')
 
 /**
  * `init` scaffolds the WHOLE loop, not just a key.
@@ -472,20 +475,20 @@ const resolved = resolveDocPilot(settings, env)
  * needed a URL, three flags and an exit code would have to parse them twice.
  */
 if (cmd === 'import') {
-  const { runImport } = await import('../src/build/import.js')
+  const { runImport } = await import('../dist/build/import.js')
   process.exit(await runImport({ docPilot: resolved, argv: rest, env }))
 }
 
 // Same shape, same reason: a mode, four flags and a verdict of its own.
 if (cmd === 'feedback') {
-  const { runFeedback } = await import('../src/feedback/cli.js')
+  const { runFeedback } = await import('../dist/feedback/cli.js')
   process.exit(await runFeedback({ docPilot: resolved, argv: rest, env }))
 }
 
 // And the same again: four flags, and a verdict — a model that would not answer
 // is a failed run, not an empty vocabulary.
 if (cmd === 'vocabulary') {
-  const { runVocabulary } = await import('../src/build/vocabulary.js')
+  const { runVocabulary } = await import('../dist/build/vocabulary.js')
   process.exit(await runVocabulary({ docPilot: resolved, argv: rest, env }))
 }
 
@@ -712,7 +715,7 @@ if (cmd === 'doctor') {
    * the last one's name.
    */
   if (rest.includes('--models')) {
-    const { fetchFreePool } = await import('../src/theme/docpilot/openrouter.js')
+    const { fetchFreePool } = await import('../dist/theme/docpilot/openrouter.js')
     console.log('')
     for (const [half, shipped] of [
       ['chat', chatModels(resolved)],
@@ -863,12 +866,12 @@ if (cmd === 'doctor') {
 }
 
 const ENTRY = {
-  index: '../src/build/build-rag-index.js',
-  eval: '../src/eval/run.js',
-  calibrate: '../src/eval/calibrate.js',
-  bench: '../src/eval/answer-bench.js',
-  tune: '../src/eval/tune.js',
-  lint: '../src/eval/lint-golden.js',
+  index: '../dist/build/build-rag-index.js',
+  eval: '../dist/eval/run.js',
+  calibrate: '../dist/eval/calibrate.js',
+  bench: '../dist/eval/answer-bench.js',
+  tune: '../dist/eval/tune.js',
+  lint: '../dist/eval/lint-golden.js',
 }
 /**
  * `argv[1]` becomes the ENTRY MODULE, not this launcher.

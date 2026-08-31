@@ -36,6 +36,7 @@ and a research pass first, and a change that moves a rule updates 000 and
 | [009](009-every-action-has-a-switch.md) | **rule 11** — every reader-visible action is removable and documented; sixteen switches, seventeen changes, four defects that get none |
 | [010](010-a-turn-outlives-the-panel.md) | Closing the panel stops looking, not asking — the turn runs on and the trigger takes a dot |
 | [011](011-the-panel-can-be-pinned.md) | `ui.theme` — a site can pin the panel light or dark instead of following the page |
+| [012](012-nothing-is-lost-to-a-reload.md) | Leaving the page keeps what was written, what was typed, and says so while you wait |
 
 ## The rules
 

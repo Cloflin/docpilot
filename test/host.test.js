@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { srcText } from './helpers/source.js'
 import fs from 'node:fs'
 import { ref, watch, nextTick } from 'vue'
 import {
@@ -25,7 +26,7 @@ import { DEFAULTS } from '../src/config.js'
  * why the one thing worth asserting about that file is asserted over its SOURCE,
  * at the bottom of this suite.
  */
-const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+const read = srcText
 
 describe('routeOf', () => {
   it.each([
@@ -282,9 +283,9 @@ describe('the VitePress specifier', () => {
     const dir = new URL('../src/theme/docpilot/', import.meta.url)
     const named = fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith('.js'))
+      .filter((f) => /\.(js|ts)$/.test(f))
       .filter((f) => /from ['"]vitepress['"]/.test(fs.readFileSync(new URL(f, dir), 'utf8')))
-    expect(named).toEqual(['host-vitepress.js'])
+    expect(named.map((f) => f.replace(/\.(js|ts)$/, ''))).toEqual(['host-vitepress'])
   })
 
   it('reaches the panel through the binding, not through an import', () => {

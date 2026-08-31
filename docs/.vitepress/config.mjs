@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vitepress'
 // `.js` spelled out: the theme ships no `exports` map, so Node's ESM resolver
 // will not add the extension the way Vite's does. Without it `npx docpilot
@@ -306,6 +307,38 @@ const sidebarForReference = [
 ]
 
 /**
+ * `vitepress dev`, reading the package's SOURCE instead of its build.
+ *
+ * `exports` names `dist/` since 0.6.0, and going through it is the whole point
+ * of importing this package by name here — a subpath that stops resolving must
+ * fail this site's build rather than someone else's install. But `dist/` is
+ * emitted, so under `dev` that same virtue means an edit to `src/` is invisible
+ * until something rebuilds, which is not a loop anybody can work in.
+ *
+ * So: on `serve` only, the theme entry points back at the source. `tsc` and
+ * Vite both try `.ts` before `.js` for a `.js` specifier, so the alias needs no
+ * maintenance as modules convert. `build` — and therefore `docs:build`,
+ * `scripts/vercel-build.sh` and every consumer-shaped check — is untouched and
+ * still goes through `exports`, which is where the guarantee was worth having.
+ */
+const devSource = () => ({
+  name: 'docpilot:dev-source',
+  config(_config, { command }) {
+    if (command !== 'serve') return
+    return {
+      resolve: {
+        alias: [
+          {
+            find: /^@cloflin\/docpilot\/theme$/,
+            replacement: fileURLToPath(new URL('../../src/theme/index.js', import.meta.url)),
+          },
+        ],
+      },
+    }
+  },
+})
+
+/**
  * The plugin's own documentation site, running the plugin — see the `docPilot`
  * block above for what that costs a contributor with an empty environment
  * (nothing) and what it takes to actually see the panel (an index).
@@ -319,7 +352,7 @@ const config = defineConfig({
   // Three jobs, all of them things this site would otherwise have to know
   // about: SSR-externalisation of the package's own `.vue` files, the dev-only
   // `/ai/*` proxy that attaches the key, and the build-time readiness report.
-  vite: { plugins: [ai.plugin()] },
+  vite: { plugins: [ai.plugin(), devSource()] },
 
   title: 'DocPilot',
   description:

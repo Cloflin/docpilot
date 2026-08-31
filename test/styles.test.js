@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import fs from 'node:fs'
+import { srcText } from './helpers/source.js'
 
 /**
  * The stylesheet split, asserted rather than remembered.
@@ -17,7 +17,7 @@ import fs from 'node:fs'
  * differently across platforms, and the rule that matters most — "no VitePress
  * in the core" — is worth having in the one runner every contributor executes.
  */
-const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+const read = srcText
 
 const CORE = read('src/theme/styles/core.scss')
 const ENTRY = read('src/theme/styles/docpilot.scss')

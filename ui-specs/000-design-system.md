@@ -744,7 +744,7 @@ package has shipped one already — `docPilot.suggestions` was read by the clien
 and never emitted by the build, so the fallback was the only branch that could
 ever run, for the whole life of the setting.
 
-`THEME_ONLY` in `src/config.js` is 11a's list of allowed exceptions, and it is
+`THEME_ONLY` in `src/config.ts` is 11a's list of allowed exceptions, and it is
 the mirror of `SERVER_ONLY`: the eval runner's seam into the shared harness, and
 the two credentials the client half must never carry. It stayed at four entries
 because the first run turned up a fifth — `llm.think`, read in `harness.js` with

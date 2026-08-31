@@ -18,6 +18,7 @@ The loop is `index → calibrate → lint → eval → bench`, with `import` ahe
 npx docpilot index
 npx docpilot index --dry
 npx docpilot index --no-embed
+npx docpilot index --html-dir=dist
 ```
 
 Builds the retrieval index into `docs/public/rag/` (or wherever `indexDir` points). `--dry` chunks and reports without embedding — no network, no model — which is the loop for tuning chunking.
@@ -48,6 +49,57 @@ What that mode costs was measured on a 1191-chunk corpus: recall@8 fell from 0.9
 It also inlines the calibrated guard. If `${evalDir}/calibration.json` is missing, is for a different corpus, or was measured with a different embedding model, the build **warns and inlines a provisional guard** rather than failing — documentation must stay publishable when a threshold is stale.
 
 And it inlines the tuned retrieval levers, which is the half of [`tune`](#tune) people miss: `tuning.json` reaches a reader only through this command. A missing one is **silent**, not warned — the shipped levers are measured values rather than placeholders, so a site that never runs `tune` is not misconfigured. A `tuning.json` that is present but stale is a warning, and the build falls back to those same shipped values.
+
+### `--html-dir` — a site that is already built {#html-dir}
+
+```bash
+npx docpilot index --html-dir=dist
+npx docpilot index --html-dir=public --html-select="article.doc"
+npx docpilot index --html-dir=dist --sitemap=dist/sitemap.xml
+```
+
+Your markdown is walked as it always was, and **every `.html` under `--html-dir` is walked too**. That is the whole answer for a generator this package has no adapter for — Hugo, Jekyll, MkDocs, Astro, Next, a Blade or Twig template, a help centre somebody else runs. It has already produced HTML; that HTML is a corpus.
+
+A built page is a page of **your** site. It is cited by its route, exactly like a markdown page: `dist/guide/install.html` is `/guide/install`, and an `index.html` collapses to its directory, which is the same rule `docs/guide/install.md` follows. No `sources.allow` entry is needed and no `origin` is written, because nothing left your machine — the difference from [`import`](#import), which fetches somebody else's page and must therefore say whose.
+
+**Markdown wins.** An HTML file whose route a markdown page already claims is skipped, and the count is reported. Pointing this at the `dist/` of the very docs site you are indexing is therefore a no-op rather than a duplicate corpus:
+
+```
+  pages            465
+  built pages      0 (412 shadowed by markdown) from dist
+```
+
+Which part of each page is the documentation is decided in code, by the same extractor [`import`](#import) uses: `<main>`, `[role=main]` or `<article>` when the page has one, otherwise the block holding the most prose. Navigation, footers, banners and share widgets are dropped. **`--html-select` overrides that** with a CSS selector of your own — and a selector that matches nothing warns and skips the page rather than quietly falling back, because a typo in a flag should not index a different subtree than the one you asked for.
+
+`--sitemap` reads a **local** `sitemap.xml` and indexes only the routes it declares. Nothing is fetched: the file is the list of pages your site publishes, which is exactly the filter that removes the 404 page, the draft a generator left behind, and the per-tag listing pages. `--html-base=https://example.com` only resolves relative links found inside the pages.
+
+Requires an HTML parser, which is an optional dependency — `npm i -D linkedom`. The command says so if it is missing.
+
+::: tip Rebuild after it
+`--html-dir` changes what is in the corpus, so the numbers behind the gate move with it. Run [`calibrate`](#calibrate) and [`eval`](#eval) after the first build that includes it.
+:::
+
+### `DOCPILOT_SPLIT_IDENTIFIERS` — searching an identifier by its parts {#split-identifiers}
+
+```bash
+DOCPILOT_SPLIT_IDENTIFIERS=1 npx docpilot index
+```
+
+`docPilot.sources.allow` is one token, so a reader who types **sources allow** matches nothing. `getUserName` is one token, so **user name** matches nothing. In technical documentation the identifier is the most common thing a reader searches for and the least likely thing they spell the way the code does.
+
+With this set, a token that *looks* like an identifier — a separator inside it, or an internal capital — also contributes its parts, and keeps its whole form so an exact query loses no weight. Ordinary prose contributes nothing: `documentation` has neither a separator nor an internal capital.
+
+**It is off by default and it is an environment variable rather than a setting, on purpose.** It moves every lexical score in your corpus, and whether it moves them the right way is a question only [`eval`](#eval) can answer, on *your* corpus. Sweep it:
+
+```bash
+npx docpilot eval                                   # the number you have
+DOCPILOT_SPLIT_IDENTIFIERS=1 npx docpilot index
+npx docpilot calibrate && npx docpilot eval         # the number it becomes
+```
+
+On this project's own 470-chunk corpus it takes the vocabulary from 4,710 types to 4,998 — **+6.1%** — and changes no chunk.
+
+The flag is written into `manifest.tokenizer`, so the reader's browser tokenises the way the index was built; and it is folded into `vocabHash`, so a calibration measured without it is reported stale by the guard that already exists rather than used silently.
 
 ## `import`
 

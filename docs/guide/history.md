@@ -15,7 +15,11 @@ A conversation appears in the list once it has an answer in it. The row is title
 - **Delete** a row with the bin beside it. Deleting the conversation currently on screen empties the panel too. Pointing at the bin lights it as a darker chip inside the lighter row, so the thing under the cursor is unambiguous — `×` in this panel always means *dismiss*, and this is the one control with nothing behind it.
 - **Delete all** clears the list and the panel in one step. It asks twice, and never through a browser dialog.
 
-Reloading the page brings back the conversation that tab was in. Following a citation into a new tab starts a fresh conversation there — see [Two tabs](#two-tabs) below.
+Reloading the page brings back the conversation that tab was in, **including an answer that was still being written** — it comes back as a stopped turn, with the text that had arrived and an *Ask again* under it. The request itself cannot be resumed, and nothing here pretends otherwise: what is kept is what had already reached the browser, which is the half that was paid for. [`history.saveOnUnload`](/reference/config#history-saveonunload) turns that off.
+
+**A half-typed question survives too**, in the same tab, under [`composer.draft`](/reference/config#composer-draft). It is redacted on exactly the rule a sent question is, so a key pasted into the composer and never sent is stored as the mask — and both keys obey `history.enabled` below, because "record nothing" has to mean nothing.
+
+Following a citation into a new tab starts a fresh conversation there — see [Two tabs](#two-tabs) below.
 
 ## What is stored
 
@@ -41,6 +45,7 @@ Two keys, in two different storages:
 |---|---|---|
 | `docpilot:history` | `localStorage` | the archive — every conversation, shared by every tab of the site |
 | `docpilot:conversation` | `sessionStorage` | which conversation *this tab* is showing |
+| `docpilot:draft` | `sessionStorage` | the question half-typed in *this tab*'s composer, redacted before it is written |
 
 Both are on the reader's device, under your site's origin, and neither is ever sent anywhere. The one thing that leaves the browser is a vote — with whatever reasons and sentence the reader attached to it — and only when you have configured `feedbackEndpoint`. Which verdicts travel is [`feedback.send`](/reference/config#feedback-send); `'none'` keeps the thumbs on screen and sends nothing at all.
 

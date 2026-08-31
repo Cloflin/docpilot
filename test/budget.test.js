@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
+import { srcText } from './helpers/source.js'
 
-import { readFileSync } from 'node:fs'
 
 import {
   FREE_TIER_DAILY,
@@ -1424,10 +1424,7 @@ describe('hasDailyAllowance — the two arms of a ceiling', () => {
    * one-armed test that caused this is gone rather than merely joined.
    */
   it('gates the panel line on the predicate, not on the free pool alone', () => {
-    const panel = readFileSync(
-      new URL('../src/theme/components/DocPilot.vue', import.meta.url),
-      'utf8',
-    )
+    const panel = srcText('src/theme/components/DocPilot.vue')
     expect(panel).toContain("import { hasDailyAllowance } from '../docpilot/budget.js'")
     expect(panel).toContain(
       "if (!s.config.budget.showRemaining || !hasAllowance.value) return ''",
@@ -1442,10 +1439,7 @@ describe('hasDailyAllowance — the two arms of a ceiling', () => {
    * with the widening rather than after it.
    */
   it('has copy that is true on both arms', () => {
-    const shipped = readFileSync(
-      new URL('../src/theme/docpilot/i18n.js', import.meta.url),
-      'utf8',
-    )
+    const shipped = srcText('src/theme/docpilot/i18n.js')
     expect(shipped).toContain("budgetLeft: '{n} of {limit} answers left today',")
     expect(shipped).not.toContain('free answers left today')
   })

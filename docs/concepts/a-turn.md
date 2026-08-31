@@ -36,9 +36,11 @@ When that call does not come back, [the answer ladder](/concepts/the-ladder) is 
 
 ## 5. Tools, if the model wants more
 
-`search_docs`, `fetch_section`, `list_pages`, and `answer`. Two properties matter more than the list:
+`search_docs`, `fetch_section`, `expand_section`, `list_pages`, and `answer`. Two properties matter more than the list:
 
 **None of them accepts a path, a page set, or a scope.** There is no argument in which a wider scope could be expressed, so scope is not a rule the model is asked to follow.
+
+`expand_section` is the one that exists for a shape of failure rather than for a capability: an answer that begins at the end of one section and finishes at the start of the next. It takes an id the model already has and returns the section immediately before or after it, on the same page. Two per turn — enough to cross a boundary in either direction, not enough to read a page a chunk at a time — and it always costs a step, because a free one is a walk with nothing to stop it.
 
 **Observations are appended, never rewritten.** Step two's prompt is step one's prompt plus new results at the end. This is what keeps a provider-side prefix cache valid across the steps of a turn; rewriting the head to save tokens trades a small saving here for a much larger loss there.
 

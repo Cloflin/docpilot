@@ -22,7 +22,7 @@
   </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { SYMBOLS } from '../docpilot/glyphs.js'
 
 /**

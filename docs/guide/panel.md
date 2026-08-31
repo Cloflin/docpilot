@@ -275,7 +275,7 @@ Panel chrome follows the page's locale. The credential warning and the greeting
 reply follow the language the **reader typed in**, which is not always the same
 thing.
 
-All 171 reader-facing strings are replaceable one at a time, in 25 groups, in the
+All 173 reader-facing strings are replaceable one at a time, in 25 groups, in the
 same shape as VitePress's own local-search i18n:
 
 ```js

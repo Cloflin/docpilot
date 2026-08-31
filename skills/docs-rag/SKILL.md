@@ -33,8 +33,9 @@ tried, here is what happened", not as predictions for your corpus.
 
 ## The pipeline in one paragraph
 
-`docpilot index` chunks `<docsDir>/**/*.md` — plus `<importDir>` and any OpenAPI
-YAML — into the index directory (manifest, shards, int8 vectors, df; no vectors
+`docpilot index` chunks `<docsDir>/**/*.{md,mdx}` — plus `<importDir>`, the
+OpenAPI specs `docPilot.openapi` names, and, with `--html-dir`, a directory of
+already-built HTML — into the index directory (manifest, shards, int8 vectors, df; no vectors
 when the site declared `embed: false`). In the
 browser, `retriever.js` fuses BM25 and dense retrieval — on the thresholds
 `calibrate` measured and the levers `tune` measured, both of which ride in the
@@ -613,8 +614,8 @@ metric in any report.
 
 - `npm run check` (`scripts/check-docpilot.sh`) plus the design rules that moved into
   the test suite. Two bite here: `harness.js` may never contain the bare token
-  `index`, and `search_docs fetch_section list_pages maxIterations qwen3 threshold
-  topK` may never appear in `DocPilot.vue`.
+  `index`, and `search_docs fetch_section expand_section list_pages maxIterations
+  qwen3 threshold topK` may never appear in `DocPilot.vue`.
 - `systemText()` takes no addendum parameter, and the test suite asserts the
   system message is byte-identical with and without a reader instruction.
 - `assertWeights` throws unless `wLexical < tau`.
