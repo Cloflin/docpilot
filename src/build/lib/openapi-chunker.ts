@@ -199,14 +199,14 @@ export async function chunkOpenapi(yamlText, name) {
         title: op.summary || head,
         breadcrumb: title,
         kind: 'reference',
-        codeLangs: [],
         text,
       })
     }
   }
 
+  // Forward only, same page only — the same contract `chunker.js` states, and
+  // the backward half is derived at load rather than shipped.
   chunks.forEach((c, i) => {
-    c.prev = i > 0 ? chunks[i - 1].id : null
     c.next = i < chunks.length - 1 ? chunks[i + 1].id : null
   })
 

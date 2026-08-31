@@ -48,3 +48,11 @@ ui-specs/IDEAS.ru.md
 # so the second person to clone this repository would commit them.
 .DS_Store
 .claude/settings.local.json
+
+# The embedding cache: float32 vectors `npx docpilot index` has already bought,
+# keyed by model and chunk text. Re-derivable at one embedding request per 32
+# changed chunks, and larger than the index it saves rebuilding — 1.9 MB per
+# embedder here against a 952 KB int8 blob. `docpilot init` writes this line
+# into docpilot/.gitignore for a consuming project; this repository has none,
+# because it deliberately commits calibration.raw.jsonl.
+docpilot/embed-cache/

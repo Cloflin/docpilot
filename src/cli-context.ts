@@ -121,3 +121,17 @@ export const TUNING_OUT = path.join(DOCPILOT_DIR, 'tuning.json')
  * moving a refusal threshold.
  */
 export const VOCABULARY_OUT = path.join(DOCPILOT_DIR, 'vocabulary.json')
+
+/**
+ * Where `docpilot index` keeps the vectors it has already bought.
+ *
+ * A DIRECTORY beside the three files above, and deliberately NOT under
+ * `indexDir`: that one is wiped whole by `fs.rmSync` at the top of every write,
+ * and it is the directory the reader downloads. A megabytes-large build cache
+ * published to every visitor and deleted on every run is both halves of wrong.
+ *
+ * Re-derivable, large, and rewritten every run — the same three properties that
+ * put `calibration.raw.jsonl` in `docpilot/.gitignore`, and `docpilot init`
+ * writes this one there for the same reason.
+ */
+export const EMBED_CACHE_DIR = path.join(DOCPILOT_DIR, 'embed-cache')

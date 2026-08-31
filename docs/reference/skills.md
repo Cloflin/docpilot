@@ -46,7 +46,7 @@ Enough to be worth the diff. All of it is in **Things already measured**, which 
 
 ## `docs-rag`
 
-The measurement and tuning loop. Six modes:
+The measurement and tuning loop. Seven modes:
 
 | mode | what it does |
 |---|---|
@@ -54,6 +54,7 @@ The measurement and tuning loop. Six modes:
 | `generate` | author golden records — stratified sampling, then a mandatory editing pass |
 | `bench` | A/B two retrieval configurations on answer quality, with no API key |
 | `tune` | propose edits, each naming a file, a change, and the metric it should move |
+| `faq` | choose the three openers the empty state shows, and read what `index` says about them |
 | `corpus` | fix the **documentation** when no retrieval constant will help |
 | `llms` | make the docs readable by agents that are not this panel |
 

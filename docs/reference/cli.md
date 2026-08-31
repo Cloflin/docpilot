@@ -19,6 +19,7 @@ npx docpilot index
 npx docpilot index --dry
 npx docpilot index --no-embed
 npx docpilot index --html-dir=dist
+npx docpilot index --refresh-embeddings
 ```
 
 Builds the retrieval index into `docs/public/rag/` (or wherever `indexDir` points). `--dry` chunks and reports without embedding — no network, no model — which is the loop for tuning chunking.
@@ -39,6 +40,17 @@ One extra request at most, and none at all when you named the model or when a
 free pool already stands behind the provider. A name **you** wrote is used as
 given and a wrong one fails loudly rather than being replaced. See
 [Asking the provider](/reference/config#asking-the-provider).
+
+**The vectors you already bought are not bought twice.** A chunk's embedding is
+cached under a key made of the model, the provider, the host, the prefix that
+was applied and the chunk's own text — so editing one page costs one embedding
+request rather than one per 32 chunks of the whole corpus. The cache lives in
+`${evalDir}/embed-cache/`, is gitignored by `init`, and is safe by construction
+rather than by expiry: a different model, provider or host is a different
+namespace, so a cache hit is always a vector from the space the index is being
+built in. `--refresh-embeddings` skips reading it — never writing it, so a
+refresh also repairs a file that went bad — for the one case a key cannot see,
+which is a provider that changed under a stable model name.
 
 `--no-embed` writes a real index with **no vectors in it**: no embedding calls, no `vectors.<hash>.bin`, and retrieval by BM25 alone. It is the one-off form of [`embed: false`](/reference/config#embed-false) — the config key is what a deployment sets, because the browser has to be told as well.
 

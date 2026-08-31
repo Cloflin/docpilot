@@ -36,7 +36,10 @@ tried, here is what happened", not as predictions for your corpus.
 `docpilot index` chunks `<docsDir>/**/*.{md,mdx}` — plus `<importDir>`, the
 OpenAPI specs `docPilot.openapi` names, and, with `--html-dir`, a directory of
 already-built HTML — into the index directory (manifest, shards, int8 vectors, df; no vectors
-when the site declared `embed: false`). In the
+when the site declared `embed: false`). It then resolves
+`suggestions.questions` against the index it just built and ships the result as
+`openers.<hash>.json`, so the panel's three openers cost no embedding request.
+In the
 browser, `retriever.js` fuses BM25 and dense retrieval — on the thresholds
 `calibrate` measured and the levers `tune` measured, both of which ride in the
 manifest — and its gate decides, before any model call, whether there is evidence
@@ -359,6 +362,95 @@ it for you. Remedy: `unset` it, or pin the axis where a pin is legible —
 is a real thing to measure, and the note exists because `tuning.json` will record
 only λ and `GATE_K`, so the answer was measured under a pool the file never mentions.
 
+### `faq` — choose the three openers, and freeze them
+
+The empty state offers three questions. They are the most-asked questions on the
+site by construction — every reader who opens the panel without one of their own
+sees them — and `docpilot index` now resolves them ahead of time, so a click
+costs no embedding request (engine-specs/009, ui-specs/013).
+
+Two commands, and a person between them.
+
+```bash
+npx docpilot feedback faq --from ./export.jsonl   # what readers actually ask
+#   ...you edit docPilot.suggestions.questions...
+npx docpilot index                                # resolve them, and report
+```
+
+**`feedback faq` proposes and never writes.** It clusters candidates with the
+same symmetric coverage scorer the panel matches a paraphrase with, at this
+site's own `matchTau`, so a cluster is exactly what one opener would catch at
+runtime. It drops questions asked once, questions the corpus refused, and
+questions readers complained about — that last one because promoting a
+`downRate` of a third would put the site's weakest answer where every reader's
+first click lands. Read `reports/faq-latest.md` before touching the config: the
+sample is voted turns, not questions, and on a `feedback.send: 'down'` project it
+is complaints only.
+
+**Read the `openers` block `index` prints.** It is the only place a refused
+opener is visible before a reader finds it:
+
+```
+  openers          3 question(s) · configHash 3f1c9a02 · 1 embedded, 2 cached
+    ✓ 0.71  "How do I get started?"  4 chunk(s)  answer 412 B
+    ✗ 0.22  "How do I authenticate requests?"  0 chunk(s)
+    REFUSED  "How do I authenticate requests?" scores 0.22 against tau 0.57.
+```
+
+A `REFUSED` line is a **documentation** defect, not a threshold defect. The fix
+is `corpus` mode — write the page, or rewrite the question to name what the
+corpus calls the thing — and never lowering `tau`, which governs every reader's
+every question in order to rescue one chip.
+
+A `COLLIDES` line means two openers score at or above `matchTau` against each
+other, so a reader's paraphrase could land on either and the panel will refuse
+the tie rather than guess. Rename one, or set `suggestions.matchTau: false`.
+
+**When to turn `suggestions.answers` on.** It bakes the answer as well as the
+evidence, so a matching question costs nothing at all — but it spends one model
+request per opener whenever the corpus hash moves, against the same allowance
+your readers draw on. Worth it on a stable corpus or a funded key; not worth it
+on a docs site rebuilt several times an afternoon against a free tier. Answers
+are cached on `(question, index hash, prompt hash, model)`, so a rebuild that
+moves none of the four spends nothing.
+
+**`matchTau` is not a calibrated threshold, but it is measured.** It is a config
+constant — `calibrate` never touches it and `tuning.json` never carries it — and
+the measurement behind it is a pure lexical sweep that costs nothing:
+
+```bash
+node .claude/skills/docs-rag/scripts/opener-collisions.js
+```
+
+It scores every probe in `calibration.jsonl` against every configured opener. A
+probe is not an opener, so **every score it produces is a false positive waiting
+to happen**, and the highest of them is the floor `matchTau` has to sit above.
+
+Measured on this project's corpus, 597 probes × 3 openers = 1,791 pairs:
+
+```
+    0.500  "What claims will this documentation not make?"
+           would match "What is this documentation about?"     [s-06/S]
+    0.500  "Is that requests or tokens?"
+           would match "How do I authenticate requests?"       [f-16/F]
+    0.333  "Is the limit on requests or on tokens?"            [s-27/S]
+
+    threshold   probes wrongly captured
+    0.500              2
+    0.600              0
+    0.650              0   <- shipped default
+```
+
+Nothing reaches 0.6. A real paraphrase covering two of three key words scores
+0.667, and the subset trap `"gate"` against `"How do I configure the refusal
+gate?"` scores 0.333 — one-directional coverage would have scored it 1.000, which
+is why the measure is symmetric. **0.65 is the shipped default because it sits
+above every measured false positive and below the paraphrases the feature exists
+to catch.**
+
+Re-run it after a corpus change or an opener rewrite. The numbers above are this
+corpus and these three questions; yours are yours.
+
 ### `corpus` — edit the documentation, not the code
 
 The lever most tuning discussions miss. When an answer is wrong because the
@@ -632,6 +724,28 @@ metric in any report.
   that decides pass/fail is not. **`docpilot tune` obeys this**: it optimises
   `retrievalF1Loose`, `recallAtK` and `mrr` from `metrics.js`, contacts no chat
   model, and its report is reproducible from the same index and golden set.
+- **The opener match path never embeds.** `theme/docpilot/openers.js` may not
+  import `embed.js`, `llm.js`, `providers.js` or `harness.js`. "A click costs no
+  embedding request" is a property of what that file can reach, not a promise
+  about how it is called, and the test suite greps its import list.
+- **A baked entry is only ever served for the question it was baked for.** The
+  key is `normalise(q)` and the bundle carries a fingerprint of the whole
+  configured list; an edited question moves the fingerprint and retires the
+  bundle. Nothing may key an entry by array position.
+- **The opener short-circuit introduces no second ranking path.** A match hands
+  `createRetrieval` a vector through the same `queryVec` parameter a live
+  embedding enters by, so `manifest.tuning`, a config `guard.tau` and the scope
+  mask all still apply. Serving the baked `ids` directly would bypass all three
+  and is a change to the gate, not an optimisation.
+- **`gate.channel` never gains a value for this path.** `feedback/stratum.js`
+  routes on it, and an unfamiliar value enters the calibration proposal as a
+  stratum nobody measured. The marker is `turn.opener`.
+- **A baked answer with no citations is never written.** Same floor as a live
+  answer, and stronger: a live uncited answer is a turn the reader can retry, a
+  baked one is a turn every reader gets until the next build.
+- **`docpilot feedback faq` never edits the site config**, on the same terms as
+  `pull` and `report` — and with more force, because these three strings are the
+  first thing every reader sees and the sample behind them is biased.
 - Every reader-facing string goes through the i18n table. A new literal in a
   component fails `i18n — the components go through the table`.
 - **Only a full-pool sweep may write `tuning.json`.** `--level` or `--limit` makes

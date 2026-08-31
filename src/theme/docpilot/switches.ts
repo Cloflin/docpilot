@@ -50,7 +50,47 @@
 export const QUOTE_DEFAULTS = { fromAnswer: true, fromDocs: false }
 export const CITATIONS_DEFAULTS = { passage: false, inCopy: true, pagesRead: false }
 export const COMPOSER_DEFAULTS = { editLastOnArrowUp: true, deepLink: true, draft: true }
-export const SUGGESTIONS_DEFAULTS = { questions: [], scoped: true, followUps: false }
+export const SUGGESTIONS_DEFAULTS = {
+  questions: [],
+  scoped: true,
+  followUps: false,
+  precomputed: true,
+  answers: true,
+  matchTau: 0.65,
+}
+
+/**
+ * The built-in three, for a project that configured none.
+ *
+ * Lived in `DocPilot.vue` until the indexer needed the same list: it bakes what
+ * the panel WILL SHOW, and a second copy of the list would bake three questions
+ * the reader never sees. Same reason `normalise` moved into text.js.
+ *
+ * Deliberately engine-agnostic: this package ships to any VitePress site, so a
+ * default that names a feature only one product has is a question the gate will
+ * refuse on contact — which reads to the reader as a broken panel on their very
+ * first click. `docPilot.suggestions` is where three good ones go, and
+ * `docpilot index` now says on stdout which of these three your corpus refuses.
+ */
+export const DEFAULT_SUGGESTIONS = [
+  'What is this documentation about?',
+  'How do I get started?',
+  'How do I authenticate requests?',
+]
+
+/**
+ * The value that retires the paraphrase match — `BUDGET_NEVER`'s sibling, and
+ * the same trick for the same reason.
+ *
+ * Lexical coverage L is a fraction of the query's rare terms that the opener's
+ * text covers, so it cannot exceed 1. A threshold of 2 is a comparison that
+ * cannot come true: the rule stays in the code and stops firing, exact matching
+ * carries on, and the resolved shape stays a NUMBER so nothing downstream has to
+ * branch on a type. `matchTau: false` in the config file resolves to this, which
+ * also keeps the resolver idempotent — a resolved block fed back through comes
+ * out unchanged. Rule 11a.
+ */
+export const MATCH_NEVER = 2
 
 /** `'auto'` shows the field once the corpus is past the point where scanning works. */
 export const SCOPE_FILTERS = ['auto', true, false]
@@ -167,6 +207,30 @@ function threshold(value, fallback, key, err) {
   if (Number.isInteger(value) && value >= BUDGET_NEVER) return value
   err(
     `[docpilot] ${key} accepts a whole number of 0 or more, or -1 for never — using ${fallback}`,
+    value,
+  )
+  return fallback
+}
+
+/**
+ * One fraction in [0, 1], or `false` for never.
+ *
+ * `threshold` above is the integer sibling and this is deliberately not it: a
+ * coverage threshold is a fraction, and `Number.isInteger` would reject every
+ * value an author would sensibly write. The two share the shape that matters —
+ * a sentinel the comparison can never satisfy, so a retired rule stays in the
+ * code rather than being branched around.
+ *
+ * A value outside [0, 1] is reported rather than clamped. `matchTau: 75` is an
+ * author who meant a percentage, and clamping it to 1 would silently give them
+ * "never match" while the config file says something that looks generous.
+ */
+function fraction(value, never, fallback, key, err) {
+  if (value == null) return fallback
+  if (value === false) return never
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1) return value
+  err(
+    `[docpilot] ${key} accepts a number from 0 to 1, or false for never — using ${fallback}`,
     value,
   )
   return fallback
@@ -565,6 +629,52 @@ export function resolveSuggestions(docPilot, warn = console.warn) {
       object ? raw.followUps : null,
       SUGGESTIONS_DEFAULTS.followUps,
       'suggestions.followUps',
+      warn,
+    ),
+    /**
+     * Whether `docpilot index` resolves these questions ahead of time, and
+     * whether the panel uses what it resolved — engine-specs/009, ui-specs/013.
+     *
+     * ONE key for both halves, and that is the point: a bake nobody reads is
+     * build-time requests spent on a file that ships and does nothing, and a
+     * reader with no bake to read is the behaviour that already exists. Off, the
+     * feature is absent in both directions rather than half-present.
+     */
+    precomputed: flag(
+      object ? raw.precomputed : null,
+      SUGGESTIONS_DEFAULTS.precomputed,
+      'suggestions.precomputed',
+      warn,
+    ),
+    /**
+     * Whether the bake includes the ANSWER as well as the evidence.
+     *
+     * The expensive half at build time — one model call per question, against
+     * the same allowance the readers draw on — and the only half that can go
+     * stale in a way the index hash does not catch, because it is prose about
+     * chunks rather than the chunks. Off leaves the evidence bake intact: the
+     * click still costs no embedding, the model still writes the answer, and it
+     * still writes it in the reader's language.
+     */
+    answers: flag(
+      object ? raw.answers : null,
+      SUGGESTIONS_DEFAULTS.answers,
+      'suggestions.answers',
+      warn,
+    ),
+    /**
+     * How close a typed question has to be to a baked one to count as it.
+     *
+     * `false` retires the paraphrase test and leaves exact matching, which is
+     * the setting for a corpus where two openers are near-neighbours and the
+     * build said so. The default is PROVISIONAL until measured against
+     * `docpilot/calibration.jsonl` — see the `faq` mode in the docs-rag skill.
+     */
+    matchTau: fraction(
+      object ? raw.matchTau : null,
+      MATCH_NEVER,
+      SUGGESTIONS_DEFAULTS.matchTau,
+      'suggestions.matchTau',
       warn,
     ),
   }

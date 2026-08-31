@@ -1,0 +1,281 @@
+{
+  "ok": true,
+  "fails": [],
+  "version": 1,
+  "calibratedAt": "c21b32e5",
+  "embedModel": "nvidia/nemotron-3-embed-1b:free",
+  "vocabHash": null,
+  "lexicalOnly": false,
+  "chunkCount": 476,
+  "probeFile": "docpilot/calibration.jsonl",
+  "probeCount": 271,
+  "byStratum": {
+    "U": 52,
+    "S": 52,
+    "F": 32,
+    "N1": 15,
+    "N2": 15,
+    "N3": 15,
+    "N4": 30,
+    "N5": 15,
+    "N6": 15,
+    "X": 15,
+    "P": 15
+  },
+  "specStratumSize": {
+    "U": 180,
+    "S": 60,
+    "F": 60,
+    "N1": 30,
+    "N2": 30,
+    "N3": 30,
+    "N4": 30,
+    "N5": 30,
+    "N6": 30,
+    "X": 30,
+    "P": 30
+  },
+  "guard": {
+    "tau": 0.69,
+    "tauLexical": 0.51,
+    "wDense": 0.75,
+    "wLexical": 0.25,
+    "denseMode": "cosine",
+    "cosFloor": 0.04,
+    "cosCeil": 0.18,
+    "source": "transferred-window",
+    "calibratedAt": "c21b32e5",
+    "zexp": [
+      {
+        "n": 7,
+        "z": 1.1804
+      },
+      {
+        "n": 10,
+        "z": 1.3211
+      },
+      {
+        "n": 25,
+        "z": 2.9946
+      },
+      {
+        "n": 49,
+        "z": 3.8667
+      },
+      {
+        "n": 110,
+        "z": 4.7491
+      },
+      {
+        "n": 315,
+        "z": 7.0109
+      },
+      {
+        "n": 476,
+        "z": 8.3235
+      },
+      {
+        "n": 476,
+        "z": 8.3235
+      }
+    ],
+    "zexpSource": "measured",
+    "overRefusalUB95": null,
+    "gatePrecision": null
+  },
+  "transferredFrom": {
+    "embedModel": "bge-m3",
+    "calibratedAt": "c21b32e5",
+    "source": "calibrated-reduced",
+    "probeCount": 597,
+    "tau": 0.69,
+    "tauLexical": 0.51,
+    "cosFloor": 0.2,
+    "cosCeil": 0.6
+  },
+  "transferCheck": {
+    "anchorCount": 271,
+    "probeCount": 597,
+    "window": {
+      "cosFloor": 0.04,
+      "cosCeil": 0.18
+    },
+    "byStratum": {
+      "U": {
+        "n": 52,
+        "failures": 0,
+        "rate": 0,
+        "sourceRate": 0
+      },
+      "S": {
+        "n": 52,
+        "failures": 0,
+        "rate": 0,
+        "sourceRate": 0.015625
+      },
+      "F": {
+        "n": 32,
+        "failures": 0,
+        "rate": 0,
+        "sourceRate": 0
+      },
+      "N1": {
+        "n": 15,
+        "failures": 15,
+        "rate": 1,
+        "sourceRate": null
+      },
+      "N2": {
+        "n": 15,
+        "failures": 15,
+        "rate": 1,
+        "sourceRate": null
+      },
+      "N3": {
+        "n": 15,
+        "failures": 9,
+        "rate": 0.6,
+        "sourceRate": null
+      },
+      "N4": {
+        "n": 30,
+        "failures": 3,
+        "rate": 0.1,
+        "sourceRate": null
+      },
+      "N5": {
+        "n": 15,
+        "failures": 9,
+        "rate": 0.6,
+        "sourceRate": null
+      },
+      "N6": {
+        "n": 15,
+        "failures": 14,
+        "rate": 0.9333333333333333,
+        "sourceRate": null
+      },
+      "X": {
+        "n": 15,
+        "failures": 6,
+        "rate": 0.4,
+        "sourceRate": null
+      },
+      "P": {
+        "n": 15,
+        "failures": 14,
+        "rate": 0.9333333333333333,
+        "sourceRate": null
+      }
+    },
+    "gatePrecision": 0.37037037037037035,
+    "blatantRefusalRate": 0.9,
+    "rampShare": 0.04411764705882353,
+    "drift": 0.015625
+  },
+  "bounds": {
+    "gateOverRefusal": {
+      "stratum": "U",
+      "bound": 0.05,
+      "n": 52,
+      "specN": 180,
+      "ub95AtZero": 0.049459127793665375,
+      "tolerates": 0,
+      "nForOneFailure": 87
+    },
+    "scopedGateOverRefusal": {
+      "stratum": "S",
+      "bound": 0.05,
+      "n": 52,
+      "specN": 60,
+      "ub95AtZero": 0.049459127793665375,
+      "tolerates": 0,
+      "nForOneFailure": 87
+    },
+    "followupRefusalRate": {
+      "stratum": "F",
+      "bound": 0.08,
+      "n": 32,
+      "specN": 60,
+      "ub95AtZero": 0.0779611510808021,
+      "tolerates": 0,
+      "nForOneFailure": 54
+    }
+  },
+  "chosen": null,
+  "chosenLexical": null,
+  "retrievalMisses": {
+    "rate": 0,
+    "n": 0,
+    "ids": []
+  },
+  "boundingProbes": {
+    "blocked": [],
+    "newlyRefused": []
+  },
+  "tauWithoutBoundingProbes": null,
+  "backlog": [
+    {
+      "id": "s-16",
+      "stratum": "S",
+      "G": 0.6934,
+      "margin": 0.0034
+    },
+    {
+      "id": "s-112",
+      "stratum": "S",
+      "G": 0.75,
+      "margin": 0.06
+    },
+    {
+      "id": "s-105",
+      "stratum": "S",
+      "G": 0.7944,
+      "margin": 0.1044
+    },
+    {
+      "id": "u-76",
+      "stratum": "U",
+      "G": 0.85,
+      "margin": 0.16
+    },
+    {
+      "id": "f-37",
+      "stratum": "F",
+      "G": 0.85,
+      "margin": 0.16
+    },
+    {
+      "id": "s-57",
+      "stratum": "S",
+      "G": 0.8655,
+      "margin": 0.1755
+    },
+    {
+      "id": "s-03",
+      "stratum": "S",
+      "G": 0.875,
+      "margin": 0.185
+    },
+    {
+      "id": "s-47",
+      "stratum": "S",
+      "G": 0.875,
+      "margin": 0.185
+    },
+    {
+      "id": "s-66",
+      "stratum": "S",
+      "G": 0.875,
+      "margin": 0.185
+    },
+    {
+      "id": "u-12",
+      "stratum": "U",
+      "G": 0.9167,
+      "margin": 0.2267
+    }
+  ],
+  "sweep": [],
+  "sweepLexical": []
+}

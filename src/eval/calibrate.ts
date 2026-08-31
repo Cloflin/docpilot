@@ -843,7 +843,38 @@ const TAU_STEPS = Array.from({ length: 101 }, (_, i) => Number((i / 100).toFixed
  * keeps the window its probe ran under. Said out loud because a reader comparing
  * `unscopedG` against a swept `G` would otherwise find them inconsistent.
  */
-const WINDOW_FLOORS = Array.from({ length: 16 }, (_, i) => Number((0.16 + i * 0.02).toFixed(2)))
+/**
+ * THE GRID'S OWN FLOOR WAS THE LAST PLACE AN EMBEDDER'S SCALE WAS ASSUMED.
+ *
+ * The block above exists because `[0.44, 0.64]` was a bge-m3 literal that no
+ * swap re-measured. The grid that replaced it started at 0.16 and reproduced the
+ * same class of bug one level up: a floor is the smallest cosine the sweep can
+ * call anything other than zero evidence, so a grid that starts at 0.16 can only
+ * describe embedders whose positives sit above it.
+ *
+ * Measured on this corpus at index `aab4ce6a`, carrying bge-m3's calibration
+ * onto `nvidia/nemotron-3-embed-1b:free`. That model RANKS the corpus as well —
+ * AUC on the raw cosine 0.856 against bge-m3's 0.868 — but its scale is lower:
+ * positive median 0.421 against 0.615. Two S positives land at 0.146 and 0.142,
+ * below every floor in the old grid, so they clamped to `D = 0` under all 272
+ * candidates and scored `G = 0.25 · L`, which cannot reach a tau above
+ * `wLexical` no matter what L is. The largest feasible tau over the whole grid
+ * was 0.12 — below `wLexical` 0.25, so `assertWeights` rejected it — and the
+ * index shipped the provisional guard, which refuses 37% of U, 71% of S and 88%
+ * of F. With the floor extended to 0, the same probes admit `[0.00, 0.24]` at
+ * tau 0.58, `blatantRefusalRate` 0.93 and U/S/F all 0 — a guard as good as the
+ * one bge-m3 measured, on the free embedder.
+ *
+ * Compare on `z_raw`, never on `D`: `D` is post-clamp, and under the old grid
+ * 186 of 271 nemotron probes sat on the floor, which destroys the ordering and
+ * invents a separation gap that is not there.
+ *
+ * A floor of 0 is not a free pass. `cosCeil` is what discriminates, the step-5
+ * floor still applies, and `chooseWindow` still ranks by `gatePrecision` and
+ * still prefers `rampShare >= 0.33` — a window that calls everything evidence
+ * loses on precision before it is ever selected.
+ */
+const WINDOW_FLOORS = Array.from({ length: 24 }, (_, i) => Number((0 + i * 0.02).toFixed(2)))
 const WINDOW_SPANS = Array.from({ length: 17 }, (_, i) => Number((0.08 + i * 0.02).toFixed(2)))
 
 const WINDOWS = WINDOW_FLOORS.flatMap((cosFloor) =>
@@ -984,7 +1015,7 @@ function fitWindowAtTau(scored, guard, tau, sourceRate) {
     // `gatePrecision` is ever consulted. Reusing it here is what stops the
     // pinned fit degenerating: measured on this corpus's 597 rows, the
     // unfiltered argmax is [0.44, 0.84] at gatePrecision 100% and 77.5%
-    // over-refusal on U. With this line, one window of 272 survives and it is
+    // over-refusal on U. With this line, one window of the grid survives and it is
     // the one the joint search chose.
     if (!row.feasible) continue
     if (row.blatantRefusalRate === null || row.blatantRefusalRate < 0.8) continue

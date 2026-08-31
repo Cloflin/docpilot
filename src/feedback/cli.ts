@@ -20,8 +20,11 @@ import {DOCPILOT_DIR, REPORTS} from '../cli-context.js'
 import {aggregate, merge} from './aggregate.js'
 import {parseRows, fetchRows, TOKEN_ENV} from './source.js'
 import {renderReport} from './report.js'
+import {clusterQuestions, against, renderFaqReport} from './faq.js'
+import {resolveSuggestions} from '../theme/docpilot/switches.js'
+import {openerQuestions} from '../theme/docpilot/openers.js'
 
-const MODES = ['pull', 'report']
+const MODES = ['pull', 'report', 'faq']
 const CANDIDATES = path.join(DOCPILOT_DIR, 'candidates.jsonl')
 
 const USAGE = `
@@ -29,6 +32,8 @@ const USAGE = `
 
     pull      aggregate votes into ${path.basename(CANDIDATES)} for review
     report    write a markdown summary of what readers said
+    faq       rank the questions readers ask, grouped the way the panel groups
+              them, and propose a \`suggestions.questions\` block to paste
 
   --from <path|url>   a JSONL/JSON export of your own storage, or a GET endpoint
   --since <ISO>       passed through to a URL source as ?since=
@@ -150,6 +155,53 @@ export async function runFeedback({docPilot, argv = [], env = {}}) {
 
   const candidates = aggregate(rows)
   const send = docPilot?.feedback?.send ?? 'both'
+
+  /**
+   * The openers a real reader population would have asked for.
+   *
+   * Grouped with the panel's own paraphrase scorer at this site's own
+   * `matchTau`, so a cluster is exactly what one opener would catch at runtime
+   * rather than a plausible-looking grouping the runtime then disagrees with.
+   *
+   * `df` is deliberately NOT loaded from the index here. The scorer weights by
+   * term rarity and falls back to "unlisted means maximally rare", which over a
+   * few dozen candidate questions is the conservative direction: it makes
+   * clustering stricter, so a proposal is under-merged rather than over-merged,
+   * and an author reads two rows instead of silently losing one. Reading the
+   * index would also make this command fail on a project that has not built one,
+   * for a report about questions rather than about chunks.
+   */
+  if (args.mode === 'faq') {
+    const suggestions = resolveSuggestions(docPilot, () => {})
+    const configured = openerQuestions(suggestions)
+    const opts = {df: null, matchTau: suggestions.matchTau}
+    const clusters = clusterQuestions(candidates, opts)
+    const {rows, unasked} = against(clusters, configured, opts)
+    const out = args.out ? path.resolve(args.out) : path.join(REPORTS, 'faq-latest.md')
+    mkdirSync(path.dirname(out), {recursive: true})
+    writeFileSync(
+      out,
+      renderFaqReport(rows, {
+        configured,
+        unasked,
+        send,
+        source: isUrl(args.from) ? new URL(args.from).origin : path.basename(args.from),
+        generatedAt: new Date().toISOString(),
+      }),
+    )
+    console.log(
+      `[docpilot] ${path.relative(process.cwd(), out)} — ${rows.length} cluster(s) ` +
+        `from ${candidates.length} candidate(s)\n` +
+        (unasked.length
+          ? `           ${unasked.length} configured opener(s) nobody has ever asked for.\n`
+          : '') +
+        `\n  Your config was not touched, and this is not a ranking of questions —\n` +
+        `  it is a ranking of questions somebody VOTED on. Read the report, choose\n` +
+        `  three yourself, then run \`npx docpilot index\`, which resolves them\n` +
+        `  against the corpus and names the ones the gate refuses.`,
+    )
+    return 0
+  }
 
   if (args.mode === 'report') {
     const out = args.out ? path.resolve(args.out) : path.join(REPORTS, 'feedback-latest.md')

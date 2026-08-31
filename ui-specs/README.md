@@ -37,6 +37,7 @@ and a research pass first, and a change that moves a rule updates 000 and
 | [010](010-a-turn-outlives-the-panel.md) | Closing the panel stops looking, not asking — the turn runs on and the trigger takes a dot |
 | [011](011-the-panel-can-be-pinned.md) | `ui.theme` — a site can pin the panel light or dark instead of following the page |
 | [012](012-nothing-is-lost-to-a-reload.md) | Leaving the page keeps what was written, what was typed, and says so while you wait |
+| [013](013-an-answer-that-was-already-written.md) | An opener whose answer the build already wrote settles instantly, in the reader's language or not at all |
 
 ## The rules
 

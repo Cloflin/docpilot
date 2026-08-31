@@ -584,6 +584,11 @@ export function createRetrieval({
    * index — would change the index format, move the corpus hash, and make every
    * consumer rebuild for a value that is derivable in one pass at load.
    *
+   * The chunkers wrote one anyway for two releases, and nothing here ever read
+   * it: 4.6% of this corpus's shard bytes, downloaded by every reader, for a map
+   * the line below rebuilds. An index built before that was fixed still carries
+   * the key; ignoring it is what this code already did.
+   *
    * Built here rather than in the store because this is the only reader: a map
    * the size of the corpus, built once per retrieval object, not per turn.
    */
