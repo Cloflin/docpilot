@@ -98,16 +98,18 @@ const localRagIndex = new URL(
  * `doctor` all read THIS named export, so there is no second place stating
  * which model embeds or where the docs live.
  *
- * The providers are OpenRouter, on BOTH halves, and the models are deliberately
- * unnamed. An unnamed half on this one provider does not fall back to a default
- * model — it resolves to the free pool in `openrouter.js`, which is the shape
- * that matches what a shared free tier actually is: a 429 there is a statement
- * about other people's traffic, not about the model, so a list tried in order
- * beats any single id anyone could write here.
+ * The providers are OpenRouter on BOTH halves, and the models are NAMED. They
+ * were left unnamed until now, which resolved to the free pools in
+ * `openrouter.js` — and the reasoning behind that shape has not gone away, it
+ * has moved to `chat.models`: a 429 on a shared free tier is a statement about
+ * other people's traffic rather than about the model, so a list tried in order
+ * still beats any single id. What changed is only WHERE the list is written, and
+ * that the embed half now states the one model this site's index was built with
+ * instead of recording it after the fact. The two blocks below carry the rest.
  *
- * `embed: 'auto'` follows the chat provider rather than restating it. It reads
- * as one decision because it is one — OpenRouter serves `/v1/embeddings` too,
- * so the second provider a docs site usually needs is not needed here.
+ * OpenRouter serves `/v1/embeddings` too, so the second provider a docs site
+ * usually needs is not needed here — the embed half names the same provider
+ * rather than borrowing it through `'auto'`.
  *
  * The key is `OPENROUTER_API_KEY`, read from `.env.local` by `loadEnv` below.
  * It never reaches the page: in dev the plugin's `/ai/*` proxy attaches it
@@ -200,8 +202,70 @@ export const docPilot = {
         },
       }
     : {
-        chat: { provider: 'openrouter' },
-        embed: 'auto',
+        /**
+         * THE POOL, WRITTEN DOWN. This is the list `chatModels(docPilot)`
+         * returned while the half was unnamed, copied rather than imported
+         * because `openrouter.js` is not on the package's `exports` map — and
+         * copied on purpose besides, since a deployment that wants to drop a
+         * model or reorder them should be able to do it in the file it already
+         * edits.
+         *
+         * `chat.models` KEEPS the rotation the unnamed form had: it is walked on
+         * a 429, a retired id or an empty answer, and the model that answered is
+         * tried first next time. The order is `openrouter.js`'s and it is not
+         * alphabetical — the final step pins its shape with a strict
+         * `response_format: json_schema`, so ids carrying `structured_outputs`
+         * lead, `response_format`-only ones follow, and the rest are the tail
+         * rotation reaches when nothing better is free. `openrouter/free` stays
+         * at the head: it is a router, so it sees the pool closer than this file
+         * can, and the explicit ids behind it are what runs when it will not.
+         *
+         * THE COST OF WRITING IT DOWN, stated because it is the whole trade: this
+         * list no longer tracks the shipped pool. When OpenRouter's free lineup
+         * moves, `openrouter.js` follows it on the next release and this file
+         * does not. That is the point of a pin, and it is also the reason these
+         * ids are worth a glance whenever the package is upgraded.
+         */
+        chat: {
+          provider: 'openrouter',
+          models: [
+            'openrouter/free',
+            'dots-studio/dots-3-note-preview:free',
+            'google/gemma-4-26b-a4b-it:free',
+            'nvidia/nemotron-3-super-120b-a12b:free',
+            'openai/gpt-oss-20b:free',
+            'nvidia/nemotron-nano-9b-v2:free',
+            'google/gemma-4-31b-it:free',
+            'nvidia/nemotron-3.5-lightning:free',
+            'nvidia/nemotron-3-ultra-550b-a55b:free',
+            'nvidia/nemotron-3-nano-30b-a3b:free',
+          ],
+        },
+        /**
+         * ONE id, and a list here would be a mistake rather than a safeguard:
+         * the embed half never rotates, because the index and every query have
+         * to land in ONE vector space. A second embedder is a second index, not
+         * a fallback.
+         *
+         * This is the model `docs/public/rag` was actually built with —
+         * `manifest.embedModel` says so — and naming it is what turns that from
+         * a fact about which of the two free embedders answered first that
+         * morning into something a rebuild reproduces. The other one,
+         * `nvidia/llama-nemotron-embed-vl-1b-v2:free`, is a vision-language
+         * model; both are 2048-dimensional, which makes them look
+         * interchangeable and is exactly why the width check alone would not
+         * catch a swap.
+         *
+         * If this id and `manifest.embedModel` ever disagree, the panel says so
+         * in the console once and drops to lexical-only rather than scoring a
+         * query against a foreign space — `embedderMatchesIndex` in
+         * `session.js`. Changing this id means rebuilding the index in the same
+         * commit.
+         */
+        embed: {
+          provider: 'openrouter',
+          model: 'nvidia/nemotron-3-embed-1b:free',
+        },
       }),
   ui: { trigger: 'fab' },
 }
