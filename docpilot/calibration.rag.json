@@ -2,7 +2,7 @@
   "ok": true,
   "fails": [],
   "version": 1,
-  "calibratedAt": "c21b32e5",
+  "calibratedAt": "e313235d",
   "embedModel": "nvidia/nemotron-3-embed-1b:free",
   "vocabHash": null,
   "lexicalOnly": false,
@@ -44,7 +44,7 @@
     "cosFloor": 0.04,
     "cosCeil": 0.18,
     "source": "transferred-window",
-    "calibratedAt": "c21b32e5",
+    "calibratedAt": "e313235d",
     "zexp": [
       {
         "n": 7,
@@ -52,15 +52,15 @@
       },
       {
         "n": 10,
-        "z": 1.3211
+        "z": 1.3209
       },
       {
         "n": 25,
-        "z": 2.9946
+        "z": 2.9932
       },
       {
         "n": 49,
-        "z": 3.8667
+        "z": 3.86
       },
       {
         "n": 110,
@@ -85,7 +85,7 @@
   },
   "transferredFrom": {
     "embedModel": "bge-m3",
-    "calibratedAt": "c21b32e5",
+    "calibratedAt": "e313235d",
     "source": "calibrated-reduced",
     "probeCount": 597,
     "tau": 0.69,

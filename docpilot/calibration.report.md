@@ -1,11 +1,11 @@
-# Gate calibration — `c21b32e5`
+# Gate calibration — `e313235d`
 
 Produced by `npx docpilot calibrate` (RAG-SPEC 5.6). Embed endpoint only — no chat model,
 no LLM judge, no unseeded randomness. Same corpus + same probes ⇒ same output.
 
 | | |
 |---|---|
-| index | `c21b32e5`, 476 chunks, nvidia/nemotron-3-embed-1b:free |
+| index | `e313235d`, 476 chunks, nvidia/nemotron-3-embed-1b:free |
 | probes | 271 from `docpilot/calibration.jsonl` |
 | **tau** | **0.69** |
 | **tauLexical** | **0.51** |
@@ -169,9 +169,9 @@ exactly the correlation the ladder exists to measure.
 | n | z | closed form sqrt(2·ln n) |
 |---|---|---|
 | 7 | 1.1804 | 1.9728 |
-| 10 | 1.3211 | 2.1460 |
-| 25 | 2.9946 | 2.5373 |
-| 49 | 3.8667 | 2.7899 |
+| 10 | 1.3209 | 2.1460 |
+| 25 | 2.9932 | 2.5373 |
+| 49 | 3.86 | 2.7899 |
 | 110 | 4.7491 | 3.0661 |
 | 315 | 7.0109 | 3.3919 |
 | 476 | 8.3235 | 3.5115 |
