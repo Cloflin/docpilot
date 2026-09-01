@@ -122,6 +122,7 @@
   },
   "files": [
     "CHANGELOG.md",
+    "package.json",
     "LICENSE",
     "README.md",
     "bin/",

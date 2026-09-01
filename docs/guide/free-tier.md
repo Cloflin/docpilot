@@ -270,6 +270,18 @@ Three ways out, in the order they cost you something:
   than a weaker one — a corpus that changed materially, and a deploy that has to
   go out today — and the wrong one as a standing setting you forget about.
 
+**The openers are the line item nobody budgets for.** Every question in
+[`suggestions.questions`](/reference/config#suggestions-questions) is embedded at
+build time, and with
+[`suggestions.answers`](/reference/config#suggestions-answers) on — the default —
+each is a model call as well. At the ceiling of five that is ten requests, a fifth
+of a fifty-a-day tier, on top of the corpus. And they are re-bought whenever the
+corpus hash moves **or you edit one opener**, because the bake is fingerprinted
+over the whole list rather than per question: rewording one chip re-buys all five.
+On a docs site rebuilt several times an afternoon, `answers: false` halves it and
+leaves the click free; the embedding half is cached and only a *new* question
+misses.
+
 Naming a **second embedder** as the fallback is not offered, and the reason is
 worth knowing: the index and every query have to land in one vector space, so a
 second embedder is a second index — and its address would have to reach every

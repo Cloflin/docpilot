@@ -25,6 +25,7 @@ import { toMarkdown } from './lib/html-to-md.js'
 import { parseDocument } from './lib/dom.js'
 import { annotate } from './lib/annotate.js'
 import type { Annotation } from './lib/annotate.js'
+import { flagErrors, spaceFormWarning } from '../cli-flags.js'
 import {
   canonicalOf,
   declaredAlternates,
@@ -334,6 +335,17 @@ export function parseImportFlags(argv) {
  * @param {Console} [o.log]
  */
 export async function runImport({ docPilot, argv, env = process.env, log = console }) {
+  // First, and before the URL is fetched or the model is called: a typo in a
+  // flag used to be dropped in silence, and `--out --force` used to mean
+  // `out === '--force'` while eating the `--force`.
+  const [bad] = flagErrors('import', argv)
+  if (bad) {
+    log.error(`[docpilot] ${bad}`)
+    return 1
+  }
+  const spaceForm = spaceFormWarning('import', argv)
+  if (spaceForm) log.error(`[docpilot] ${spaceForm}`)
+
   const flags = parseImportFlags(argv)
   if (flags.unknown.length) {
     log.error(`[docpilot] unknown option: ${flags.unknown.join(', ')}`)

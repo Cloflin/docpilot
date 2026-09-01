@@ -556,7 +556,7 @@ same relationship the armed send button uses.
 
 Not a pill: these are whole sentences, and a pill around a sentence is a paragraph
 with a rounded rectangle drawn on it. `--dp-surface-2` at rest — resting, because
-these three rows are the only thing to do in an empty panel and a control whose
+these rows are the only thing to do in an empty panel and a control whose
 only affordance is hover has none at all on a touchscreen — `--dp-wash` and
 promoted text on contact, `--dp-r-md`, 14px.
 

@@ -1,11 +1,11 @@
-# Gate calibration — `e313235d`
+# Gate calibration — `ab42d56c`
 
 Produced by `npx docpilot calibrate` (RAG-SPEC 5.6). Embed endpoint only — no chat model,
 no LLM judge, no unseeded randomness. Same corpus + same probes ⇒ same output.
 
 | | |
 |---|---|
-| index | `e313235d`, 476 chunks, nvidia/nemotron-3-embed-1b:free |
+| index | `ab42d56c`, 477 chunks, nvidia/nemotron-3-embed-1b:free |
 | probes | 271 from `docpilot/calibration.jsonl` |
 | **tau** | **0.69** |
 | **tauLexical** | **0.51** |
@@ -168,14 +168,14 @@ exactly the correlation the ladder exists to measure.
 
 | n | z | closed form sqrt(2·ln n) |
 |---|---|---|
-| 7 | 1.1804 | 1.9728 |
-| 10 | 1.3209 | 2.1460 |
-| 25 | 2.9932 | 2.5373 |
-| 49 | 3.86 | 2.7899 |
-| 110 | 4.7491 | 3.0661 |
-| 315 | 7.0109 | 3.3919 |
-| 476 | 8.3235 | 3.5115 |
-| 476 | 8.3235 | 3.5115 |
+| 7 | 1.1593 | 1.9728 |
+| 10 | 1.29 | 2.1460 |
+| 25 | 3.0093 | 2.5373 |
+| 49 | 3.8108 | 2.7899 |
+| 110 | 4.6497 | 3.0661 |
+| 315 | 7.0089 | 3.3919 |
+| 477 | 8.315 | 3.5121 |
+| 477 | 8.315 | 3.5121 |
 
 `denseMode` is `cosine` on this index, so the ladder is **inert**:
 `zExp(n)` is only consulted in `zscore` mode. It is measured and recorded anyway so

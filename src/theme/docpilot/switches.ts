@@ -69,7 +69,7 @@ export const SUGGESTIONS_DEFAULTS = {
  * Deliberately engine-agnostic: this package ships to any VitePress site, so a
  * default that names a feature only one product has is a question the gate will
  * refuse on contact — which reads to the reader as a broken panel on their very
- * first click. `docPilot.suggestions` is where three good ones go, and
+ * first click. `docPilot.suggestions` is where three to five good ones go, and
  * `docpilot index` now says on stdout which of these three your corpus refuses.
  */
 export const DEFAULT_SUGGESTIONS = [
@@ -585,7 +585,34 @@ export function resolveBudget(docPilot, report = console.error) {
   }
 }
 
-const SUGGESTION_LIMIT = 3
+/**
+ * How many chips the empty state can hold — three by default, five at most.
+ *
+ * A CEILING, NOT A COUNT. The author writes three, four or five and the panel
+ * shows what is written; `DEFAULT_SUGGESTIONS` stays three, so a project that
+ * configured none pays exactly what it paid before — three embeddings and,
+ * with `answers` on, three model calls per hash move.
+ *
+ * FIVE BECAUSE THE LAYOUT SAYS FIVE. `.docpilot__empty` is a `flex: 1` column
+ * whose greeting takes the free space on `margin-block: auto` while the rows
+ * stay anchored above the composer (core.scss:665-676). Five rows of 32px with
+ * an 8px gap is the most the greeting can give up before it stops being
+ * centred and starts being pushed.
+ *
+ * A `suggestions.limit` KEY WAS THE OTHER CANDIDATE AND IS WORSE. `questions`
+ * already states the count — its length — so a limit beside it can only ever
+ * disagree with its own input. The one behaviour it would add that the array
+ * cannot is "configure five, show three", which is a config that lies about
+ * itself. It would also cost a leaf in `DEFAULTS`, a line in the resolver, the
+ * pre-configure copy in session.js, a declaration in types/config.d.ts and
+ * four rule-11 checks, two of which EXECUTE the documented default — for a
+ * number the author states by typing questions.
+ *
+ * EXPORTED, and that is the fix rather than the decoration. `DocPilot.vue` held
+ * its own literal `3`, so the warning an author read and the list a reader saw
+ * were free to disagree and nothing was watching. One constant, two readers.
+ */
+export const SUGGESTION_LIMIT = 5
 
 /**
  * What an empty panel offers, and what a settled answer offers after it.
@@ -709,8 +736,9 @@ function questionsOf(raw, warn) {
     clean.push(q)
   }
 
-  // No silent cap. The component slices at three; saying so here is the
-  // difference between a design decision and a bug the author cannot see.
+  // No silent cap. The component slices at the same constant now; saying so
+  // here is the difference between a design decision and a bug the author
+  // cannot see.
   if (clean.length > SUGGESTION_LIMIT) {
     warn(
       `[docpilot] ${clean.length} suggestions configured, ${SUGGESTION_LIMIT} shown — ` +

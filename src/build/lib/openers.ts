@@ -1,10 +1,10 @@
 /**
  * Resolving the openers at index time — engine-specs/009.
  *
- * The three questions on the panel's empty state are the most-asked questions
- * on any docs site by construction: every reader who opens the panel without
- * one of their own sees them, and clicking one is the cheapest thing they can
- * do. Until now it was also one of the most expensive things the site could do
+ * The questions on the panel's empty state — three of them by default, five at
+ * most — are the most-asked questions on any docs site by construction: every
+ * reader who opens the panel without one of their own sees them, and clicking
+ * one is the cheapest thing they can do. Until now it was also one of the most expensive things the site could do
  * — an embedding request and a model call, per reader, for a question the
  * author wrote down weeks earlier and has not changed since.
  *

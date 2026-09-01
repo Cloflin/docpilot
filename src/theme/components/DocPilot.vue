@@ -154,9 +154,9 @@
             {{ T('history.stale') }}
           </p>
 
-          <!-- empty state: a centred greeting, three questions anchored to the
-               composer. The greeting is resident in every scope; the questions
-               are not. -->
+          <!-- empty state: a centred greeting, the configured questions anchored
+               to the composer. The greeting is resident in every scope; the
+               questions are not. -->
           <!-- `!s.busy` as well as `!s.turns.length`: editing the FIRST question
                empties the thread for the width of one flush before the
                replacement turn is pushed, and a greeting that blinks through
@@ -1223,7 +1223,7 @@ import { resolveI18n, t as translate, normaliseLocale } from '../docpilot/i18n.j
 import { relativeParts } from '../docpilot/history.js'
 import { COMMENT_MAX } from '../docpilot/feedback.js'
 import { createSelectionAsk } from '../docpilot/selection.js'
-import { FILTER_AUTO_ABOVE, DEFAULT_SUGGESTIONS } from '../docpilot/switches.js'
+import { FILTER_AUTO_ABOVE, DEFAULT_SUGGESTIONS, SUGGESTION_LIMIT } from '../docpilot/switches.js'
 import { hasDailyAllowance } from '../docpilot/budget.js'
 import { terms } from '../docpilot/text.js'
 import { atBottom as isAtBottom, createFollower } from '../docpilot/follow.js'
@@ -2415,8 +2415,10 @@ function onEditKeydown(e: KeyboardEvent) {
 
 // The built-in three now live in switches.js, beside the resolver, because
 // `docpilot index` bakes WHAT THE PANEL WILL SHOW and cannot import a constant
-// out of a .vue file. Two copies of the list would bake three questions the
-// reader never sees.
+// out of a .vue file. Two copies of the list would bake questions the reader
+// never sees — and the SLICE was the second copy of the NUMBER: this line read
+// `.slice(0, 3)` while `questionsOf` sliced at `SUGGESTION_LIMIT`, so the
+// warning an author reads and the list a reader gets were free to disagree.
 //
 // Suppressed under a narrower scope: the defaults are almost certainly outside
 // it and the gate would refuse all three on contact. What goes there instead is
@@ -2424,7 +2426,7 @@ function onEditKeydown(e: KeyboardEvent) {
 const suggestions = computed(() => {
   if (s.scope.kind !== 'all') return []
   const configured = s.config.suggestions.questions
-  return (configured.length ? configured : DEFAULT_SUGGESTIONS).slice(0, 3)
+  return (configured.length ? configured : DEFAULT_SUGGESTIONS).slice(0, SUGGESTION_LIMIT)
 })
 
 /**

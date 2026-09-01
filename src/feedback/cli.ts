@@ -17,6 +17,7 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs'
 import path from 'node:path'
 import {DOCPILOT_DIR, REPORTS} from '../cli-context.js'
+import {flagErrors, spaceFormWarning} from '../cli-flags.js'
 import {aggregate, merge} from './aggregate.js'
 import {parseRows, fetchRows, TOKEN_ENV} from './source.js'
 import {renderReport} from './report.js'
@@ -96,6 +97,19 @@ function readCandidates(file) {
  */
 export async function runFeedback({docPilot, argv = [], env = {}}) {
   const args = parseArgs(argv)
+
+  // `--help` is handled by the launcher now, above every import, so by the time
+  // this runs the reader asked for work. A flag they misspelled is a flag that
+  // used to be dropped, and `--from --out=x` used to make the URL `--out=x`.
+  if (!args.help) {
+    const [bad] = flagErrors('feedback', argv)
+    if (bad) {
+      console.error(`[docpilot] ${bad}`)
+      return 1
+    }
+    const spaceForm = spaceFormWarning('feedback', argv)
+    if (spaceForm) console.error(`[docpilot] ${spaceForm}`)
+  }
 
   if (args.help || !args.mode) {
     console.log(USAGE)

@@ -69,6 +69,7 @@ import { composeQuery } from '../theme/docpilot/gate.js'
 import { retrievalF1Loose, recallAtK, mrr, underPath, mean } from './metrics.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
+import { flagErrors } from '../cli-flags.js'
 
 import {
   ROOT,
@@ -107,49 +108,24 @@ const has = (name) => process.argv.includes(`--${name}`)
  * asked for. A flag that silently means its opposite is worse than one that
  * throws, and the `=` is the only spelling the parser has ever supported.
  */
-const VALUE_FLAGS = {
-  level: '--level=low',
-  lambda: '--lambda=0.5:1.0:0.05',
-  k: '--k=4:12',
-  limit: '--limit=10',
-}
-const BOOL_FLAGS = ['dry']
-
 /**
- * argv from `--` onwards, checked before anything is loaded or embedded: a typo
- * that is going to abort the run has to abort it before the two-minute embedding
- * pass, not after. `slice(2)` because the bin dispatcher rewrites `argv[1]` to
- * this module, so the subcommand is already gone by the time we see it.
+ * The check, which now lives in src/cli-flags.js as `flagErrors` — this function
+ * WAS that code, and it was the only command in the package that had it. The
+ * ones that did not were exactly the ones that spend money: `calibrate --limt=3`
+ * embedded all 597 probes, `eval --limit=abc` ran the whole pool, and
+ * `<cmd> --help` on four of them was a purchase order.
+ *
+ * Generalising it changed no wording: `flagErrors('tune', …)` emits the same
+ * three sentences this file wrote, so a reader who meets one here and one in
+ * `eval` reads a single dialect.
+ *
+ * Still called before anything is loaded or embedded — a typo that is going to
+ * abort the run has to abort it before the two-minute embedding pass, not after.
  */
 function assertKnownFlags() {
-  // `Object.hasOwn`, not `in`: `--constructor=x` and `--toString` are inherited
-  // keys of any object literal, and `in` would wave both straight through.
-  const known = (name) => Object.hasOwn(VALUE_FLAGS, name)
-  for (const tok of process.argv.slice(2)) {
-    if (!tok.startsWith('--')) continue
-    const name = tok.slice(2).split('=')[0]
-    if (tok.includes('=')) {
-      if (!known(name)) die(unknownFlag(tok))
-      continue
-    }
-    if (BOOL_FLAGS.includes(name)) continue
-    if (known(name)) die(`--${name} takes a value: ${VALUE_FLAGS[name]}`)
-    die(unknownFlag(tok))
-  }
-
-  // `--limit` decides whether this run may write `tuning.json` at all, so it may
-  // not fail open. `Number('abc')` is NaN, NaN is falsy, and both `slice(0, NaN)`
-  // and the narrowing test read that as "no limit" — a typo would sweep the whole
-  // pool AND ship the answer, which is the pair of surprises this file is being
-  // hardened against.
-  const raw = arg('limit', null)
-  if (raw !== null && !(Number.isInteger(Number(raw)) && Number(raw) > 0)) {
-    die(`--limit="${raw}" must be a positive whole number, e.g. --limit=10`)
-  }
+  const [bad] = flagErrors('tune', process.argv.slice(2))
+  if (bad) die(bad)
 }
-const unknownFlag = (tok) =>
-  `unknown flag ${tok}\n` +
-  `        tune takes: ${Object.values(VALUE_FLAGS).join('  ')}  --dry`
 
 const DRY = has('dry')
 const LIMIT = Number(arg('limit', '0'))

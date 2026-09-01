@@ -110,7 +110,7 @@ corpus rather than someone else's.
 | | DocPilot | Algolia Ask AI | kapa.ai | Inkeep | Mintlify AI | Orama Cloud |
 |---|---|---|---|---|---|---|
 | **Where retrieval runs** | the reader's browser | Algolia's cloud | kapa's cloud | their cloud, or your infra | Mintlify's cloud | Orama's cloud — or the browser, with the OSS library |
-| **Index the reader downloads** | int8 vectors, one byte per dimension — 952 KB for this site's 476 chunks at 2048 dimensions | n/a — the index is theirs | n/a — the index is theirs | n/a — the index is theirs | n/a — the index is theirs | n/a, unless you ship an OSS bundle |
+| **Index the reader downloads** | int8 vectors, one byte per dimension — 960 KB for this site's 480 chunks at 2048 dimensions | n/a — the index is theirs | n/a — the index is theirs | n/a — the index is theirs | n/a — the index is theirs | n/a, unless you ship an OSS bundle |
 | **Retrieval model** | hybrid — BM25 over the chunk text and cosine over the vectors, fused by Reciprocal Rank Fusion | keyword; NeuralSearch is listed on Elevate | not documented | not documented | not documented | full-text, vector and hybrid |
 | **Where the index lives** | a static file on the host already serving your site | an Algolia index | kapa's platform | their platform, or self-hosted | the Mintlify platform | Orama Cloud, or a bundle you ship |
 | **Server you must run** | one reverse-proxy route that attaches the model key | none | none | none, unless you self-host | none | none — Secure Proxy fronts the model call |
@@ -230,6 +230,6 @@ Checked August 2026.
 DocPilot's own column is not sourced to a marketing page; every claim in it is
 either a documented setting, a measured artefact of this site's own index, or
 one of the four [guarantees](/concepts/guarantees), each of which is covered by
-a test in this repository. The index figures — 476 chunks, 2048 dimensions,
-952 KB of int8 vectors, under 0.003 mean |Δcos| — describe the files this page
+a test in this repository. The index figures — 480 chunks, 2048 dimensions,
+960 KB of int8 vectors, under 0.003 mean |Δcos| — describe the files this page
 is served alongside and can be checked with `ls -l docs/public/rag/`.

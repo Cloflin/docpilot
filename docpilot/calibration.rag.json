@@ -2,11 +2,11 @@
   "ok": true,
   "fails": [],
   "version": 1,
-  "calibratedAt": "e313235d",
+  "calibratedAt": "ab42d56c",
   "embedModel": "nvidia/nemotron-3-embed-1b:free",
   "vocabHash": null,
   "lexicalOnly": false,
-  "chunkCount": 476,
+  "chunkCount": 477,
   "probeFile": "docpilot/calibration.jsonl",
   "probeCount": 271,
   "byStratum": {
@@ -44,39 +44,39 @@
     "cosFloor": 0.04,
     "cosCeil": 0.18,
     "source": "transferred-window",
-    "calibratedAt": "e313235d",
+    "calibratedAt": "ab42d56c",
     "zexp": [
       {
         "n": 7,
-        "z": 1.1804
+        "z": 1.1593
       },
       {
         "n": 10,
-        "z": 1.3209
+        "z": 1.29
       },
       {
         "n": 25,
-        "z": 2.9932
+        "z": 3.0093
       },
       {
         "n": 49,
-        "z": 3.86
+        "z": 3.8108
       },
       {
         "n": 110,
-        "z": 4.7491
+        "z": 4.6497
       },
       {
         "n": 315,
-        "z": 7.0109
+        "z": 7.0089
       },
       {
-        "n": 476,
-        "z": 8.3235
+        "n": 477,
+        "z": 8.315
       },
       {
-        "n": 476,
-        "z": 8.3235
+        "n": 477,
+        "z": 8.315
       }
     ],
     "zexpSource": "measured",
@@ -85,7 +85,7 @@
   },
   "transferredFrom": {
     "embedModel": "bge-m3",
-    "calibratedAt": "e313235d",
+    "calibratedAt": "ab42d56c",
     "source": "calibrated-reduced",
     "probeCount": 597,
     "tau": 0.69,
@@ -139,8 +139,8 @@
       },
       "N4": {
         "n": 30,
-        "failures": 3,
-        "rate": 0.1,
+        "failures": 2,
+        "rate": 0.06666666666666667,
         "sourceRate": null
       },
       "N5": {
@@ -168,8 +168,8 @@
         "sourceRate": null
       }
     },
-    "gatePrecision": 0.37037037037037035,
-    "blatantRefusalRate": 0.9,
+    "gatePrecision": 0.37777777777777777,
+    "blatantRefusalRate": 0.9333333333333333,
     "rampShare": 0.04411764705882353,
     "drift": 0.015625
   },

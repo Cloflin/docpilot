@@ -186,7 +186,14 @@ const DEFAULTS = {
   // The RESOLVED shapes, never the settings ones — the rule `ui` below already
   // states. Each is equal to its resolver called with `{}`, and the suite says
   // so, which is what makes these safe to run on before `configure` lands.
-  suggestions: { questions: [], scoped: true, followUps: false },
+  suggestions: {
+    questions: [],
+    scoped: true,
+    followUps: false,
+    precomputed: true,
+    answers: true,
+    matchTau: 0.65,
+  },
   quote: { fromAnswer: true, fromDocs: false },
   citations: { passage: false, inCopy: true, pagesRead: false },
   composer: { editLastOnArrowUp: true, deepLink: true, draft: true },

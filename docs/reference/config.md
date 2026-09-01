@@ -142,7 +142,7 @@ written by hand; only the values are mechanical.
 | [`budget.showRemaining`](#budget-showremaining) | `boolean` | `false` | Adds the muted line under the composer — answers left today, and where `embed: false` that this deployment has no embedder — *the count half needs a daily allowance: a declared `dailyLimit`, or the provider's own free pool* |
 | [`budget.probe`](#budget-probe) | `'auto' \| 'always' \| 'never'` | `'auto'` | Governs the tool-detection call made on page load: `'auto'` skips it for a pool, `'always'` keeps it, `'never'` drops it |
 | [`budget.dailyLimit`](#budget-dailylimit) | `number \| null` | `null` | Declares a ceiling to count against locally for a metered service that sends no rate-limit headers; header counts still win — *`0` is reported and ignored — everything downstream reads a falsy ceiling as no ceiling at all* |
-| [`suggestions.questions`](#suggestions-questions) | `string[]` | `[]` | Replaces the built-in three empty-state openers with your own — the first three are used, extras, empties and repeats dropped and named on stdout — *`suggestions: ['One?']` — a bare array — sets this same key* |
+| [`suggestions.questions`](#suggestions-questions) | `string[]` | `[]` | Replaces the built-in three empty-state openers with your own — the first five are used, extras, empties and repeats dropped and named on stdout — *`suggestions: ['One?']` — a bare array — sets this same key* |
 | [`suggestions.scoped`](#suggestions-scoped) | `boolean` | `true` | Under a narrowed scope, fills the empty panel with the pages in that scope as rows rather than leaving it blank — no text is generated — *`false` gives back the blank panel, not the questions: those never show under a narrow scope* |
 | [`suggestions.followUps`](#suggestions-followups) | `boolean` | `false` | Adds up to three next-question rows under the newest answer, built from headings on the pages it cited — no model call and nothing invented |
 | [`suggestions.precomputed`](#suggestions-precomputed) | `boolean` | `true` | Has `npx docpilot index` resolve the openers ahead of time and the panel use what it resolved, so a reader clicking one spends no embedding request — *off, nothing is baked and nothing is read* |
@@ -252,7 +252,7 @@ Where the VitePress site lives, relative to the project root.
 - **Type:** `string | null`
 - **Default:** `null` — meaning `${docsDir}/public/rag`
 
-Set it only if you moved the index.
+Set it only if you moved the index — or if you keep more than one, which is the other reason it exists. `npx docpilot index` writes an index built with an embedder this config does not name into a directory of its own by default, and prints the two lines you paste here to point the panel at it. See [Building the index](/guide/indexing).
 
 ## evalDir
 
@@ -1434,12 +1434,12 @@ this package does not know to be metered.
 
 ## suggestions
 
-- **Type:** `string[] | { questions?: string[], scoped?: boolean, followUps?: boolean }`
-- **Default:** `{ questions: [], scoped: true, followUps: false }` — the built-in three
+- **Type:** `string[] | { questions?: string[], scoped?: boolean, followUps?: boolean, precomputed?: boolean, answers?: boolean, matchTau?: number | false }`
+- **Default:** `{ questions: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65 }` — the built-in three
 - **Related:** [ui-specs/009]
 
-The three questions on the empty state, and what the panel offers when it cannot
-show them.
+The three to five questions on the empty state, and what the panel offers when it
+cannot show them.
 
 An **array is still legal** and still means what it always meant — it is
 `{ questions: [...] }` with the two behaviours left at their defaults.
@@ -1449,14 +1449,27 @@ suggestions: [
   'How do I connect the editor to my app?',
   'How do I authenticate requests?',
   'How do I build a custom extension?',
+  'How do I change the panel’s colours?',
+  'What does the assistant refuse to answer?',
 ]
 ```
 
 Strings, not `{label, question}` objects: the row submits what it shows, so a
 separate label would put a question the reader never read into the thread.
 
-The first three are used. Extras, empties, repeats and non-strings are dropped and
-**named on stdout** — a silent cap reads as "covered everything" when it did not.
+**The first five are used, and three is the fallback rather than the maximum.**
+Extras, empties, repeats and non-strings are dropped and **named on stdout** — a
+silent cap reads as "covered everything" when it did not. The count is yours: the
+panel shows what you configure, and a site that configures nothing still shows the
+built-in three.
+
+**Five is not free.** Each opener is an embedding request at build time and, with
+[`suggestions.answers`](#suggestions-answers) on, a model call as well — and they
+are spent again whenever the corpus hash moves **or you edit one of them**,
+because the bake is fingerprinted over the whole list rather than per question. At
+five with answers on that is ten requests, which on a fifty-a-day free tier is a
+fifth of the day. Four good openers beat five where the fifth is one you have not
+finished writing.
 
 These are gate inputs, not headings. A question your corpus cannot answer produces
 a refusal on the reader's first click, in the one state that exists to show the
@@ -1510,7 +1523,7 @@ question can only ever be served the evidence it was resolved for.
 The build prints what it resolved, including the openers your corpus **refuses**:
 
 ```
-  openers  3 questions · configHash 3f1c9a02
+  openers  5 questions · configHash 3f1c9a02
     ✓ 0.71  'How do I get started?'                 4 chunks
     ✗ 0.22  'How do I authenticate requests?'       < tau 0.57
 ```
@@ -1533,9 +1546,12 @@ over; the model writes a fresh one, in Russian, from the evidence that was baked
 So this key never costs a reader an answer in the wrong language.
 
 **It is the half that costs requests at build time**: one model call per opener,
-against the same allowance your readers draw on, whenever the corpus changes.
-Answers are cached against the index hash, the prompt and the model, so a
-rebuild that changes none of the three regenerates none of them.
+against the same allowance your readers draw on, whenever the corpus changes —
+**or whenever you edit one opener**, because the bundle is fingerprinted over the
+whole configured list and a one-word rewrite moves it. At the ceiling of five that
+is five embeddings and five model calls, ten of a fifty-a-day tier. Answers are
+cached against the index hash, the prompt and the model, so a rebuild that changes
+none of the three regenerates none of them.
 
 An answer with no citations is never baked. Turn this off and the evidence bake
 stays: the click still costs no embedding.

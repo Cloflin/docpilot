@@ -52,6 +52,7 @@ import {
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 
 import { ROOT, RAG, GOLDEN, DOCPILOT_DIR, settings as docPilot } from '../cli-context.js'
+import { entryFlagError } from '../cli-flags.js'
 
 /** Bench artefacts sit beside the golden set, under the configured `evalDir`. */
 const BENCH = path.join(DOCPILOT_DIR, 'bench')
@@ -60,6 +61,17 @@ const BENCH = path.join(DOCPILOT_DIR, 'bench')
 const PROMPT_HASH = promptHash(docPilot.prompt, docPilot.product)
 
 const MODE = process.argv[2]
+
+/**
+ * EVERY FLAG THIS COMMAND TAKES, CHECKED FIRST — before a config is read, before
+ * `.env.local` is loaded, and long before anything is embedded. See
+ * `src/cli-flags.js` for what it rejects and why each kind of rejection exists.
+ */
+const BAD_FLAG = entryFlagError('bench', import.meta.url)
+if (BAD_FLAG) {
+  console.error(`\n  FAIL  ${BAD_FLAG}\n`)
+  process.exit(1)
+}
 const arg = (name: string, dflt?: string) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
   return hit ? hit.split('=').slice(1).join('=') : dflt

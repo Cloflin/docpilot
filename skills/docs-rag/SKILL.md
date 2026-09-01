@@ -5,16 +5,23 @@ description: >-
   corpus so the assistant can answer from it. Use when running or reading
   `npx docpilot eval`, `calibrate`, `index`, `bench` or `tune`; when editing the
   golden or calibration set, or choosing the level a new record enters at; when
+  choosing the questions the empty state offers, with or without reader data; when
   tuning retrieval (RRF weights, MMR lambda, `topK`/GATE_K, chunking); when
   cutting tokens or latency per answer; when diagnosing why a
   golden record failed or why the gate refused a real question; when proposing
   documentation edits (`<llm-only>` hints, frontmatter `description`) that make a
   page answerable; or when making the docs consumable by other people's agents
-  (llms.txt, robots, per-route markdown). Triggers: "run the eval", "why did q-08
+  (llms.txt, robots, per-route markdown); and when building or rebuilding the
+  index, where the embedder has to be shown to the user and chosen before the
+  build runs. Triggers: "build the index", "index the docs", "rebuild the index",
+  "which embedder", "which provider should index this", "собери индекс",
+  "переиндексируй", "run the eval", "why did q-08
   fail", "tune retrieval", "docpilot tune", "tune retrieval levers", "run the
   smoke level", "grow the golden set", "calibrate the gate", "fewer tokens per
   answer", "the assistant can't answer X", "improve the docs for the AI",
-  "llms.txt".
+  "llms.txt", "choose the openers", "what should the suggestion chips say", "the
+  empty state questions", "propose openers from the corpus", "opener candidates",
+  "cold start openers".
 ---
 
 # docs-rag
@@ -38,7 +45,7 @@ OpenAPI specs `docPilot.openapi` names, and, with `--html-dir`, a directory of
 already-built HTML — into the index directory (manifest, shards, int8 vectors, df; no vectors
 when the site declared `embed: false`). It then resolves
 `suggestions.questions` against the index it just built and ships the result as
-`openers.<hash>.json`, so the panel's three openers cost no embedding request.
+`openers.<hash>.json`, so the panel's openers cost no embedding request.
 In the
 browser, `retriever.js` fuses BM25 and dense retrieval — on the thresholds
 `calibrate` measured and the levers `tune` measured, both of which ride in the
@@ -48,6 +55,89 @@ then runs a short tool loop over the retriever and nothing else. `docpilot eval`
 drives exactly those production modules; nothing is stubbed.
 
 ## Modes
+
+### `index` — choose the embedder, then build
+
+**Never run `npx docpilot index` without first showing the user what it is about
+to build with.** The choice was always being made and never being said: the
+provider chain resolves silently from `.env.local`, so a project with
+`OPENAI_API_KEY` in it built with OpenAI and nobody was told, and a project with
+nothing anywhere fell through to a provider it had no key for and found out on
+the first chunk. Ask first.
+
+```bash
+npx docpilot doctor --embed        # the list — no metered request, localhost only
+```
+
+It prints every embedder this project could build with, one numbered row each,
+with the source of the row underneath and the exact command that picks it:
+
+* what `docPilot.embed` in the config file names — **first, and the default**
+* every provider the environment carries a key for, named by the variable
+  (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, …) so the user can check their own file
+* a local Ollama, when one answered `/api/tags` — the answer when the config
+  names nothing and the environment carries nothing
+* `embed: false`, lexical-only, which needs neither
+
+A row marked `✗ cannot run here` has no key in this environment. Say so rather
+than proposing it: the shipped fallback appears there whether or not a key for it
+exists, and running it spends a build to reach a 401.
+
+**Show the list, ask which one, then run the command that row printed.** It
+carries `--embed-model` and, for a local server, `--embed-base-url` — an address
+dropped from that line silently sends the build to `localhost` instead of the
+host the environment named.
+
+```bash
+npx docpilot index --embed-provider=ollama --embed-model=bge-m3 \
+  --embed-base-url=http://gpu.internal:11434 \
+  --index-dir=docs/public/rag-ollama-bge-m3
+```
+
+**`--index-dir` is not optional on an override, and this is the part to
+understand rather than copy.** Rebuilding at the current path with an embedder
+the config does not name leaves the deployed panel reading an index its own
+config does not describe. Two outcomes, and neither is acceptable:
+
+* **The config names a model.** `embedderMatchesIndex` in `session.js` compares
+  it against `manifest.embedModel`, logs the mismatch and drops retrieval to
+  lexical-only. Loud — and the panel is degraded until somebody reads a console.
+* **The config leaves the model to a pool or to `'auto'`.** There is no name on
+  the config side, so that check returns true and never fires. What remains is
+  the retriever's vector-width check, which two 1024-dimensional models pass
+  identically — and the panel scores queries against a foreign vector space with
+  **nothing anywhere reporting it**.
+
+`doctor --embed` prints the separate directory on every override row for that
+reason, and the config block below names the model for the same one: an unnamed
+model is exactly the case the runtime cannot check.
+
+**Then propose the config edit; do not make it.** Same rule as the openers and
+`llms.txt` below — this skill proposes and the user decides. The interactive form
+of `index` prints the exact block; reproduce it:
+
+```js
+embed: {
+  provider: 'ollama',
+  model: 'bge-m3',
+  baseURL: 'http://gpu.internal:11434',
+},
+indexDir: 'docs/public/rag-ollama-bge-m3',
+```
+
+Until that is pasted, the deployed site keeps reading the index it already has —
+which is the safe outcome, not a broken one.
+
+**What to do with no key and no local server.** Two honest answers, and they are
+the user's to choose between: `ollama serve` plus `ollama pull bge-m3`, which
+costs nothing and needs no account; or a provider key in `.env.local`. Do not
+default to the second because it is fewer steps.
+
+**Swapping embedder invalidates the measurements, not just the index.**
+`calibrate --transfer` is the check — see "the thresholds do not transfer" below —
+and the golden set's `gold_chunks` are repointed by `lint` after chunk ids move.
+Running `index` with a new embedder and then reading an old report is comparing
+two different pipelines.
 
 ### `eval` — run and read
 
@@ -362,14 +452,67 @@ it for you. Remedy: `unset` it, or pin the axis where a pin is legible —
 is a real thing to measure, and the note exists because `tuning.json` will record
 only λ and `GATE_K`, so the answer was measured under a pool the file never mentions.
 
-### `faq` — choose the three openers, and freeze them
+### `faq` — choose the openers, and freeze them
 
-The empty state offers three questions. They are the most-asked questions on the
-site by construction — every reader who opens the panel without one of their own
-sees them — and `docpilot index` now resolves them ahead of time, so a click
-costs no embedding request (engine-specs/009, ui-specs/013).
+The empty state offers three to five questions. They are the most-asked
+questions on the site by construction — every reader who opens the panel without
+one of their own sees them — and `docpilot index` resolves them ahead of time, so
+a click costs no embedding request (engine-specs/009, ui-specs/013).
 
-Two commands, and a person between them.
+**Two ways in, and which one you have depends on whether anyone has used the
+panel yet.** Both end at the same place: you edit, then `index` decides.
+
+#### Path A — the cold start, with no reader data
+
+```bash
+node .claude/skills/docs-rag/scripts/opener-candidates.js
+#   ...you EDIT, then paste into docPilot.suggestions.questions...
+npx docpilot index                                # resolve them, and report
+```
+
+`feedback faq` below needs an export of real votes, which a site that has not
+shipped does not have. This reads the **index** instead — the questions the
+corpus already phrases, and the pages it has the text to answer — and it makes
+**no request at all**.
+
+**It proposes and never writes**, on the same terms as `feedback faq` and with
+more force: that command has a biased sample, this one has no sample. A corpus
+knows what it can ANSWER; it does not know what anybody wants to ask.
+
+**Its `✓` is not a pass and its `✗` is not a refusal.** The script assembles the
+lexical twin of your index — `manifest.vectors` nulled, which `assembleIndex`
+reads as "no dense channel" — and runs the real retriever and the real gate over
+it, so the score is `G = L` against `guard.tauLexical`. The panel's gate is
+hybrid against `guard.tau`, and `assertWeights` guarantees `wLexical < tau`, so
+the lexical channel can never clear it alone. Read a `✓` as a floor: the corpus
+contains the question's rare wording. Read a `✗` as a warning. **The verdict is
+the `openers` block of `npx docpilot index`.**
+
+**The edit pass is mandatory, and the `template` rows are why.** Three tiers come
+out, in descending order of "a human already wrote this": a `<FaqAccordion>`
+question the author typed (`kind: 'faq'`), a heading that is already a question,
+and — for everything else — the one template the panel already ships for
+follow-ups, `Tell me about {heading}`, over a page title. That third tier emits a
+**subject, not a sentence**. `followUps` gets away with the same wording because
+the reader is mid-conversation and just saw the page; an empty state is a first
+impression and does not. A corpus with FAQ islands should run `--tiers=faq`
+first and will need no rewriting at all.
+
+**One candidate per section, and the arithmetic is worse at five than at sixty.**
+`sample-chunks.js` records a corpus where one section held 916 of 1191 chunks, so
+proportional sampling would have made 77% of a golden set about one part of the
+site. Five chips have no room for that at all — a pure score ranking would put
+four of them in the largest section, and the empty state would advertise a
+quarter of the docs. `--per-section=` raises the allowance where a site is too
+narrow to fill five under it.
+
+**A candidate that would swallow a probe is rejected with the probe named.** The
+script cross-scores every proposal against `docpilot/calibration.jsonl` with the
+same `similarity()` at the same `matchTau` that `opener-collisions.js` uses, so
+the two agree by construction and you do not have to run the second one to
+discover the first proposed a trap.
+
+#### Path B — with reader data
 
 ```bash
 npx docpilot feedback faq --from ./export.jsonl   # what readers actually ask
@@ -391,8 +534,11 @@ is complaints only.
 opener is visible before a reader finds it:
 
 ```
-  openers          3 question(s) · configHash 3f1c9a02 · 1 embedded, 2 cached
+  openers          5 question(s) · configHash 3f1c9a02 · 1 embedded, 4 cached
     ✓ 0.71  "How do I get started?"  4 chunk(s)  answer 412 B
+    ✓ 0.68  "How do I build a custom extension?"  6 chunk(s)  answer 508 B
+    ✓ 0.63  "What does the assistant refuse to answer?"  3 chunk(s)  answer 331 B
+    ✓ 0.59  "How do I change the panel's colours?"  5 chunk(s)  answer 402 B
     ✗ 0.22  "How do I authenticate requests?"  0 chunk(s)
     REFUSED  "How do I authenticate requests?" scores 0.22 against tau 0.57.
 ```
@@ -449,7 +595,19 @@ above every measured false positive and below the paraphrases the feature exists
 to catch.**
 
 Re-run it after a corpus change or an opener rewrite. The numbers above are this
-corpus and these three questions; yours are yours.
+corpus and these three questions; yours are yours. Both proposers emit the same
+paste-able block and score with the same `similarity()` at the same `matchTau`,
+so a site with reader data can run both and read the union.
+
+**Three to five, and five is the ceiling.** The panel shows what you configure;
+`resolveSuggestions` drops and names anything past `SUGGESTION_LIMIT`. The
+built-in fallback is still three, so a site that configures none pays what it
+always paid. **Five is not free**: five embedding requests plus, with
+`suggestions.answers` on, five model requests — and they are spent again whenever
+the corpus hash moves *or you edit one opener*, because the bundle is
+fingerprinted over the whole list rather than per question. On a fifty-a-day free
+tier that is ten. Four good ones beat five where the fifth is a `template` row you
+did not rewrite.
 
 ### `corpus` — edit the documentation, not the code
 
@@ -743,6 +901,18 @@ metric in any report.
 - **A baked answer with no citations is never written.** Same floor as a live
   answer, and stronger: a live uncited answer is a turn the reader can retry, a
   baked one is a turn every reader gets until the next build.
+- **Neither opener proposer edits the site config.** `docpilot feedback faq`
+  never does, on the terms below; `scripts/opener-candidates.js` never does
+  either, and with more force rather than less: that command has a sample biased
+  towards readers who pressed a thumb, this one has no sample at all. Every
+  candidate it prints is derived from the corpus, and a corpus knows what it can
+  answer, not what anybody wants to ask.
+- **The candidate script's gate verdict is lexical-only and is not the panel's.**
+  In that mode `verdict()` returns `G = L` against `guard.tauLexical`; the shipped
+  gate is `wDense·D + wLexical·L` against `guard.tau`, and `assertWeights`
+  guarantees `wLexical < tau`, so lexical alone can never clear it. Never quote a
+  `✓` from the script as a pass, and never drop a candidate on a `✗` alone.
+  `npx docpilot index` decides.
 - **`docpilot feedback faq` never edits the site config**, on the same terms as
   `pull` and `report` — and with more force, because these three strings are the
   first thing every reader sees and the sample behind them is biased.
@@ -767,7 +937,21 @@ metric in any report.
   those constants folded `process.env` at import, `.env.local` lands after it, and
   answering from them turns a set variable into the package literal and drops
   `manifest.tuning` on the way past.
-- New tests go in `test/docpilot.test.js`. One file is the repo convention.
+- **The skill's scripts never reach the network.** `opener-collisions.js` and
+  `opener-candidates.js` may import `text.js`, `gate.js`, `openers.js`,
+  `switches.js`, `store.js` and `retriever.js` out of `dist/` and nothing else —
+  never `embed.js`, `llm.js`, `providers.js` or `harness.js`. The same rule the
+  opener match path keeps, applied to the tooling, and for a sharper reason: both
+  scripts print "0 requests" in their own headers, and a script that claims it and
+  then makes one is worse than a script that never claimed it. The test suite
+  greps both import lists, static and dynamic.
+- **`SUGGESTION_LIMIT` has one spelling and two readers.** `DocPilot.vue` may not
+  repeat the number as a literal. It did — `.slice(0, 3)` against `questionsOf`'s
+  `slice(0, SUGGESTION_LIMIT)` — so the warning an author read and the list a
+  reader saw were free to disagree, and nothing was watching.
+- New tests go in `test/docpilot.test.js`. One file is the repo convention. The
+  two invariants above live in `test/openers.test.js` beside the match-path grep
+  they are siblings of.
 
 ## Things already measured — do not re-derive them
 

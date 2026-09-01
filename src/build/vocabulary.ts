@@ -32,6 +32,7 @@ import { pathToFileURL } from 'node:url'
 import { chat } from '../theme/docpilot/llm.js'
 import { setVocabulary, vocabularyHash } from '../theme/docpilot/text.js'
 import { nodeChatTarget, assertVocabulary } from '../config.js'
+import { flagErrors } from '../cli-flags.js'
 
 /**
  * The reply shape, as a STRICT JSON schema — an array of pairs rather than the
@@ -318,6 +319,15 @@ const value = (argv, name, fallback = null) => {
  * @returns {Promise<number>} an exit code
  */
 export async function runVocabulary({ docPilot, argv = [], env = {}, out = null }) {
+  // Before the corpus is read and before the one chat request. `--limit` bare
+  // used to mean a limit of ONE — `value()` returns `true` and `Number(true)` is
+  // 1 — and `--limit=abc` used to mean the default 24, both without a word.
+  const [bad] = flagErrors('vocabulary', argv)
+  if (bad) {
+    console.error(`[docpilot] ${bad}`)
+    return 1
+  }
+
   const say = (m) => console.log(m)
   const warn = (m) => console.error(`[docpilot] ${m}`)
 

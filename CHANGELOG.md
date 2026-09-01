@@ -7,6 +7,50 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## Unreleased
+
+### Changed
+
+**The empty state holds five questions, not three.** The panel shows what you
+configure, up to five; anything past that is still dropped and still named on
+stdout. The built-in fallback is still three, so a site that configures none pays
+nothing new. **Five is not free**: five embedding requests plus, with
+`suggestions.answers` on, five model calls — and they are spent again whenever the
+corpus hash moves *or you edit one opener*, because the bundle is fingerprinted
+over the whole list rather than per question. On a fifty-a-day free tier that is
+ten. The number itself lived in two places, `SUGGESTION_LIMIT` and a literal `3`
+in `DocPilot.vue`, so the warning an author read and the list a reader saw were
+free to disagree; it now lives in one, and a test says so.
+
+### Added
+
+**`opener-candidates.js` — the openers a corpus with no readers would ask for.**
+`docpilot feedback faq` clusters real reader votes, which a site that has not
+shipped does not have. This new script in the `docs-rag` skill reads the index
+instead: an `<FaqAccordion>` question the author already typed, a heading that is
+already a question, and — for everything else — the one template the panel
+already ships for follow-ups, over a page title. It ranks them, keeps at most one
+per section, refuses a pair the panel would refuse to match, cross-scores against
+`calibration.jsonl` so a candidate cannot swallow an unrelated probe, and runs
+the real retriever in its lexical-only mode so every candidate carries a real
+gate score for **zero requests**. That score is a floor and not a pass — the
+shipped gate is hybrid and the lexical channel cannot clear it alone — so it
+proposes and never writes, and the verdict is still the `openers` block of
+`npx docpilot index`.
+
+### Fixed
+
+**`SuggestionsSettings` declared three of its six keys.** `precomputed`,
+`answers` and `matchTau` shipped in 1.0.1, were resolved, were documented on the
+config reference — and were missing from the public `.d.ts`, so a consumer
+writing TypeScript could not set them without a cast. The conformance gate could
+not have caught it and never would: excess-property checking applies only to
+fresh object literals, so a wider generated object stays assignable to a narrower
+interface with optional keys, in both directions, forever. A new rule 11f walks
+`DEFAULTS` against the declaration file instead. The same three keys were also
+missing from the pre-`configure` copy in `session.js`, under a comment claiming
+it equalled its own resolver.
+
 ## 1.0.1 — 2026-09-01
 
 ### Added

@@ -40,6 +40,7 @@ import { embeddingsOf } from '../build/build-rag-index.js'
 import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { wilsonUpper95 } from './metrics.js'
 import { nodeEmbedTarget } from '../config.js'
+import { entryFlagError } from '../cli-flags.js'
 
 import {
   ROOT,
@@ -65,6 +66,17 @@ const arg = (name: string, dflt?: string) => {
   return hit ? hit.split('=').slice(1).join('=') : dflt
 }
 const has = (name) => process.argv.includes(`--${name}`)
+
+/**
+ * EVERY FLAG THIS COMMAND TAKES, CHECKED FIRST — before a config is read, before
+ * `.env.local` is loaded, and long before anything is embedded. See
+ * `src/cli-flags.js` for what it rejects and why each kind of rejection exists.
+ */
+const BAD_FLAG = entryFlagError('calibrate', import.meta.url)
+if (BAD_FLAG) {
+  console.error(`\n  FAIL  ${BAD_FLAG}\n`)
+  process.exit(1)
+}
 
 const REFRESH = has('refresh')
 const SWEEP_ONLY = has('sweep-only')

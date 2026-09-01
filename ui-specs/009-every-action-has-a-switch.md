@@ -211,6 +211,19 @@ produces, and a default that names something the gate refuses reads to a
 first-time reader as a broken panel. Copy that is **opt-in** only has to be good
 enough for the project that opted in, which is why B3 may.
 
+**A third case has since appeared that this pair did not have a name for:
+proposed, edited by a human, and verified by the real gate before it ships.**
+`scripts/opener-candidates.js` in the `docs-rag` skill derives opener candidates
+from the corpus for a site with no reader votes to cluster — the same heading
+material A5 refused, reaching the panel by a different road. It is opt-in twice
+over: the author runs the script, and the author pastes the result. And the
+objection that decided A5 is answered rather than waived, in two places the
+generated-by-default version had neither: the script scores every candidate
+through the shipped retriever and marks the ones the corpus cannot ground, and
+`docpilot index` then prints a `REFUSED` line for any that survive editing and
+still fail the hybrid gate. A heading is not an opener; a heading a person
+rewrote and two gates measured is a different object.
+
 ---
 
 ### A defect is not a feature

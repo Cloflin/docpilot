@@ -36,7 +36,9 @@ Delete only the skill you mean to refresh — `init` re-copies whatever is missi
 
 ### What changed in `docs-rag` this release
 
-Enough to be worth the diff. All of it is in **Things already measured**, which is the section an agent quotes at you when it declines to re-derive something:
+One new mode, and the rest is in **Things already measured**, which is the section an agent quotes at you when it declines to re-derive something.
+
+`index` is the new one, and it is a rule about asking rather than a measurement: the embedder was always resolved silently from `.env.local` and the config file, so a build never said which one it had picked. It says so now, and `npx docpilot doctor --embed` lists every one this project could use. The measured entries:
 
 - **`underPath` had no page pin, and every retrieval number this package printed was about seven points low.** A gold entry written as `path#` — the documented shape for a question a whole page answers — matched the lead chunk and nothing else, so retrieving the right page *and* the right section of it scored a miss. Measured over the 44 answerable development records: recall@8 0.761 → 0.830. Deltas measured with the old matcher are still valid; absolutes are not, and a comparison against the ancestor project's reports is not a baseline.
 - **The dense channel carries the system; BM25 is the accessory.** Three configurations measured `--gate-only`, then split by the language of the question. Turning BM25 off costs about four points of recall and refuses nothing extra. Turning the *embedder* off costs twenty-five points and refuses 11 of the 12 Russian positives before a model is ever called, each with lexical coverage of exactly zero. The entry ends in a decision rule for anyone proposing `embed: false`, and in what a query embedding actually costs.
@@ -46,15 +48,16 @@ Enough to be worth the diff. All of it is in **Things already measured**, which 
 
 ## `docs-rag`
 
-The measurement and tuning loop. Seven modes:
+The measurement and tuning loop. Eight modes:
 
 | mode | what it does |
 |---|---|
+| `index` | show the user every embedder this project could build with, ask which, then build — and never overwrite an index built by a different one |
 | `eval` | run the golden set, read the report, state a verdict, change nothing |
 | `generate` | author golden records — stratified sampling, then a mandatory editing pass |
 | `bench` | A/B two retrieval configurations on answer quality, with no API key |
 | `tune` | propose edits, each naming a file, a change, and the metric it should move |
-| `faq` | choose the three openers the empty state shows, and read what `index` says about them |
+| `faq` | choose the three to five openers the empty state shows — from reader votes, or from the corpus when there are none — and read what `index` says about them |
 | `corpus` | fix the **documentation** when no retrieval constant will help |
 | `llms` | make the docs readable by agents that are not this panel |
 
@@ -69,6 +72,10 @@ Plus two sections that matter more than the modes:
 Two files travel with it. `answerer-protocol.md` and `judge-protocol.md` are given verbatim to the agents the bench spawns — checked in, because a protocol that lives in a chat message is one nobody can reproduce, and a bench whose instruction drifted between runs measured nothing.
 
 `scripts/sample-chunks.js` prints a stratified slice of the index for golden-set authoring. Documentation is never evenly sized, and sampling proportionally to chunk mass produces an eval of whichever corner has the most pages.
+
+`scripts/opener-candidates.js` proposes the empty state's questions from the corpus, for a site that has no reader votes to cluster yet. It harvests what the docs already phrase as a question — an `<FaqAccordion>` entry, an interrogative heading — and falls back to the one template the panel already ships for follow-ups over a page title, then ranks, keeps one per section, and refuses a pair the panel would refuse to match. It runs the real retriever in its lexical-only mode, so every candidate carries a real gate score for zero requests; that score is a floor rather than a pass, because the panel's gate is hybrid. It proposes and never writes, and the verdict is still the `openers` block of `npx docpilot index`.
+
+`scripts/opener-collisions.js` measures the false-positive floor for [`suggestions.matchTau`](/reference/config#suggestions-matchtau) by scoring every calibration probe against every configured opener. A probe is not an opener, so every score it produces is a false positive waiting to happen.
 
 ## `docs-import`
 

@@ -99,6 +99,7 @@ import { lintRecords, levelSummary } from '../src/eval/lint-golden.js'
 import { mmr, pageCap, resolveLevers, LEVER_NAMES } from '../src/theme/docpilot/retriever.js'
 import { parseRange, chooseCell, buildTuningDoc } from '../src/eval/tune.js'
 import { TUNING_OUT, CALIBRATION_OUT } from '../src/cli-context.js'
+import { SUGGESTION_LIMIT } from '../src/theme/docpilot/switches.js'
 import {
   resolveSuggestions,
   themeDocPilot,
@@ -2586,6 +2587,36 @@ describe('rule 11 — every action has a switch', () => {
   })
 
   /**
+   * 11f — every knob is DECLARED, not just documented and resolved.
+   *
+   * 11b holds the tree against the reference and 11d/11e hold the values in it.
+   * None of the three looks at `types/config.d.ts`, and that is the file a
+   * consumer writing TypeScript configures against: `suggestions.precomputed`,
+   * `suggestions.answers` and `suggestions.matchTau` shipped, were resolved,
+   * were documented on the reference page — and could not be set without a
+   * cast, because `SuggestionsSettings` declared three of its six keys.
+   *
+   * THE CONFORMANCE GATE IS STRUCTURALLY UNABLE TO CATCH THIS, which is the
+   * whole argument for a rule-11-shaped check instead of a better type.
+   * `DEFAULTS` is declared `Required<DocPilotSettings>` and excess-property
+   * checking applies only to fresh object literals, so a generated object with
+   * MORE keys stays assignable to an interface with fewer optional ones. The
+   * assignment holds in both directions and holds forever; a missing optional
+   * key is not a type error and never becomes one.
+   *
+   * The check is 11b's, pointed at a different file: the leaf's own name,
+   * declared as a property. It is deliberately name-only and not
+   * interface-aware — mapping `chat.numCtx` to the interface that ought to
+   * declare it means encoding the tree's shape twice, and the defect this
+   * exists to catch is a key nobody declared ANYWHERE, which a name catches.
+   */
+  it('11f — every leaf in DEFAULTS is declared in the public types', () => {
+    const types = read('types/config.d.ts')
+    const declared = (leaf) => new RegExp(`^\\s{2,}${leaf.split('.').pop()}\\??:`, 'm').test(types)
+    expect(leavesOf(DEFAULTS).filter((l) => !declared(l)), 'undeclared settings').toEqual([])
+  })
+
+  /**
    * 11c — the inventory, printed, the way rule 1b prints the rings. A reviewer
    * should be able to see every switch by name without reading the config.
    */
@@ -3458,14 +3489,17 @@ describe('empty-state suggestions — configured, with the built-in three as fal
     expect(w.messages[0]).toMatch(/must be an array/)
   })
 
-  // "No silent caps" — the component slices at three either way; what is being
-  // tested is that the author is told which two vanished.
-  it('caps at three and names what it dropped', () => {
+  // "No silent caps" — the component slices at the same constant now, which is
+  // the point of exporting it; what is being tested is that the author is told
+  // which two vanished. Asserted AGAINST THE CONSTANT and never against `5`: a
+  // test that hardcodes the number is the third copy of it.
+  it('caps at SUGGESTION_LIMIT and names what it dropped', () => {
     const w = collect()
-    const five = ['a?', 'b?', 'c?', 'd?', 'e?']
-    expect(resolveSuggestions(docPilot(five), w).questions).toEqual(['a?', 'b?', 'c?'])
-    expect(w.messages[0]).toContain('"d?"')
-    expect(w.messages[0]).toContain('"e?"')
+    const seven = ['a?', 'b?', 'c?', 'd?', 'e?', 'f?', 'g?']
+    expect(resolveSuggestions(docPilot(seven), w).questions).toHaveLength(SUGGESTION_LIMIT)
+    expect(resolveSuggestions(docPilot(seven), quiet).questions).toEqual(seven.slice(0, SUGGESTION_LIMIT))
+    expect(w.messages[0]).toContain('"f?"')
+    expect(w.messages[0]).toContain('"g?"')
   })
 })
 
@@ -9805,9 +9839,14 @@ describe('the eval commands — a value-taking flag written without its =', () =
   // `parseLevelArg` runs at module scope and defaults the tier away.
   it('run.js refuses at module scope, above the flags it guards', () => {
     const src = srcText('src/eval/run.js')
-    const check = src.indexOf('const BARE = bareValueFlag(process.argv)')
+    // The call moved to `entryFlagError`, which is `bareValueFlag`'s check plus
+    // the unknown-flag, integer and enum ones that this module used to wave
+    // through — same position, same wording, strictly more caught. The INVARIANT
+    // this test exists for is unchanged and is the line below: it has to run
+    // before `parseLevelArg` defaults the tier away.
+    const check = src.indexOf("entryFlagError('eval', import.meta.url)")
     expect(check).toBeGreaterThan(-1)
-    expect(src).toContain('die(`--${BARE} takes a value: --${BARE}=${VALUE_FLAGS[BARE]}`)')
+    expect(src).toContain('if (BAD_FLAG) die(BAD_FLAG)')
     // Above `RUN_LEVEL`, or the default has already been chosen by then.
     expect(check).toBeLessThan(src.indexOf('RUN_LEVEL = parseLevelArg('))
   })

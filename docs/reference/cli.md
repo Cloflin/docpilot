@@ -26,6 +26,24 @@ Builds the retrieval index into `docs/public/rag/` (or wherever `indexDir` point
 
 Idempotent: identical input produces byte-identical output.
 
+### It asks which embedder to build with {#embedder-question}
+
+The first answer is what your config already names, so pressing Enter changes nothing. The rest of the list is every provider your environment carries a key for — named by the variable, so you can check your own `.env.local` — plus a local Ollama when one is answering, plus lexical-only. A row it cannot run here says so instead of building until it reaches a 401.
+
+The question needs a terminal. `npx --yes`, CI and a Dockerfile never see it; they get one line naming the embedder and the build proceeds. To answer it up front:
+
+| flag | |
+|---|---|
+| `--embed-provider=<id\|none>` | build with this embedder instead of the one your config names; `none` is lexical-only |
+| `--embed-model=<name>` | the model, when the provider serves more than one |
+| `--embed-base-url=<url>` | where a local server is. **Required when it is not on this machine** — a provider with no table row falls back to `localhost`, so `--embed-provider=ollama` alone will not reach `http://gpu.internal:11434` |
+| `--index-dir=<path>` | write here instead of over the index your site reads |
+| `--yes` | take the config as it stands and ask nothing |
+
+[`npx docpilot doctor --embed`](#doctor) prints the same list without asking, with the exact command that picks each row.
+
+**An override writes to a directory of its own by default**, and that is not caution for its own sake. The index is bound to the embedder that built it. If your config **names a model**, `embedderMatchesIndex` in the panel compares the two, logs the mismatch and drops retrieval to lexical-only — loud, and degraded. If your config leaves the model to a free pool or to `'auto'` there is no name to compare, the only remaining check is vector width, and two 1024-dimensional models pass it identically: the panel then scores queries against a foreign vector space with nothing anywhere reporting it. So an override prints the `embed:` block to paste, with the model spelled out, and leaves the index your site is serving alone.
+
 **It asks the provider which embedding models it serves**, when the model was not
 one you wrote down — you named a provider and stopped, or you named neither. The
 configured name is tried first and the provider's own answers line up behind it:
@@ -562,6 +580,7 @@ One thing does outrank a tuned lever: a [`topK`](/reference/config#topk) you set
 ```bash
 npx docpilot doctor
 npx docpilot doctor --proxy
+npx docpilot doctor --embed
 npx docpilot doctor --models
 ```
 
@@ -583,6 +602,8 @@ The build log stays quiet about this when a provider is named, because a line re
 It runs without a config file at all, on the shipped defaults and your environment. That is the zero-config install, and a command that exited there could not check it.
 
 `--proxy` additionally prints the contract a production reverse proxy has to satisfy: the exact paths, the upstream for each, and the name of the header the key goes in. The key value is never printed. See [Production](/guide/production) for what to do with it.
+
+`--embed` lists every embedder this project could build with — what your config names, what your environment has a key for, what is running locally, and lexical-only — each with the source of the row and the exact `npx docpilot index …` line that picks it. It is the non-interactive half of [the question `index` asks](#embedder-question), and it is what an agent driving this package should read before proposing a rebuild. It touches the network only to ask the Ollama on this machine whether it is running; no hosted provider is contacted and no metered request is spent.
 
 `--models` also asks whether the **chat-only** claim in the provider table still holds. `anthropic`, `deepseek`, `groq`, `xai` and `cerebras` are recorded as serving no embeddings endpoint, which is a claim rather than a law — the same table said that of OpenRouter for months after it stopped being true, and the cost of it going stale is a second key and the text of your whole corpus posted to a third party at build time. So the endpoint is knocked on, with a candidate from the provider's own catalogue, and the answer is printed when it has changed:
 

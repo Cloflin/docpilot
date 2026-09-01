@@ -30,6 +30,7 @@ import { pathToFileURL } from 'node:url'
 import { ROOT, RAG, GOLDEN } from '../cli-context.js'
 import { underPath } from './metrics.js'
 import { LEVELS, DEFAULT_RECORD_LEVEL, levelRank, levelHistogram } from './levels.js'
+import { entryFlagError } from '../cli-flags.js'
 
 const arg = (name: string, dflt?: string) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -37,6 +38,17 @@ const arg = (name: string, dflt?: string) => {
 }
 
 const FILE = arg('file') ? path.resolve(ROOT, arg('file')) : GOLDEN
+
+/**
+ * EVERY FLAG THIS COMMAND TAKES, CHECKED FIRST — before a config is read, before
+ * `.env.local` is loaded, and long before anything is embedded. See
+ * `src/cli-flags.js` for what it rejects and why each kind of rejection exists.
+ */
+const BAD_FLAG = entryFlagError('lint', import.meta.url)
+if (BAD_FLAG) {
+  console.error(`\n  FAIL  ${BAD_FLAG}\n`)
+  process.exit(1)
+}
 
 /** The band `CORE`'s "under 200 words" actually yields. */
 const MIN_WORDS = 90

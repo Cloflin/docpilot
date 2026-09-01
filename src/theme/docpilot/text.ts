@@ -105,9 +105,9 @@ export function normalise(question) {
  * FNV-1a in two lanes, not sha256: `node:crypto` does not exist in a browser and
  * `crypto.subtle` is async, and this runs in both, synchronously. A fingerprint
  * is the whole job — it separates two lists and defends nothing. The second lane
- * folds from the far end so that reordering the same three strings moves the
- * value, which matters because the panel shows the first three and the bake
- * bakes the first three.
+ * folds from the far end so that reordering the same strings moves the value,
+ * which matters because the panel shows the first `SUGGESTION_LIMIT` and the
+ * bake bakes the same ones.
  *
  * Hashes the NORMALISED question, because that is the key an entry is looked up
  * by: an edit `normalise` erases — a doubled space, a trailing question mark —

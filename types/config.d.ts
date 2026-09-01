@@ -292,10 +292,29 @@ export type EmbedConfig = 'auto' | false | 'none' | EmbedSettings
  */
 export type ChatConfig = ChatSettings | false | 'none'
 
+/**
+ * Three of these six were missing here for the whole life of the other three.
+ *
+ * `precomputed`, `answers` and `matchTau` shipped with the openers bake, are
+ * resolved by `resolveSuggestions` and are documented in the config reference —
+ * and were absent from the public surface, so a consumer writing TypeScript
+ * could not set them without a cast.
+ *
+ * THE CONFORMANCE GATE COULD NOT HAVE CAUGHT IT. `DEFAULTS` is declared
+ * `Required<DocPilotSettings>` and excess-property checking applies only to
+ * fresh object literals, so a wider generated object stays assignable to a
+ * narrower interface with optional keys — in both directions, forever. A
+ * missing optional key is structurally invisible to `typecheck:dist`, which is
+ * why rule 11f walks `DEFAULTS` against this file instead.
+ */
 export interface SuggestionsSettings {
   questions?: string[]
   scoped?: boolean
   followUps?: boolean
+  precomputed?: boolean
+  answers?: boolean
+  /** `false` retires the paraphrase test — `MATCH_NEVER`, engine-specs/009. */
+  matchTau?: number | false
 }
 
 export interface QuoteSettings {
@@ -935,6 +954,28 @@ export declare function indexDirOf(settings: DocPilotSettings): string
 
 /** The manifest inside it. */
 export declare function manifestPathOf(settings: DocPilotSettings): string
+
+/**
+ * What the manifest on disk says about the index that is already there — or
+ * null when there is none, which is not the same as an index built without
+ * vectors. `vectors === null` is the strict test for that; a missing key is a
+ * broken manifest.
+ */
+export declare function indexInfo(settings: DocPilotSettings): {
+  embedModel: string | null
+  chunkCount: number
+  hash: string
+  dims: number
+  vectors: string | null
+} | null
+
+/**
+ * Whether a provider has an embeddings endpoint at all. `'ollama'` always does;
+ * every other answer is whether the provider table carries an `embedModel`, and
+ * the five chat-only services — anthropic, groq, deepseek, xai, cerebras —
+ * answer false.
+ */
+export declare function canEmbed(provider: ProviderId): boolean
 
 /** The three legal `guard.mode` values. */
 export declare const GUARD_MODES: readonly string[]

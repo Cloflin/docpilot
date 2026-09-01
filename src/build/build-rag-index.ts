@@ -46,6 +46,7 @@ import { openerQuestions } from '../theme/docpilot/openers.js'
 import { questionsHash } from '../theme/docpilot/text.js'
 import { promptHash } from '../theme/docpilot/prompt.js'
 import { nodeChatTarget } from '../config.js'
+import { entryFlagError } from '../cli-flags.js'
 import {
   terms,
   estTokens,
@@ -61,6 +62,18 @@ const DF_TERMS = 4000
 const MANIFEST_MAX_BYTES = 64 * 1024
 const WARN_BYTES = 3 * 1024 * 1024
 const FAIL_BYTES = 5 * 1024 * 1024
+
+
+/**
+ * EVERY FLAG THIS COMMAND TAKES, CHECKED FIRST — before a config is read, before
+ * `.env.local` is loaded, and long before anything is embedded. See
+ * `src/cli-flags.js` for what it rejects and why each kind of rejection exists.
+ */
+const BAD_FLAG = entryFlagError('index', import.meta.url)
+if (BAD_FLAG) {
+  console.error(`\n  FAIL  ${BAD_FLAG}\n`)
+  process.exit(1)
+}
 
 const DRY = process.argv.includes('--dry')
 

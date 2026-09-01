@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import fs from 'node:fs'
 import { srcText } from './helpers/source.js'
 
 import { assembleIndex, __setIndex } from '../src/theme/docpilot/store.js'
@@ -435,6 +436,48 @@ describe('openers — the match path never embeds', () => {
     const src = srcText('src/theme/docpilot/openers.js')
     const imports = src.match(/^import .*$/gm) || []
     expect(imports.join('\n')).not.toMatch(/embed|llm|providers|harness/)
+  })
+
+  /**
+   * The same rule, applied to the tooling, and for a SHARPER reason rather than
+   * a weaker one: both skill scripts print "0 requests" in their own headers,
+   * and a script that makes the claim and then makes a request is worse than one
+   * that never claimed it. `opener-candidates.js` assembles a real index and
+   * runs the real retriever, so it is one import away from the embedder at all
+   * times.
+   *
+   * A dynamic `import()` rather than a static one, because these load out of
+   * `dist/` at run time — hence the second pattern.
+   */
+  it('the skill scripts import nothing that can reach the network', () => {
+    const dir = 'skills/docs-rag/scripts'
+    const scripts = fs.readdirSync(new URL(`../${dir}/`, import.meta.url)).filter((f) => f.endsWith('.js'))
+    expect(scripts.length, 'skill scripts to check').toBeGreaterThan(0)
+    for (const file of scripts) {
+      const src = srcText(`${dir}/${file}`)
+      const specifiers = [
+        ...(src.match(/^import .*$/gm) || []),
+        ...(src.match(/import\(pathToFileURL\([^)]*\)[^)]*\)/g) || []),
+        ...(src.match(/'theme\/docpilot\/[a-z-]+\.js'/g) || []),
+      ].join('\n')
+      expect(specifiers, `${file} reaches the network`).not.toMatch(/embed\.js|llm\.js|providers\.js|harness\.js/)
+    }
+  })
+
+  /**
+   * `SUGGESTION_LIMIT` has one spelling and two readers.
+   *
+   * `DocPilot.vue` held its own literal `3` while `questionsOf` sliced at the
+   * constant, so the warning an author read and the list a reader saw were free
+   * to disagree and nothing was watching. The number is not allowed back into
+   * the component.
+   */
+  it('the component slices at the constant, not at a literal', () => {
+    const vue = srcText('src/theme/components/DocPilot.vue')
+    const computed = vue.match(/const suggestions = computed\(\(\) => \{[\s\S]*?\n\}\)/)
+    expect(computed, 'the suggestions computed').not.toBe(null)
+    expect(computed[0]).toContain('SUGGESTION_LIMIT')
+    expect(computed[0], 'a second copy of the number').not.toMatch(/slice\(0,\s*\d/)
   })
 })
 

@@ -6,6 +6,20 @@ npx docpilot index --dry        # chunk and report; no embeddings, no network
 npx docpilot index --no-embed   # a real index with no vectors in it
 ```
 
+**It asks which embedder to build with, and the first answer is the one your config already names** — so pressing Enter changes nothing. The other rows are every provider your environment carries a key for, named by the variable so you can check your own `.env.local`, plus a local Ollama when one is answering, plus lexical-only. A row it cannot run in this environment says so instead of building until it reaches a 401.
+
+The question needs a terminal, which is how it stays out of the way: `npx --yes`, CI and a Dockerfile never see it. Answer it up front instead, and the build is the same build:
+
+```bash
+npx docpilot doctor --embed     # the same list, printed rather than asked
+npx docpilot index --yes        # take the config as it stands, ask nothing
+npx docpilot index --embed-provider=ollama --embed-model=bge-m3 \
+  --embed-base-url=http://localhost:11434 \
+  --index-dir=docs/public/rag-ollama-bge-m3
+```
+
+`--index-dir` is what keeps an override off the index your deployed site is reading — see [When to rebuild](#when-to-rebuild) for what happens when the two disagree. Whichever way you answer, one line names the embedder before the build starts, terminal or not.
+
 Output goes to `docs/public/rag/` — a manifest, sharded chunk text, a quantised vector blob, and a document-frequency table. The browser fetches these on first use.
 
 `--no-embed` writes the same set minus the vector blob, for a site that retrieves lexically by declaration. It is the one-off form of [`embed: false`](/reference/config#embed-false), which is what a deployment sets — the flag on its own leaves the config naming an embedder the index does not have, and `readiness` refuses that pairing unless the config also declared [`embed.fallback: 'lexical'`](/reference/config#embed-fallback). Read what the mode costs before choosing it.
@@ -134,6 +148,8 @@ Whenever the docs change, and always when `embed.model` changes. Rebuilding also
 
 The corpus hash covers the chunk TEXT. Swap the embedder and every cosine moves while the hash does not — which is why the model name is recorded beside the thresholds. The manifest records which model built it, and the panel compares that against the model the browser embeds with: a mismatch drops retrieval to keyword-only and says so loudly in the console rather than scoring queries against a foreign vector space.
 
+That comparison needs a NAME on both sides. A config that leaves the model to a free pool or to `'auto'` gives it none, so the check passes by having nothing to check and the only thing left is vector width — which two 1024-dimensional models pass identically. This is why building with something other than what your config names writes to a directory of its own by default, and why the block `index` prints for you to paste names the model rather than repeating the shorthand you started from.
+
 ## A second index, to measure against
 
 Nothing stops a project committing more than one index of the same corpus, and
@@ -193,12 +209,12 @@ The blob is a single file, `vectors.<hash>.bin`, exactly `chunkCount × dims` by
 **The error is measured, not assumed.** Every build samples up to 200 vector pairs, compares the exact float cosine against the int8 round trip, and prints the mean absolute difference:
 
 ```
-quantisation err 0.00262 mean |Δcos|
+quantisation err 0.00243 mean |Δcos|
 ```
 
 Above `0.01` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.
 
-For scale: this documentation site indexes 476 chunks at 2048 dimensions, so its vector blob is 974,848 bytes — 952 KB, where float32 would have been 3.7 MB.
+For scale: this documentation site indexes 480 chunks at 2048 dimensions, so its vector blob is 983,040 bytes — 960 KB, where float32 would have been 3.8 MB.
 
 ## Scale
 

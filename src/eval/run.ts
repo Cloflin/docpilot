@@ -62,6 +62,7 @@ import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
 
 import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot, fileEnv } from '../cli-context.js'
+import { COMMANDS, entryFlagError } from '../cli-flags.js'
 
 /**
  * The hash of the instruction THIS project sends, not of the shipped default.
@@ -126,16 +127,9 @@ const die = (m) => {
  * Exported for the unit test, which cannot exercise the module-scope check
  * without ending the worker in `process.exit`.
  */
-export const VALUE_FLAGS = {
-  level: 'low',
-  limit: '5',
-  model: 'qwen3:8b',
-  models: 'qwen3:8b,phi4:14b',
-  provider: 'ollama',
-  fallback: 'auto',
-  'max-iterations': '2',
-  'num-ctx': '8192',
-}
+export const VALUE_FLAGS = Object.fromEntries(
+  COMMANDS.eval.flags.filter((f) => f.kind !== 'bool').map((f) => [f.name, f.example]),
+)
 
 /** The first value-taking flag in `argv` written without its `=`, or null. */
 export function bareValueFlag(argv, flags = VALUE_FLAGS) {
@@ -144,8 +138,18 @@ export function bareValueFlag(argv, flags = VALUE_FLAGS) {
   return Object.keys(flags).find((name) => argv.includes(`--${name}`)) ?? null
 }
 
-const BARE = bareValueFlag(process.argv)
-if (BARE) die(`--${BARE} takes a value: --${BARE}=${VALUE_FLAGS[BARE]}`)
+/**
+ * The whole check now, not just the bare-flag half of it.
+ *
+ * `bareValueFlag` stays exported because it is what the unit test can call — the
+ * module-scope guard below ends the worker in `process.exit` — but the guard is
+ * `flagErrors`, which catches the three cases this file used to wave through:
+ * `--levle=low` (unknown, so the flag read as absent and `ultra` ran),
+ * `--limit=abc` (NaN, falsy, so the whole pool ran) and `--fallback=grbge`
+ * (neither 'on' nor 'off', so it silently meant 'auto').
+ */
+const BAD_FLAG = entryFlagError('eval', import.meta.url)
+if (BAD_FLAG) die(BAD_FLAG)
 
 // --models is the matrix; --model stays as the one-model alias it always was.
 const MODELS = String(arg('models', arg('model', 'qwen3:8b')))

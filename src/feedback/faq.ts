@@ -6,10 +6,17 @@
  * caller stamps time and writes files.
  *
  * WHAT THIS IS FOR. `suggestions.questions` is the panel's first impression, and
- * until now it was three guesses. `docpilot feedback pull` already turns votes
- * into candidates carrying `asked` — a frequency — so the raw material for a
- * better three has been on disk all along with nothing reading it for this
+ * until now it was a handful of guesses. `docpilot feedback pull` already turns
+ * votes into candidates carrying `asked` — a frequency — so the raw material
+ * for a better set has been on disk all along with nothing reading it for this
  * purpose.
+ *
+ * THE OTHER HALF IS NOT HERE, and it is not here on purpose. This needs an
+ * export of real votes, which a site that has not shipped does not have. The
+ * cold start — the openers a corpus with no readers would ask for — is
+ * `opener-candidates.js` in the docs-rag skill, because a proposal derived from
+ * the corpus is a draft for a person to edit, and drafts do not belong in a
+ * command whose other two modes report measurements.
  *
  * THE CLUSTERING IS NOT A CONVENIENCE. It uses `similarity` — the identical
  * symmetric coverage the panel matches a paraphrase with, at the site's own
@@ -19,9 +26,9 @@
  * runtime then disagrees with.
  *
  * IT PROPOSES AND NEVER WRITES. `cli.js` states the rule for `pull` and it holds
- * here with more force, not less: these three strings are shown to every reader
- * who opens the panel, and a sample drawn only from people who pressed a thumb
- * is not a sample of what people ask.
+ * here with more force, not less: these strings are shown to every reader who
+ * opens the panel, and a sample drawn only from people who pressed a thumb is
+ * not a sample of what people ask.
  */
 
 import { similarity } from '../theme/docpilot/openers.js'
@@ -117,7 +124,7 @@ export function against(clusters, configured, { df = null, matchTau = 0.65 }: {d
 const pct = (v) => (v == null ? '   —' : `${Math.round(v * 100)}%`.padStart(4))
 
 /** The report, and the paste-able block at the end of it. */
-export function renderFaqReport(clusters, { configured, unasked, send, source, generatedAt, limit = 3 }) {
+export function renderFaqReport(clusters, { configured, unasked, send, source, generatedAt, limit = 5 }) {
   const total = clusters.reduce((a, c) => a + c.asked, 0)
   const out = [
     '# The questions readers ask',

@@ -636,7 +636,14 @@ const EMBED_FALLBACK = 'openrouter'
 
 const hostedOf = (id) => PROVIDERS[id] || null
 
-const canEmbed = (id) => (id === 'ollama' ? true : Boolean(PROVIDERS[id]?.embedModel))
+/**
+ * Exported for `src/embed-choices.ts`, which asks the same question this file
+ * asks internally — WHICH of the providers an environment carries can embed at
+ * all — and must get the same answer. A second copy of the `embedModel` lookup
+ * beside the table would be a second place for the two to disagree, which is
+ * the defect `embedModelOf` below was extracted to close.
+ */
+export const canEmbed = (id) => (id === 'ollama' ? true : Boolean(PROVIDERS[id]?.embedModel))
 
 /**
  * The provider's own embedding model, from the table — Ollama's lives in a
@@ -2181,7 +2188,12 @@ export function manifestPathOf(docPilot) {
     return path.resolve(indexDirOf(docPilot), 'manifest.json')
 }
 
-function indexInfo(docPilot) {
+/**
+ * Exported for the same reason `canEmbed` above is: the embedder interview has
+ * to say which model the index ON DISK was built with, and reading the manifest
+ * a second time somewhere else would be a second answer to that question.
+ */
+export function indexInfo(docPilot) {
     try {
         const m = JSON.parse(readFileSync(manifestPathOf(docPilot), 'utf8'))
         // `vectors` is carried because it is the ONE signal that an index has no
@@ -2847,7 +2859,8 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
         console.log(`[docpilot] import ${docPilot.importDir || 'docs only'} · ${origins}`)
     }
     // Which of the two sources is in force. The whole point of the key is that
-    // the built-in three stop being invisible defaults nobody chose.
+    // the built-in three stop being invisible defaults nobody chose. The count
+    // is the author's, up to `SUGGESTION_LIMIT`, so the line prints it.
     // `.questions`, not `.length`: `resolveSuggestions` returned an array until
     // the union landed and returns `{questions, scoped, followUps}` now, so this
     // line read `undefined` off an object and printed "built-in suggestions" for

@@ -40,9 +40,8 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
   docpilot <command>
 
     index       build the retrieval index from your docs
-                --html-dir=dist  also index a site that is already built —
-                any generator, no markdown needed; --html-select=<css> names
-                the body, --sitemap=<file> limits it to published routes
+                asks which embedder to build with; the config's own answer is
+                the default, so Enter changes nothing
     import      turn an allowlisted external page into a page of the corpus
     vocabulary  propose the names readers use for what your docs call something
                 --languages=ru,de  --limit=N  --replace  --dry
@@ -57,7 +56,9 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
     feedback    turn readers' votes into candidates for the eval sets
     doctor      check the configuration without a full build
                 --proxy prints the reverse-proxy contract; --models checks a
-                free pool against the provider's live catalogue
+                free pool against the provider's live catalogue; --embed lists
+                every embedder this project could build with, and the command
+                that picks each one
     init        scaffold the environment, the eval sets and the authoring skills
 
   The loop is  index → calibrate → lint → eval → bench,  with tune where it is
@@ -78,6 +79,11 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
   Every command reads .vitepress/config.mjs — or docpilot.config.mjs — for its
   settings.
 
+  npx docpilot <command> --help  lists that command's flags, what each one does
+  and what it costs. It needs no config, no key and no network, which is the
+  point: it used to RUN the command, and on four of them that was a purchase
+  order.
+
   "feedback" sits outside the loop: it reads what your own endpoint collected
   and PROPOSES probes for it, and with "feedback faq" the empty state's three
   openers. It never writes to the eval sets or to your config — a stratum is a
@@ -87,13 +93,72 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
   process.exit(0)
 }
 
+/**
+ * `--version`, which did not exist — `docpilot --version` fell past the command
+ * check and was reported as an unknown COMMAND, which is a confusing thing to be
+ * told about the most standard flag a CLI has.
+ *
+ * Read from package.json rather than baked in: a constant here is a constant
+ * that a release forgets to bump, and this file is two directories from the
+ * manifest that already carries the number.
+ */
+if (cmd === '--version' || cmd === '-v' || cmd === '-V') {
+  const pkg = new URL('../package.json', import.meta.url)
+  console.log(JSON.parse(readFileSync(pkg, 'utf8')).version)
+  process.exit(0)
+}
+
 if (!COMMANDS.includes(cmd)) {
+  // `docter`, `evals`, `calibrat` — one edit away, and worth naming rather than
+  // making somebody diff their typo against a list of eleven.
+  const near = COMMANDS.filter((c) => editDistance(c, cmd) <= 2).sort(
+    (a, b) => editDistance(a, cmd) - editDistance(b, cmd),
+  )
   console.error(
     `[docpilot] unknown command "${cmd}"\n\n` +
+      (near.length ? `  Did you mean: ${near.slice(0, 3).join(', ')}?\n\n` : '') +
       `  One of: ${COMMANDS.join(', ')}\n` +
       '  npx docpilot --help  says what each one does.\n',
   )
   process.exit(1)
+}
+
+/**
+ * `docpilot <cmd> --help` PRINTS HELP. It used to run the command.
+ *
+ * `--help` was matched in the COMMAND position only, so `rest` never saw it and
+ * every command parsed the flags it knew and dropped the rest in silence. On
+ * `index`, `eval`, `calibrate` and `vocabulary` that meant a full metered run —
+ * the most reflexive thing a person types at an unfamiliar CLI was a purchase
+ * order, and this package's own notes record ~20 OpenRouter requests spent on
+ * one `calibrate --help`.
+ *
+ * SO IT IS FIRST, above `loadSettings()`, above `loadEnvironment()` and above
+ * the six `await import('../dist/…')` below. Help must not need a config file, a
+ * key, a built `dist/`, or a network — a reader asking what a command takes is
+ * very often a reader who has none of those yet.
+ */
+if (rest.includes('--help') || rest.includes('-h')) {
+  const { helpFor } = await import('../dist/cli-flags.js')
+  console.log(helpFor(cmd))
+  process.exit(0)
+}
+
+/** Levenshtein, iterative two-row. Eleven command names; no need for more. */
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i]
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(
+        prev[j] + 1,
+        row[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      )
+    }
+    prev = row
+  }
+  return prev[b.length]
 }
 
 /**
@@ -166,10 +231,24 @@ const {
   resolveChain,
   resolveChatChain,
   nodeChatTarget,
+  nodeEmbedTarget,
   resolveEmbed,
   resolveTuning,
   capsOf,
 } = await import('../dist/config.js')
+/**
+ * The embedder question's pure half — what `index` has to know before it can ask
+ * which embedder to build with, and what `doctor --embed` prints instead of
+ * asking. Decisions there, stdin here; the same split `cli-init.js` documents.
+ */
+const {
+  embedChoices,
+  embedOverrideSnippet,
+  embedQuestion,
+  indexCommandFor,
+  indexDirQuestion,
+  parseEmbedFlags,
+} = await import('../dist/embed-choices.js')
 // The catalogue reader `npx docpilot index` uses, so `doctor --models` proposes
 // the same candidates the build would.
 const { discoverEmbedModels, probeEmbedEndpoint } = await import('../dist/build/lib/embed-discovery.js')
@@ -478,9 +557,86 @@ async function loadEnvironment() {
   }
 }
 
+/**
+ * Which local embedding servers are actually running.
+ *
+ * A hosted provider is offered on the strength of its key: `probeEmbedEndpoint`
+ * sends a REAL embedding request, and spending one of OpenRouter's fifty free
+ * daily requests to confirm something the key already says is the wrong trade.
+ * A LOCAL server has no key to be found by, so the only way to know it is there
+ * is to ask it — and offering an Ollama that nobody started is worse than not
+ * offering one at all. That is also the case this exists for: nothing configured
+ * anywhere, and the answer is the Ollama already on the machine.
+ *
+ * BOUNDED AND SILENT. One address, a short timeout, and every failure — refused,
+ * slow, a body of the wrong shape — is the same answer: not running. Nothing
+ * here may throw, because it runs in front of a build and a machine without
+ * Ollama must reach the same list it always did.
+ */
+async function probeLocalEmbedders(env, { timeoutMs = 2500 } = {}) {
+  const fetchImpl = (url, init = {}) =>
+    fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
+  const baseURL = env.OLLAMA_BASE_URL || 'http://localhost:11434'
+  try {
+    /**
+     * THE CATALOGUE, NOT AN EMBEDDING — and the difference is seconds.
+     *
+     * `probeEmbedEndpoint` is the thorough answer and the wrong one here: it
+     * POSTs a real embedding, which on a cold Ollama means LOADING the weights
+     * first. Measured against the box this was written on that is several
+     * seconds past any timeout worth putting in front of a prompt, and a probe
+     * that times out reports "not running" about a server that is.
+     *
+     * `/api/tags` answers both questions this needs — the server is up, and
+     * these are the embedding models it has pulled — in one GET. Whether a named
+     * model actually embeds is settled later and for free: `createEmbedder`
+     * walks its pool during the build and takes the first that answers.
+     */
+    const models = await discoverEmbedModels({
+      provider: 'ollama',
+      baseURL,
+      apiKey: null,
+      fetchImpl,
+    })
+    return models.length ? [{ id: 'ollama', model: models[0], baseURL }] : []
+  } catch {
+    return []
+  }
+}
+
 const { settings, configPath } = await loadSettings()
 const env = await loadEnvironment()
-const resolved = resolveDocPilot(settings, env)
+/**
+ * `let`, for the one command that may be told to build with something other than
+ * what the config names. An override is REBUILT rather than patched — `embed` is
+ * assigned whole by `resolveDocPilot` and not merged, so a half-written object
+ * spliced into an already-resolved one would carry fields from both.
+ */
+let resolved = resolveDocPilot(settings, env)
+
+/**
+ * SET HERE, not at the dispatch below — and that placement was a bug.
+ *
+ * `import`, `feedback`, `vocabulary` and `doctor` all run from their own blocks
+ * further down, BEFORE the `ENTRY` dispatch where these two used to be assigned.
+ * So for those four `cli-context.js` found no globals and fell back to
+ * `resolveDocPilot({}, process.env)` — the SHIPPED defaults. `DOCPILOT_DIR` is
+ * `path.resolve(ROOT, settings.evalDir)` and `DOCS` is the same for `docsDir`,
+ * so a project that had moved either one got `vocabulary.json` and the feedback
+ * reports written to `docpilot/` regardless of its config, and `vocabulary` read
+ * its markdown from `docs/` regardless of where the docs actually were — a
+ * proposal about the wrong corpus, silently.
+ *
+ * `resolved` is reassigned once, by the embedder override inside `index`, and
+ * that runs before the dispatch it belongs to. So this is re-stated there rather
+ * than being merely earlier than it used to be.
+ */
+globalThis.__DOCPILOT_SETTINGS__ = resolved
+// The file the settings came from, so the indexer reads the sidebar out of THAT
+// config rather than re-deriving a path: the search accepts `.js` as readily as
+// `.mjs`, and the indexer used to join `.mjs` unconditionally and fail to find a
+// config the CLI had just loaded.
+globalThis.__DOCPILOT_CONFIG__ = configPath
 
 /**
  * `import` runs HERE rather than through the ENTRY table below, because it is
@@ -737,8 +893,45 @@ if (cmd === 'doctor') {
     console.log('')
   }
   /**
-   * `--models` is the ONLY thing in this command that touches the network, and
-   * it is a flag rather than a default for that reason: `doctor` runs in CI, and
+   * `--embed` — the same list `npx docpilot index` asks from, printed instead of
+   * asked.
+   *
+   * It exists because the asking half needs a terminal and the reader who most
+   * needs the answer often has not got one: an agent driving this package, a CI
+   * log, a reader who wants to see the options before committing to a build. So
+   * the choices are a report here and a prompt there, out of one function.
+   *
+   * IT TOUCHES THE NETWORK, and only localhost. `probeLocalEmbedders` asks the
+   * Ollama on this machine whether it is running, which is free and which no
+   * amount of reading config files can answer. No hosted provider is contacted
+   * and no metered request is spent — that is `--models`.
+   */
+  if (rest.includes('--embed')) {
+    const choices = embedChoices(settings, env, { probed: await probeLocalEmbedders(env) })
+    console.log('')
+    choices.forEach((c, i) => {
+      // The cross is the whole point of the row it is on: with nothing in the
+      // environment the chain still ends at its shipped fallback, and a list
+      // that offered that without saying it would 401 is the same silence this
+      // flag was added to end.
+      say('embed', `${i + 1}. ${c.label}${c.ready ? '' : '   ✗ cannot run here'}`)
+      console.log(`${PAD}${c.hint}`)
+      // The command that takes this answer, spelled out — an agent reading this
+      // should not have to infer the flags from the label.
+      console.log(`${PAD}npx docpilot index ${indexCommandFor(c)}`)
+    })
+    if (!choices.some((c) => c.ready && c.source !== 'lexical')) {
+      console.log('')
+      console.log(`${PAD}Nothing here can embed. Either put a provider key in .env.local, or`)
+      console.log(`${PAD}run \`ollama serve\` and \`ollama pull bge-m3\` and ask again.`)
+    }
+    console.log('')
+  }
+
+  /**
+   * `--models` is the only thing in this command that reaches a THIRD PARTY —
+   * `--embed` above touches the network too, but never past localhost — and it
+   * is a flag rather than a default for that reason: `doctor` runs in CI, and
    * a check that fails when a third party is slow is a check that gets removed.
    *
    * What it answers is the one question a baked list cannot answer for itself —
@@ -898,6 +1091,173 @@ if (cmd === 'doctor') {
   process.exit(1)
 }
 
+/**
+ * THE EMBEDDER QUESTION — asked once, before the indexer is even imported.
+ *
+ * WHAT WAS WRONG. Every ingredient of "this index will be built with OpenAI,
+ * because OPENAI_API_KEY is in your .env.local" was already computed by the time
+ * this line ran, and none of it was ever said. A reader who had put a key
+ * somewhere was not told it was in use; a reader who had put nothing anywhere
+ * was not told that the Ollama on their own machine would do; and a config file
+ * naming an embedder was obeyed without ever showing what else was available.
+ * The resolution was right and mute, which is the shape of a bug that gets
+ * discovered as a bad answer in a panel three weeks later.
+ *
+ * SO IT ASKS — and the first option is always what the config already says, and
+ * always the default, so pressing Enter is a no-op. That is the property that
+ * makes asking on EVERY build acceptable rather than obstructive.
+ *
+ * NON-INTERACTIVE IS THE DEFAULT, NOT THE FALLBACK. The same rule `init`
+ * follows and for the same reason: `npx --yes`, a CI job and a Dockerfile all
+ * run this with no terminal, and a prompt there is a hang with no output. A flag
+ * that already answers the question skips it too, so `--embed-provider=ollama`
+ * is a complete instruction.
+ *
+ * WHY THE OVERRIDE DOES NOT WRITE OVER THE CURRENT INDEX. The index is bound to
+ * the embedder that built it, and rebuilding it at the current path leaves the
+ * deployed panel reading an index its own config does not describe.
+ * `embedderMatchesIndex` in session.js catches that when the config NAMES a
+ * model — it logs and drops retrieval to lexical-only — and cannot catch it at
+ * all when the config leaves the model to a pool or to `'auto'`, because then
+ * there is no name on the config side to compare. What is left is the
+ * retriever's vector-width check, which two 1024-dimensional models pass
+ * identically. A separate directory is the same move docs/.vitepress/config.mjs
+ * already makes for its local builds.
+ */
+let dispatchArgs = rest
+
+if (cmd === 'index') {
+  const flags = parseEmbedFlags(rest)
+  if (flags.unknown.length) {
+    console.error(`[docpilot] cannot use: ${flags.unknown.join(' ')}`)
+    console.error(
+      '  index accepts --embed-provider=<id|none>, --embed-model=<name>,\n' +
+        '  --embed-base-url=<url>, --index-dir=<path>, --yes\n' +
+        '  npx docpilot doctor --embed  lists the ids this project can use.\n',
+    )
+    process.exit(1)
+  }
+  // Our flags do not travel on to the indexer: it has its own, and a flag it
+  // does not know is a flag it silently ignores.
+  dispatchArgs = flags.rest
+
+  // `false` is an answer here — lexical-only — so "was it given" is asked as
+  // `!== null` and never for truthiness.
+  const answered = flags.embed !== null || flags.indexDir != null
+  const interactive = !answered && !flags.yes && !!process.stdin.isTTY && !!process.stdout.isTTY
+
+  let embed = flags.embed !== null ? flags.embed : undefined
+  let indexDir = flags.indexDir
+  let source = answered ? '--embed-provider' : null
+
+  if (interactive) {
+    const choices = embedChoices(settings, env, { probed: await probeLocalEmbedders(env) })
+    const { createInterface } = await import('node:readline/promises')
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    // Ctrl-C during a question is an answer too, and the whole exchange happens
+    // before the indexer is imported — so cancelling leaves the project exactly
+    // as it was found, and a cancelled build is not an error.
+    rl.on('SIGINT', () => {
+      console.log('\n  Cancelled — nothing was written.')
+      rl.close()
+      process.exit(0)
+    })
+    try {
+      const picked = await askOne(rl, embedQuestion(choices))
+      const choice = choices.find((c) => c.label === picked) || choices[0]
+      if (choice.source !== 'config') {
+        embed = choice.embed
+        source = 'your answer'
+        const current = indexDirOf(resolved)
+        const q = indexDirQuestion(choice, current)
+        indexDir = (await askOne(rl, q)) === q.options[1] ? current : choice.indexDir
+        console.log('\n' + embedOverrideSnippet(choice, configPath, indexDir, current) + '\n')
+      }
+    } catch {
+      // Ctrl-D closes stdin mid-question and readline rejects. Same intent as
+      // Ctrl-C, same outcome — and an unhandled rejection here would print a
+      // stack trace at somebody who simply changed their mind.
+      console.log('\n  Cancelled — nothing was written.')
+      rl.close()
+      process.exit(0)
+    } finally {
+      rl.close()
+    }
+  }
+
+  if (embed !== undefined || indexDir != null) {
+    resolved = resolveDocPilot(
+      {
+        ...settings,
+        ...(embed !== undefined ? { embed } : null),
+        ...(indexDir != null ? { indexDir } : null),
+      },
+      env,
+    )
+  }
+
+  /**
+   * A FLAG THAT MOVES THE EMBEDDER AND NOT THE PATH, said out loud.
+   *
+   * `doctor --embed` prints `--index-dir=` alongside every override for exactly
+   * this reason, so the common path is already safe; a flag typed by hand is
+   * the reader's own call and is obeyed. But it is obeyed with the consequence
+   * stated, because nothing downstream states it as plainly: the panel drops to
+   * lexical-only where its config names a model, and says nothing at all where
+   * the config names a pool.
+   */
+  if (embed !== undefined && indexDir == null && !interactive) {
+    const before = (() => {
+      try {
+        return nodeEmbedTarget(resolveDocPilot(settings, env), env)
+      } catch {
+        return null
+      }
+    })()
+    const after = (() => {
+      try {
+        return nodeEmbedTarget(resolved, env)
+      } catch {
+        return null
+      }
+    })()
+    if (before && after && (before.id !== after.id || before.model !== after.model)) {
+      console.warn(
+        `[docpilot] ${'warn'.padEnd(10)}this overwrites ${indexDirOf(resolved)}, built with ` +
+          `${before.id} / ${before.model || '(pool)'}, which is still what your config names.\n` +
+          `${' '.repeat(21)}Pass --index-dir=<path> to keep both, or change \`embed\` in your config.`,
+      )
+    }
+  }
+
+  /**
+   * SAID OUT LOUD, on every build, terminal or not.
+   *
+   * The half of this that works in CI, in Docker and under `--yes`, where a
+   * question cannot be asked but the answer still matters. One line, because the
+   * build log below it is long and a reader scanning for "which embedder" should
+   * find it without reading a block.
+   */
+  try {
+    const target = nodeEmbedTarget(resolved, env)
+    const model = target.model || target.models?.[0] || '(the provider picks)'
+    const where =
+      source ||
+      ('embed' in settings ? configPath || 'your config' : null) ||
+      resolveChain(env).tried.find((t) => t.found)?.envKey ||
+      'the shipped default'
+    console.log(
+      `[docpilot] ${'embed'.padEnd(10)}${
+        target.lexicalOnly ? 'lexical only — no embedder' : `${target.id} / ${model}`
+      }   ← ${where}`,
+    )
+  } catch {
+    // A configuration the resolver refuses is the indexer's to report, with the
+    // message it has been writing for that case all along. A line here would be
+    // a worse version of it, printed first.
+  }
+}
+
 const ENTRY = {
   index: '../dist/build/build-rag-index.js',
   eval: '../dist/eval/run.js',
@@ -920,11 +1280,10 @@ const ENTRY = {
  * Pointing it at the module about to run is also simply what `argv[1]` means.
  */
 const entry = new URL(ENTRY[cmd], import.meta.url)
-process.argv = [process.argv[0], fileURLToPath(entry), ...rest]
+process.argv = [process.argv[0], fileURLToPath(entry), ...dispatchArgs]
+// RE-STATED, because `index` may have rebuilt `resolved` from an embedder the
+// reader chose a few lines ago. Everything else has been reading the assignment
+// made up beside `resolveDocPilot` since the four early-dispatch commands
+// needed it there.
 globalThis.__DOCPILOT_SETTINGS__ = resolved
-// The file the settings came from, so the indexer reads the sidebar out of THAT
-// config rather than re-deriving a path: the search accepts `.js` as readily as
-// `.mjs`, and the indexer used to join `.mjs` unconditionally and fail to find a
-// config the CLI had just loaded.
-globalThis.__DOCPILOT_CONFIG__ = configPath
 await import(entry.href)
