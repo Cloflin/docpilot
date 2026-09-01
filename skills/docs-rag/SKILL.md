@@ -824,8 +824,15 @@ metric in any report.
   committed answers — write to a scratch directory and aggregate under a
   run-specific name. (2) Hold the answerer prompt byte-identical across runs;
   paraphrasing it between runs adds a confound the three-run rule cannot absorb.
-- **The embedder is not the chat model.** `--gate-only`, `calibrate`, `index` and
-  `bench` are embed-only and never contact a chat model. Anthropic has no
+- **The embedder is not the chat model.** `--gate-only`, `calibrate` and `bench`
+  are embed-only and never contact a chat model. **`index` is no longer among
+  them**: engine-spec 009 has it resolve the empty state's openers at build time,
+  which embeds each question AND has the shipped harness write its answer, so a
+  build spends chat requests as well as embedding ones. That is the trade the
+  spec argues — the answer is bought once at build rather than on every reader's
+  first click — and it is stated here because this line said the opposite for two
+  releases. `suggestions.answers: false` turns the answer half off and leaves the
+  embed half; the other three commands are unchanged. Anthropic has no
   embeddings API, so an Anthropic key covers the answer side only: `embed: 'auto'`
   borrows OpenRouter's free embedding pool for the retrieval half, and `embed:
   {provider: 'anthropic'}` — naming it explicitly — is the build-stopping error.

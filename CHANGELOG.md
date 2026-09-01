@@ -7,6 +7,91 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 1.0.1 — 2026-09-01
+
+### Added
+
+**The empty state's three questions are answered at build time.** They are the
+most-clicked questions a panel has, by construction, and each click cost an
+embedding request and a model call for a question the author wrote and has not
+changed in weeks. `docpilot index` now resolves them: it embeds each one, runs
+the real retriever and the real gate, and writes the result beside the index.
+A reader's first click spends nothing. Two switches, both on by default —
+`suggestions.precomputed` turns the bake and its use off together, because a
+bake nobody reads is build-time requests spent on a file that does nothing, and
+`suggestions.answers` drops the expensive half while keeping the evidence.
+engine-specs/009, ui-specs/013.
+
+**`docpilot feedback faq`** ranks the questions your readers actually asked,
+grouped the way the panel groups them.
+
+**A content-addressed embedding cache, so a rebuild does not buy the same
+vectors twice.** `docpilot index` re-embedded the whole corpus on every run, and
+the loop this project mandates — `index → calibrate → lint → eval` — therefore
+cost 34 requests on this corpus and 57 on a 1216-chunk one, against a free tier
+of 50 a day. The process the documentation requires did not fit the tariff the
+documentation recommends. The key is the schema, the resolved model, the
+provider, the host, the prefix and the chunk's own text; the value is the
+post-`l2normalise` float32, because caching the int8 rows would blind
+`quantisationError` and an f64 round trip breaks the byte-identical-output
+contract. Measured: a build that bought its vectors and a build that took all
+476 from the cache write the same bytes for `vectors.bin`, both shards and
+`df.json`. A five-file docs edit then rebuilt on **1 request instead of 15**.
+The cache lives in `${evalDir}/embed-cache/`, `docpilot init` gitignores it, and
+`--refresh-embeddings` skips reading it — never writing it, so a refresh also
+repairs a file that went bad. engine-specs/008.
+
+**`doctor` names a provisional guard.** `guardFor` says so once, in the build
+log, at the moment it falls back — and a build log is read while it scrolls.
+Afterwards the fact lived in one key of one JSON file and nothing asked about it
+again, which is how this package's own deployed index carried unmeasured
+thresholds through a release. A note, never a blocker: the build stays soft on a
+stale calibration so documentation stays publishable, and a `doctor` that exited
+1 on the same state would be a stricter opinion than the build's.
+
+### Fixed
+
+**The cosine window grid had a floor of its own, and it could not describe an
+embedder whose cosines sit low.** `WINDOW_FLOORS` started at 0.16. A floor is
+the smallest cosine the sweep can call anything other than zero evidence, so the
+grid only described embedders whose positives sit above it — which is the exact
+class of bug the grid was introduced to fix one level down, where `[0.44, 0.64]`
+was a bge-m3 literal nobody re-measured. On
+`nvidia/nemotron-3-embed-1b:free` — which ranks this corpus as well as bge-m3,
+AUC 0.856 against 0.868, but on a lower scale — two positives at cosine 0.146
+and 0.142 clamped to `D = 0` under all 272 candidates, the largest feasible tau
+over the whole grid was 0.12, below `wLexical` 0.25, and `assertWeights`
+rejected it. The index shipped the provisional guard, which refused 37% of
+unscoped positives, 71% of scoped ones and 88% of follow-ups. Floors now start
+at 0.00, giving 408 candidates. Measured afterwards on the same probes: window
+`[0.00, 0.24]`, tau 0.58, `blatantRefusalRate` 0.93, and U/S/F all zero.
+engine-specs/006.
+
+Compare separation on `z_raw`, never on `D`: `D` is computed after the clamp,
+and under the old grid 186 of 271 probes sat on the floor, which destroys the
+ordering and invents a gap that is not there.
+
+**A `guard.source` this package did not write is now named.** `guardFor` stamped
+it verbatim out of a file a consumer commits and may hand-edit, and from
+`manifest.guard` it reaches every feedback record and every eval report — so a
+hand-written `"calibrated"` re-labelled the whole evidence trail and nothing
+downstream could tell. Warn and pass, not reject.
+
+### Changed
+
+**`prev` and `codeLangs` leave the chunk record.** Neither was read anywhere at
+runtime. `prev` additionally contradicted engine-spec 004 and the comment in
+`retriever.js` that explains why the field must not exist — the backward pointer
+is derived at load in one pass. Together they were 4.1% of the shard bytes every
+reader downloads. An index built before this still works: the extra keys are
+ignored, which is what the code already did. engine-specs/007.
+
+**`docpilot index` is no longer embed-only.** Resolving the openers has the
+shipped harness write their answers, so a build now spends chat requests as well
+as embedding ones. `suggestions.answers: false` restores the old cost. The
+invariant in the docs-rag skill said otherwise for two releases and has been
+corrected.
+
 ## 1.0.0 — 2026-08-31
 
 ### Breaking
