@@ -1223,7 +1223,7 @@ import { resolveI18n, t as translate, normaliseLocale } from '../docpilot/i18n.j
 import { relativeParts } from '../docpilot/history.js'
 import { COMMENT_MAX } from '../docpilot/feedback.js'
 import { createSelectionAsk } from '../docpilot/selection.js'
-import { FILTER_AUTO_ABOVE } from '../docpilot/switches.js'
+import { FILTER_AUTO_ABOVE, DEFAULT_SUGGESTIONS } from '../docpilot/switches.js'
 import { hasDailyAllowance } from '../docpilot/budget.js'
 import { terms } from '../docpilot/text.js'
 import { atBottom as isAtBottom, createFollower } from '../docpilot/follow.js'
@@ -2413,19 +2413,11 @@ function onEditKeydown(e: KeyboardEvent) {
   if (turn) saveTurnEdit(turn)
 }
 
-/**
- * The built-in three, for a project that configured none.
- *
- * Deliberately engine-agnostic: this package ships to any VitePress site, so a
- * default that names a feature only one product has is a question the gate will
- * refuse on contact — which reads to the reader as a broken panel on their very
- * first click. `docPilot.suggestions` is where three good ones go.
- */
-const DEFAULT_SUGGESTIONS = [
-  'What is this documentation about?',
-  'How do I get started?',
-  'How do I authenticate requests?',
-]
+// The built-in three now live in switches.js, beside the resolver, because
+// `docpilot index` bakes WHAT THE PANEL WILL SHOW and cannot import a constant
+// out of a .vue file. Two copies of the list would bake three questions the
+// reader never sees.
+//
 // Suppressed under a narrower scope: the defaults are almost certainly outside
 // it and the gate would refuse all three on contact. What goes there instead is
 // `scopedPages` below — ui-specs/009.

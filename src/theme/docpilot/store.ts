@@ -23,9 +23,9 @@ async function fetchJson(url) {
  * function, and a copy of an integrity check is a check that silently stops
  * matching the format it guards.
  *
- * @returns {{manifest, chunks, byId, vectors, dims, lexicalOnly, df}}
+ * @returns {{manifest, chunks, byId, vectors, dims, lexicalOnly, df, openers}}
  */
-export function assembleIndex({ manifest, shards, vectorBuffer, dfDoc }) {
+export function assembleIndex({ manifest, shards, vectorBuffer, dfDoc, openersDoc = null }) {
   const chunks = shards.flat()
   if (chunks.length !== manifest.chunkCount) {
     throw new Error(`chunk count mismatch: ${chunks.length} vs ${manifest.chunkCount}`)
@@ -88,6 +88,24 @@ export function assembleIndex({ manifest, shards, vectorBuffer, dfDoc }) {
     dims: lexicalOnly ? 0 : manifest.dims,
     lexicalOnly,
     df: dfDoc.df,
+    /**
+     * The openers this build already resolved — engine-specs/009.
+     *
+     * `null` covers four different absences and deliberately does not
+     * distinguish them, because the panel does the same thing in all four: an
+     * index built before the key existed, a site with `suggestions.precomputed`
+     * off, a build whose embedder went down during the openers pass, and a
+     * fetch that 404'd. In every one of them there is nothing resolved to lean
+     * on and the turn embeds its question, which is what every turn did before
+     * this existed.
+     *
+     * NOT validated here the way `vectors` is. A vector buffer of the wrong
+     * length is a corrupt index and must throw — every turn depends on it. A
+     * bundle that disagrees with the manifest is a stale optimisation, and
+     * `openers.js` checks the two hashes it carries at match time and declines.
+     * Throwing here would let a stale file take the whole panel down with it.
+     */
+    openers: openersDoc,
   }
 }
 
@@ -110,7 +128,7 @@ export function loadIndex(base) {
   loading = (async () => {
     const manifest = await fetchJson(`${base}/manifest.json`)
 
-    const [shards, vectorBuffer, dfDoc] = await Promise.all([
+    const [shards, vectorBuffer, dfDoc, openersDoc] = await Promise.all([
       Promise.all(manifest.shards.map((s) => fetchJson(`${base}/${s}`))),
       // A lexical-only index ships no vector blob, so there is no URL to ask
       // for — `${base}/null` is a request for a file that was never written,
@@ -123,9 +141,27 @@ export function loadIndex(base) {
             return r.arrayBuffer()
           }),
       fetchJson(`${base}/${manifest.df}`),
+      /**
+       * The openers bundle — and the ONE fetch here allowed to fail quietly.
+       *
+       * Every other member of this array is load-bearing: without shards there
+       * are no chunks, without `df` there is no lexical channel, and a named
+       * vector blob that 404s is a corrupt index. This one is an optimisation.
+       * A site that reverted `suggestions.precomputed` between the manifest
+       * being cached and the bundle being asked for, a CDN that has one and not
+       * the other, a deploy caught mid-upload — all of them are a reader whose
+       * question costs an embedding request, which is what it cost last week.
+       * None of them is a reader who cannot ask.
+       *
+       * `manifest.openers` absent or null skips the request entirely, on the
+       * same terms and for the same reason as `manifest.vectors` above.
+       */
+      manifest.openers
+        ? fetchJson(`${base}/${manifest.openers}`).catch(() => null)
+        : null,
     ])
 
-    return assembleIndex({ manifest, shards, vectorBuffer, dfDoc })
+    return assembleIndex({ manifest, shards, vectorBuffer, dfDoc, openersDoc })
   })().catch((e) => {
     /**
      * THE MEMO IS RELEASED ON FAILURE — the same fix, and the same reason, as

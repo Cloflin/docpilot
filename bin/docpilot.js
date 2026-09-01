@@ -79,8 +79,10 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
   settings.
 
   "feedback" sits outside the loop: it reads what your own endpoint collected
-  and PROPOSES probes for it. It never writes to the eval sets — a stratum is a
-  judgement and a gold answer is written by a person.
+  and PROPOSES probes for it, and with "feedback faq" the empty state's three
+  openers. It never writes to the eval sets or to your config — a stratum is a
+  judgement, a gold answer is written by a person, and the openers are the first
+  thing every reader sees.
 `)
   process.exit(0)
 }
@@ -155,6 +157,7 @@ async function loadSettings() {
 const {
   resolveDocPilot,
   readiness,
+  provisionalGuardNote,
   indexDirOf,
   proxyContract,
   chatModels,
@@ -340,48 +343,59 @@ if (cmd === 'init') {
       '# stable filenames must not be committed.',
       'bench/',
       '',
+      '# Vectors `npx docpilot index` has already bought, keyed by model and text.',
+      'embed-cache/',
+      '',
     ].join('\n'),
   )
 
   /**
-   * The built index, kept out of the project's history.
+   * One entry into one `.gitignore`, appended rather than `put`.
    *
-   * APPENDED rather than `put`, because the project almost certainly has a
-   * `.gitignore` already and `put` skips a file that exists — which is how this
-   * ended up being a documented behaviour that nothing implemented. The rule is
-   * worth a few lines of special-casing: the index is megabytes of quantised
-   * vectors, rewritten in full by every `npx docpilot index`, and a repository
-   * that commits it grows by that much per rebuild.
+   * `put` skips a file that exists, and every project that has run `init` once
+   * has these files — which is how the index rule ended up being a documented
+   * behaviour that nothing implemented for the projects that needed it most.
+   * Appending is the only form that reaches them.
    *
-   * A project that DELIBERATELY commits its index — this one does, so its deploy
-   * makes zero API requests — deletes the line. Idempotent: the entry is matched
-   * before anything is written, so running `init` twice adds it once.
+   * Idempotent: the entry is matched before anything is written, so running
+   * `init` twice adds it once. One helper rather than two copies, because two
+   * copies of an idempotence check is one check that silently stops matching.
    */
-  {
-    const rel = '.gitignore'
+  const ignore = (rel, entry, why) => {
     const target = path.resolve(rel)
-    // The SHIPPED path, not this project's: `init` runs before the config is
-    // loaded — it is the command for a project that does not have one yet — so
-    // there is no `indexDir` to have been moved. A project that later moves it
-    // is a project editing this line anyway.
-    const entry = `${indexDirOf(resolveDocPilot({})).replace(/\\/g, '/').replace(/\/*$/, '')}/`
     const current = existsSync(target) ? readFileSync(target, 'utf8') : ''
     if (current.split('\n').some((l) => l.trim() === entry)) {
       skipped.push(`${rel} — ${entry}`)
-    } else {
-      const block = [
-        '',
-        '# DocPilot: the built retrieval index. Megabytes of quantised vectors,',
-        '# rewritten whole by every `npx docpilot index`. Delete this line if you',
-        '# would rather commit it — a deploy that ships the index makes no API',
-        '# requests of its own.',
-        entry,
-        '',
-      ].join('\n')
-      writeFileSync(target, current ? `${current.replace(/\n*$/, '\n')}${block}` : block.replace(/^\n/, ''))
-      wrote.push(`${rel}   (+ ${entry})`)
+      return
     }
+    const block = ['', ...why.map((l) => `# ${l}`), entry, ''].join('\n')
+    mkdirSync(path.dirname(target), { recursive: true })
+    writeFileSync(target, current ? `${current.replace(/\n*$/, '\n')}${block}` : block.replace(/^\n/, ''))
+    wrote.push(`${rel}   (+ ${entry})`)
   }
+
+  // The SHIPPED path, not this project's: `init` runs before the config is
+  // loaded — it is the command for a project that does not have one yet — so
+  // there is no `indexDir` to have been moved. A project that later moves it is
+  // a project editing this line anyway.
+  //
+  // A project that DELIBERATELY commits its index — this one does, so its deploy
+  // makes zero API requests — deletes the line.
+  ignore('.gitignore', `${indexDirOf(resolveDocPilot({})).replace(/\\/g, '/').replace(/\/*$/, '')}/`, [
+    'DocPilot: the built retrieval index. Megabytes of quantised vectors,',
+    'rewritten whole by every `npx docpilot index`. Delete this line if you',
+    'would rather commit it — a deploy that ships the index makes no API',
+    'requests of its own.',
+  ])
+
+  // The build cache. Same three properties as `calibration.raw.jsonl` directly
+  // above it in that file — re-derivable, large, rewritten every run — and one
+  // more that decides it: it holds float32 vectors of the whole corpus, so
+  // committing it is committing the index twice at four times the width.
+  ignore('docpilot/.gitignore', 'embed-cache/', [
+    'Vectors `npx docpilot index` has already bought, keyed by model and text.',
+    'Re-derivable at the cost of one embedding request per 32 chunks; large.',
+  ])
 
   /**
    * The skills, copied into the project.
@@ -512,6 +526,25 @@ if (cmd === 'doctor') {
   say('config', configPath || 'none — shipped defaults + your environment')
   say('docs', resolved.docsDir)
   say('index', indexDirOf(resolved))
+
+  /**
+   * The one readiness note that lives in a built artefact rather than in the
+   * config — so the fs read is here and the judgement is in `config.js`, where
+   * it can be run without a project on disk. See `provisionalGuardNote`.
+   */
+  {
+    const manifest = path.resolve(indexDirOf(resolved), 'manifest.json')
+    if (existsSync(manifest)) {
+      let note = null
+      try {
+        note = provisionalGuardNote(JSON.parse(readFileSync(manifest, 'utf8')).guard)
+      } catch {
+        // An unreadable manifest is the build's fault to report, not this
+        // line's to guess at. Every other check still runs.
+      }
+      if (note) ready.notes.push(note)
+    }
+  }
 
   /**
    * THE CHAIN, and this is the one command where it is printed unconditionally.

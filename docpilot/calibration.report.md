@@ -1,18 +1,18 @@
-# Gate calibration — `aab4ce6a`
+# Gate calibration — `e313235d`
 
 Produced by `npx docpilot calibrate` (RAG-SPEC 5.6). Embed endpoint only — no chat model,
 no LLM judge, no unseeded randomness. Same corpus + same probes ⇒ same output.
 
 | | |
 |---|---|
-| index | `aab4ce6a`, 471 chunks, bge-m3 |
-| probes | 597 from `docpilot/calibration.jsonl` |
-| **tau** | **0.57** |
+| index | `e313235d`, 476 chunks, nvidia/nemotron-3-embed-1b:free |
+| probes | 271 from `docpilot/calibration.jsonl` |
+| **tau** | **0.69** |
 | **tauLexical** | **0.51** |
 | wDense / wLexical | 0.75 / 0.25 |
-| denseMode | cosine, window [0.3, 0.64] |
-| source | `calibrated-reduced` |
-| gatePrecision | 54.6% (target 60%, never a constraint) |
+| denseMode | cosine, window [0.04, 0.18] |
+| source | `transferred-window` |
+| gatePrecision | — (target 60%, never a constraint) |
 
 ## Probe set, and what the reduction costs
 
@@ -24,26 +24,28 @@ negatives, which are a target (`gatePrecision >= 0.60`) and never a constraint.
 
 | stratum | spec n | this run | UB95 at 0 failures | UB95 at spec n | cost of the cut |
 |---|---|---|---|---|---|
-| U | 180 | 169 | 0.016 | 0.015 | +0.001 |
-| S | 60 | 128 | 0.021 | 0.043 | −0.022 |
-| F | 60 | 60 | 0.043 | 0.043 | — |
-| N1 | 30 | 30 | 0.083 | 0.083 | — |
-| N2 | 30 | 30 | 0.083 | 0.083 | — |
-| N3 | 30 | 30 | 0.083 | 0.083 | — |
+| U | 180 | 52 | 0.049 | 0.015 | +0.035 |
+| S | 60 | 52 | 0.049 | 0.043 | +0.006 |
+| F | 60 | 32 | 0.078 | 0.043 | +0.035 |
+| N1 | 30 | 15 | 0.153 | 0.083 | +0.070 |
+| N2 | 30 | 15 | 0.153 | 0.083 | +0.070 |
+| N3 | 30 | 15 | 0.153 | 0.083 | +0.070 |
 | N4 | 30 | 30 | 0.083 | 0.083 | — |
-| N5 | 30 | 30 | 0.083 | 0.083 | — |
-| N6 | 30 | 30 | 0.083 | 0.083 | — |
-| X | 30 | 30 | 0.083 | 0.083 | — |
-| P | 30 | 30 | 0.083 | 0.083 | — |
+| N5 | 30 | 15 | 0.153 | 0.083 | +0.070 |
+| N6 | 30 | 15 | 0.153 | 0.083 | +0.070 |
+| X | 30 | 15 | 0.153 | 0.083 | +0.070 |
+| P | 30 | 15 | 0.153 | 0.083 | +0.070 |
 
 The interval width is not the whole cost. What actually decides whether a bound can
 bind is how many failures it tolerates at the n it has:
 
 | bound | stratum | n | ceiling | failures tolerated | n needed for 1 |
 |---|---|---|---|---|---|
-| `gateOverRefusal` | U | 169 (spec 180) | 0.05 | **3** | 87 |
-| `scopedGateOverRefusal` | S | 128 (spec 60) | 0.05 | **2** | 87 |
-| `followupRefusalRate` | F | 60 (spec 60) | 0.08 | **1** | 54 |
+| `gateOverRefusal` | U | 52 (spec 180) | 0.05 | **0** | 87 |
+| `scopedGateOverRefusal` | S | 52 (spec 60) | 0.05 | **0** | 87 |
+| `followupRefusalRate` | F | 32 (spec 60) | 0.08 | **0** | 54 |
+
+`gateOverRefusal` and `scopedGateOverRefusal` and `followupRefusalRate` tolerate **zero** failures at this n: a single refused probe decides `tau`. That is the outcome RAG-SPEC 5.4 introduced UB95 to prevent, and for `gateOverRefusal` it persists at the spec's own n = 180 — the bound needs n = 87 before one failure is survivable. Read `tau` accordingly.
 
 ## Sweep (RAG-SPEC 5.6 step 3)
 
@@ -53,46 +55,13 @@ Positives that are `retrievalMisses` are excluded from the three bounds (RAG-SPE
 
 | tau | U | UB95 | S | UB95 | F | UB95 | gatePrecision | N4 | feasible |
 |---|---|---|---|---|---|---|---|---|---|
-| 0.00 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 0.0% | 0.0% | yes |
-| 0.05 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 1.7% | 6.7% | yes |
-| 0.10 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 2.5% | 6.7% | yes |
-| 0.15 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 3.3% | 10.0% | yes |
-| 0.20 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 5.0% | 16.7% | yes |
-| 0.25 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 8.8% | 30.0% | yes |
-| 0.30 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 16.7% | 53.3% | yes |
-| 0.35 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 24.6% | 76.7% | yes |
-| 0.40 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 29.2% | 83.3% | yes |
-| 0.45 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 34.2% | 90.0% | yes |
-| 0.50 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 40.0% | 90.0% | yes |
-| 0.55 | 0/169 | 0.016 | 1/128 | 0.034 | 0/60 | 0.043 | 50.4% | 96.7% | yes |
-| 0.57 | 0/169 | 0.016 | 2/128 | 0.046 | 0/60 | 0.043 | 54.6% | 96.7% | yes |
-| 0.60 | 3/169 | 0.044 | 4/128 | 0.068 | 0/60 | 0.043 | 58.3% | 96.7% |  |
-| 0.65 | 7/169 | 0.075 | 12/128 | 0.145 | 1/60 | 0.071 | 65.8% | 96.7% |  |
-| 0.70 | 8/169 | 0.082 | 18/128 | 0.199 | 2/60 | 0.096 | 72.9% | 100.0% |  |
-| 0.75 | 12/169 | 0.111 | 24/128 | 0.250 | 4/60 | 0.140 | 80.8% | 100.0% |  |
-| 0.80 | 16/169 | 0.138 | 33/128 | 0.326 | 7/60 | 0.202 | 89.2% | 100.0% |  |
-| 0.85 | 31/169 | 0.237 | 44/128 | 0.415 | 9/60 | 0.241 | 93.3% | 100.0% |  |
-| 0.90 | 52/169 | 0.369 | 62/128 | 0.557 | 17/60 | 0.387 | 97.5% | 100.0% |  |
-| 0.95 | 87/169 | 0.577 | 85/128 | 0.729 | 30/60 | 0.604 | 99.6% | 100.0% |  |
-| 1.00 | 109/169 | 0.703 | 99/128 | 0.828 | 44/60 | 0.816 | 100.0% | 100.0% |  |
 
 ## Every stratum at the chosen tau
 
 | stratum | what it is | n | correct | wrong |
 |---|---|---|---|---|
-| U | unscoped positives | 169 | 100.0% | 0 |
-| S | scoped positives | 128 | 98.4% | 2 — `s-66`, `s-112` |
-| F | follow-up pairs | 60 | 100.0% | 0 |
-| N1 | adjacent product, absent here | 30 | 30.0% | 21 — `n1-01`, `n1-02`, `n1-03`, `n1-04`, `n1-05`, `n1-06`, `n1-08`, `n1-09`, `n1-10`, `n1-11`, … |
-| N2 | plausible-but-absent API | 30 | 16.7% | 25 — `n2-01`, `n2-02`, `n2-03`, `n2-04`, `n2-06`, `n2-07`, `n2-08`, `n2-09`, `n2-10`, `n2-11`, … |
-| N3 | off-domain technical | 30 | 86.7% | 4 — `n3-04`, `n3-11`, `n3-16`, `n3-17` |
-| N4 | off-domain general (blatant) | 30 | 96.7% | 1 — `n4-01` |
-| N5 | off-domain after a legitimate previous turn | 30 | 63.3% | 11 — `n5-01`, `n5-02`, `n5-04`, `n5-06`, `n5-17`, `n5-19`, `n5-23`, `n5-25`, `n5-26`, `n5-27`, … |
-| N6 | docs excerpt + off-domain ask | 30 | 13.3% | 26 — `n6-01`, `n6-02`, `n6-03`, `n6-04`, `n6-05`, `n6-06`, `n6-08`, `n6-09`, `n6-10`, `n6-11`, … |
-| X | scoped, gold outside the scope | 30 | 100.0% | 0 |
-| P | scoped, vocabulary overlap without the answer | 30 | 30.0% | 21 — `p-02`, `p-03`, `p-04`, `p-05`, `p-07`, `p-08`, `p-09`, `p-10`, `p-11`, `p-12`, … |
 
-`gatePrecision` **54.6%** against a target of 60%. RAG-SPEC 5.6
+`gatePrecision` **—** against a target of 60%. RAG-SPEC 5.6
 step 6: it may never justify raising the threshold past the rule that chose it, and
 `chooseTau()` is not given the number — the
 constraint is structural, not a promise.
@@ -103,27 +72,21 @@ The separability question, before any threshold is chosen.
 
 | stratum | min G | median G | max G |
 |---|---|---|---|
-| U | 0.589 | 0.946 | 1.000 |
-| S | 0.529 | 0.904 | 1.000 |
-| F | 0.650 | 0.950 | 1.000 |
-| N1 | 0.308 | 0.660 | 0.938 |
-| N2 | 0.472 | 0.722 | 0.917 |
-| N3 | 0.296 | 0.512 | 0.662 |
-| N4 | 0.000 | 0.294 | 0.666 |
-| N5 | 0.000 | 0.513 | 0.875 |
-| N6 | 0.455 | 0.726 | 0.917 |
-| X | 0.059 | 0.307 | 0.560 |
-| P | 0.293 | 0.691 | 0.958 |
+| U | 0.850 | 1.000 | 1.000 |
+| S | 0.693 | 1.000 | 1.000 |
+| F | 0.850 | 1.000 | 1.000 |
+| N1 | 0.750 | 0.875 | 1.000 |
+| N2 | 0.850 | 0.875 | 0.917 |
+| N3 | 0.438 | 0.813 | 0.906 |
+| N4 | 0.210 | 0.425 | 0.861 |
+| N5 | 0.228 | 0.812 | 1.000 |
+| N6 | 0.574 | 0.875 | 0.938 |
+| X | 0.023 | 0.532 | 0.850 |
+| P | 0.596 | 0.900 | 0.958 |
 
 ## The probes that bound the chosen tau
 
-At tau 0.58 the bound `scopedGateOverRefusal` breaks.
-
-| probe | stratum | G | D | L | question |
-|---|---|---|---|---|---|
-| `s-31` | S | 0.570 | 0.594 | 0.500 | What do I have to decide myself? |
-
-Without that probe, `tau` would be **0.59** instead of **0.57**. That is a robustness number, not a proposal: deleting the probe that pins `tau` in order to make calibration pass is the one edit this procedure exists to prevent.
+No positive probe flips at tau + 0.01, so `tau` is not bounded by a named probe.
 
 ## Over-refusal backlog — the ten positives closest to tau
 
@@ -132,16 +95,16 @@ threshold moves, and the shortlist for a documentation fix.
 
 | probe | stratum | G | margin | question |
 |---|---|---|---|---|
-| `s-31` | S | 0.570 | 0.000 | What do I have to decide myself? |
-| `u-48` | U | 0.589 | 0.019 | How does the i18n fallback work? |
-| `s-03` | S | 0.593 | 0.023 | How much of the conversation is remembered? |
-| `u-114` | U | 0.596 | 0.026 | What does tune cost to run? |
-| `u-111` | U | 0.600 | 0.030 | What flags does eval take? |
-| `u-166` | U | 0.610 | 0.040 | Что такое шлюз отказа и когда он срабатывает? |
-| `u-168` | U | 0.622 | 0.052 | Где хранится история переписки? |
-| `s-23` | S | 0.624 | 0.054 | How much of the golden set should a single run cover? |
-| `s-22` | S | 0.625 | 0.055 | How do I grow the golden set? |
-| `s-103` | S | 0.630 | 0.060 | What does tune write? |
+| `s-16` | S | 0.693 | 0.003 | How is the money arranged compared to the alternatives? |
+| `s-112` | S | 0.750 | 0.060 | What does guard accept? |
+| `s-105` | S | 0.794 | 0.104 | What is the step everyone forgets? |
+| `u-76` | U | 0.850 | 0.160 | How do I verify a production deployment is wired correctly? |
+| `f-37` | F | 0.850 | 0.160 | А какие у него два канала? |
+| `s-57` | S | 0.866 | 0.175 | What does "measured, not chosen" mean here? |
+| `s-03` | S | 0.875 | 0.185 | How much of the conversation is remembered? |
+| `s-47` | S | 0.875 | 0.185 | Whose plugin generates llms.txt? |
+| `s-66` | S | 0.875 | 0.185 | How do I verify the deployment? |
+| `u-12` | U | 0.917 | 0.227 | How does the gate treat a follow-up question differently from a first question? |
 
 ## Refusal causes at the chosen tau (RAG-SPEC 5.6 step 3)
 
@@ -151,36 +114,21 @@ a refused `X` probe whose `wouldPassUnscoped` is false at this threshold is a
 
 | probe | refused | wouldPassUnscoped | cause | verdict |
 |---|---|---|---|---|
-| `x-01` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-02` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-03` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-04` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-05` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-06` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-07` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-08` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-09` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-10` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-11` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-12` | yes | yes | `refuse:out-of-scope` | correct |
+| `x-02` | no | no | — | ESCAPED |
+| `x-05` | yes | no | `refuse:no-evidence` | authoring miss |
+| `x-09` | no | no | — | ESCAPED |
+| `x-12` | yes | no | `refuse:no-evidence` | authoring miss |
 | `x-13` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-14` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-15` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-16` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-17` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-18` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-19` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-20` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-21` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-22` | yes | yes | `refuse:out-of-scope` | correct |
+| `x-15` | yes | no | `refuse:no-evidence` | authoring miss |
+| `x-17` | yes | no | `refuse:no-evidence` | authoring miss |
+| `x-18` | no | yes | — | ESCAPED |
+| `x-19` | no | no | — | ESCAPED |
+| `x-21` | yes | no | `refuse:no-evidence` | authoring miss |
+| `x-22` | no | no | — | ESCAPED |
 | `x-23` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-24` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-25` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-26` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-27` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-28` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-29` | yes | yes | `refuse:out-of-scope` | correct |
-| `x-30` | yes | yes | `refuse:out-of-scope` | correct |
+| `x-24` | yes | no | `refuse:no-evidence` | authoring miss |
+| `x-25` | no | no | — | ESCAPED |
+| `x-26` | yes | no | `refuse:no-evidence` | authoring miss |
 
 ## Lexical-only (RAG-SPEC 5.6 step 7)
 
@@ -201,11 +149,8 @@ are in the table.
 | metric | value | bound |
 |---|---|---|
 | tauLexical | 0.51 | — |
-| U over-refusal | 9/169, UB95 0.089 | none (RAG-SPEC 3.2) |
-| S over-refusal | 10/128, UB95 0.126 | none (RAG-SPEC 3.2) |
-| F over-refusal | 6/60, UB95 0.182 | none (RAG-SPEC 3.2) |
-| gatePrecision | 69.6% | — |
-| blatantRefusalRate | 86.7% | >= 80% |
+| gatePrecision | — | — |
+| blatantRefusalRate | — | >= 80% |
 
 ### The `G_lex` sweep
 
@@ -214,28 +159,6 @@ nothing else, so this is where the over-refusal it costs becomes visible.
 
 | tauLexical | U | UB95 | S | UB95 | F | UB95 | gatePrecision | N4 |
 |---|---|---|---|---|---|---|---|---|
-| 0.00 | 0/169 | 0.016 | 0/128 | 0.021 | 0/60 | 0.043 | 0.0% | 0.0% |
-| 0.05 | 3/169 | 0.044 | 1/128 | 0.034 | 5/60 | 0.161 | 13.8% | 23.3% |
-| 0.10 | 3/169 | 0.044 | 1/128 | 0.034 | 5/60 | 0.161 | 13.8% | 23.3% |
-| 0.15 | 3/169 | 0.044 | 1/128 | 0.034 | 5/60 | 0.161 | 13.8% | 23.3% |
-| 0.20 | 3/169 | 0.044 | 1/128 | 0.034 | 5/60 | 0.161 | 14.2% | 23.3% |
-| 0.25 | 3/169 | 0.044 | 1/128 | 0.034 | 5/60 | 0.161 | 17.5% | 33.3% |
-| 0.30 | 3/169 | 0.044 | 1/128 | 0.034 | 5/60 | 0.161 | 25.4% | 46.7% |
-| 0.35 | 4/169 | 0.052 | 1/128 | 0.034 | 5/60 | 0.161 | 37.1% | 66.7% |
-| 0.40 | 4/169 | 0.052 | 1/128 | 0.034 | 5/60 | 0.161 | 37.9% | 66.7% |
-| 0.45 | 5/169 | 0.060 | 1/128 | 0.034 | 5/60 | 0.161 | 46.7% | 70.0% |
-| 0.50 | 5/169 | 0.060 | 1/128 | 0.034 | 5/60 | 0.161 | 46.7% | 70.0% |
-| 0.51 | 9/169 | 0.089 | 10/128 | 0.126 | 6/60 | 0.182 | 69.6% | 86.7% |
-| 0.55 | 9/169 | 0.089 | 10/128 | 0.126 | 6/60 | 0.182 | 69.6% | 86.7% |
-| 0.60 | 9/169 | 0.089 | 10/128 | 0.126 | 6/60 | 0.182 | 71.3% | 86.7% |
-| 0.65 | 12/169 | 0.111 | 10/128 | 0.126 | 7/60 | 0.202 | 80.8% | 90.0% |
-| 0.70 | 22/169 | 0.179 | 24/128 | 0.250 | 9/60 | 0.241 | 87.9% | 93.3% |
-| 0.75 | 22/169 | 0.179 | 24/128 | 0.250 | 9/60 | 0.241 | 89.6% | 93.3% |
-| 0.80 | 31/169 | 0.237 | 36/128 | 0.351 | 12/60 | 0.297 | 94.6% | 96.7% |
-| 0.85 | 40/169 | 0.294 | 40/128 | 0.383 | 20/60 | 0.439 | 97.5% | 96.7% |
-| 0.90 | 40/169 | 0.294 | 40/128 | 0.383 | 21/60 | 0.456 | 97.5% | 96.7% |
-| 0.95 | 40/169 | 0.294 | 40/128 | 0.383 | 21/60 | 0.456 | 97.5% | 96.7% |
-| 1.00 | 40/169 | 0.294 | 40/128 | 0.383 | 21/60 | 0.456 | 97.5% | 96.7% |
 
 ## zExp ladder (RAG-SPEC 3.4.1)
 
@@ -245,14 +168,14 @@ exactly the correlation the ladder exists to measure.
 
 | n | z | closed form sqrt(2·ln n) |
 |---|---|---|
-| 7 | 1.1666 | 1.9728 |
-| 11 | 1.3629 | 2.1899 |
-| 25 | 1.8191 | 2.5373 |
-| 48 | 2.2316 | 2.7825 |
-| 110 | 2.8991 | 3.0661 |
-| 311 | 4.0757 | 3.3882 |
-| 471 | 4.6672 | 3.5085 |
-| 471 | 4.6672 | 3.5085 |
+| 7 | 1.1804 | 1.9728 |
+| 10 | 1.3209 | 2.1460 |
+| 25 | 2.9932 | 2.5373 |
+| 49 | 3.86 | 2.7899 |
+| 110 | 4.7491 | 3.0661 |
+| 315 | 7.0109 | 3.3919 |
+| 476 | 8.3235 | 3.5115 |
+| 476 | 8.3235 | 3.5115 |
 
 `denseMode` is `cosine` on this index, so the ladder is **inert**:
 `zExp(n)` is only consulted in `zscore` mode. It is measured and recorded anyway so

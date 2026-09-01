@@ -14,6 +14,7 @@ import { embedQuery } from './embed.js'
 import { runTurn } from './harness.js'
 import { detectTools } from './llm.js'
 import { renderAnswer, renderPassage } from './markdown.js'
+import { matchOpener } from './openers.js'
 import { ensureHighlighter, onReady } from './highlight.js'
 import * as scopeApi from './scope.js'
 import * as instruction from './prompt-store.js'
@@ -1384,6 +1385,17 @@ export interface Turn {
   delinked?: any[]
   credential?: any
   social?: any
+  /**
+   * This turn matched an opener the build had already resolved —
+   * engine-specs/009. `baked` says whether the ANSWER came from the bundle too,
+   * or only the evidence did.
+   *
+   * Provenance, and nothing routes on it. `gate.channel` deliberately does NOT
+   * gain a third value: `feedback/stratum.js` routes on that field when it
+   * proposes a calibration stratum, and an unfamiliar value there would enter
+   * the loop as a stratum nobody measured.
+   */
+  opener?: { matched: 'exact' | 'lexical'; score: number; baked: boolean }
   notAnswerable?: unknown
   tentative?: boolean
   rateLimit?: any
@@ -1395,6 +1407,57 @@ export interface Turn {
   promptHash?: string
   citedIdx?: number[]
   [key: string]: any
+}
+
+/**
+ * A turn that ANSWERED, settled.
+ *
+ * Extracted when a second caller appeared: an opener whose answer this build
+ * already wrote settles here too, and the alternative was a second copy of the
+ * citation bookkeeping below. That bookkeeping is not boilerplate — it decides
+ * which marker resolves to which row — so two copies would be two answers to
+ * "does `[2]` point at the second source or at the first", and only one of them
+ * would be tested.
+ *
+ * `result` is `{text, sources}`: whatever `runTurn` returned, or the same two
+ * fields read out of a baked entry. Nothing here can tell which, and nothing
+ * here should be able to.
+ *
+ * Two citations into one section — the chunker splits a long section into
+ * `#aws-s3-bucket` and `#aws-s3-bucket~2`, which share an anchor — are one
+ * destination and get one row. `cited` keeps a row per citation so marker [2]
+ * still resolves; it simply resolves to the same row as [1].
+ *
+ * `~N`, not `-N`: the tilde is a CONTINUATION part, while `-N` is how a repeated
+ * heading is disambiguated and is a different section entirely. Only the id
+ * carries the suffix — every part shares the `anchor` field the href is built
+ * from — which is why both parts land on one row here.
+ */
+function settleAnswer(turn, result, started) {
+  // Sources first: the answer's inline markers link into this list, so it has
+  // to exist before the markdown is rendered.
+  const rows = []
+  const byHref = new Map()
+  const cited = result.sources.map((c) => {
+    const row = sourceRow(c)
+    const seen = byHref.get(row.href)
+    if (seen) return seen
+    row.n = rows.length + 1
+    rows.push(row)
+    byHref.set(row.href, row)
+    return row
+  })
+  turn.sources = rows
+  // Kept so a completed turn can be re-rendered identically — see the onReady()
+  // hook. `cited` holds one entry per citation and `rows` the deduped set, so
+  // re-rendering without it would silently drop markers.
+  turn.cited = cited
+  const { html, delinked } = renderAnswer(result.text, knownPaths.value, cited)
+  turn.answerText = result.text
+  turn.answerHtml = html
+  turn.delinked = delinked
+  turn.state = 'complete'
+  finishTurn(turn, started)
 }
 
 function makeTurn(question, frozen, quote = ''): Turn {
@@ -1596,11 +1659,84 @@ export async function submit(question, { quote = '' } = {}) {
     return
   }
 
+  /**
+   * ── an opener this build already resolved — engine-specs/009 ──────────────
+   *
+   * THIRD in a row of three, and the order is the argument for the position.
+   * Credentials come first because a greeting carrying a key is a key; social
+   * comes second because a greeting is not a question. An opener is a question,
+   * and it is the last thing that can be decided about one before the network
+   * is involved — which is exactly where the saving is.
+   *
+   * Read off `clean`, the redacted string, so nothing unredacted can reach a
+   * turn through this path either. A pasted key never matches an opener, and if
+   * it somehow did, the branch above already ended the turn.
+   *
+   * A miss costs a `normalise` and, at most, three coverage scores against
+   * `df` — no allocation worth naming and no network at all.
+   */
+  const opener = matchOpener(clean, {
+    index: state.index,
+    // `state.config`, not the `cfg` alias below: that one is bound after the
+    // AbortController, and this branch has to decide before it.
+    config: state.config,
+    scope: frozen,
+    quote: selected,
+    turns: state.turns,
+    // BOTH selectors — see `answerFor`. The typed language decides for a reader
+    // who wrote the question; the page's language decides for a reader who
+    // clicked a chip somebody else wrote, which is every chip.
+    locale: localeOf(detectLanguage(clean)),
+    uiLocale: state.lang,
+  })
+
+  /**
+   * The answer was written at index time, in this reader's language, and it
+   * settles here with ZERO requests — no embedding, no model call.
+   *
+   * Unlike the two branches above this is an ANSWER, not a refusal, so it
+   * settles through `settleAnswer` and lands on `state: 'complete'` with real
+   * sources and real markers. It is the same answer the same harness wrote from
+   * the same corpus under the same prompt; the only thing that differs is when.
+   *
+   * It does not stream, and it is not made to. Nothing is being generated, and a
+   * typing animation over a stored string would be the panel performing work it
+   * is not doing.
+   *
+   * It carries no badge either. A "cached" label would be a reader-visible
+   * action owing rule 11 a switch and an i18n key, to make a claim that is not
+   * interesting: the answer is invalidated by any change to the corpus, the
+   * prompt or the model, which is the same set of things that would have changed
+   * a live one.
+   */
+  if (opener?.answer) {
+    const turn = makeTurn(clean, frozen, selected)
+    turn.opener = { matched: opener.matched, score: opener.score, baked: true }
+    turn.gate = opener.entry.gate
+    const started = performance.now()
+    state.turns.push(turn)
+    settleAnswer(
+      turn,
+      {
+        text: opener.answer.text,
+        sources: opener.answer.citations
+          .map((id) => state.index.byId.get(id))
+          .filter(Boolean),
+      },
+      started,
+    )
+    return
+  }
+
   stop()
   controller = new AbortController()
   const signal = controller.signal
 
   const turn = makeTurn(q, frozen, selected)
+  // Provenance for a turn that skipped the embedder — the evidence half of
+  // the bake fired even though the answer half did not (wrong language, a quote
+  // attached, a scope narrowed, or no answer was baked at all).
+  if (opener) turn.opener = { matched: opener.matched, score: opener.score, baked: false }
   state.turns.push(turn)
   state.busy = true
   state.status = { phase: 'searching' }
@@ -1739,6 +1875,30 @@ export async function submit(question, { quote = '' } = {}) {
     if (cfg.embed.lexicalOnly) {
       mode = 'lexical-only'
       state.retrieval = 'lexical-only'
+    } else if (opener?.queryVec) {
+      /**
+       * The vector this build already computed — engine-specs/009.
+       *
+       * NOT a shortcut around the pipeline: it is the same value `embed()`
+       * would have returned, produced by the model named in the manifest, on
+       * the author's allowance, at index time. Everything downstream — the
+       * fusion, MMR, the page cap, the scope mask, `manifest.tuning`, a `tau`
+       * the site overrode in its config — runs on it exactly as it runs on a
+       * live one, because it enters through the same parameter.
+       *
+       * NO BUDGET IS SPENT, and that is a property of the control flow rather
+       * than a decision made here: `embed()` is the only site that calls
+       * `ensureBudget().spend(1)`, and it is on the other branch. There is no
+       * flag to get wrong.
+       *
+       * `embedderMatchesIndex` is not consulted, and its absence is correct
+       * rather than an omission. That check exists to stop a query embedded by
+       * one model being scored against an index built by another; this vector
+       * came out of the index's own build, so the two agree by construction. A
+       * site with a misconfigured `embed.model` still gets a hybrid turn out of
+       * its openers, which is the one turn it can still get right.
+       */
+      queryVec = opener.queryVec
     } else {
       try {
         if (!embedderMatchesIndex()) throw new Error('embedder does not match the index')
@@ -2159,28 +2319,7 @@ export async function submit(question, { quote = '' } = {}) {
     // repeated heading is disambiguated and is a different section entirely.
     // Only the id carries the suffix — every part shares the `anchor` field the
     // href is built from — which is why both parts land on one row here.
-    const rows = []
-    const byHref = new Map()
-    const cited = result.sources.map((c) => {
-      const row = sourceRow(c)
-      const seen = byHref.get(row.href)
-      if (seen) return seen
-      row.n = rows.length + 1
-      rows.push(row)
-      byHref.set(row.href, row)
-      return row
-    })
-    turn.sources = rows
-    // Kept so a completed turn can be re-rendered identically — see the
-    // onReady() hook below. `cited` holds one entry per citation and `rows` the
-    // deduped set, so re-rendering without it would silently drop markers.
-    turn.cited = cited
-    const { html, delinked } = renderAnswer(result.text, knownPaths.value, cited)
-    turn.answerText = result.text
-    turn.answerHtml = html
-    turn.delinked = delinked
-    turn.state = 'complete'
-    finishTurn(turn, started)
+    settleAnswer(turn, result, started)
   } catch (e) {
     if (signal.aborted) {
       // Stopping mid-write keeps what was already written, so the last render is

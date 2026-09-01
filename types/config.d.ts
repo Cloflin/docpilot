@@ -757,6 +757,16 @@ export declare function readiness(
   settings: Required<DocPilotSettings>,
   env?: Record<string, string | undefined>,
 ): Readiness
+/**
+ * The readiness note for an index built on thresholds nobody measured.
+ *
+ * Takes `manifest.guard` rather than a path, so the fs read stays in the command
+ * and this stays runnable without a project on disk. Null when the guard was
+ * measured — which is every case except `source: "provisional"`.
+ */
+export declare function provisionalGuardNote(
+  guard: { source?: string; tau?: number } | null | undefined,
+): string | null
 export declare function themeDocPilot(
   settings: Required<DocPilotSettings>,
   env?: Record<string, string | undefined>,

@@ -35,9 +35,17 @@ import {
   TUNING_OUT,
   CONFIG,
   VOCABULARY_OUT,
+  EMBED_CACHE_DIR,
   fileEnv,
 } from '../cli-context.js'
+import { openEmbedCache } from './lib/embed-cache.js'
 import { l2normalise, toInt8, quantisationError } from './lib/quantize.js'
+import { bakeOpeners, renderOpenerReport } from './lib/openers.js'
+import { resolveSuggestions, DEFAULT_SUGGESTIONS } from '../theme/docpilot/switches.js'
+import { openerQuestions } from '../theme/docpilot/openers.js'
+import { questionsHash } from '../theme/docpilot/text.js'
+import { promptHash } from '../theme/docpilot/prompt.js'
+import { nodeChatTarget } from '../config.js'
 import {
   terms,
   estTokens,
@@ -102,6 +110,17 @@ const SITEMAP = argValue('sitemap')
 const NO_EMBED = process.argv.includes('--no-embed') || noEmbed(docPilot)
 
 /**
+ * `--refresh-embeddings` — buy every vector again, and rewrite the cache.
+ *
+ * Same shape and same name as `calibrate --refresh`: the flag skips the READ,
+ * never the write, so it also repairs a file that went bad. The cache cannot go
+ * stale by construction — model, host and text are all in the key — so this is
+ * for the case where you suspect the provider itself changed under a stable
+ * name, which no key can see.
+ */
+const REFRESH_EMBEDDINGS = process.argv.includes('--refresh-embeddings')
+
+/**
  * `embed.fallback: 'lexical'` — what to do when the embedder will not answer.
  *
  * WITHOUT IT this build dies and there is no index, which is the right default:
@@ -125,10 +144,15 @@ const EMBED_FALLBACK_LEXICAL = resolveEmbed(docPilot).fallback === 'lexical'
  * Changing embedder is one edit there, then `npx docpilot index`. Keys still come
  * from .env.local; nothing is stored.
  */
-const EMBED = nodeEmbedTarget(NO_EMBED ? { ...docPilot, embed: false } : docPilot, {
-  ...(await fileEnv()),
-  ...process.env,
-})
+/**
+ * The environment both halves resolve against, named once.
+ *
+ * The chat half needs it too now — the openers pass writes answers with the
+ * shipped harness — and re-reading `.env.local` for the second caller would be
+ * a second answer to "which key is this build using".
+ */
+const BUILD_ENV = { ...(await fileEnv()), ...process.env }
+const EMBED = nodeEmbedTarget(NO_EMBED ? { ...docPilot, embed: false } : docPilot, BUILD_ENV)
 const EMBED_URL = EMBED.baseURL
 /**
  * NOT a constant when the embedder is a pool.
@@ -280,6 +304,13 @@ async function embedBatch(model, texts) {
   const vectors = embeddingsOf(json, EMBED_PROVIDER === 'ollama')
   if (!vectors?.length) return { error: 'the response carried no vectors' }
   if (vectors.some((v) => !v?.length)) return { error: 'the response carried an empty vector' }
+  // A SHORT BATCH IS A PROVIDER THAT SILENTLY DROPPED INPUTS, and the caller
+  // assembles by position. Guessing which ones came back is how a chunk gets
+  // somebody else's vector — and with the cache below, keeps it. `calibrate.js`
+  // has checked this since its own batching landed; this side had not.
+  if (vectors.length !== texts.length) {
+    return { error: `the response carried ${vectors.length} vectors for ${texts.length} inputs` }
+  }
   return { vectors }
 }
 
@@ -322,20 +353,24 @@ export function createEmbedder({
   batch,
   fail,
   batchSize = 32,
+  cacheFor = (_model: string) => null,
   onChoose = (_model: string, _dims: number, _size: number) => {},
   onSkip = (_model: string, _why: string) => {},
   onRestart = (_from: string, _to: string, _why: string) => {},
   onProgress = (_done: number, _total: number) => {},
+  onCache = (_hits: number, _total: number) => {},
 }: {
   model?: string | null
   pool?: string[]
   batch: (model: string, texts: string[]) => Promise<any>
   fail: (message: string) => never
   batchSize?: number
+  cacheFor?: (model: string) => any
   onChoose?: (model: string, dims: number, size: number) => void
   onSkip?: (model: string, why: string) => void
   onRestart?: (from: string, to: string, why: string) => void
   onProgress?: (done: number, total: number) => void
+  onCache?: (hits: number, total: number) => void
 }) {
   let chosen = model || null
   const tried = new Set()
@@ -391,19 +426,48 @@ export function createEmbedder({
     await choose()
     for (;;) {
       tried.add(chosen)
-      const vectors = []
+      /**
+       * The cache is opened PER MODEL, inside the restart loop.
+       *
+       * That is not tidiness, it is the restart invariant restated: the model
+       * name is in the cache key, so a restart lands on a namespace that is cold
+       * by construction and cannot top up one vector space out of another. It is
+       * also why the cache cannot be opened before `choose()` — until then there
+       * is no model name to key it with.
+       */
+      const cache = cacheFor(chosen)
+      const vectors = new Array(texts.length)
+      const miss = []
+      for (let i = 0; i < texts.length; i++) {
+        const hit = cache?.get(texts[i])
+        if (hit) vectors[i] = hit
+        else miss.push(i)
+      }
+      onCache(texts.length - miss.length, texts.length)
+
       let failure = null
-      for (let i = 0; i < texts.length; i += batchSize) {
-        const out = await batch(chosen, texts.slice(i, i + batchSize))
+      for (let i = 0; i < miss.length; i += batchSize) {
+        const rows = miss.slice(i, i + batchSize)
+        const out = await batch(chosen, rows.map((j) => texts[j]))
         if (out.fatal) fail(out.fatal)
         if (!out.vectors) {
           failure = out
           break
         }
-        for (const v of out.vectors) vectors.push(l2normalise(v))
-        onProgress(Math.min(i + batchSize, texts.length), texts.length)
+        out.vectors.forEach((v, k) => {
+          const vec = l2normalise(v)
+          vectors[rows[k]] = vec
+          cache?.set(texts[rows[k]], vec)
+        })
+        onProgress(Math.min(i + batchSize, miss.length), miss.length)
       }
-      if (!failure) return { model: chosen, vectors }
+      if (!failure) {
+        // Written only on a complete pass, and with exactly the texts this run
+        // used — so a corpus that lost a chunk stops paying disk for it, and a
+        // run that died halfway leaves the previous file intact.
+        cache?.commit(texts)
+        return { model: chosen, vectors }
+      }
 
       const next = pool.find((m) => !tried.has(m))
       if (!next) {
@@ -518,6 +582,26 @@ async function embedAll(texts) {
       )
     },
     onProgress: (done, total) => process.stdout.write(`\r  embedding ${done}/${total}`),
+    onCache: (hits, total) => {
+      if (hits) console.log(`  cache     ${hits}/${total} vectors already bought`)
+    },
+    /**
+     * Opened per model, and only here — `createEmbedder` never learns what a
+     * provider or a base URL is. The prefix is recomputed rather than passed:
+     * it is a function of the model name (`embedBatch` above), and deriving it
+     * in both places from the same rule is what stops the key describing a
+     * request the build did not make.
+     */
+    cacheFor: (model) =>
+      openEmbedCache({
+        dir: EMBED_CACHE_DIR,
+        model,
+        provider: EMBED_PROVIDER,
+        baseURL: EMBED_URL,
+        prefix: /nomic/i.test(model) ? 'search_document: ' : '',
+        refresh: REFRESH_EMBEDDINGS,
+        warn,
+      }),
   })
   let out
   try {
@@ -638,6 +722,23 @@ export function calibrationPathFor(indexDir = OUT) {
  * fails the build.** Documentation must stay publishable when a threshold is
  * stale — a broken deploy is a worse outcome than a conservative gate.
  */
+
+/**
+ * Every `guard.source` `docpilot calibrate` writes, and nothing else.
+ *
+ * Keep in step with the ternary in `buildDoc` (`eval/calibrate.js`), which is
+ * the only writer: it produces `transferred-window`, `calibrated-reduced-lexical`
+ * or `calibrated-reduced`. `calibrated` is kept because files written before
+ * that split carry it. See the warn-and-pass block in `guardFor` for why an
+ * unknown value is reported rather than refused.
+ */
+const SOURCE_VOCABULARY = [
+  'calibrated',
+  'calibrated-reduced',
+  'calibrated-reduced-lexical',
+  'transferred-window',
+]
+
 export function guardFor(hash, opts: {
     file?: string
     warn?: (message: string) => void
@@ -792,6 +893,39 @@ export function guardFor(hash, opts: {
     return stale(
       `${shown} has wLexical ${g.wLexical} >= tau ${tau}, which gate.js rejects at init`,
     )
+  }
+
+  /**
+   * `source` IS A CLAIM ABOUT EVIDENCE, AND IT TRAVELS FURTHER THAN THE GUARD.
+   *
+   * The projection below stamps it verbatim out of a file a consumer commits and
+   * may hand-edit. From `manifest.guard` it reaches `session.js`, which writes it
+   * onto EVERY feedback record, and `report.js`, which prints it into EVERY eval
+   * report. So a hand-written `"calibrated"` in `calibration.json` does not just
+   * mislabel one build: it re-labels the whole evidence trail the project
+   * produces about itself, and nothing downstream can tell.
+   *
+   * WARN AND PASS, never reject. `guardFor`'s contract is that documentation
+   * stays publishable — every other fault here degrades to `provisional` rather
+   * than stopping the build — and refusing an unknown string would be a
+   * strictness this function does not have anywhere else. The value still ships;
+   * it just stops shipping silently.
+   *
+   * `'provisional'` is deliberately absent: it is this function's own OUTPUT
+   * (see `provisional` above), never an input, so a file carrying it is a
+   * hand-edit and earns the warning. `'config'` is absent for the opposite
+   * reason — `session.js` mints it after the manifest is written, when the
+   * author sets `guard.tau` by hand, and it never passes through here.
+   *
+   * `'calibrated'` has no producer today; `calibrate.js` writes one of the other
+   * three. It stays for the calibration files written before that split.
+   */
+  if (!SOURCE_VOCABULARY.includes(g.source)) {
+    log(
+      `${shown} carries source "${g.source}", which is not a value this package writes — ` +
+        `inlining it as given, but every feedback record and eval report will repeat it.`,
+    )
+    log(`      the values calibrate produces are: ${SOURCE_VOCABULARY.join(', ')}.`)
   }
 
   note(
@@ -1424,6 +1558,29 @@ async function main() {
     .digest('hex')
     .slice(0, 8)
 
+  /**
+   * The bundle the LAST build wrote, read before the directory is wiped.
+   *
+   * It is the answer cache and nothing else: an answer whose question, corpus,
+   * prompt and model are all unchanged is the same answer, and regenerating it
+   * would spend a model request to arrive at a string already on disk. On a
+   * fifty-a-day allowance that is the difference between the openers pass being
+   * something you run and something you avoid running.
+   *
+   * Read here rather than after `rmSync` for the obvious reason, and wrapped
+   * because every way this can fail — no previous build, a hand-deleted file,
+   * half-written JSON — means the same thing: no cache, bake everything.
+   */
+  let previousOpeners = null
+  try {
+    const prev = JSON.parse(fs.readFileSync(path.join(OUT, 'manifest.json'), 'utf8'))
+    if (prev.openers) {
+      previousOpeners = JSON.parse(fs.readFileSync(path.join(OUT, prev.openers), 'utf8'))
+    }
+  } catch {
+    previousOpeners = null
+  }
+
   fs.rmSync(OUT, { recursive: true, force: true })
   fs.mkdirSync(OUT, { recursive: true })
 
@@ -1437,6 +1594,14 @@ async function main() {
   if (vecName) fs.writeFileSync(path.join(OUT, vecName), Buffer.from(flat.buffer))
   fs.writeFileSync(path.join(OUT, `df.${hash}.json`), JSON.stringify({ n: chunks.length, df: dfTop }))
 
+  /**
+   * Hoisted out of the manifest literal because the openers pass needs the SAME
+   * values — it runs the real gate, and a gate run against a different threshold
+   * than the one that ships would print a verdict no reader will reproduce.
+   */
+  const guard = guardFor(hash)
+  const tuning = tuningFor(hash)
+
   const manifest = {
     version: 3,
     hash,
@@ -1449,12 +1614,12 @@ async function main() {
     pages: pageList,
     sections: sectionOut,
     orphanPages: orphans,
-    guard: guardFor(hash),
+    guard,
     // ~120 bytes, and `version` stays 3: store.js reads `chunkCount`, `dims`,
     // `vectors`, `shards` and `df` and hands the manifest on whole, so an
     // additive optional key is invisible to every reader that predates it.
     // null on every build that has not run `docpilot tune`, which is most of them.
-    tuning: tuningFor(hash),
+    tuning,
     /**
      * The map the reader's browser has to tokenise with, and a hash of it.
      *
@@ -1480,6 +1645,113 @@ async function main() {
      * guard that already exists rather than through a second one.
      */
     tokenizer: tokenizerConfig(),
+    /**
+     * The openers this build resolved — engine-specs/009. Filled in below,
+     * because resolving them needs this object.
+     *
+     * Declared null rather than left off, on the same terms as `vectors`:
+     * `store.js` reads a strict null as "there is nothing to fetch" and a
+     * missing key as the same thing, and stating it keeps the two shapes one.
+     * `version` stays 3 — an additive optional key is invisible to every reader
+     * that predates it.
+     */
+    openers: null,
+  }
+
+  /**
+   * ── the openers, resolved — engine-specs/009 ───────────────────────────────
+   *
+   * LAST, because it needs everything above it: the model the pool actually
+   * settled on, the corpus hash, the shards, the vector blob, and the guard the
+   * manifest is about to carry. It runs the production retriever over the index
+   * this build just produced, which is the only arrangement in which the score
+   * it prints is the score a reader will get.
+   *
+   * Written before the size check below on purpose — the bundle's bytes are part
+   * of what ships, so they are part of what the ceilings see.
+   */
+  const suggestions = resolveSuggestions(docPilot, warn)
+  const openerList = suggestions.precomputed ? openerQuestions(suggestions) : []
+  if (openerList.length) {
+    const chatTarget = nodeChatTarget(docPilot, BUILD_ENV)
+    const { bundle, json, entries, report } = await bakeOpeners({
+      questions: openerList,
+      manifest,
+      chunks,
+      vectorBuffer: vectorless ? null : flat.buffer,
+      dfDoc: { n: chunks.length, df: dfTop },
+      hash,
+      embed: {
+        model: EMBED_MODEL,
+        provider: EMBED_PROVIDER,
+        baseURL: EMBED_URL,
+        apiKey: EMBED_KEY,
+        /**
+         * The query-side cache, in its OWN DIRECTORY — and the directory is the
+         * fix rather than a filing preference.
+         *
+         * `openEmbedCache` derives its namespace from model, provider, baseURL
+         * and prefix. For a nomic model the prefixes differ (`search_query: `
+         * against `search_document: `) and the two sides land in separate files
+         * on their own. For every other model BOTH prefixes are empty, so the
+         * two passes resolve to the SAME file — and `commit` is self-evicting by
+         * design: it rewrites the pair with exactly the texts its caller used.
+         * This pass commits three questions, so it replaced 476 chunk vectors
+         * with three and reported a healthy cache while doing it. The next build
+         * then re-bought the whole corpus, which on a metered embedder is
+         * fifteen requests a build, silently, forever.
+         *
+         * A separate directory makes the two caches incapable of meeting,
+         * whatever the model is called.
+         */
+        cache: vectorless
+          ? null
+          : openEmbedCache({
+              dir: path.join(EMBED_CACHE_DIR, 'openers'),
+              model: EMBED_MODEL,
+              provider: EMBED_PROVIDER,
+              baseURL: EMBED_URL,
+              prefix: /nomic/i.test(EMBED_MODEL) ? 'search_query: ' : '',
+              refresh: REFRESH_EMBEDDINGS,
+              warn,
+            }),
+      },
+      chat: {
+        searchOnly: chatTarget.searchOnly === true,
+        model: chatTarget.model,
+        promptHash: promptHash(docPilot.prompt, docPilot.product),
+        maxIterations: docPilot.maxIterations ?? 4,
+        llm: {
+          provider: chatTarget.provider,
+          baseURL: chatTarget.baseURL,
+          model: chatTarget.model,
+          apiKey: chatTarget.apiKey,
+          temperature: 0.2,
+          stepTimeoutMs: 180000,
+          numCtx: chatTarget.numCtx ?? undefined,
+        },
+      },
+      docPilot,
+      answers: suggestions.answers,
+      matchTau: suggestions.matchTau,
+      previous: previousOpeners,
+      warn,
+    })
+    if (bundle) {
+      const name = `openers.${hash}.json`
+      fs.writeFileSync(path.join(OUT, name), json)
+      manifest.openers = name
+      for (const line of renderOpenerReport({
+        entries,
+        report,
+        matchTau: suggestions.matchTau,
+        configHash: bundle.configHash,
+      })) {
+        console.log(line)
+      }
+    }
+  } else if (!suggestions.precomputed) {
+    console.log('  openers          suggestions.precomputed is off — nothing resolved, nothing read')
   }
 
   const manifestJson = JSON.stringify(manifest)
@@ -1499,6 +1771,12 @@ async function main() {
   if (vecName) console.log(`    ${vecName}  ${(flat.length / 1024).toFixed(0)} KB`)
   else console.log('    no vectors file  lexical-only — this index carries no embeddings')
   console.log(`    ${shards.length} chunk shard(s)`)
+  if (manifest.openers) {
+    console.log(
+      `    ${manifest.openers}  ` +
+        `${(fs.statSync(path.join(OUT, manifest.openers)).size / 1024).toFixed(1)} KB`,
+    )
+  }
   console.log(`  hash ${hash}`)
 
   if (total > FAIL_BYTES) die(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB, over the 5 MB ceiling`)

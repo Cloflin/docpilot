@@ -58,6 +58,73 @@ export function norm(s) {
 }
 
 /**
+ * `norm`, plus collapsed whitespace and no trailing punctuation.
+ *
+ * The KEY a question is looked up by, wherever two typings of the same question
+ * have to land on one thing: the feedback aggregator groups readers' questions
+ * with it, the indexer stamps `qnorm` on a baked opener with it, and the panel
+ * matches against that stamp with it. It lived in `feedback/aggregate.js` and
+ * moved here when the second caller appeared — three copies of a key function is
+ * how two of them silently stop agreeing.
+ *
+ * NOT `terms()` below: that stems, and stemming would merge "rotating keys" with
+ * "rotate key" — a distinction the corpus itself makes, and the question a
+ * reviewer reads back is the one that was typed.
+ *
+ * Built ON `norm` rather than beside it, which is the one behaviour change the
+ * move carries: the feedback key now folds NFKC and drops format characters
+ * before grouping. Two spellings of a question that differ only by a zero-width
+ * joiner were two candidates and are now one, which is what a reviewer counting
+ * "how many people asked this" meant in the first place.
+ */
+export function normalise(question) {
+  return norm(question ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[?!.,;:\s]+$/u, '')
+}
+
+/**
+ * The fingerprint of a question list — the staleness guard for a baked bundle.
+ *
+ * DERIVED, never carried. `docpilot index` resolves the config and hashes the
+ * openers it is about to bake; the panel resolves the same config and hashes it
+ * again before trusting what was baked. A bundle whose `configHash` disagrees
+ * was baked for questions that are no longer configured, so the panel ignores it
+ * and the turn runs the way it ran before this feature existed.
+ *
+ * The alternative — computing it once in Node and shipping it beside the
+ * questions — puts the answer in two places and makes the config resolver
+ * non-idempotent, which rule 11a forbids. Derived from `questions`, there is no
+ * second place to forget.
+ *
+ * IT LIVES HERE because both readers are here: `switches.js` states that it
+ * takes no imports and none may be added, and this module is already the one
+ * thing the build and the runtime share by design.
+ *
+ * FNV-1a in two lanes, not sha256: `node:crypto` does not exist in a browser and
+ * `crypto.subtle` is async, and this runs in both, synchronously. A fingerprint
+ * is the whole job — it separates two lists and defends nothing. The second lane
+ * folds from the far end so that reordering the same three strings moves the
+ * value, which matters because the panel shows the first three and the bake
+ * bakes the first three.
+ *
+ * Hashes the NORMALISED question, because that is the key an entry is looked up
+ * by: an edit `normalise` erases — a doubled space, a trailing question mark —
+ * correctly leaves a bundle that still matches valid.
+ */
+export function questionsHash(questions) {
+  let a = 0x811c9dc5
+  let b = 0x811c9dc5
+  const text = (questions || []).map((q) => normalise(q)).join('\u0000')
+  for (let i = 0; i < text.length; i++) {
+    a = Math.imul(a ^ text.charCodeAt(i), 0x01000193) >>> 0
+    b = Math.imul(b ^ text.charCodeAt(text.length - 1 - i), 0x01000193) >>> 0
+  }
+  return (a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')).slice(0, 12)
+}
+
+/**
  * SUFFIX STRIPPING, and the narrowest version of it that pays for itself.
  *
  * The lexical channel matched surface forms and nothing else, which is a

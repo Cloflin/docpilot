@@ -32,6 +32,10 @@ The rule this directory exists to enforce:
 | [003](003-the-block-ir-seam.md) | The block stream inside `html-to-md` becomes a named type, and the chunker takes it directly |
 | [004](004-expand-section.md) | `expand_section` — the model can ask for the neighbouring chunk instead of guessing across a boundary |
 | [005](005-identifier-aware-tokens.md) | `getUserName` and `docPilot.sources.allow` are searchable by their parts as well as whole |
+| [006](006-the-window-grid-has-its-own-floor.md) | the window grid starts at 0.00 — a floor of 0.16 could not describe an embedder whose cosines sit lower |
+| [007](007-two-fields-nobody-read.md) | `prev` and `codeLangs` leave the chunk record — 4.1% of the shard bytes every reader downloads |
+| [008](008-the-vectors-already-bought.md) | a content-addressed embedding cache — a one-file edit costs one request rather than fifteen |
+| [009](009-a-question-the-build-already-answered.md) | `docpilot index` resolves `suggestions.questions` against the corpus, so a reader's first click costs no embedding request |
 
 ## Shape of a spec
 

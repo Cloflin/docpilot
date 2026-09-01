@@ -49,7 +49,7 @@ export const docPilot = {
   topK: null,
   maxIterations: 2,
   budget: { mode: 'auto', oneShotBelow: 15, rotateAbove: 6, maxContinuations: 1, showRemaining: false, probe: 'auto', dailyLimit: null },
-  suggestions: { questions: [], scoped: true, followUps: false },
+  suggestions: { questions: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65 },
   quote: { fromAnswer: true, fromDocs: false },
   citations: { passage: false, inCopy: true, pagesRead: false },
   composer: { editLastOnArrowUp: true, deepLink: true, draft: true },
@@ -145,6 +145,9 @@ written by hand; only the values are mechanical.
 | [`suggestions.questions`](#suggestions-questions) | `string[]` | `[]` | Replaces the built-in three empty-state openers with your own — the first three are used, extras, empties and repeats dropped and named on stdout — *`suggestions: ['One?']` — a bare array — sets this same key* |
 | [`suggestions.scoped`](#suggestions-scoped) | `boolean` | `true` | Under a narrowed scope, fills the empty panel with the pages in that scope as rows rather than leaving it blank — no text is generated — *`false` gives back the blank panel, not the questions: those never show under a narrow scope* |
 | [`suggestions.followUps`](#suggestions-followups) | `boolean` | `false` | Adds up to three next-question rows under the newest answer, built from headings on the pages it cited — no model call and nothing invented |
+| [`suggestions.precomputed`](#suggestions-precomputed) | `boolean` | `true` | Has `npx docpilot index` resolve the openers ahead of time and the panel use what it resolved, so a reader clicking one spends no embedding request — *off, nothing is baked and nothing is read* |
+| [`suggestions.answers`](#suggestions-answers) | `boolean` | `true` | Also bakes the ANSWER to each opener, served instantly and free when the reader's language matches the language it was written in — *costs one model request per opener per index build* |
+| [`suggestions.matchTau`](#suggestions-matchtau) | `number \| false` | `0.65` | How much of a typed question's rare wording an opener has to cover, in both directions, to count as the same question — *`false` leaves exact matching only* |
 | [`quote.fromAnswer`](#quote-fromanswer) | `boolean` | `true` | Selecting text inside an answer raises one button that attaches the passage to the composer as a chip — *off together with `fromDocs` also suppresses `ui.firstRunHint`, which names that gesture* |
 | [`quote.fromDocs`](#quote-fromdocs) | `boolean` | `false` | Extends that selection popover to your own article, so a reader can ask about the paragraph that confused them without retyping it — *only inside `host.article` — nav, sidebar and footer are deliberately out of bounds* |
 | [`citations.passage`](#citations-passage) | `boolean` | `false` | Gives every source row a chevron that expands the exact retrieved chunk inline, costing no request since the text is already in the browser — *on a restored conversation the chunk is resolved by id, so a rebuilt index simply drops the control* |
@@ -1488,6 +1491,90 @@ not have.
 follow-up suggestions and its readers write custom instructions to suppress them.
 Copy that ships on has to be good for every corpus; copy you opt into only has to
 be good enough for yours.
+
+### suggestions.precomputed
+
+**The openers are resolved at index time, not at read time.**
+
+`npx docpilot index` takes the questions above, embeds each one, and runs the
+same retrieval and the same gate your readers run. What it resolved ships beside
+the index. A reader who clicks an opener — or types one of these questions
+verbatim, or a close paraphrase — gets that resolution instead of an embedding
+request.
+
+You never see a chunk id and never write one. Edit the questions, run
+`npx docpilot index`, and the resolution follows. Edit them and *don't* rebuild,
+and the panel notices the mismatch and asks the embedder as it always did: a
+question can only ever be served the evidence it was resolved for.
+
+The build prints what it resolved, including the openers your corpus **refuses**:
+
+```
+  openers  3 questions · configHash 3f1c9a02
+    ✓ 0.71  'How do I get started?'                 4 chunks
+    ✗ 0.22  'How do I authenticate requests?'       < tau 0.57
+```
+
+That second line is the one worth the feature on its own. It is the sentence at
+the top of this section — *a question your corpus cannot answer produces a
+refusal on the reader's first click* — caught on your machine instead of theirs.
+
+Off, nothing is baked and nothing is read, in both directions: a bundle no panel
+consults is build-time requests spent on a file that ships and does nothing.
+
+### suggestions.answers
+
+Also bakes the **answer**, so a matching question costs no requests at all.
+
+Served only when the language the reader asked in matches the language the
+answer was written in — the same detector that decides which language a greeting
+is answered in. Ask an English opener in Russian and the baked answer is passed
+over; the model writes a fresh one, in Russian, from the evidence that was baked.
+So this key never costs a reader an answer in the wrong language.
+
+**It is the half that costs requests at build time**: one model call per opener,
+against the same allowance your readers draw on, whenever the corpus changes.
+Answers are cached against the index hash, the prompt and the model, so a
+rebuild that changes none of the three regenerates none of them.
+
+An answer with no citations is never baked. Turn this off and the evidence bake
+stays: the click still costs no embedding.
+
+### suggestions.matchTau
+
+How close a typed question has to be to a baked one to be treated as it.
+
+The measure is how much of the question's **rare** wording the opener covers, and
+it is required in **both** directions — otherwise `gate` alone would match
+`How do I configure the refusal gate?`, and a reader asking about one thing would
+be handed the answer to another. Common words buy nothing: the score is weighted
+by how rare each word is in your corpus, by the same arithmetic the refusal gate
+uses.
+
+`false` retires the paraphrase test and leaves exact matching, which cannot fire
+on a different question at all. That is the setting for a corpus where two of
+your openers are near neighbours — and the build tells you when they are:
+
+```
+  openers  'How do I configure the gate?' and 'How do I configure the guard?'
+           score 0.80 against each other, at or above matchTau 0.65 — a reader's
+           paraphrase could land on either.
+```
+
+**Where 0.65 comes from, and what it is not.** It is a config constant, not a
+calibrated threshold: `docpilot calibrate` never measures it and `tuning.json`
+never carries it. But it is not a guess either. Scoring all 597 probes of this
+project's calibration set against its three openers — 1,791 pairs, no network —
+the highest score any probe that is *not* an opener reaches is **0.500**, and
+nothing reaches 0.6 at all. Meanwhile a real paraphrase covering two of three key
+words scores 0.667. So the threshold sits above every measured false positive
+with room, and below the paraphrases the feature exists to catch.
+
+**That measurement is of one corpus.** Yours has different vocabulary and
+different openers. The number that is about *your* site is the build's `COLLIDES`
+line, which scores your openers against each other with the same function; and
+the measurement above is reproducible on your corpus in seconds with no requests
+— see the `faq` mode in the `docs-rag` skill.
 
 ## quote
 

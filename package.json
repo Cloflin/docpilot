@@ -1,6 +1,6 @@
 {
   "name": "@cloflin/docpilot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "A grounded Ask AI panel for any page of any website — VitePress, Docusaurus, Vue, React, or a plain script tag. Hybrid search runs in the browser against a static index you build; a calibrated gate refuses before the model is called.",
   "keywords": [

@@ -9,7 +9,10 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # `contents: write` — not just read — because the last step creates the
+      # GitHub release for this tag. Reading the repo would be enough to publish
+      # to npm and nothing else.
+      contents: write
       # Required for trusted publishing: lets the job mint the OIDC token
       # npm exchanges for a short-lived publish credential. Also what
       # --provenance signs with.
@@ -47,4 +50,41 @@ jobs:
       # (check -> typecheck -> vitest -> build -> check-publish).
       - run: npm ci
 
-      - run: npm publish --provenance
+      # Skipped rather than attempted when the registry already has this
+      # version. The v0.3.0 run died on `You cannot publish over the previously
+      # published versions` — 0.3.x, 0.5.0 and 1.0.0 were published by hand and
+      # tagged afterwards — which made a tag that only needed a release page
+      # look like a broken release. A version npm already serves is not an error
+      # here; a version it does not serve still publishes exactly as before.
+      - name: Publish to npm unless the registry already has this version
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already on the registry — skipping publish"
+          else
+            npm publish --provenance
+          fi
+
+      # npm has the tarball at this point; the release page is what a human
+      # reads. Notes come out of CHANGELOG.md so there is exactly one place to
+      # write them — see the header of scripts/changelog-section.js. The script
+      # exits 1 rather than emitting an empty body, so a version with no
+      # changelog entry fails here loudly instead of shipping a blank release.
+      - name: Release notes from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/changelog-section.js "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+          # Re-running a failed publish must not die on "release already exists",
+          # so an existing release is updated in place instead.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              --verify-tag
+          fi

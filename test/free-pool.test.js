@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -15,6 +15,7 @@ import {
 } from '../src/theme/docpilot/openrouter.js'
 import { chat, detectTools, orderCandidates, resetPools } from '../src/theme/docpilot/llm.js'
 import { createEmbedder, embeddingsOf } from '../src/build/build-rag-index.js'
+import { openEmbedCache } from '../src/build/lib/embed-cache.js'
 import { embedQuery } from '../src/theme/docpilot/embed.js'
 import { createRetrieval } from '../src/theme/docpilot/retriever.js'
 import { assembleIndex } from '../src/theme/docpilot/store.js'
@@ -1123,6 +1124,154 @@ describe('a rejected embedder is a tried embedder', () => {
     )
     // 'refused' is never asked a second time.
     expect(asked.filter((m) => m === 'refused')).toEqual(['refused'])
+  })
+})
+
+/**
+ * The vectors already bought, and the one thing the cache may never do.
+ *
+ * It is a CACHE and never a second code path: a miss re-embeds, which is what
+ * the build did before it existed. What it must never do is hand back a vector
+ * from another space — the failure `calibrate.js`'s `sigOf` docstring is a
+ * post-mortem of, where a cache keyed too loosely published one embedder's
+ * thresholds as another's calibration.
+ */
+describe('the embedding cache', () => {
+  const vec = (axis, dims = 4) => Array.from({ length: dims }, (_, i) => (i === axis ? 1 : 0))
+  const boom = (message) => {
+    throw new Error(message)
+  }
+  const dirs = []
+  const tmp = () => {
+    const d = mkdtempSync(path.join(tmpdir(), 'docpilot-embed-cache-'))
+    dirs.push(d)
+    return d
+  }
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
+  })
+
+  const runner = (dir, { model = 'm', provider = 'openai', baseURL = '/ai', onBatch } = {}) =>
+    createEmbedder({
+      model,
+      batch: async (m, texts) => {
+        onBatch?.(m, texts)
+        return { vectors: texts.map((t) => vec(t.length % 4)) }
+      },
+      fail: boom,
+      batchSize: 2,
+      cacheFor: (m) => openEmbedCache({ dir, model: m, provider, baseURL }),
+    })
+
+  it('buys each vector once, and the second build buys none', async () => {
+    const dir = tmp()
+    const texts = ['a', 'bb', 'ccc', 'dddd', 'eeeee']
+
+    const cold = []
+    const first = await runner(dir, { onBatch: (_m, t) => cold.push(...t) }).all(texts)
+    expect(cold).toEqual(texts)
+
+    const warm = []
+    const second = await runner(dir, { onBatch: (_m, t) => warm.push(...t) }).all(texts)
+    expect(warm).toEqual([])
+
+    // Bit-identical, not merely close: the build promises byte-identical output
+    // for identical input, and `toInt8` rounds — an f64 round trip would
+    // disagree on the boundary and break that quietly.
+    expect(first.vectors.length).toBe(texts.length)
+    second.vectors.forEach((v, i) => expect([...v]).toEqual([...first.vectors[i]]))
+  })
+
+  it('survives a transport that has stopped answering, when nothing is missing', async () => {
+    const dir = tmp()
+    const texts = ['a', 'bb', 'ccc']
+    await runner(dir).all(texts)
+
+    const dead = createEmbedder({
+      model: 'm',
+      batch: async () => boom('the endpoint is gone'),
+      fail: boom,
+      cacheFor: (m) => openEmbedCache({ dir, model: m, provider: 'openai', baseURL: '/ai' }),
+    })
+    const out = await dead.all(texts)
+    expect(out.vectors).toHaveLength(3)
+  })
+
+  it('embeds only what is new when the corpus grows', async () => {
+    const dir = tmp()
+    await runner(dir).all(['a', 'bb'])
+    const asked = []
+    await runner(dir, { onBatch: (_m, t) => asked.push(...t) }).all(['a', 'bb', 'ccc'])
+    expect(asked).toEqual(['ccc'])
+  })
+
+  /**
+   * The three key components, each on its own. A cache that ignored any one of
+   * them would serve a vector from a different space under the same text.
+   */
+  it('is cold under a different model, provider or host', async () => {
+    const dir = tmp()
+    const texts = ['a', 'bb']
+    await runner(dir).all(texts)
+
+    for (const over of [{ model: 'other' }, { provider: 'together' }, { baseURL: 'https://elsewhere' }]) {
+      const asked = []
+      await runner(dir, { ...over, onBatch: (_m, t) => asked.push(...t) }).all(texts)
+      expect(asked, JSON.stringify(over)).toEqual(texts)
+    }
+  })
+
+  it('drops a blob that does not match its index rather than serving half of it', async () => {
+    const dir = tmp()
+    const texts = ['a', 'bb', 'ccc']
+    await runner(dir).all(texts)
+
+    const bin = readdirSync(dir).find((f) => f.endsWith('.bin'))
+    writeFileSync(path.join(dir, bin), Buffer.from([1, 2, 3]))
+
+    const warnings = []
+    const asked = []
+    const run = createEmbedder({
+      model: 'm',
+      batch: async (m, t) => {
+        asked.push(...t)
+        return { vectors: t.map((x) => vec(x.length % 4)) }
+      },
+      fail: boom,
+      cacheFor: (m) =>
+        openEmbedCache({
+          dir,
+          model: m,
+          provider: 'openai',
+          baseURL: '/ai',
+          warn: (w) => warnings.push(w),
+        }),
+    })
+    await run.all(texts)
+    expect(asked).toEqual(texts)
+    expect(warnings.join(' ')).toMatch(/not usable/)
+  })
+
+  it('discards the cache with the vectors when an embedder dies mid-pass', async () => {
+    const dir = tmp()
+    const texts = ['a', 'bb', 'ccc', 'dddd']
+    let seen = 0
+    const run = createEmbedder({
+      model: null,
+      pool: ['dies', 'lives'],
+      batchSize: 2,
+      batch: async (m, t) => {
+        if (m === 'dies' && t.length > 1 && ++seen > 1) return { error: 'HTTP 503' }
+        return { vectors: t.map(() => vec(m === 'dies' ? 0 : 1)) }
+      },
+      fail: boom,
+      cacheFor: (m) => openEmbedCache({ dir, model: m, provider: 'openai', baseURL: '/ai' }),
+    })
+    const out = await run.all(texts)
+    expect(out.model).toBe('lives')
+    // One vector space, whole. A cache keyed on text alone would have topped the
+    // survivor's pass up with the dead model's rows.
+    for (const v of out.vectors) expect([...v]).toEqual([0, 1, 0, 0])
   })
 })
 

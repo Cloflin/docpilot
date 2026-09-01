@@ -393,11 +393,6 @@ function paragraphSplit(text) {
   return out
 }
 
-/** Code languages mentioned in a chunk, for the record rather than for retrieval. */
-function codeLangs(text) {
-  return [...new Set([...text.matchAll(/^\s*```(\w+)/gm)].map((m) => m[1].toLowerCase()))]
-}
-
 /**
  * @returns {{ chunks: Array, warnings: string[] }}
  */
@@ -556,7 +551,6 @@ export function chunkMarkdown({
         title: heading,
         breadcrumb,
         kind,
-        codeLangs: codeLangs(body),
         text: full,
       })
     })
@@ -591,16 +585,23 @@ export function chunkMarkdown({
         title: f.question,
         breadcrumb: pageTitle,
         kind: 'faq',
-        codeLangs: [],
         text: `${context}\n${body}`,
       })
     })
   })
 
-  // prev/next are SAME PAGE ONLY and null at the ends, so section expansion can
-  // never cross a page boundary. RAG-SPEC 3.1.
+  /**
+   * `next` is SAME PAGE ONLY and null at the end, so section expansion can never
+   * cross a page boundary. RAG-SPEC 3.1.
+   *
+   * FORWARD ONLY, and the backward half is derived at load.
+   * `engine-specs/004-expand-section.md` decided this and `retriever.js` says it
+   * in as many words — a `prev` field in every chunk of every shipped index buys
+   * a value one pass over `index.chunks` reconstructs, and the reader downloads
+   * it. It was written here anyway, contradicting both, until the field was
+   * measured at 4.6% of this corpus's shard bytes with no reader anywhere.
+   */
   chunks.forEach((c, i) => {
-    c.prev = i > 0 ? chunks[i - 1].id : null
     c.next = i < chunks.length - 1 ? chunks[i + 1].id : null
   })
 

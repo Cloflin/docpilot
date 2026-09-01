@@ -3228,7 +3228,34 @@ export const DEFAULTS = {
      * pages in the scope, as rows. It generates no text. `followUps` is off —
      * see switches.js, where the reason is a measurement rather than a taste.
      */
-    suggestions: {questions: [], scoped: true, followUps: false},
+    suggestions: {
+        questions: [],
+        scoped: true,
+        followUps: false,
+        /**
+         * The three below are engine-specs/009 and ui-specs/013 — a question
+         * the build already resolved.
+         *
+         * `precomputed` governs BOTH halves in one word: `docpilot index` does
+         * not bake, and the panel does not read a bake. Off, the feature is
+         * absent in both directions rather than half-present — a bundle nobody
+         * reads is build-time requests spent on a file that ships and does
+         * nothing.
+         *
+         * `answers` is the expensive half: one model call per question at build
+         * time, against the same allowance the readers draw on. Off leaves the
+         * evidence bake intact, so the click still costs no embedding and the
+         * model still writes the answer in the reader's language.
+         *
+         * `matchTau` is how close a typed question has to be to a baked one to
+         * count as it. `false` retires the paraphrase test and leaves exact
+         * matching. The number is PROVISIONAL until measured — see the `faq`
+         * mode in the docs-rag skill.
+         */
+        precomputed: true,
+        answers: true,
+        matchTau: 0.65,
+    },
     /**
      * Quoting a passage — ui-specs/007 for the mechanism, 009 for the switches.
      *
@@ -4144,4 +4171,36 @@ export function readiness(docPilot, env = {}) {
         notes,
         hint: 'Run `npx docpilot doctor` to re-check without a full build.',
     }
+}
+
+/**
+ * THE GATE SHIPS ON PROVISIONAL THRESHOLDS FOREVER, AND NOBODY FINDS OUT.
+ *
+ * That sentence is `bin/docpilot.js`'s, above `init`, and this function is the
+ * line that makes it false. `guardFor` in `build-rag-index.js` DOES say so —
+ * once, in the build log, at the moment it falls back — and a build log is read
+ * while it scrolls. Afterwards the fact lives in one key of one JSON file and
+ * nothing asks about it again. This package's own deployed index carried
+ * `source: "provisional"` through a release for exactly that reason.
+ *
+ * A NOTE, never a `missing`. The build deliberately warns and continues when a
+ * calibration is stale, because documentation has to stay publishable; a
+ * `doctor` that exited 1 on the same state would be a stricter opinion than the
+ * build's, held by the same project, which is how an author learns to ignore
+ * one of them.
+ *
+ * PURE, and it takes the guard rather than a path, so the fs read stays in the
+ * command and this stays runnable without a project on disk.
+ *
+ * @param guard `manifest.guard`, or null/undefined when there is no index yet
+ * @returns the note to print, or null when the guard was measured
+ */
+export function provisionalGuardNote(guard) {
+    if (guard?.source !== 'provisional') return null
+    return (
+        `the index ships the PROVISIONAL guard (tau ${guard.tau}) — thresholds nothing measured ` +
+        'on this corpus, so an off-topic question may be answered and a real one refused.\n' +
+        '      `npx docpilot calibrate` measures them; `--transfer` carries a calibration ' +
+        'across an embedder swap.'
+    )
 }

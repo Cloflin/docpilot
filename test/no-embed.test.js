@@ -901,7 +901,12 @@ describe('the turn — a declared mode is not an outage', () => {
    * question for the lifetime of the site.
    */
   it('reaches the gate without asking anyone to embed the question', () => {
-    const branch = src.match(/if \(cfg\.embed\.lexicalOnly\) \{[\s\S]*?\n    \} else \{/)[0]
+    // Stops at the first `} else`, WITH OR WITHOUT an `if` after it. The branch
+    // gained a sibling — `else if (opener?.queryVec)`, engine-specs/009 — and a
+    // delimiter that only recognised a bare `else {` silently ran past it and
+    // asserted about two branches at once. The subject of this test is the
+    // DECLARED lexical-only branch and nothing else.
+    const branch = src.match(/if \(cfg\.embed\.lexicalOnly\) \{[\s\S]*?\n    \} else\b/)[0]
     expect(branch).toContain("mode = 'lexical-only'")
     expect(branch).toContain("state.retrieval = 'lexical-only'")
     expect(branch).not.toContain('embed(')

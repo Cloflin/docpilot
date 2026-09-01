@@ -104,6 +104,7 @@ import {
   themeDocPilot,
   resolveDocPilot,
   readiness,
+  provisionalGuardNote,
   proxyContract,
   SERVER_ONLY,
   // ui-specs/009 rule 11 walks it: every leaf here either reaches the panel or
@@ -334,10 +335,26 @@ describe('chunker', () => {
     for (const c of chunks) expect(c.text.length).toBeLessThanOrEqual(8000)
   })
 
-  it('keeps prev/next inside one page', () => {
+  it('keeps next inside one page, and writes no backward pointer at all', () => {
     const { chunks } = chunkMarkdown({ src: page, path: '/p', kind: 'guide' })
-    expect(chunks[0].prev).toBeNull()
     expect(chunks[chunks.length - 1].next).toBeNull()
+    // `prev` is DERIVED at load (`retriever.js`, engine-spec 004). Shipping it
+    // is 4.6% of this corpus's shard bytes for a value no reader reads.
+    for (const c of chunks) expect(Object.hasOwn(c, 'prev')).toBe(false)
+  })
+
+  /**
+   * The record is what every reader downloads, so its key set is a budget.
+   * `codeLangs` was written on every chunk and read by nothing for two releases;
+   * this is the assertion that would have caught it.
+   */
+  it('emits these eight keys and no others', () => {
+    const { chunks } = chunkMarkdown({ src: page, path: '/p', kind: 'guide' })
+    for (const c of chunks) {
+      expect(Object.keys(c).sort()).toEqual(
+        ['anchor', 'breadcrumb', 'id', 'kind', 'next', 'path', 'text', 'title'].sort(),
+      )
+    }
   })
 
   it('slugs headings', () => expect(slug('How-To: Build `x`')).toBe('how-to-build-x'))
@@ -2891,6 +2908,44 @@ describe('calibration — what the build inlines (RAG-SPEC 5.6)', () => {
     expect(guard('abc12345', calibrated({ source: 'calibrated' })).source).toBe('calibrated')
   })
 
+  /**
+   * The value stamped above is a CLAIM ABOUT EVIDENCE, and it travels: onto
+   * every feedback record (`session.js`) and into every eval report
+   * (`report.js`). A hand-edited one re-labels the whole trail, so it is named.
+   * Warn and pass, not refuse — every other fault here degrades to provisional
+   * rather than stopping the build, and documentation stays publishable.
+   */
+  it('names a source it did not write, and inlines it anyway', () => {
+    const warnings = []
+    const g = guardFor('abc12345', {
+      file: write('c.json', calibrated({ source: 'measured-by-hand' })),
+      warn: (m) => warnings.push(m),
+      note: () => {},
+    })
+    expect(g.source).toBe('measured-by-hand')
+    expect(g.tau).toBe(0.42)
+    expect(warnings.join(' ')).toMatch(/measured-by-hand/)
+    expect(warnings.join(' ')).toMatch(/transferred-window/)
+  })
+
+  it('says nothing about the four sources calibrate actually writes', () => {
+    for (const source of [
+      'calibrated',
+      'calibrated-reduced',
+      'calibrated-reduced-lexical',
+      'transferred-window',
+    ]) {
+      const warnings = []
+      const g = guardFor('abc12345', {
+        file: write('c.json', calibrated({ source })),
+        warn: (m) => warnings.push(m),
+        note: () => {},
+      })
+      expect(g.source, source).toBe(source)
+      expect(warnings, source).toEqual([])
+    }
+  })
+
   it('warns and falls back to provisional on a hash mismatch — never fails', () => {
     const warnings = []
     const g = guardFor('deadbeef', {
@@ -3204,6 +3259,29 @@ describe('calibration — the cosine window sweep', () => {
     // back an unswept row unchanged is the honest outcome, not a silent zero.
     const old = { id: 'legacy', stratum: 'U', G: 0.61, D: 0.5, L: 0.1, channel: 'raw' }
     expect(regate([old], { cosFloor: 0.2, cosCeil: 0.8 }, guard)[0]).toEqual(old)
+  })
+
+  /**
+   * The grid describes the EMBEDDER, so it may not assume the embedder's scale.
+   *
+   * A floor is the smallest cosine the sweep can call anything but zero
+   * evidence. A grid whose lowest floor is f clamps every positive under f to
+   * `D = 0` under EVERY candidate, capping its G at `wLexical · L` — which
+   * cannot reach a tau above `wLexical`, whatever L is. That is not a corpus
+   * being flat; it is the grid refusing to describe a scale. Measured on this
+   * package's own corpus: two S positives at cosine 0.146 and 0.142 under
+   * `nemotron-3-embed-1b:free` held the largest feasible tau to 0.12, below
+   * `wLexical` 0.25, and the index shipped the provisional guard instead.
+   */
+  it('can lift a positive below the old 0.16 floor to full evidence', () => {
+    const low = 0.142
+    expect(WINDOWS.some((w) => w.cosFloor < low)).toBe(true)
+    expect(WINDOWS.some((w) => dOf(low, w) === 1)).toBe(true)
+  })
+
+  it('still refuses to call a cosine of zero evidence', () => {
+    // A floor of 0 is legal; a window that scores nothing as something is not.
+    for (const w of WINDOWS) expect(dOf(0, w)).toBe(0)
   })
 })
 
@@ -4331,6 +4409,31 @@ describe('config — sources and importDir', () => {
     const r = readiness(resolveDocPilot({ importDir: 'no-such-dir-here' }), {})
     expect(r.notes.join(' ')).toMatch(/no-such-dir-here/)
     expect(r.missing.some((m) => /no-such-dir-here/.test(m.what))).toBe(false)
+  })
+
+  /**
+   * `guardFor` says "provisional" once, in the build log, and a build log is
+   * read while it scrolls. This package's own deployed index carried that guard
+   * through a release because nothing asked about it afterwards.
+   */
+  it('names a provisional guard, and stays silent about every measured one', () => {
+    const note = provisionalGuardNote({ source: 'provisional', tau: 0.3 })
+    expect(note).toMatch(/PROVISIONAL/)
+    expect(note).toMatch(/0\.3/)
+    expect(note).toMatch(/calibrate/)
+
+    for (const source of [
+      'calibrated',
+      'calibrated-reduced',
+      'calibrated-reduced-lexical',
+      'transferred-window',
+    ]) {
+      expect(provisionalGuardNote({ source, tau: 0.57 }), source).toBeNull()
+    }
+    // No index yet is not a defect to report — `enabled` already covers it.
+    expect(provisionalGuardNote(null)).toBeNull()
+    expect(provisionalGuardNote(undefined)).toBeNull()
+    expect(provisionalGuardNote({})).toBeNull()
   })
 })
 

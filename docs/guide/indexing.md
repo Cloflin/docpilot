@@ -198,7 +198,7 @@ quantisation err 0.00262 mean |Δcos|
 
 Above `0.01` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.
 
-For scale: this documentation site indexes 471 chunks at 2048 dimensions, so its vector blob is 964,608 bytes — 942 KB, where float32 would have been 3.7 MB.
+For scale: this documentation site indexes 476 chunks at 2048 dimensions, so its vector blob is 974,848 bytes — 952 KB, where float32 would have been 3.7 MB.
 
 ## Scale
 

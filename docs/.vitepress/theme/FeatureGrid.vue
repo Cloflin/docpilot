@@ -45,7 +45,7 @@ const channels = [
 
 /*
  * This site's own index, and the figures are the served file rather than a
- * rounded boast: 471 chunks × 2048 dims × 1 byte = 964,608 bytes, which is
+ * rounded boast: 476 chunks × 2048 dims × 1 byte = 974,848 bytes, which is
  * exactly what `ls -l docs/public/rag/vectors.*.bin` prints. The float32 row is
  * the same array at 4 bytes a dimension.
  *
@@ -58,7 +58,7 @@ const channels = [
  */
 const sizes = [
   { label: 'float32', bytes: '3.7 MB', width: '100%', dim: true },
-  { label: 'int8', bytes: '942 KB', width: '25%', dim: false },
+  { label: 'int8', bytes: '952 KB', width: '25%', dim: false },
 ]
 </script>
 
@@ -250,7 +250,7 @@ const sizes = [
           </li>
         </ul>
         <p class="text-sm">
-          This site's own index &mdash; 471 chunks at 2048 dimensions, one signed
+          This site's own index &mdash; 476 chunks at 2048 dimensions, one signed
           byte each, no per-vector scale to unpack. The build measures the
           round-trip against the exact cosines and
           <span class="text-white">refuses to ship above 0.01 mean |&Delta;cos|</span>;

@@ -14,21 +14,22 @@
  */
 
 import {suggest} from './stratum.js'
+import {normalise} from '../theme/docpilot/text.js'
 
 /**
- * Lowercase, collapse whitespace, drop trailing punctuation.
+ * The grouping key, and it lives in text.js now.
  *
- * NOT `terms()` from text.js: that stems, and stemming would merge "rotating
- * keys" with "rotate key" — a distinction the corpus itself makes, and the
- * question a reviewer has to read back is the one that was typed.
+ * It was defined here, and then the indexer needed the same key to stamp a baked
+ * opener with (`build-rag-index.js`) and the panel needed it to match against
+ * that stamp (`theme/docpilot/openers.js`). Three copies of the function that
+ * decides whether two typings are ONE question is three chances for two of them
+ * to disagree, and the disagreement would be silent: candidates that fail to
+ * merge, or an opener that fails to fire.
+ *
+ * Re-exported rather than only imported, because this module's own consumers —
+ * `report.js`, `cli.js` and the tests — already import it from here.
  */
-export function normalise(question) {
-  return String(question || '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/[?!.,;:\s]+$/u, '')
-}
+export {normalise}
 
 /** Highest revision wins, per messageId. */
 export function dedupe(rows) {
