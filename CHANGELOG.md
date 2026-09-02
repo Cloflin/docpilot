@@ -7,9 +7,24 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
-## Unreleased
+## 1.1.0
 
 ### Changed
+
+**The window grid is 408, and the eval figures are gated.** `docs/guide/evaluation.md`
+said the window search had 272 candidates; spec 006 widened it to 408 two releases
+ago, and nothing caught it — the existing figures gate covers only the index
+numbers, and its repair script cannot reach a constant inside `calibrate.js`. Both
+mentions are corrected against `WINDOWS.length`, the sample output block is a real
+transcript of this repository's own run, and three new checks derive the printed
+window grid, the printed tune grid (`11 λ × 9 k = 99`) and the probe count from the
+code and the artefacts that produce them.
+
+**Both shipped indexes carry a measured guard again.** They were on corpus
+`e9985350` against a calibration measured on `ab42d56c`, so both shipped
+`guard.source: "provisional"` — a tau of 0.3 that nothing measured on this corpus.
+The loop was re-run: `docs/public/rag-local` is `calibrated-reduced` and
+`docs/public/rag` is `transferred-window`, both on corpus `08e7a87e`, tau 0.69.
 
 **One embedding purchase per run.** `eval`, `tune` and `bench emit` bought one
 vector per request — 58 requests for this repository's golden set, against a

@@ -1,11 +1,11 @@
-# Gate calibration — `ab42d56c`
+# Gate calibration — `08e7a87e`
 
 Produced by `npx docpilot calibrate` (RAG-SPEC 5.6). Embed endpoint only — no chat model,
 no LLM judge, no unseeded randomness. Same corpus + same probes ⇒ same output.
 
 | | |
 |---|---|
-| index | `ab42d56c`, 477 chunks, nvidia/nemotron-3-embed-1b:free |
+| index | `08e7a87e`, 484 chunks, nvidia/nemotron-3-embed-1b:free |
 | probes | 271 from `docpilot/calibration.jsonl` |
 | **tau** | **0.69** |
 | **tauLexical** | **0.51** |
@@ -53,8 +53,7 @@ bind is how many failures it tolerates at the n it has:
 `wouldPassUnscoped` is itself a function of tau. The cause is checked once, below.
 Positives that are `retrievalMisses` are excluded from the three bounds (RAG-SPEC 5.4).
 
-| tau | U | UB95 | S | UB95 | F | UB95 | gatePrecision | N4 | feasible |
-|---|---|---|---|---|---|---|---|---|---|
+Inherited from `bge-m3` (corpus `08e7a87e`) — **not measured on a transfer**. `--transfer` keeps the threshold and re-fits only the cosine window, so there is no sweep to show. The window it did fit is in the table above.
 
 ## Every stratum at the chosen tau
 
@@ -80,9 +79,9 @@ The separability question, before any threshold is chosen.
 | N3 | 0.438 | 0.813 | 0.906 |
 | N4 | 0.210 | 0.425 | 0.861 |
 | N5 | 0.228 | 0.812 | 1.000 |
-| N6 | 0.574 | 0.875 | 0.938 |
+| N6 | 0.574 | 0.889 | 0.938 |
 | X | 0.023 | 0.532 | 0.850 |
-| P | 0.596 | 0.900 | 0.958 |
+| P | 0.596 | 0.900 | 1.000 |
 
 ## The probes that bound the chosen tau
 
@@ -154,11 +153,7 @@ are in the table.
 
 ### The `G_lex` sweep
 
-Every fifth step, plus the chosen row. `chooseTauLexical` reads the `N4` column and
-nothing else, so this is where the over-refusal it costs becomes visible.
-
-| tauLexical | U | UB95 | S | UB95 | F | UB95 | gatePrecision | N4 |
-|---|---|---|---|---|---|---|---|---|
+Inherited from `bge-m3` (corpus `08e7a87e`) — **not measured on a transfer**. `--transfer` keeps the threshold and re-fits only the cosine window, so there is no sweep to show. The window it did fit is in the table above.
 
 ## zExp ladder (RAG-SPEC 3.4.1)
 
@@ -168,14 +163,14 @@ exactly the correlation the ladder exists to measure.
 
 | n | z | closed form sqrt(2·ln n) |
 |---|---|---|
-| 7 | 1.1593 | 1.9728 |
-| 10 | 1.29 | 2.1460 |
-| 25 | 3.0093 | 2.5373 |
-| 49 | 3.8108 | 2.7899 |
-| 110 | 4.6497 | 3.0661 |
-| 315 | 7.0089 | 3.3919 |
-| 477 | 8.315 | 3.5121 |
-| 477 | 8.315 | 3.5121 |
+| 7 | 1.1129 | 1.9728 |
+| 10 | 1.2607 | 2.1460 |
+| 25 | 3.0253 | 2.5373 |
+| 50 | 3.7962 | 2.7971 |
+| 111 | 4.6357 | 3.0690 |
+| 321 | 6.9987 | 3.3975 |
+| 484 | 8.3185 | 3.5163 |
+| 484 | 8.3185 | 3.5163 |
 
 `denseMode` is `cosine` on this index, so the ladder is **inert**:
 `zExp(n)` is only consulted in `zscore` mode. It is measured and recorded anyway so
@@ -183,7 +178,7 @@ that a swap to an anisotropic embed model cannot silently inherit the closed for
 
 ## retrievalMisses
 
-0/0 positives carrying a gold page (0.0%, bound 5%).
+**Bound not armed.** No probe in `docpilot/calibration.jsonl` carries a `gold_page`, so there is nothing to measure retrieval misses over. The 5% floor cannot fail and cannot pass; add `gold_page` to the positives to arm it.
 
 Measured at PAGE level through `retrieval.closest()`: RAG-SPEC 5.6 step 1 gives the
 probe set no gold chunk ids, so `gold_page` is the granularity available. Page level

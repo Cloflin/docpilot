@@ -60,9 +60,11 @@ That was a real failure, not a hypothetical: a window measured on `bge-m3` lande
 So the window is now searched beside the threshold, over a grid, and `calibrate` prints its shortlist:
 
 ```
-  window: [0.42, 0.50] from 272 candidates — 63 viable, 41 non-degenerate
+  window: [0.2, 0.6] from 408 candidates — 241 viable, 93 non-degenerate  (was [0.44, 0.64], provisional)
            window        tau   gatePrec  blatant  ramp
-           [0.42, 0.50]  0.65   41.2%     100%     87%
+           [0.2, 0.6]  0.69   53.8%     97%     41%
+           [0.3, 0.64]  0.57   53.8%     97%     66%
+           [0.28, 0.68]  0.54   53.8%     97%     85%
 ```
 
 Only windows that clear the hard refusal floor with a threshold above the lexical weight are considered, and among those the one that catches the most negatives wins. A window narrower than the spread it is mapping is rejected even when it scores well: it saturates every probe to 0 or 1 and turns the gate into a step function that one embedder revision flips wholesale.
@@ -92,7 +94,7 @@ Three assertions license it, and each one refuses rather than warns: the corpus 
 
 The anchor set is sized by the strata's own ceilings rather than by taste: the smallest n at which `UB95` at zero failures still fits inside a bound is 52 for the 5% strata and 32 for the 8% one. A convenient-looking 120-probe draw gives `U ≈ 34`, where `UB95(0, 34) = 0.074` against a 0.05 ceiling — infeasible before a single probe is scored, so such a run would refuse every window in the grid. `--anchors` therefore takes `bounded` or `full`, not a number.
 
-The window is fitted at the pinned `tau` under the same viability rules a normal sweep uses, with `feasible` kept as a hard filter. That filter is not decoration. Pinning `tau` removes the brake `chooseTau` normally applies, and without it the objective is a monotone reward for refusing everything: measured on this corpus, the unfiltered argmax is `[0.44, 0.84]` at 100% negative-catch and **77.5% over-refusal on `U`**. With the filter, one window of 272 survives — and applied to the embedder that measured it, the pinned fit returns the joint search's own answer.
+The window is fitted at the pinned `tau` under the same viability rules a normal sweep uses, with `feasible` kept as a hard filter. That filter is not decoration. Pinning `tau` removes the brake `chooseTau` normally applies, and without it the objective is a monotone reward for refusing everything: measured on this corpus, the unfiltered argmax is `[0.44, 0.84]` at 100% negative-catch and **77.5% over-refusal on `U`**. With the filter, one window of the 408 survives — and applied to the embedder that measured it, the pinned fit returns the joint search's own answer.
 
 **What it costs, measured.** bge-m3 → `qwen3-embedding` (1024 → 4096 dimensions) over one corpus, 271 anchors of 597, then scored on all 597:
 

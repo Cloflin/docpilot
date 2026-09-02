@@ -2,11 +2,15 @@
   "ok": true,
   "fails": [],
   "version": 1,
-  "calibratedAt": "ab42d56c",
+  "ranAt": "2026-09-02T06:21:00.640Z",
+  "embedBase": "https://openrouter.ai",
+  "probeSha": "ac0a2c391e2917f5",
+  "embedRequests": 10,
+  "calibratedAt": "08e7a87e",
   "embedModel": "nvidia/nemotron-3-embed-1b:free",
   "vocabHash": null,
   "lexicalOnly": false,
-  "chunkCount": 477,
+  "chunkCount": 484,
   "probeFile": "docpilot/calibration.jsonl",
   "probeCount": 271,
   "byStratum": {
@@ -44,39 +48,39 @@
     "cosFloor": 0.04,
     "cosCeil": 0.18,
     "source": "transferred-window",
-    "calibratedAt": "ab42d56c",
+    "calibratedAt": "08e7a87e",
     "zexp": [
       {
         "n": 7,
-        "z": 1.1593
+        "z": 1.1129
       },
       {
         "n": 10,
-        "z": 1.29
+        "z": 1.2607
       },
       {
         "n": 25,
-        "z": 3.0093
+        "z": 3.0253
       },
       {
-        "n": 49,
-        "z": 3.8108
+        "n": 50,
+        "z": 3.7962
       },
       {
-        "n": 110,
-        "z": 4.6497
+        "n": 111,
+        "z": 4.6357
       },
       {
-        "n": 315,
-        "z": 7.0089
+        "n": 321,
+        "z": 6.9987
       },
       {
-        "n": 477,
-        "z": 8.315
+        "n": 484,
+        "z": 8.3185
       },
       {
-        "n": 477,
-        "z": 8.315
+        "n": 484,
+        "z": 8.3185
       }
     ],
     "zexpSource": "measured",
@@ -85,7 +89,7 @@
   },
   "transferredFrom": {
     "embedModel": "bge-m3",
-    "calibratedAt": "ab42d56c",
+    "calibratedAt": "08e7a87e",
     "source": "calibrated-reduced",
     "probeCount": 597,
     "tau": 0.69,
@@ -170,7 +174,7 @@
     },
     "gatePrecision": 0.37777777777777777,
     "blatantRefusalRate": 0.9333333333333333,
-    "rampShare": 0.04411764705882353,
+    "rampShare": 0.03676470588235294,
     "drift": 0.015625
   },
   "bounds": {
@@ -207,6 +211,7 @@
   "retrievalMisses": {
     "rate": 0,
     "n": 0,
+    "armed": false,
     "ids": []
   },
   "boundingProbes": {

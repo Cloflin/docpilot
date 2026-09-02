@@ -194,10 +194,32 @@ CHANGELOG и полем `seed` в `meta`, по которому видно, гд
   `retry-after`, обрыв на короткой пачке. Сегодня эта логика не покрыта ничем.
 - `test/docs-links.test.js`: клеймы «408 candidates», «99 cells», `tau` и `probeCount`
   выводятся из кода и `calibration.json`, а не из памяти автора.
-- **Числа петли `calibrate → lint → eval` в эту спеку ещё не вписаны.** Они дописываются
-  после прогона на пересобранном индексе, а не подразумеваются: сегодня
-  `docpilot/calibration.json` отмечен корпусом `ab42d56c`, оба отгруженных манифеста —
-  `e9985350`, и оба поэтому шипят `guard.source: "provisional"`.
+- **Числа петли `calibrate → lint → eval`, вписанные после прогона** (2026-09-02).
+  Долг закрыт: оба отгруженных манифеста несут корпус `08e7a87e` и калиброванный guard —
+  `rag-local` — `calibrated-reduced`, `rag` — `transferred-window`. Ни одного
+  `provisional`.
+
+  | | rag-local (bge-m3, ollama) | rag (nemotron-3-embed-1b, openrouter) |
+  |---|---|---|
+  | window | `[0.2, 0.6]` из 408 кандидатов — 241 viable, 93 non-degenerate | `[0.04, 0.18]` из 408 — 6 viable, 0 non-degenerate |
+  | tau / tauLexical | 0.69 / 0.51 | 0.69 / 0.51 (унаследованы) |
+  | gatePrecision | 53.8% | 37.8% |
+  | blatantRefusalRate | 96.7% | 93% |
+  | probes | 597 | 271 anchors of 597 |
+  | `eval --gate-only`: gate over-refusal | 1/40 UB95 0.10 | 0/40 UB95 0.06 |
+  | negatives caught | 7/16 (44%) | 2/16 (13%) |
+  | запросов эмбеддера на прогон `eval` | 2 (было 54) | 2 (было 54) |
+
+  Метерённая половина стоила ровно то, что спека предсказала: `index` 1 запрос
+  (кэш отдал 480 из 484), `calibrate --transfer` — 10, `eval --gate-only` — 2.
+
+  Два замечания, которые прогон вскрыл и которые эта спека не чинит. Первое:
+  `manifest.hash` берётся по тексту чанков и **не двигается с эмбеддером**, поэтому
+  `rag` и `rag-local` одного корпуса дают одно имя отчёта — второй прогон стирал первый,
+  и теперь его спасает `history/`, а различает `meta.embedBase`. Второе: перенос
+  теряет 24 пункта negative-catch (44% → 13%) — это цена переноса на эмбеддер, который
+  разделяет корпус хуже, а не дефект переноса; `--transfer` о ней предупреждает
+  строкой `6 viable, 0 non-degenerate`.
 
 ## The switches
 

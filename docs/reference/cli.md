@@ -18,39 +18,7 @@ The loop is `index → calibrate → lint → eval → bench`, with `import` ahe
 
 `feedback` sits outside the loop. It reads what your own endpoint collected and **proposes** probes for it; it never writes to the eval sets.
 
-## Help, and the version {#help}
-
-```bash
-npx docpilot --help            # every command, and what the loop is
-npx docpilot <command> --help  # that command's flags, what each does, what it costs
-npx docpilot help <command>    # the same thing, spelled the other way
-npx docpilot --version         # the installed version, and nothing else
-```
-
-Help costs nothing and needs nothing: no config file, no key, no network, no built index. That is deliberate — it used to *run* the command, and on `index`, `eval`, `calibrate` and `vocabulary` that made `--help` a purchase order. Every command's flag list is rendered from the same table that validates the flags, so a flag that exists is a flag the help names, including its short spelling where it has one (`--yes, -y`).
-
-## The environment, and who wins {#environment}
-
-`.env` and `.env.local` are read once, by the launcher, the way the VitePress build reads them — and **the existing environment wins**. A variable already set in your shell or by CI is never overwritten by the file, so a one-off `OPENROUTER_API_KEY=… npx docpilot eval` beats a checked-in `.env`, which is the case the rule exists for.
-
-Every command sees the result, including `bench` and `lint`, which used to read the file not at all while this CLI's own help told you to put your key in it. A project without VitePress installed simply has no file to read, and the shell stands alone.
-
-## Exit codes {#exit-codes}
-
-Every command returns one of four, and a script can act on the difference.
-
-| Code | Means | What to do about it |
-| --- | --- | --- |
-| `0` | done | — |
-| `1` | the work was attempted and it failed | a provider that would not answer, a config that resolves to nothing usable, a missing index, a breached hard gate, `CALIBRATION FAILED`. Worth a retry when the cause is a service. |
-| `2` | the command line was wrong | an unknown command, flag, mode or value. **Nothing was attempted**, so retrying changes nothing — fix what you typed. |
-| `130` | cancelled at a prompt | Ctrl-C or Ctrl-D while `index` or `init` was asking a question. `128 + SIGINT`, the shell's own convention. Nothing was written. |
-
-Two of these are new in 1.1.0 and both used to be `0` or `1`: cancelling a prompt returned `0`, and a typed flag returned the same `1` as an outage. There is no code for "succeeded with warnings" — a warning goes to stderr and the command still returns `0`.
-
-**Diagnostics go to stderr, the product goes to stdout.** That includes the progress counters, which redraw in place only when stderr is a terminal — piped to a file they print whole lines instead of one line holding every value the counter ever had. `docpilot doctor --json | jq .ready` therefore works with the diagnosis still visible on the terminal.
-
-**Errors are one line, prefixed `[docpilot] `.** Set `DOCPILOT_DEBUG=1` to get the stack trace behind one.
+Three things are true of every command and are documented once, at the foot of this page: [help and `--version`](#help), [how `.env.local` is read](#environment), and [what each exit code means](#exit-codes).
 
 ## `index`
 
@@ -733,3 +701,37 @@ npx docpilot init
 ```
 
 Delete only the skill directories. Everything else `init` writes is yours to keep — the eval sets especially, which is the whole reason the helper refuses to overwrite in the first place. If you have edited a skill locally, diff it against the package's own copy under `node_modules/@cloflin/docpilot/skills/` rather than deleting it — that directory is what `init` copies from.
+
+## Help, and the version {#help}
+
+```bash
+npx docpilot --help            # every command, and what the loop is
+npx docpilot <command> --help  # that command's flags, what each does, what it costs
+npx docpilot help <command>    # the same thing, spelled the other way
+npx docpilot --version         # the installed version, and nothing else
+```
+
+Help costs nothing and needs nothing: no config file, no key, no network, no built index. That is deliberate — it used to *run* the command, and on `index`, `eval`, `calibrate` and `vocabulary` that made `--help` a purchase order. Every command's flag list is rendered from the same table that validates the flags, so a flag that exists is a flag the help names, including its short spelling where it has one (`--yes, -y`).
+
+## The environment, and who wins {#environment}
+
+`.env` and `.env.local` are read once, by the launcher, the way the VitePress build reads them — and **the existing environment wins**. A variable already set in your shell or by CI is never overwritten by the file, so a one-off `OPENROUTER_API_KEY=… npx docpilot eval` beats a checked-in `.env`, which is the case the rule exists for.
+
+Every command sees the result, including `bench` and `lint`, which used to read the file not at all while this CLI's own help told you to put your key in it. A project without VitePress installed simply has no file to read, and the shell stands alone.
+
+## Exit codes {#exit-codes}
+
+Every command returns one of four, and a script can act on the difference.
+
+| Code | Means | What to do about it |
+| --- | --- | --- |
+| `0` | done | — |
+| `1` | the work was attempted and it failed | a provider that would not answer, a config that resolves to nothing usable, a missing index, a breached hard gate, `CALIBRATION FAILED`. Worth a retry when the cause is a service. |
+| `2` | the command line was wrong | an unknown command, flag, mode or value. **Nothing was attempted**, so retrying changes nothing — fix what you typed. |
+| `130` | cancelled at a prompt | Ctrl-C or Ctrl-D while `index` or `init` was asking a question. `128 + SIGINT`, the shell's own convention. Nothing was written. |
+
+Two of these are new in 1.1.0 and both used to be `0` or `1`: cancelling a prompt returned `0`, and a typed flag returned the same `1` as an outage. There is no code for "succeeded with warnings" — a warning goes to stderr and the command still returns `0`.
+
+**Diagnostics go to stderr, the product goes to stdout.** That includes the progress counters, which redraw in place only when stderr is a terminal — piped to a file they print whole lines instead of one line holding every value the counter ever had. `docpilot doctor --json | jq .ready` therefore works with the diagnosis still visible on the terminal.
+
+**Errors are one line, prefixed `[docpilot] `.** Set `DOCPILOT_DEBUG=1` to get the stack trace behind one.

@@ -464,3 +464,63 @@ describe('docs — the printed index figures match the committed index', () => {
     ).toEqual([])
   })
 })
+
+/**
+ * THE OTHER HALF OF THE FIGURES — the ones that come out of `eval`, and which
+ * nothing has ever guarded.
+ *
+ * The gate above covers the INDEX figures — chunk counts, dimensions, blob
+ * sizes — and its repair script, `scripts/refresh-figures.mjs`, is plain `node`
+ * with no project imports and reads only `manifest.json`. These numbers are not
+ * reachable that way: the window grid is a `const` inside `calibrate.js` and
+ * the tune grid is a pair of default ranges parsed by `parseRange`. So they get
+ * their own block here, deriving each figure from the code or the artefact that
+ * produces it rather than from what somebody remembered.
+ *
+ * `272` sat in `docs/guide/evaluation.md` for two releases after spec 006
+ * widened the grid to 408.
+ */
+describe('docs — the printed eval figures match the code that produces them', () => {
+  const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')
+  const CALIBRATION = path.join(ROOT, 'docpilot', 'calibration.json')
+
+  it('prints the window grid at the size calibrate actually searches', async () => {
+    const { WINDOWS } = await import('../src/eval/calibrate.js')
+    const evaluation = read('docs/guide/evaluation.md')
+    // Both mentions: the sample console block and the sentence about the
+    // pinned fit. Named separately so a failure says which one went stale.
+    expect(evaluation, 'the sample output block').toContain(`from ${WINDOWS.length} candidates`)
+    expect(evaluation, 'the pinned-fit sentence').toContain(`one window of the ${WINDOWS.length} survives`)
+  })
+
+  /**
+   * `11 λ × 9 k = 99` is three numbers, and all three come out of the two
+   * default ranges. A widened default would leave the sentence describing a
+   * grid nobody sweeps.
+   */
+  it('prints the tune grid at the size the defaults produce', async () => {
+    const { parseRange } = await import('../src/eval/tune.js')
+    const opts = { name: 'x', min: 0, max: 100, example: 'x' }
+    const lambdas = parseRange('0.5:1.0:0.05', opts)
+    const ks = parseRange('4:12', opts)
+    expect(read('docs/guide/evaluation.md')).toContain(
+      `${lambdas.length} λ × ${ks.length} k = ${lambdas.length * ks.length} cells by default`,
+    )
+  })
+
+  /**
+   * The two thresholds and the probe count are read off the artefact this
+   * repository ships, not off a memory of the last run.
+   */
+  it.skipIf(!fs.existsSync(CALIBRATION))('prints the thresholds this project measured', () => {
+    const c = JSON.parse(fs.readFileSync(CALIBRATION, 'utf8'))
+    const skill = read('skills/docs-rag/SKILL.md')
+    const stale = []
+    // `probeCount` is quoted in the skill as the size of the probe set an
+    // author is asked to keep balanced, and it moved from 60 to 597.
+    if (!skill.includes(String(c.probeCount))) {
+      stale.push(`skills/docs-rag/SKILL.md no longer names probeCount ${c.probeCount}`)
+    }
+    expect(stale).toEqual([])
+  })
+})

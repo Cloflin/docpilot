@@ -962,7 +962,10 @@ function markdown(ctx) {
   // timestamp in this subsystem that existed only there — the report a person
   // reads could not say whether it described this morning or last month.
   if (doc.sweptAt) {
-    L.push(`Swept \`${doc.sweptAt}\` against index \`${doc.indexHash}\` (\`${doc.embedModel ?? 'lexical only'}\`).`)
+    // `tunedAt` IS the index hash — the document's own name for it, and the
+    // same one the heading above prints. `indexHash` is the parameter name, not
+    // a field, and reaching for it printed `undefined` at a reader.
+    L.push(`Swept \`${doc.sweptAt}\` against index \`${doc.tunedAt}\` (\`${doc.embedModel ?? 'lexical only'}\`).`)
     L.push('')
   }
 
