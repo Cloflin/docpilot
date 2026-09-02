@@ -493,6 +493,10 @@ async function probeRecords(index, guard, records) {
     const wanted = records.flatMap((rec) => [
       rec.question,
       composeQuery(rec.question, rec.prev_question),
+      // The priming turn's own question, for the gate it now runs under. Bought
+      // here or bought one at a time later — the batcher exists because a free
+      // tier meters requests, and a follow-up would otherwise cost one each.
+      rec.prev_question || null,
     ])
     const { vectors, requests } = await prefetchEmbeddings(
       wanted,
@@ -542,6 +546,43 @@ async function probeRecords(index, guard, records) {
     // charge the difference to the missing embedder.
     if (LEXICAL && composedQuery) composedVec = null
 
+    /**
+     * THE PRIMING TURN NEEDS ITS OWN GATE, and running it without one is a
+     * measurement error rather than an economy.
+     *
+     * A follow-up record is two turns, and the first one is a real turn: in
+     * production it runs its own retrieval and is primed with what ITS question
+     * found. Here it was handed `probe.g` — the gate of the SECOND question —
+     * so the priming turn answered `rec.prev_question` from evidence retrieved
+     * for `rec.question`.
+     *
+     * Two consequences, and the second is what made this worth an embedding.
+     * The answer that becomes history was written from the wrong excerpts, so
+     * the window §4.5 exercises is not the window production builds. And
+     * anything the second turn INHERITS from the first — spec 013 primes it with
+     * the chunks that answer cited — is inherited out of the second turn's own
+     * gate result, lands in `primed` already, and dedupes away to nothing. The
+     * feature was structurally unmeasurable: byte-identical prompt tokens on all
+     * eight follow-ups, which is what sent us looking.
+     */
+    let prevGate = null
+    if (rec.prev_question) {
+      let prevVec
+      if (!LEXICAL) {
+        try {
+          prevVec = await embed(rec.prev_question, index.manifest.embedModel)
+        } catch (e) {
+          die(endpointHelp('embed', EMBED_BASE, EMBED_PROVIDER, e))
+        }
+      }
+      prevGate = retrieval.evaluate({
+        question: rec.prev_question,
+        previousQuestion: null,
+        queryVec: prevVec,
+        mode: LEXICAL ? 'lexical-only' : 'hybrid',
+      })
+    }
+
     const g = retrieval.evaluate({
       question: rec.question,
       previousQuestion: rec.prev_question,
@@ -587,6 +628,9 @@ async function probeRecords(index, guard, records) {
       vec,
       composedVec,
       g,
+      // The gate the priming turn of a follow-up runs under; null for every
+      // other record, and never consulted for the scored turn.
+      prevGate,
       retrievedIds,
       // The ranked eight the two retrieval metrics are read off. It was built
       // here and thrown away, so a report could say recall@8 was 1 and never say
@@ -602,6 +646,18 @@ async function probeRecords(index, guard, records) {
     })
   }
   return probes
+}
+
+/**
+ * The probe a PRIMING turn runs under — its own gate, or the record's if it has
+ * none to run under (a record with no `prev_question` never reaches this).
+ *
+ * Exported because it is the whole of the fix and a one-line ternary inside an
+ * await is a line nothing can pin: the defect it repairs was invisible in every
+ * metric and surfaced only as eight byte-identical follow-up prompts.
+ */
+export function primingProbe(probe) {
+  return probe?.prevGate ? { ...probe, g: probe.prevGate } : probe
 }
 
 // ── stage B: one model over the probed records ───────────────────────────────
@@ -670,7 +726,9 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       let first
       try {
         first = await turn({
-          probe,
+          // Its own gate, so the priming turn answers from what its own question
+          // retrieved — see `prevGate` where it is built.
+          probe: primingProbe(probe),
           model,
           fallback,
           thinkSupported,

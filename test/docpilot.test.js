@@ -9055,6 +9055,33 @@ describe('eval run.js — --level and the lever fingerprint', () => {
   }
 
   /**
+   * A follow-up's PRIMING turn is a real turn and needs its own gate.
+   *
+   * It was handed the gate of the SECOND question, so it answered the first one
+   * from evidence retrieved for the second — and anything the second turn then
+   * inherits from it (spec 013) was already in that gate's chunks, deduped away
+   * to nothing. The defect moved no metric: it surfaced as eight follow-ups with
+   * byte-identical prompt tokens across a change that should have grown them.
+   */
+  describe('the priming turn runs under its own gate', () => {
+    it('swaps in prevGate when there is one, and leaves the probe alone otherwise', async () => {
+      await withRun({}, async ({ primingProbe }) => {
+        const g = { G: 1, chunks: [{ id: 'second#q' }] }
+        const prevGate = { G: 0.8, chunks: [{ id: 'first#q' }] }
+
+        expect(primingProbe({ g, prevGate }).g).toBe(prevGate)
+        // Everything else about the probe travels unchanged: the retrieval, the
+        // scope and the scored-turn fields are the same object's.
+        expect(primingProbe({ g, prevGate, retrievedIds: ['x'] }).retrievedIds).toEqual(['x'])
+        // A record with no previous question never reaches this, and a probe
+        // without a prevGate must not be rewritten on the way past.
+        const plain = { g }
+        expect(primingProbe(plain)).toBe(plain)
+      })
+    })
+  })
+
+  /**
    * THE WITNESSES — spec 011, decision 1.
    *
    * `meta` had eighteen fields and every one described the INPUT. A report taken
