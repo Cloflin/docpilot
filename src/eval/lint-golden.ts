@@ -216,7 +216,22 @@ export function levelSummary(records) {
 }
 
 function main() {
-  const manifest = JSON.parse(fs.readFileSync(path.join(RAG, 'manifest.json'), 'utf8'))
+  /**
+   * A project with no index yet, named as such.
+   *
+   * The catch added in spec 010 turned this from an unhandled rejection into
+   * one line — but the line was the raw `ENOENT`, which names a path the reader
+   * never chose and no next step. The rule this file already states about an
+   * unreachable endpoint holds here too: produce a command, not an error.
+   */
+  const manifestPath = path.join(RAG, 'manifest.json')
+  if (!fs.existsSync(manifestPath)) {
+    fail(
+      `no index at ${path.relative(ROOT, RAG)} — lint measures the golden set against ` +
+        `the index it names.\n        Build one:  npx docpilot index`,
+    )
+  }
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
   const chunks = manifest.shards.flatMap((s) =>
     JSON.parse(fs.readFileSync(path.join(RAG, s), 'utf8')),
   )
