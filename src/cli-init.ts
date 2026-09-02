@@ -383,6 +383,12 @@ export async function runInit({ argv = [], configPath = null } = {}) {
       '# Vectors `npx docpilot index` has already bought, keyed by model and text.',
       'embed-cache/',
       '',
+      '# The previous eval report, kept aside so a rerun does not erase it — the',
+      '# report name is a pure function of the inputs, so a rerun with nothing',
+      '# changed writes over the file it is being compared against. Long-term',
+      '# history is git; this protects the last run inside one working cycle.',
+      'reports/history/',
+      '',
     ].join('\n'),
   )
 

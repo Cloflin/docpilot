@@ -11,6 +11,51 @@ against `package.json`'s version and refuses the publish if they disagree.
 
 ### Changed
 
+**The eval report names its witnesses, and the seed is finally sent.** `meta`
+carried eighteen fields and every one described the *input* — the corpus hash,
+the prompt hash, the levers, the flags. A report taken against a metered
+provider and one taken against a laptop's Ollama were byte-identical, and a
+rerun a week later was indistinguishable from the one it overwrote. It now also
+carries `ranAt`, `chatBase`, `embedBase` (origins only — never a path, never a
+key), `node`, `package`, `goldenSha`, `temperature` and `seed`.
+`calibration.json` gains `ranAt`, `embedBase`, `probeSha` and `embedRequests` —
+the last was already printed during the run and then thrown away, and it is the
+one number that says what a rerun costs. `tuning.report.md` prints `sweptAt`.
+
+**`goldenSha` is a new incomparability marker.** `records` is a count, so a
+question rewritten inside an existing record moved nothing and two different
+sets of 56 were identical to every check. Absent in an older report reads as
+*unknown*, not as changed — the rule `meta.level` already established — so
+upgrading does not announce a golden-set change to everybody once.
+
+**The seed reaches the call that writes the answer.** Every answer metric was
+one unseeded sample: the transport has accepted a seed all along, and
+`config.llm` simply carried no `tuning`, so the guard never fired. It does now,
+at `20260829` — the constant `calibrate` already draws its anchors with. A
+related trap is fixed with it: the harness passed the whole tuning record
+through its can-this-model-think filter, so on a model without thinking the
+seed, `topP` and `verbosity` vanished from the final call. "Cannot think" and
+"does not take a seed" are separate claims; only the first is that filter's to
+make. **Sent, not guaranteed** — Anthropic's API has no such parameter, and
+`bench runs` remains the arbiter of answer reproducibility.
+`DOCPILOT_EVAL_SEED=""` restores the previous behaviour. The first seeded run is
+not comparable with unseeded history on the answer half; `meta.seed` is where
+that line falls.
+
+**A rerun no longer erases the run before it.** The report name is a pure
+function of the inputs, so a rerun with nothing changed wrote over the very file
+it was being diffed against. The existing file is now copied into
+`docpilot/reports/history/` first, under its own `ranAt`. `latest.json`,
+`reportName` and the pairing are untouched, and the directory is gitignored:
+long-term history is git, this covers one working cycle.
+
+**A transferred calibration stops looking measured.** `--transfer` runs no
+sweep, and both sweep sections printed a table header with no rows under it —
+which reads as a measurement that found nothing. They now say what was inherited
+and from where. `retrievalMisses` printed `0/0 (bound 5%)` on a probe set where
+not one probe carries `gold_page`; it now says the bound is not armed, and
+writes `armed: false`.
+
 **`doctor --json` and `lint --json`, `docpilot help <command>`, and one law for
 `.env.local`.** `doctor` is documented as a CI gate and answered only in prose,
 so gating on it meant grepping wording that is not a contract; `--json` puts one

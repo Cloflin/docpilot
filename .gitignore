@@ -56,3 +56,11 @@ ui-specs/IDEAS.ru.md
 # into docpilot/.gitignore for a consuming project; this repository has none,
 # because it deliberately commits calibration.raw.jsonl.
 docpilot/embed-cache/
+
+# The previous eval report, kept aside so a rerun does not erase it. `reportName`
+# is a pure function of the inputs, so a rerun with nothing changed writes over
+# the very file `previousReport` diffs against. Long-term history is git; this
+# directory protects the last run inside ONE working cycle, between the run and
+# the decision about what to commit. Same reason as the line above: re-derivable
+# by rerunning, and it grows by a report per run.
+docpilot/reports/history/

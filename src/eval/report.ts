@@ -309,6 +309,22 @@ export function writeReport({ dir, name, meta, summary, rows }) {
     if (prev.meta.records !== meta.records) {
       incomparable.push(`Golden changed: ${prev.meta.records} → ${meta.records} records`)
     }
+    /**
+     * THE SAME COUNT IS NOT THE SAME SET.
+     *
+     * `records` moves when the set GROWS and not when it is edited, so a
+     * rewritten question inside an existing record — a different measurement
+     * under the same name — passed every one of the four markers above.
+     * `goldenSha` is the file itself.
+     *
+     * ABSENT READS AS UNKNOWN, not as different: a report written before this
+     * field existed carries no sha, and announcing "the golden set changed" at
+     * every reader who upgrades would be a marker that cries wolf once per
+     * install. Same rule `meta.level` already established for pre-level history.
+     */
+    if (prev.meta.goldenSha && meta.goldenSha && prev.meta.goldenSha !== meta.goldenSha) {
+      incomparable.push(`Golden set edited: ${prev.meta.goldenSha} → ${meta.goldenSha}`)
+    }
     if (prev.meta.numCtx !== meta.numCtx) {
       incomparable.push(`num_ctx changed: ${prev.meta.numCtx} → ${meta.numCtx}`)
     }
@@ -317,7 +333,47 @@ export function writeReport({ dir, name, meta, summary, rows }) {
   const diff = diffSummaries(prev, summary)
 
   const doc = { meta, summary, incomparable, diff, rows }
-  fs.writeFileSync(path.join(dir, name), JSON.stringify(doc, null, 1))
+  /**
+   * THE PREVIOUS RUN SURVIVES THIS ONE.
+   *
+   * `reportName` is a pure function of the inputs — index hash, model, flags,
+   * level, prompt hash — which is what makes `previousReport` work at all, and
+   * which also means a rerun with nothing changed writes over the file it is
+   * being compared against. `previousReport` picks the newest by mtime, so it
+   * diffs against a file that is about to cease to exist.
+   *
+   * So the existing file is copied aside first, under its own `ranAt`. The name,
+   * `latest.json` and `previousReport` are all untouched: that function reads
+   * this directory with a non-recursive `readdirSync` and takes only
+   * `report-….json`, so a subdirectory does not exist as far as it is concerned.
+   *
+   * `ranAt` is missing on every report written before this spec, and the first
+   * rerun after upgrading is exactly the case that would name the copy
+   * `undefined`. The file's own mtime answers it.
+   *
+   * NOT COMMITTED — long-term history is git. This protects the last run inside
+   * one working cycle, between the run and the decision about what to keep.
+   */
+  const target = path.join(dir, name)
+  if (fs.existsSync(target)) {
+    try {
+      const history = path.join(dir, 'history')
+      fs.mkdirSync(history, { recursive: true })
+      let stamp
+      try {
+        stamp = JSON.parse(fs.readFileSync(target, 'utf8')).meta?.ranAt
+      } catch {
+        // An unreadable previous report is still worth keeping a copy of; the
+        // mtime names it as well as its own field would have.
+      }
+      const when = String(stamp || fs.statSync(target).mtime.toISOString()).replace(/[:.]/g, '-')
+      fs.copyFileSync(target, path.join(history, name.replace(/\.json$/, `.${when}.json`)))
+    } catch {
+      // Keeping a copy must never be the reason a run loses its report. The
+      // write below is the product; this is insurance.
+    }
+  }
+  fs.writeFileSync(target, JSON.stringify(doc, null, 1))
   fs.writeFileSync(
     path.join(dir, name.replace(/\.json$/, '.md')),
     markdown({ meta, summary, diff, incomparable, rows }),

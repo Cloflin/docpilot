@@ -7542,6 +7542,70 @@ describe('runTurn — the free-step ceiling', () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
+  /**
+   * THE SEED HAS TO SURVIVE A MODEL THAT CANNOT THINK — spec 011, decision 4.
+   *
+   * The final call — the only one whose output the reader reads — passed the
+   * whole `tuning` record through `thinkable()`, which returns `undefined` when
+   * `thinkSupported === false`. So on exactly those models the seed, `topP`,
+   * `verbosity` and the ceiling field all vanished from the call that writes the
+   * answer, and nothing said so: two runs would simply differ.
+   */
+  describe('tuning on the final call', () => {
+    const bodiesFor = async (llm) => {
+      const bodies = []
+      vi.stubGlobal('fetch', async (_url, init) => {
+        bodies.push(JSON.parse(init.body))
+        // No tool calls: the turn goes straight to the answering call.
+        return { ok: true, json: async () => ({ message: { content: 'done' } }) }
+      })
+      const index = oneChunkIndex()
+      await runTurn({
+        retrieval: createRetrieval({
+          index,
+          scope: { kind: 'all', paths: [], label: 'All docs' },
+          guard: GUARD,
+        }),
+        gateResult: { G: 1, pass: true, chunks: index.chunks },
+        question: 'how is the alpha widget configured?',
+        history: [],
+        addendum: '',
+        config: {
+          llm: { provider: 'ollama', baseURL: 'http://x', model: 'm', ...llm },
+          maxIterations: 4,
+        },
+        fallback: true,
+        queryVec: null,
+      })
+      return bodies
+    }
+
+    it('sends the seed on a model that thinks', async () => {
+      const bodies = await bodiesFor({ thinkSupported: true, tuning: { seed: 20260829 } })
+      expect(bodies.at(-1).options.seed).toBe(20260829)
+    })
+
+    it('sends it on a model that does not — the two claims are separate', async () => {
+      const bodies = await bodiesFor({ thinkSupported: false, tuning: { seed: 20260829 } })
+      expect(bodies.at(-1).options.seed).toBe(20260829)
+    })
+
+    /**
+     * And the reasoning half is still stripped, which is what `thinkable` was
+     * for: Ollama REJECTS the `think` field rather than ignoring it, so it must
+     * not appear at all. phi4:14b is exactly that model.
+     */
+    it('still sends no think field at all to a model that cannot think', async () => {
+      const bodies = await bodiesFor({
+        thinkSupported: false,
+        tuning: { seed: 1, style: 'think', effort: 'high', off: false },
+      })
+      expect(Object.hasOwn(bodies.at(-1), 'think')).toBe(false)
+      // …while the half that is not about thinking still travels.
+      expect(bodies.at(-1).options.seed).toBe(1)
+    })
+  })
+
   it('an invented tool name cannot buy free steps forever', async () => {
     const r = await run({ function: { name: 'no_such_tool', arguments: '{}' } })
     // 4 charged steps plus at most MAX_FREE_STEPS refunds — a small constant,
@@ -8273,6 +8337,117 @@ describe('golden-set levels — report comparability and lint (W3 consumers)', (
     expect(doc.incomparable).toContain('Golden changed: 10 → 12 records')
   })
 
+  /**
+   * THE SAME COUNT IS NOT THE SAME SET — spec 011, decision 3.
+   *
+   * `records` moves when the set grows and not when a question inside it is
+   * rewritten, so two different sets of 56 passed every one of the four markers.
+   */
+  it('names a golden set that was edited rather than grown', () => {
+    const dir = fresh()
+    put(dir, 'report-abc12345-m1-old.json', meta({ records: 56, goldenSha: 'aaaaaaaaaaaaaaaa' }), 1e9)
+
+    const name = 'report-abc12345-m1-new.json'
+    quietly(() =>
+      writeReport({
+        dir,
+        name,
+        meta: meta({ records: 56, goldenSha: 'bbbbbbbbbbbbbbbb' }),
+        summary: summary(),
+        rows: [],
+      }),
+    )
+    const doc = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+    expect(doc.incomparable).toContain('Golden set edited: aaaaaaaaaaaaaaaa → bbbbbbbbbbbbbbbb')
+  })
+
+  /**
+   * Absent reads as UNKNOWN, not as different — the rule `meta.level` already
+   * established. Otherwise every reader who upgrades is told their golden set
+   * changed, once, for no reason.
+   */
+  it('says nothing when the older report predates the field', () => {
+    const dir = fresh()
+    const legacy = meta({ records: 56 })
+    delete legacy.goldenSha
+    put(dir, 'report-abc12345-m1-old.json', legacy, 1e9)
+
+    const name = 'report-abc12345-m1-new.json'
+    quietly(() =>
+      writeReport({
+        dir,
+        name,
+        meta: meta({ records: 56, goldenSha: 'bbbbbbbbbbbbbbbb' }),
+        summary: summary(),
+        rows: [],
+      }),
+    )
+    const doc = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+    expect(doc.incomparable.some((l) => l.startsWith('Golden set edited'))).toBe(false)
+  })
+
+  /**
+   * THE PREVIOUS RUN SURVIVES THIS ONE — spec 011, decision 6.
+   *
+   * `reportName` is a pure function of the inputs, so a rerun with nothing
+   * changed writes over the very file `previousReport` diffs against.
+   */
+  describe('history/', () => {
+    it('copies the file it is about to overwrite, under its own ranAt', () => {
+      const dir = fresh()
+      const name = 'report-abc12345-m1-x.json'
+      put(dir, name, meta({ ranAt: '2026-01-02T03:04:05.678Z', records: 10 }), 1e9)
+
+      quietly(() =>
+        writeReport({ dir, name, meta: meta({ records: 12 }), summary: summary(), rows: [] }),
+      )
+      const kept = fs.readdirSync(path.join(dir, 'history'))
+      expect(kept).toHaveLength(1)
+      expect(kept[0]).toContain('2026-01-02T03-04-05')
+      // …and it is the OLD document, not a copy of the new one.
+      expect(JSON.parse(fs.readFileSync(path.join(dir, 'history', kept[0]), 'utf8')).meta.records).toBe(10)
+      expect(JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')).meta.records).toBe(12)
+    })
+
+    /** Every report written before this spec has no `ranAt` to name the copy by. */
+    it('falls back to the file mtime rather than writing `undefined`', () => {
+      const dir = fresh()
+      const name = 'report-abc12345-m1-y.json'
+      const legacy = meta({ records: 10 })
+      delete legacy.ranAt
+      put(dir, name, legacy, 1e9)
+
+      quietly(() => writeReport({ dir, name, meta: meta(), summary: summary(), rows: [] }))
+      const [kept] = fs.readdirSync(path.join(dir, 'history'))
+      expect(kept).not.toContain('undefined')
+      expect(kept).toMatch(/\d{4}-\d{2}-\d{2}T/)
+    })
+
+    /**
+     * `previousReport` reads this directory with a non-recursive `readdirSync`
+     * and takes only `report-….json`, so the subdirectory does not exist as far
+     * as it is concerned. Nothing about the pairing changed.
+     */
+    it('is invisible to previousReport', () => {
+      const dir = fresh()
+      const name = 'report-abc12345-m1-z.json'
+      put(dir, name, meta({ records: 10, ranAt: '2026-01-01T00:00:00.000Z' }), 1e9)
+      quietly(() => writeReport({ dir, name, meta: meta({ records: 12 }), summary: summary(), rows: [] }))
+
+      const prev = previousReport(dir, meta({ records: 14 }))
+      expect(prev.meta.records).toBe(12)
+    })
+
+    it('leaves latest.json holding the run that just finished', () => {
+      const dir = fresh()
+      const name = 'report-abc12345-m1-w.json'
+      put(dir, name, meta({ records: 10, ranAt: '2026-01-01T00:00:00.000Z' }), 1e9)
+      quietly(() => writeReport({ dir, name, meta: meta({ records: 12 }), summary: summary(), rows: [] }))
+
+      expect(JSON.parse(fs.readFileSync(path.join(dir, 'latest.json'), 'utf8')).meta.records).toBe(12)
+    })
+  })
+
   it('does not report a cross-level run as a mismatched sibling', () => {
     const dir = fresh()
     // Same index, same prompt, same record COUNT — different pool. Without the
@@ -8577,6 +8752,97 @@ describe('eval run.js — --level and the lever fingerprint', () => {
       vi.resetModules()
     }
   }
+
+  /**
+   * THE WITNESSES — spec 011, decision 1.
+   *
+   * `meta` had eighteen fields and every one described the INPUT. A report taken
+   * against a metered provider and one taken against a laptop's Ollama were
+   * byte-identical here.
+   */
+  describe('meta names its witnesses', () => {
+    it('carries the date, the hosts, the runtime and the sampling parameters', async () => {
+      await withRun({}, async ({ provenance }) => {
+        const p = provenance()
+        expect(p.ranAt).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/)
+        expect(p.node).toBe(process.version)
+        expect(p.package).toMatch(/^\d+\.\d+\.\d+/)
+        expect(p.temperature).toBe(0.2)
+        expect(p.goldenSha).toMatch(/^[0-9a-f]{16}$/)
+      })
+    })
+
+    /** The sha is of the FILE, so a reformatting shows up as well as an edit. */
+    it('takes goldenSha from the bytes of the golden set', async () => {
+      const crypto = await import('node:crypto')
+      const fsm = await import('node:fs')
+      const { GOLDEN } = await import('../src/cli-context.js')
+      const expected = crypto
+        .createHash('sha1')
+        .update(fsm.readFileSync(GOLDEN))
+        .digest('hex')
+        .slice(0, 16)
+      await withRun({}, async ({ provenance }) => {
+        expect(provenance().goldenSha).toBe(expected)
+      })
+    })
+
+    /**
+     * The report is committed. An origin names the host; a full URL can carry a
+     * credential in its query, and a key must never reach this file.
+     */
+    it('records an origin and never a path or a key', async () => {
+      await withRun(
+        { DOCPILOT_BASE_URL: 'https://api.example.test/v1/chat?key=sk-secret' },
+        async ({ provenance }) => {
+          const p = provenance()
+          expect(p.chatBase).toBe('https://api.example.test')
+          expect(JSON.stringify(p)).not.toContain('sk-secret')
+          expect(JSON.stringify(p)).not.toContain('/v1/chat')
+        },
+      )
+    })
+
+    it('says nothing rather than something wrong about an unparsable address', async () => {
+      await withRun({ DOCPILOT_BASE_URL: 'not a url' }, async ({ provenance }) => {
+        expect(provenance().chatBase).toBeNull()
+      })
+    })
+  })
+
+  /**
+   * THE SEED — spec 011, decision 4.
+   *
+   * The transport has accepted one all along; `config.llm` carried no `tuning`,
+   * so `if (tuning?.seed != null)` never fired and every answer metric was one
+   * unseeded sample.
+   */
+  describe('the seed', () => {
+    it('defaults to the constant calibrate draws its anchors with', async () => {
+      await withRun({ DOCPILOT_EVAL_SEED: undefined }, async ({ provenance }) => {
+        expect(provenance().seed).toBe(20260829)
+      })
+    })
+
+    it('is removed by an empty value, which is the behaviour before this spec', async () => {
+      await withRun({ DOCPILOT_EVAL_SEED: '' }, async ({ provenance }) => {
+        expect(provenance().seed).toBeNull()
+      })
+    })
+
+    it('takes a number when one is given', async () => {
+      await withRun({ DOCPILOT_EVAL_SEED: '7' }, async ({ provenance }) => {
+        expect(provenance().seed).toBe(7)
+      })
+    })
+
+    /** It has to reach `config.llm`, or the guard downstream never fires. */
+    it('travels as tuning on the turn', () => {
+      const src = srcText('src/eval/run.js')
+      expect(src).toContain('tuning:')
+      expect(src).toContain('seed: SEED')
+    })
+  })
 
   /** The hash run.js names every report with — computed the way run.js does. */
   const promptHashOfThisProject = async () => {

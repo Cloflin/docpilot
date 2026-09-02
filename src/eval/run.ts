@@ -32,6 +32,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
 import { assembleIndex } from '../theme/docpilot/store.js'
@@ -238,6 +239,115 @@ const FALLBACK_MODE = String(arg('fallback', 'auto'))
  * largest value every row of the matrix can honour.
  */
 const NUM_CTX = Number(arg('num-ctx', '8192'))
+
+/**
+ * THE SEED — the same constant `calibrate` draws its anchors with.
+ *
+ * Every answer metric in this report was one UNSEEDED sample. The transport has
+ * accepted a seed all along — `providers.ts:164` writes `body.options.seed` for
+ * ollama and `applyTuning` writes `body.seed` for the openai-compatible half —
+ * and it never arrived for one reason: `config.llm` here carried no `tuning`, so
+ * the guard `if (tuning?.seed != null)` never fired.
+ *
+ * SENT, NOT GUARANTEED, and the report says which. Anthropic's API has no such
+ * parameter and its adapter declares `seed: false`; a provider that takes the
+ * field still decides what to do with it. The arbiter of answer reproducibility
+ * remains `bench runs`, which measures spread across three runs rather than
+ * claiming there is none.
+ *
+ * `DOCPILOT_EVAL_SEED=""` sends nothing — the behaviour before this spec.
+ */
+const SEED = (() => {
+  const raw = process.env.DOCPILOT_EVAL_SEED
+  if (raw === '') return null
+  const n = Number(raw ?? 20260829)
+  return Number.isFinite(n) ? n : 20260829
+})()
+
+/** The temperature the turn has always used, named once so `meta` can record it. */
+const TEMPERATURE = 0.2
+
+/**
+ * The version that produced the report, read rather than baked in.
+ *
+ * A constant here is a constant a release forgets to bump — the same reason
+ * `bin/docpilot.js` reads it out of the manifest for `--version`.
+ */
+const PACKAGE_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version
+  } catch {
+    return null
+  }
+})()
+
+/**
+ * WHICH golden set — sha1 of the file, truncated to 16 hex.
+ *
+ * The same truncation `sigOf` uses in `calibrate.js`, and for the same reason:
+ * sixteen hex is enough to name a file and short enough to read in a table.
+ * Computed from the bytes on disk rather than from the parsed records, so a
+ * reordering or a reformatting shows up — the question being answered is
+ * "was this the same file", not "were these the same questions".
+ */
+const goldenSha = () => {
+  try {
+    return crypto.createHash('sha1').update(fs.readFileSync(GOLDEN)).digest('hex').slice(0, 16)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * THE WITNESSES — the half of `meta` that describes the CIRCUMSTANCES.
+ *
+ * Eighteen fields described the INPUT: the corpus hash, the prompt hash, the
+ * levers, the flags. Not one described the run. A report taken against a metered
+ * provider and one taken against a laptop's Ollama were byte-identical here —
+ * `provider` is the name of an API family, not the host that answered — and a
+ * rerun a week later was indistinguishable from the one it overwrote.
+ *
+ * `goldenSha` is a MARKER and not a filter: `previousReport` still pairs a run
+ * with its predecessor across an edit, and `report.js` says the set moved.
+ * Absent in an older report reads as "unknown", which is the rule `meta.level`
+ * already established.
+ *
+ * `temperature` and `seed` are written even when the seed is off, so a report
+ * says which era it is from rather than leaving that to be inferred from an
+ * absence.
+ *
+ * EXPORTED for the same reason `reportName` is: the module-scope guard below
+ * ends the process, so the only way to assert this shape is to call it.
+ */
+export function provenance() {
+  return {
+    ranAt: new Date().toISOString(),
+    chatBase: originOf(BASE),
+    embedBase: originOf(EMBED_BASE),
+    node: process.version,
+    package: PACKAGE_VERSION,
+    goldenSha: goldenSha(),
+    temperature: TEMPERATURE,
+    seed: SEED,
+  }
+}
+
+/**
+ * An address, without the path and without anything that could be a credential.
+ *
+ * A report taken against a metered provider and one taken against
+ * `localhost:11434` were byte-identical in `meta`: `provider` is the name of an
+ * API family, not the host that answered it. The ORIGIN is the fact worth
+ * keeping; a full URL can carry a key in its query and this file is committed.
+ */
+const originOf = (url) => {
+  if (!url) return null
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
 
 // Same three adapters the panel uses, so an eval run measures the transport the
 // readers will actually get. Keys come from the environment; nothing is stored.
@@ -575,7 +685,12 @@ function turn({ probe, model, fallback, thinkSupported, guard, question, history
         baseURL: BASE,
         model,
         apiKey: API_KEY,
-        temperature: 0.2,
+        temperature: TEMPERATURE,
+        // The one field that makes the answer half of this report repeatable at
+        // all. `harness.js` no longer drops the whole record on a model that
+        // cannot think — see `sampling()` there — so the seed reaches the call
+        // that writes the answer rather than only the loop steps.
+        tuning: SEED == null ? undefined : { seed: SEED },
         stepTimeoutMs: 180000,
         numCtx: PROVIDER === 'ollama' ? NUM_CTX : undefined,
         thinkSupported,
@@ -954,6 +1069,7 @@ async function main() {
       maxIterations: MAX_ITERATIONS ?? 4,
       numCtx: PROVIDER === 'ollama' ? NUM_CTX : null,
       levers: leverFingerprint(index.manifest.tuning),
+      ...provenance(),
     }
     writeReport({ dir: REPORTS, name: reportName(meta), meta, summary: s, rows })
     runs.push({ meta, summary: s })

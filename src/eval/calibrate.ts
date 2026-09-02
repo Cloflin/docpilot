@@ -547,6 +547,51 @@ function scaleToIndexDomain(vec: ArrayLike<number> & Iterable<number>) {
 const RETRYABLE_BATCH = new Set([408, 409, 429, 500, 502, 503, 504])
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+/**
+ * What this run COST, counted where it is spent.
+ *
+ * The number was already computed and already printed — "embedded 597 probe
+ * texts in 19 request(s)" — and then thrown away. It is the one figure that
+ * says what a rerun will cost against a fifty-a-day free tier, and the document
+ * that records every threshold this run measured did not record it.
+ *
+ * Counted per ATTEMPT rather than per batch: a retried 429 is a request the
+ * provider counted, and a number that pretended otherwise would be the wrong
+ * kind of comfortable.
+ */
+const EMBED_REQUESTS = { count: 0 }
+
+/**
+ * An address, without the path and without anything that could be a credential.
+ *
+ * Two calibrations of one index against two embedding endpoints were
+ * indistinguishable in this document. The ORIGIN is the fact worth keeping; a
+ * full URL can carry a key in its query and this file is committed.
+ */
+const originOf = (url) => {
+  if (!url) return null
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
+
+/**
+ * WHICH probe set — sha1 of the file, truncated to 16 hex.
+ *
+ * `probeCount` is a count, and a count does not move when a question inside a
+ * probe is rewritten. Same truncation `sigOf` uses a few hundred lines below,
+ * for the same reason.
+ */
+const probeSha = () => {
+  try {
+    return crypto.createHash('sha1').update(fs.readFileSync(PROBES)).digest('hex').slice(0, 16)
+  } catch {
+    return null
+  }
+}
+
 async function prefetchEmbeddings(texts, index) {
   const model = index.manifest.embedModel
   const p = providerFor(EMBED_PROVIDER)
@@ -569,6 +614,7 @@ async function prefetchEmbeddings(texts, index) {
     for (let attempt = 1; attempt <= 3 && !vectors; attempt++) {
       let res
       try {
+        EMBED_REQUESTS.count++
         res = await fetch(p.embedUrl(EMBED_BASE), {
           method: 'POST',
           headers: p.headers(EMBED_KEY),
@@ -601,8 +647,12 @@ async function prefetchEmbeddings(texts, index) {
 }
 
 async function embed(text, index) {
+  // The per-text fallback, and it is a request too — `embedRequests` in the
+  // document must count what the provider counted, not what the batcher planned.
+  const cached = PREFETCHED.get(text)
+  if (cached === undefined) EMBED_REQUESTS.count++
   const vec =
-    PREFETCHED.get(text) ??
+    cached ??
     (await embedQuery(text, {
       provider: EMBED_PROVIDER,
       baseURL: EMBED_BASE,
@@ -1674,7 +1724,15 @@ function report(ctx) {
     line('  gatePrecision', pct(bestLex.gatePrecision))
     line('  blatantRefusalRate', pct(bestLex.blatantRefusalRate))
   }
-  line('retrievalMisses', `${misses.length}/${withGold}  ${pct(retrievalMissRate)}  (bound 5%)`)
+  line(
+    'retrievalMisses',
+    withGold
+      ? `${misses.length}/${withGold}  ${pct(retrievalMissRate)}  (bound 5%)`
+      : // `0/0  0%  (bound 5%)` read exactly like a bound that had passed. It is
+        // measured over probes carrying `gold_page`, and this repository's 597
+        // carry none.
+        'bound not armed: no probe carries `gold_page`',
+  )
 
   if (bounding.newlyRefused.length) {
     console.log(`\n  bounding probes (refused at tau ${(tau + 0.01).toFixed(2)}):`)
@@ -1713,6 +1771,23 @@ function buildDoc(ctx) {
     ok: fails.length === 0,
     fails,
     version: 1,
+    /**
+     * WHEN, WHERE, AGAINST WHAT, AND AT WHAT COST — the four facts this document
+     * described the input with and never the run.
+     *
+     * `calibratedAt` is the corpus hash: it says which index, and nothing about
+     * the circumstances. Two calibrations of one index against two embedding
+     * endpoints were indistinguishable here, and `embedRequests` was printed on
+     * stdout during the run (`prefetchEmbeddings`) and then thrown away — the
+     * one number that says what a rerun will cost.
+     *
+     * The address is an ORIGIN, never a full URL and never a key: this file is
+     * committed, and a query string can carry a credential.
+     */
+    ranAt: new Date().toISOString(),
+    embedBase: originOf(EMBED_BASE),
+    probeSha: probeSha(),
+    embedRequests: EMBED_REQUESTS.count,
     calibratedAt: index.manifest.hash,
     embedModel: index.manifest.embedModel,
     /**
@@ -1827,7 +1902,22 @@ function buildDoc(ctx) {
       gatePrecision: bestLex.gatePrecision,
       blatantRefusalRate: bestLex.blatantRefusalRate,
     },
-    retrievalMisses: { rate: retrievalMissRate, n: withGold, ids: misses.map((r) => r.id) },
+    /**
+     * `armed` — whether this bound was measured on anything at all.
+     *
+     * `retrievalMiss` is null on a probe with no `gold_page`, and NOT ONE of the
+     * 597 probes in this repository's `calibration.jsonl` carries that key. So
+     * `withGold` is 0, the rate is 0, the 5 % floor cannot fire, and the report
+     * printed `0/0  0%  (bound 5%)` — which reads exactly like a bound that
+     * passed. Marking the set empty says the difference out loud; annotating the
+     * 597 probes is the author's debt, not this file's.
+     */
+    retrievalMisses: {
+      rate: retrievalMissRate,
+      n: withGold,
+      armed: withGold > 0,
+      ids: misses.map((r) => r.id),
+    },
     boundingProbes: bounding,
     tauWithoutBoundingProbes: withoutBounding ? withoutBounding.tau : null,
     // The backlog is the positives nearest the threshold a reader will actually
@@ -1860,6 +1950,21 @@ const sweepDoc = (r) => ({
     Object.entries<any>(r.byStratum).map(([k, v]) => [k, { failures: v.failures, n: v.n, ub95: v.ub95 }]),
   ),
 })
+/**
+ * The line an empty sweep prints instead of a header with nothing under it.
+ *
+ * Named once because two sections need it and because the source of the
+ * inheritance is the fact a reader is missing: "not measured" alone leaves them
+ * asking where the threshold above came from.
+ */
+const inheritedNote = (doc) =>
+  doc.transferredFrom
+    ? `Inherited from \`${doc.transferredFrom.embedModel ?? 'another embedder'}\` ` +
+      `(corpus \`${doc.transferredFrom.calibratedAt ?? '?'}\`) — **not measured on a transfer**. ` +
+      `\`--transfer\` keeps the threshold and re-fits only the cosine window, so there is no ` +
+      `sweep to show. The window it did fit is in the table above.`
+    : 'Not measured on this run.'
+
 function markdown(doc, ctx) {
   const { rows, scored, sweep, sweepLex, best, bestLex, misses } = ctx
   const L = []
@@ -2000,6 +2105,18 @@ function markdown(doc, ctx) {
     L.push(`\`wouldPassUnscoped\` is itself a function of tau. The cause is checked once, below.`)
     L.push(`Positives that are \`retrievalMisses\` are excluded from the three bounds (RAG-SPEC 5.4).`)
     L.push('')
+    /**
+     * A HEADING WITH NO ROWS UNDER IT READS AS A MEASUREMENT THAT PASSED.
+     *
+     * `--transfer` does not sweep — `tau` is inherited and only the cosine
+     * window is re-fitted — so `sweep` is empty, and this table printed its
+     * header and its separator and stopped. Nothing on the page said the sweep
+     * had not been run; it looked like a sweep that had found nothing.
+     */
+    if (!sweep.length) {
+      L.push(inheritedNote(doc))
+      L.push('')
+    } else {
     L.push(`| tau | U | UB95 | S | UB95 | F | UB95 | gatePrecision | N4 | feasible |`)
     L.push(`|---|---|---|---|---|---|---|---|---|---|`)
     for (const r of sweep) {
@@ -2012,6 +2129,7 @@ function markdown(doc, ctx) {
       )
     }
     L.push('')
+    }
   }
 
   L.push(`## Every stratum at the chosen ${doc.lexicalOnly ? 'tauLexical' : 'tau'}`)
@@ -2160,6 +2278,12 @@ function markdown(doc, ctx) {
 
   L.push(`### The \`G_lex\` sweep`)
   L.push('')
+  if (!sweepLex.length) {
+    // The same empty-header defect as the hybrid sweep above, and on a transfer
+    // both are empty at once.
+    L.push(inheritedNote(doc))
+    L.push('')
+  } else {
   L.push(`Every fifth step, plus the chosen row. \`chooseTauLexical\` reads the \`N4\` column and`)
   L.push(`nothing else, so this is where the over-refusal it costs becomes visible.`)
   L.push('')
@@ -2175,6 +2299,7 @@ function markdown(doc, ctx) {
     )
   }
   L.push('')
+  }
 
   L.push(`## zExp ladder (RAG-SPEC 3.4.1)`)
   L.push('')
@@ -2203,13 +2328,26 @@ function markdown(doc, ctx) {
 
   L.push(`## retrievalMisses`)
   L.push('')
-  L.push(
-    `${doc.retrievalMisses.ids.length}/${doc.retrievalMisses.n} positives carrying a gold page ` +
-      `(${p(doc.retrievalMisses.rate)}, bound 5%).` +
-      (doc.retrievalMisses.ids.length
-        ? ` Missed: ${doc.retrievalMisses.ids.map((i) => `\`${i}\``).join(', ')} — excluded from the three bounds.`
-        : ''),
-  )
+  if (!doc.retrievalMisses.armed) {
+    // `0/0 (0%, bound 5%)` is what this printed, which reads as a bound that
+    // passed. It is measured over probes carrying `gold_page`, and not one of
+    // this probe set's records has that key: the bound has never been armed.
+    // Annotating the probes is the author's debt; printing a pass it did not
+    // measure is this file's.
+    L.push(
+      `**Bound not armed.** No probe in \`${doc.probeFile}\` carries a \`gold_page\`, so there ` +
+        `is nothing to measure retrieval misses over. The 5% floor cannot fail and cannot pass; ` +
+        `add \`gold_page\` to the positives to arm it.`,
+    )
+  } else {
+    L.push(
+      `${doc.retrievalMisses.ids.length}/${doc.retrievalMisses.n} positives carrying a gold page ` +
+        `(${p(doc.retrievalMisses.rate)}, bound 5%).` +
+        (doc.retrievalMisses.ids.length
+          ? ` Missed: ${doc.retrievalMisses.ids.map((i) => `\`${i}\``).join(', ')} — excluded from the three bounds.`
+          : ''),
+    )
+  }
   L.push('')
   L.push(`Measured at PAGE level through \`retrieval.closest()\`: RAG-SPEC 5.6 step 1 gives the`)
   L.push(`probe set no gold chunk ids, so \`gold_page\` is the granularity available. Page level`)

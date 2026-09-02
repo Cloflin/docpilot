@@ -279,6 +279,31 @@ export async function runTurn(options: RunTurnOptions) {
   const thinkable = (value) => (config.llm.thinkSupported === false ? undefined : value)
 
   /**
+   * THE SAME QUESTION ASKED OF `tuning`, WHICH IS NOT THE SAME QUESTION.
+   *
+   * The final call used to pass the whole record through `thinkable`, so on a
+   * model without think it sent `tuning: null`. But `tuning` carries the
+   * reasoning fields AND the sampling ones — `seed`, `topP`, `verbosity`, the
+   * ceiling field — and the note at the loop-step call site already says so:
+   * "none of which are about thinking". Dropping the lot meant the seed vanished
+   * from the ONE call that writes the answer, on exactly the models that cannot
+   * think, and nothing said so: two runs would simply differ.
+   *
+   * "This model cannot think" and "this model does not take a seed" are separate
+   * claims. The second is the adapter's to make — `providers.ts` declares
+   * `seed: false` where the API has no such parameter — and it is already made.
+   *
+   * `style: 'none'` rather than a deleted key, because every adapter reads the
+   * style to decide whether to spell reasoning at all, and an absent one falls
+   * back to the brand's default.
+   */
+  const sampling = (value) => {
+    if (!value) return null
+    if (config.llm.thinkSupported !== false) return value
+    return { ...value, style: 'none', effort: null, budgetTokens: null, off: false, hide: false }
+  }
+
+  /**
    * One model call's deltas, translated for the reader.
    *
    * `text` is always the WHOLE answer so far rather than the increment: the
@@ -733,7 +758,7 @@ export async function runTurn(options: RunTurnOptions) {
         // the reader reads. `thinkable` still wins over it, because a model
         // without the capability cannot be asked however deeply somebody wants
         // it to think; that is the principle `config.llm.think` was deleted for.
-        tuning: thinkable(config.llm.tuning ?? null) ?? null,
+        tuning: sampling(config.llm.tuning ?? null),
         onHeaders,
         // The call that most needs a continuation is this one: it is the only
         // one whose output the reader reads, and a `finishReason: 'length'` here

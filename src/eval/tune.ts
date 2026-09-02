@@ -923,6 +923,13 @@ function markdown(ctx) {
   L.push(`stage B: no chat model, no LLM judge, no unseeded randomness. Same index + same`)
   L.push(`golden set ⇒ same output.`)
   L.push('')
+  // WHEN. `sweptAt` has been in `tuning.json` all along and was the one
+  // timestamp in this subsystem that existed only there — the report a person
+  // reads could not say whether it described this morning or last month.
+  if (doc.sweptAt) {
+    L.push(`Swept \`${doc.sweptAt}\` against index \`${doc.indexHash}\` (\`${doc.embedModel ?? 'lexical only'}\`).`)
+    L.push('')
+  }
 
   if (narrowed) {
     L.push(`> ## Narrowed pool — no \`tuning.json\` was written`)
