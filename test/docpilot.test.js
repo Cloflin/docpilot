@@ -9889,8 +9889,26 @@ describe('the eval commands — a value-taking flag written without its =', () =
       expect(r.status).toBe(1)
     })
 
+    /** The usage names the COMMAND. Nobody types `answer-bench.js`. */
     it('still prints its usage when no mode is given', async () => {
-      expect((await bench()).out).toContain('usage: answer-bench.js emit|shard|score|runs')
+      expect((await bench()).out).toContain('usage: docpilot bench emit|shard|score|runs')
+    })
+
+    /**
+     * The entry guard this module alone did not have. Spawned directly it is
+     * the entry and prints usage; imported for a helper it must run nothing —
+     * before, importing it dispatched on whatever `argv[2]` happened to be.
+     */
+    it('runs nothing when it is imported rather than run', async () => {
+      const { spawnSync } = await import('node:child_process')
+      const { pathToFileURL } = await import('node:url')
+      const mod = pathToFileURL(distEntry('src/eval/answer-bench.js')).href
+      const r = spawnSync(process.execPath, ['-e', `await import(${JSON.stringify(mod)})`, 'score'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+      })
+      expect(`${r.stdout}${r.stderr}`).not.toContain('usage: docpilot bench')
+      expect(r.status).toBe(0)
     })
   })
 })

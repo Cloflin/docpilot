@@ -79,10 +79,14 @@ const FEEDBACK_MODES = ['pull', 'report', 'faq']
 export const COMMANDS = {
   index: {
     summary: 'build the retrieval index from your docs',
-    // `argValue` in build-rag-index.js has always taken `--html-select main` as
-    // readily as `--html-select=main`, and a builder whose documentation is
-    // right half the time is worse than one deprecation warning.
-    grammar: 'both',
+    // `equals`, and the two halves of this command now agree. `argValue` in
+    // build-rag-index.js used to take `--html-select main` as readily as
+    // `--html-select=main` — but `parseEmbedFlags`, which reads the OTHER four
+    // flags of the same command line, has only ever taken `=`, and no line of
+    // documentation shows the space form for either half. One command that
+    // spells its flags two ways depending on which flag you picked is worse
+    // than one spelling; `import` and `feedback` keep the space form because
+    // their pages have always shown it.
     flags: [
       { name: 'dry', kind: 'bool', help: 'chunk and report; no embeddings, no network, no cost' },
       { name: 'no-embed', kind: 'bool', help: 'a real index with no vectors in it' },
@@ -238,10 +242,49 @@ export const COMMANDS = {
 /** Every spelling that names this flag — its own, plus an alias if it has one. */
 const namesOf = (flag) => (flag.alias ? [flag.name, flag.alias] : [flag.name])
 
+/**
+ * The name a token spells, or null when its dashes do not spell one.
+ *
+ * WHY THE DASHES ARE COUNTED AT ALL. Every strip in this file used to be
+ * `^--?`, so one dash on a long name was legal all the way through: the table
+ * matched `-level=low`, `flagErrors` returned nothing, and the command's own
+ * `arg()` — which matched `--level=` and only that — read the flag as ABSENT
+ * and took the widest default. Silent, and destructive on the one flag that
+ * decides how much of the pool runs.
+ *
+ * POSIX draws the line this draws: one dash introduces a SHORT option, two a
+ * long one. So the check is against the NAME's length rather than against the
+ * dash — `-y`, `-h` and `-v` are short options, they are spelled that way in
+ * the table and in the help, and they stay.
+ */
+function bareOf(token) {
+  if (token.startsWith('--')) return token.slice(2)
+  if (!token.startsWith('-')) return null
+  const bare = token.slice(1)
+  return bare.split('=')[0].length === 1 ? bare : null
+}
+
 /** The flag a token names, or undefined. `--limit=5` and `--limit` both hit. */
 function flagFor(spec, token) {
-  const name = token.replace(/^--?/, '').split('=')[0]
+  const bare = bareOf(token)
+  if (bare == null) return undefined
+  const name = bare.split('=')[0]
   return spec.flags.find((f) => namesOf(f).includes(name))
+}
+
+/**
+ * `-level=low` — one dash on a long name — respelled with two, or null.
+ *
+ * Worth its own message rather than falling into `unknown flag`: the flag IS
+ * this command's, the reader typed its name correctly, and a list of every
+ * flag the command takes answers a question they did not ask.
+ */
+function longFormOf(spec, token) {
+  if (token.startsWith('--') || !token.startsWith('-')) return null
+  const bare = token.slice(1)
+  const name = bare.split('=')[0]
+  if (name.length <= 1) return null
+  return spec.flags.some((f) => namesOf(f).includes(name)) ? `--${bare}` : null
 }
 
 /** `--level=low`, as the message shows it. */
@@ -257,7 +300,8 @@ const exampleOf = (flag) =>
  */
 function valueIn(argv, flag, grammar) {
   for (const [i, token] of argv.entries()) {
-    const bare = token.replace(/^--?/, '')
+    const bare = bareOf(token)
+    if (bare == null) continue
     for (const name of namesOf(flag)) {
       if (bare.startsWith(`${name}=`)) return bare.slice(name.length + 1)
       // The space form, and ONLY where a command has always accepted it. The
@@ -290,28 +334,59 @@ export function flagErrors(command, argv = []) {
   const out = []
   const grammar = spec.grammar ?? 'equals'
   const taken = new Set()
+  // Which flags have been named already, so the SECOND `--level` is a message
+  // rather than a token nobody reads: every reader in this package finds the
+  // first match and stops, so `--level=low --level=high` ran the high tier's
+  // opposite in silence.
+  const named = new Map()
+  // POSIX's option terminator. It used to be reported as `unknown flag --`,
+  // which is the one thing it certainly is not; after it every token is an
+  // operand, and this command's rules for operands are the ones below.
+  const end = argv.indexOf('--')
+  const opts = end === -1 ? argv : argv.slice(0, end)
+  const operands = end === -1 ? [] : argv.slice(end + 1)
+  // Counted rather than read off the index, because `--` moves everything after
+  // it and the mode of `bench` is still the first operand either way.
+  let positionals = 0
 
-  for (const [i, token] of argv.entries()) {
+  const operand = (token) => {
+    // A positional. `bench` and `feedback` take a mode, `import` takes a URL;
+    // anything else has no place for one, and a stray word there is almost
+    // always a value that lost its `=`.
+    if (!spec.positional) out.push(strayPositional(token, spec, command))
+    else if (spec.positional.values && !spec.positional.values.includes(token) && positionals === 0) {
+      out.push(
+        `unknown ${spec.positional.name} "${token}"\n` +
+          `        one of: ${spec.positional.values.join(', ')}`,
+      )
+    }
+    positionals++
+  }
+
+  for (const [i, token] of opts.entries()) {
     if (taken.has(i)) continue
     if (!token.startsWith('-')) {
-      // A positional. `bench` and `feedback` take a mode, `import` takes a URL;
-      // anything else has no place for one, and a stray word there is almost
-      // always a value that lost its `=`.
-      if (!spec.positional) out.push(strayPositional(token, spec, command))
-      else if (spec.positional.values && !spec.positional.values.includes(token) && i === 0) {
-        out.push(
-          `unknown ${spec.positional.name} "${token}"\n` +
-            `        one of: ${spec.positional.values.join(', ')}`,
-        )
-      }
+      operand(token)
       continue
     }
 
     const flag = flagFor(spec, token)
     if (!flag) {
-      out.push(unknownFlag(token, spec, command))
+      const long = longFormOf(spec, token)
+      out.push(long ? oneDashFlag(token, long) : unknownFlag(token, spec, command))
       continue
     }
+
+    if (named.has(flag.name)) {
+      out.push(repeatedFlag(flag, named.get(flag.name), token))
+      // The repeat's own value is not re-checked: one mistake, one message.
+      if (!token.includes('=') && grammar === 'both') {
+        const next = opts[i + 1]
+        if (next != null && !next.startsWith('-')) taken.add(i + 1)
+      }
+      continue
+    }
+    named.set(flag.name, token)
 
     const hasEquals = token.includes('=')
     if (flag.kind === 'bool') {
@@ -328,10 +403,10 @@ export function flagErrors(command, argv = []) {
         out.push(`--${flag.name} takes a value: ${exampleOf(flag)}`)
         // Swallow what it was reaching for, so the one mistake is reported once:
         // `--level low` is a bare flag, not a bare flag AND a stray word.
-        if (argv[i + 1] != null && !argv[i + 1].startsWith('-')) taken.add(i + 1)
+        if (opts[i + 1] != null && !opts[i + 1].startsWith('-')) taken.add(i + 1)
         continue
       }
-      const next = argv[i + 1]
+      const next = opts[i + 1]
       if (next == null || next.startsWith('-')) {
         out.push(`--${flag.name} takes a value: ${exampleOf(flag)}`)
         continue
@@ -339,10 +414,12 @@ export function flagErrors(command, argv = []) {
       taken.add(i + 1)
     }
 
-    const value = hasEquals ? token.slice(token.indexOf('=') + 1) : argv[i + 1]
+    const value = hasEquals ? token.slice(token.indexOf('=') + 1) : opts[i + 1]
     const bad = badValue(flag, value)
     if (bad) out.push(bad)
   }
+
+  for (const token of operands) operand(token)
 
   return out
 }
@@ -390,6 +467,14 @@ const takesLine = (spec, command) =>
 const unknownFlag = (token, spec, command) =>
   `unknown flag ${token}\n${takesLine(spec, command)}`
 
+const oneDashFlag = (token, long) =>
+  `unknown flag ${token}\n        long flags take two dashes: ${long}`
+
+const repeatedFlag = (flag, first, again) =>
+  `--${flag.name} was given twice: ${first} then ${again}\n` +
+  '        every reader in this package takes the first and ignores the rest, so ' +
+  'name it once.'
+
 const strayPositional = (token, spec, command) =>
   `unexpected argument "${token}"\n${takesLine(spec, command)}`
 
@@ -405,7 +490,7 @@ export function spaceFormWarning(command, argv = []) {
   const spec = COMMANDS[command]
   if (spec?.grammar !== 'both') return null
   const used = spec.flags.find(
-    (f) => f.kind !== 'bool' && argv.some((t) => namesOf(f).includes(t.replace(/^--?/, ''))),
+    (f) => f.kind !== 'bool' && argv.some((t) => namesOf(f).includes(bareOf(t) ?? '\u0000')),
   )
   return used
     ? `--${used.name} <value> still works, but ${exampleOf(used)} is the spelling ` +
@@ -426,7 +511,7 @@ export function flagGiven(command, argv, name) {
   const spec = COMMANDS[command]
   const flag = spec?.flags.find((f) => f.name === name)
   if (!flag) return false
-  return argv.some((t) => namesOf(flag).includes(t.replace(/^--?/, '')))
+  return argv.some((t) => namesOf(flag).includes(bareOf(t) ?? '\u0000'))
 }
 
 /**

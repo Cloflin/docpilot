@@ -46,7 +46,7 @@ import { openerQuestions } from '../theme/docpilot/openers.js'
 import { questionsHash } from '../theme/docpilot/text.js'
 import { promptHash } from '../theme/docpilot/prompt.js'
 import { nodeChatTarget } from '../config.js'
-import { entryFlagError } from '../cli-flags.js'
+import { entryFlagError, flagValue } from '../cli-flags.js'
 import {
   terms,
   estTokens,
@@ -80,19 +80,16 @@ const DRY = process.argv.includes('--dry')
 /**
  * A flag that carries a value, in both spellings people type.
  *
- * `--html-select "main .content"` and `--html-select=main` are the same flag,
- * and a builder that accepted one of them would be a builder whose documentation
- * is right half the time. The next token is refused when it looks like another
- * flag, so a forgotten value fails as "empty" here rather than swallowing the
- * flag that followed it.
+ * `''` RATHER THAN NULL when the flag is absent, because every reader below
+ * asks `HTML_DIR &&` and an absent path has always been the empty string here.
+ * That default is the ONE thing this wrapper still adds: the parser itself is
+ * `flagValue` in `src/cli-flags.js`, the same one `flagErrors` checked the
+ * argv with a few lines above, and the copy that used to live here was the
+ * only one in the package that also took the space form — `--html-select main`
+ * — which `parseEmbedFlags` reads the other half of this same command line
+ * with and has never taken, and which no line of documentation shows.
  */
-const argValue = (name) => {
-  const eq = process.argv.find((a) => a.startsWith(`--${name}=`))
-  if (eq) return eq.slice(name.length + 3)
-  const i = process.argv.indexOf(`--${name}`)
-  const next = i >= 0 ? process.argv[i + 1] : undefined
-  return next && !next.startsWith('--') ? next : ''
-}
+const argValue = (name) => flagValue('index', process.argv.slice(2), name, '')
 
 /**
  * `--html-dir` — the corpus is a directory of built pages, not only markdown.

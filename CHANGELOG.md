@@ -11,6 +11,22 @@ against `package.json`'s version and refuses the publish if they disagree.
 
 ### Changed
 
+**One flag reader, and one dash is a short option.** `src/cli-flags.js` exported
+`flagValue` and `flagGiven` and nothing in production called them: seven
+hand-written copies read the flags instead, and they had drifted — `lint`
+truncated `--file=a=b.jsonl` at the first `=`, `index` returned `''` where it had
+been handed a default, `vocabulary` returned `true` where `--out` had been given
+no path. All seven are gone. Three command lines that used to be accepted in
+silence are now refused, because none of them ever meant what they looked like:
+`-level=low` (one dash on a long name — the table accepted it and every reader
+ignored it, so the widest tier ran), `--level=low --level=high` (every reader
+takes the first and drops the rest), and `--html-select main` (the space form, on
+the one command whose *other* parser has only ever taken `=`; `import` and
+`feedback` keep it, because their pages have always shown it). `--` now ends the
+options instead of being reported as an unknown flag. `docpilot bench` runs
+nothing when it is imported rather than run, and its usage line names the command
+rather than `answer-bench.js`.
+
 **The empty state holds five questions, not three.** The panel shows what you
 configure, up to five; anything past that is still dropped and still named on
 stdout. The built-in fallback is still three, so a site that configures none pays

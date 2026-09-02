@@ -12,6 +12,7 @@ import {
   helpFor,
   spaceFormWarning,
 } from '../src/cli-flags.js'
+import { parseEmbedFlags } from '../src/embed-choices.js'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')
@@ -151,6 +152,122 @@ describe('the space form', () => {
     expect(flagGiven('import', ['--dry-run'], 'dry')).toBe(true)
     expect(flagGiven('index', ['-y'], 'yes')).toBe(true)
     expect(flagGiven('index', [], 'yes')).toBe(false)
+  })
+})
+
+/**
+ * ONE DASH IS A SHORT OPTION, TWO ARE A LONG ONE.
+ *
+ * The strip used to be `^--?` in all four places that read a token, so
+ * `-level=low` was legal to the table, `flagErrors` returned nothing, and the
+ * command's own `arg()` — which matched `--level=` and only that — read the
+ * flag as ABSENT and ran the widest tier. The measurement is in spec 010: a
+ * direct call on the built module returned `[]` for it.
+ */
+describe('the dashes', () => {
+  it('refuses a long name spelled with one dash, and shows the spelling that works', () => {
+    const [msg] = flagErrors('eval', ['-level=low'])
+    expect(msg).toMatch(/long flags take two dashes: --level=low/)
+    expect(flagErrors('eval', ['-gate-only'])[0]).toMatch(/--gate-only/)
+  })
+
+  it('keeps every one-character option, because those are short options', () => {
+    expect(flagErrors('index', ['-y'])).toEqual([])
+    expect(flagGiven('index', ['-y'], 'yes')).toBe(true)
+    expect(flagGiven('init', ['-y'], 'yes')).toBe(true)
+  })
+
+  it('does not read a value out of a one-dash long name either', () => {
+    expect(flagValue('eval', ['-level=low'], 'level')).toBeNull()
+  })
+})
+
+/**
+ * Every reader in this package finds the first match and stops, so a repeated
+ * flag ran the opposite of what the last one on the line asked for — in
+ * silence, and `--level=low --level=high` returned `[]` before this.
+ */
+describe('a flag given twice', () => {
+  it('is a message, not a silent first-wins', () => {
+    const [msg] = flagErrors('eval', ['--level=low', '--level=high'])
+    expect(msg).toMatch(/--level was given twice/)
+    expect(msg).toContain('--level=low')
+    expect(msg).toContain('--level=high')
+  })
+
+  it('counts an alias as the same flag', () => {
+    expect(flagErrors('index', ['--yes', '-y'])[0]).toMatch(/--yes was given twice/)
+  })
+
+  it('says it once, not once per repeat', () => {
+    expect(flagErrors('eval', ['--level=low', '--level=high'])).toHaveLength(1)
+  })
+})
+
+/**
+ * POSIX's option terminator. It used to be reported as `unknown flag --`,
+ * which is the one thing it certainly is not.
+ */
+describe('--', () => {
+  it('is not an unknown flag', () => {
+    expect(flagErrors('eval', ['--'])).toEqual([])
+  })
+
+  it('ends the options, so what follows is judged as an operand', () => {
+    const errs = flagErrors('eval', ['--', '--nonsense'])
+    expect(errs).toHaveLength(1)
+    expect(errs[0]).toMatch(/unexpected argument "--nonsense"/)
+  })
+
+  it('leaves the flags before it checked as usual', () => {
+    expect(flagErrors('eval', ['--limit=abc', '--'])[0]).toMatch(/positive whole number/)
+  })
+})
+
+/**
+ * THE SEVEN COPIES, AND WHAT EACH ONE GOT WRONG.
+ *
+ * `flagValue`/`flagGiven` had zero production callers: `src/eval/run.ts`,
+ * `calibrate.ts`, `tune.ts`, `answer-bench.ts`, `lint-golden.ts`,
+ * `build-rag-index.ts` and `vocabulary.ts` each carried their own. These are
+ * the three ways they had drifted apart.
+ */
+describe('the one reader', () => {
+  it('keeps everything after the first = for every command, not only lint', () => {
+    for (const [command, name] of [
+      ['lint', 'file'],
+      ['calibrate', 'out'],
+      ['bench', 'out'],
+      ['tune', 'lambda'],
+      ['eval', 'provider'],
+      ['index', 'html-base'],
+      ['vocabulary', 'out'],
+    ]) {
+      expect(flagValue(command, [`--${name}=a=b`], name), command).toBe('a=b')
+    }
+  })
+
+  it('gives back the default it was handed, not an empty string', () => {
+    expect(flagValue('eval', [], 'level', 'low')).toBe('low')
+    expect(flagValue('index', [], 'html-dir', '')).toBe('')
+  })
+
+  it('never returns true where a value was asked for', () => {
+    expect(flagValue('vocabulary', ['--out'], 'out')).toBeNull()
+    expect(flagErrors('vocabulary', ['--out'])[0]).toMatch(/--out takes a value/)
+  })
+
+  /**
+   * `index` has two parsers on one command line — this table and
+   * `parseEmbedFlags`, which reads the four embedder flags in the launcher —
+   * and only one of them ever took the space form.
+   */
+  it('spells index the way both of its parsers spell it', () => {
+    expect(flagErrors('index', ['--html-select', 'main'])[0]).toMatch(/takes a value/)
+    expect(flagErrors('index', ['--index-dir', 'foo'])[0]).toMatch(/takes a value/)
+    expect(flagValue('index', ['--html-select', 'main'], 'html-select')).toBeNull()
+    expect(flagValue('index', ['--html-select=main'], 'html-select')).toBe('main')
+    expect(parseEmbedFlags(['--index-dir=foo']).indexDir).toBe('foo')
   })
 })
 

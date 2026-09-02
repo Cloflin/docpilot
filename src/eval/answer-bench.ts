@@ -31,6 +31,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { assembleIndex } from '../theme/docpilot/store.js'
 import { embedQuery } from '../theme/docpilot/embed.js'
@@ -52,7 +53,7 @@ import {
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 
 import { ROOT, RAG, GOLDEN, DOCPILOT_DIR, settings as docPilot } from '../cli-context.js'
-import { entryFlagError } from '../cli-flags.js'
+import { entryFlagError, flagValue } from '../cli-flags.js'
 
 /** Bench artefacts sit beside the golden set, under the configured `evalDir`. */
 const BENCH = path.join(DOCPILOT_DIR, 'bench')
@@ -72,10 +73,19 @@ if (BAD_FLAG) {
   console.error(`\n  FAIL  ${BAD_FLAG}\n`)
   process.exit(1)
 }
-const arg = (name: string, dflt?: string) => {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
-  return hit ? hit.split('=').slice(1).join('=') : dflt
-}
+/**
+ * THE FLAGS, read by the table that already validated them.
+ *
+ * There is no parser here any more. `flagValue` and `flagGiven` are exported by
+ * `src/cli-flags.js`, they read the grammar out of the same `COMMANDS` entry
+ * `flagErrors` checks, and until this change their only importer in the whole
+ * package was the test file. Seven hand-written copies read the flags instead,
+ * and they had drifted the way copies drift: one truncated a value at its first
+ * `=`, one returned `''` where it had been given a default, and one returned
+ * `true` where it had been given a path.
+ */
+const FLAGS = process.argv.slice(2)
+const arg = (name: string, dflt?: string) => flagValue('bench', FLAGS, name) ?? dflt
 const list = (name) => String(arg(name, '')).split(',').map((s) => s.trim()).filter(Boolean)
 
 /** Kept in step with harness.js — the excerpt ceiling is the same sweepable knob. */
@@ -762,15 +772,32 @@ function judgeScore() {
   console.log('')
 }
 
-if (MODE === 'emit') await emit()
-else if (MODE === 'shard') shard()
-else if (MODE === 'score') score()
-else if (MODE === 'runs') runs()
-else if (MODE === 'judge-emit') judgeEmit()
-else if (MODE === 'judge-score') judgeScore()
-else {
-  die(
-    'usage: answer-bench.js emit|shard|score|runs|judge-emit|judge-score …\n' +
-      '        emit --config=<name> [--out=<file>] [--history=<file>] [--level=low|medium|high|xhigh|max|ultra]',
-  )
+/**
+ * THE ENTRY GUARD, which this module alone did not have.
+ *
+ * `run.js`, `calibrate.js`, `tune.js`, `lint-golden.js`, `build-rag-index.js`
+ * and `vocabulary.js` all carry it, for the reason written out beside run.js's
+ * copy: `bin/docpilot.js` repoints `argv[1]` at the module it is about to
+ * import, so the comparison holds under the launcher and holds false under a
+ * test that merely imports this file for a helper. Without it, importing this
+ * module ran `judgeScore()` off whatever `argv[2]` happened to say — and with
+ * no mode there at all, printed a usage block and exited.
+ *
+ * And the usage block names the COMMAND, not the file. Nobody types
+ * `answer-bench.js`; the launcher does, and it is the only caller that ever
+ * will.
+ */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (MODE === 'emit') await emit()
+  else if (MODE === 'shard') shard()
+  else if (MODE === 'score') score()
+  else if (MODE === 'runs') runs()
+  else if (MODE === 'judge-emit') judgeEmit()
+  else if (MODE === 'judge-score') judgeScore()
+  else {
+    die(
+      'usage: docpilot bench emit|shard|score|runs|judge-emit|judge-score …\n' +
+        '        emit --config=<name> [--out=<file>] [--history=<file>] [--level=low|medium|high|xhigh|max|ultra]',
+    )
+  }
 }

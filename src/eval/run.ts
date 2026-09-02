@@ -62,7 +62,7 @@ import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
 
 import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot, fileEnv } from '../cli-context.js'
-import { COMMANDS, entryFlagError } from '../cli-flags.js'
+import { COMMANDS, entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
 
 /**
  * The hash of the instruction THIS project sends, not of the shipped default.
@@ -88,11 +88,20 @@ for (const [k, v] of Object.entries(await fileEnv())) {
   if (process.env[k] === undefined) process.env[k] = v
 }
 
-const arg = (name: string, dflt?: string) => {
-  const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
-  return hit ? hit.split('=').slice(1).join('=') : dflt
-}
-const has = (name) => process.argv.includes(`--${name}`)
+/**
+ * THE FLAGS, read by the table that already validated them.
+ *
+ * There is no parser here any more. `flagValue` and `flagGiven` are exported by
+ * `src/cli-flags.js`, they read the grammar out of the same `COMMANDS` entry
+ * `flagErrors` checks, and until this change their only importer in the whole
+ * package was the test file. Seven hand-written copies read the flags instead,
+ * and they had drifted the way copies drift: one truncated a value at its first
+ * `=`, one returned `''` where it had been given a default, and one returned
+ * `true` where it had been given a path.
+ */
+const FLAGS = process.argv.slice(2)
+const arg = (name: string, dflt?: string) => flagValue('eval', FLAGS, name) ?? dflt
+const has = (name: string) => flagGiven('eval', FLAGS, name)
 
 /**
  * Declared here, above the flags, and not in the `main` section below with the

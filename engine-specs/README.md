@@ -36,6 +36,9 @@ The rule this directory exists to enforce:
 | [007](007-two-fields-nobody-read.md) | `prev` and `codeLangs` leave the chunk record — 4.1% of the shard bytes every reader downloads |
 | [008](008-the-vectors-already-bought.md) | a content-addressed embedding cache — a one-file edit costs one request rather than fifteen |
 | [009](009-a-question-the-build-already-answered.md) | `docpilot index` resolves `suggestions.questions` against the corpus, so a reader's first click costs no embedding request |
+| [010](010-the-reader-the-table-already-has.md) | one flag reader for every command, four exit codes, and one law for `.env.local` |
+| [011](011-a-report-that-names-its-witnesses.md) | an eval report records the host, the date and the golden set it measured, and a rerun stops erasing the last one |
+| [012](012-the-vote-that-never-leaves-the-browser.md) | a reader's vote reaches the golden set: a receiver, a storage seam, and the triage rule the RAG-SPEC never carried |
 
 ## Shape of a spec
 

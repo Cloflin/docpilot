@@ -32,7 +32,7 @@ import { pathToFileURL } from 'node:url'
 import { chat } from '../theme/docpilot/llm.js'
 import { setVocabulary, vocabularyHash } from '../theme/docpilot/text.js'
 import { nodeChatTarget, assertVocabulary } from '../config.js'
-import { flagErrors } from '../cli-flags.js'
+import { flagErrors, flagValue, flagGiven } from '../cli-flags.js'
 
 /**
  * The reply shape, as a STRICT JSON schema — an array of pairs rather than the
@@ -306,13 +306,17 @@ export async function proposeVocabulary({
   }
 }
 
-const flag = (argv, name) => argv.find((a) => a === `--${name}` || a.startsWith(`--${name}=`))
-const value = (argv, name, fallback = null) => {
-  const f = flag(argv, name)
-  if (!f) return fallback
-  const eq = f.indexOf('=')
-  return eq === -1 ? true : f.slice(eq + 1)
-}
+/**
+ * THE FLAGS, read by the table that already validated them.
+ *
+ * The copy that stood here returned `true` for a bare `--out`, and `:435` puts
+ * whatever this returns into `fs.writeFileSync`. It never got there only
+ * because `flagErrors` rejects a bare value-flag on the first line of
+ * `runVocabulary` below — a broken reader kept honest by somebody else's
+ * check. `flagValue` and `flagGiven` read the same table that check reads.
+ */
+const flag = (argv, name) => flagGiven('vocabulary', argv, name)
+const value = (argv, name, fallback = null) => flagValue('vocabulary', argv, name, fallback)
 
 /**
  * @param {{docPilot: any, argv: string[], env: Record<string,string|undefined>, out?: string}} opts
