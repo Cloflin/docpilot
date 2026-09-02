@@ -40,6 +40,8 @@ The rule this directory exists to enforce:
 | [011](011-a-report-that-names-its-witnesses.md) | an eval report records the host, the date and the golden set it measured, and a rerun stops erasing the last one |
 | [012](012-the-vote-that-never-leaves-the-browser.md) | a reader's vote reaches the golden set: a receiver, a storage seam, and the triage rule the RAG-SPEC never carried |
 | [013](013-the-evidence-the-last-turn-already-bought.md) | a follow-up is primed with the chunks the last answer cited — it could neither see them nor fetch them |
+| [014](014-a-neighbouring-feature-is-not-the-answer.md) | the instruction names the case the gate cannot reach: excerpts about the neighbouring feature |
+| [015](015-the-query-the-model-asked-for.md) | the model's own `search_docs` query reaches the dense channel, not just BM25 |
 
 ## Shape of a spec
 
