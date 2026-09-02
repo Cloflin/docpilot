@@ -197,6 +197,32 @@ the project's number, and read `meta.level` before quoting anything: an
 unpartitioned `latest.json` used to end up holding a ten-question smoke score
 where the full-set number was half of it, with nothing at the fixed path saying so.
 
+**A report name now carries the EMBEDDER, and `latest.json` still does not.** The
+corpus hash is sha256 over chunk id and text, so one corpus embedded by two
+models is one hash and two vector spaces — this repository ships exactly that
+pair at `08e7a87e`, `docs/public/rag` under `nvidia/nemotron-3-embed-1b:free` and
+`docs/public/rag-local` under `bge-m3`. Each run used to overwrite the other's
+baseline and then print the difference between two embedders as "changes since
+the previous run": recall@8 0.925 against 0.912, MRR 0.762 against 0.669,
+negativesCaught 0.125 against 0.438. `report-…-emb-<hash>-….json` separates them
+and `previousReport` refuses the cross-embedder pair, so the overwrite and the
+comparison are stopped independently. **`latest.json` is still one path for both
+indexes** — read `meta.embedModel` before quoting it, exactly as you read
+`meta.level`.
+
+**Four things in a report that name what moved rather than how much.** A "By
+language" table, because a mean over a mixed set describes neither population and
+the ranking gap between them is structural — BM25 shares no term across writing
+systems. A "Failure taxonomy" section, whose four positive buckets have four
+different fixes: `retrieval-miss` is a corpus edit, `gold-below-primed` is a
+`GATE_K` and ranking problem, `primed-low-f1` is the answer side, `over-refused`
+is the gate. A "Pages behind the misses that never say what they are for" table,
+which names the markdown files whose frontmatter carries no `description` — the
+one measured dense lever, and a lead rather than a verdict. And a "Re-search"
+line counting the turns where the model searched in a language other than the
+question's, which is the evidence for what the harness does with the query vector
+on a re-search.
+
 ### `generate` — the golden set
 
 1. Sample from the index's chunk shards, stratified by `kind`, section and path
@@ -985,7 +1011,9 @@ metric in any report.
   output invents a hallucination rate production cannot produce.
 - **`citationPrecision` measures citation COUNT at |gold| = 1.** It divides by how
   many citations the answerer chose, so the same retrieval scores 1.00 or 0.33
-  depending on terseness. Read `citationRecall` beside it, always.
+  depending on terseness. Read `citationRecall` beside it, always — the report
+  carries it now, and for two releases this line asked for a number nothing
+  computed.
 - **Heading ancestors in the chunk context line do NOT help — measured and
   reverted.** `chunker.js` builds its breadcrumb from `h1` alone. Adding the
   ancestor cost recall@8 0.966 → 0.920 and MRR 0.629 → 0.600 and did not move the

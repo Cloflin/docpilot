@@ -84,9 +84,19 @@ const EMPTY = () => ({ content: '', thinking: '', toolCall: null })
  * estimate derived from character counts cannot be it — the tokenizer is the
  * only authority on how many tokens a prompt of excerpts actually became.
  */
-function usageOf(promptTokens, outputTokens) {
+function usageOf(promptTokens, outputTokens, cachedTokens = null) {
   if (promptTokens == null && outputTokens == null) return null
-  return { promptTokens: promptTokens || 0, outputTokens: outputTokens || 0 }
+  return {
+    promptTokens: promptTokens || 0,
+    outputTokens: outputTokens || 0,
+    // How much of the prompt the server served out of ITS OWN cache, which is
+    // the only evidence anyone has about the cost of re-sending every
+    // observation on every step. Providers that do not report it leave `null`
+    // rather than 0: "not measured here" and "measured, nothing cached" are
+    // different claims, and averaging the second over a provider that makes the
+    // first would invent a cache-hit rate for it.
+    cachedTokens: cachedTokens == null ? null : cachedTokens || 0,
+  }
 }
 
 // ── ollama ───────────────────────────────────────────────────────────────────
@@ -447,7 +457,11 @@ const openai = {
       toolCall: call?.function
         ? { name: call.function.name, args: normaliseArgs(call.function.arguments) }
         : null,
-      usage: usageOf(json.usage?.prompt_tokens, json.usage?.completion_tokens),
+      usage: usageOf(
+        json.usage?.prompt_tokens,
+        json.usage?.completion_tokens,
+        json.usage?.prompt_tokens_details?.cached_tokens,
+      ),
       // `'length'` is the difference between a model that answered badly and one
       // that was cut off mid-word, and the two used to be indistinguishable
       // here: a truncated `{"text": "…` fails JSON.parse, lands as a parse
@@ -469,7 +483,12 @@ const openai = {
       if (!json) return
       if (json.error) throw streamError(json.error)
       // Present only when the caller asked for it; absent is not an error.
-      if (json.usage) usage = usageOf(json.usage.prompt_tokens, json.usage.completion_tokens)
+      if (json.usage)
+        usage = usageOf(
+          json.usage.prompt_tokens,
+          json.usage.completion_tokens,
+          json.usage.prompt_tokens_details?.cached_tokens,
+        )
       const choice = json.choices?.[0]
       // The last non-null one wins. It rides on the same `choices[0]` as the
       // deltas and is null on every content frame, arriving for real only on the
@@ -720,7 +739,11 @@ const anthropic = {
       content,
       thinking,
       toolCall,
-      usage: usageOf(json.usage?.input_tokens, json.usage?.output_tokens),
+      usage: usageOf(
+        json.usage?.input_tokens,
+        json.usage?.output_tokens,
+        json.usage?.cache_read_input_tokens,
+      ),
       finishReason: null,
     }
   },
@@ -732,6 +755,7 @@ const anthropic = {
     let toolJson = ''
     let promptTokens = null
     let outputTokens = null
+    let cachedTokens = null
 
     await readLines(res, (raw) => {
       const json = sseData(raw)
@@ -739,7 +763,10 @@ const anthropic = {
       if (json.type === 'error') throw streamError(json.error)
 
       // Input tokens arrive with message_start, output tokens with message_delta.
-      if (json.type === 'message_start') promptTokens = json.message?.usage?.input_tokens ?? null
+      if (json.type === 'message_start') {
+        promptTokens = json.message?.usage?.input_tokens ?? null
+        cachedTokens = json.message?.usage?.cache_read_input_tokens ?? null
+      }
       if (json.type === 'message_delta' && json.usage) outputTokens = json.usage.output_tokens ?? null
 
       if (json.type === 'content_block_start' && json.content_block?.type === 'tool_use') {
@@ -769,7 +796,7 @@ const anthropic = {
       content,
       thinking,
       toolCall: toolName ? { name: toolName, args: normaliseArgs(toolJson) } : null,
-      usage: usageOf(promptTokens, outputTokens),
+      usage: usageOf(promptTokens, outputTokens, cachedTokens),
       finishReason: null,
     }
   },

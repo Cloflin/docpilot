@@ -12,6 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { DEFAULT_RUN_LEVEL } from './levels.js'
+import { TAXONOMY_ORDER } from './metrics.js'
 
 /**
  * The pool a report measured.
@@ -39,11 +40,16 @@ const HIGHER_IS_BETTER = new Set([
   'answerF1',
   'identifierRecall',
   'citationPrecision',
+  'citationRecall',
   'supportPrecision',
   'language',
   'negativesCaughtRate',
   'noAnswerPrecision',
   'scopeContainment',
+  // A prompt served out of the provider's cache is a prompt paid for once. The
+  // count beside it is neutral and rides in LOWER_IS_BETTER only so the table
+  // prints it; read the share.
+  'cachedShare',
 ])
 
 /** Metrics reported as a count or a cost: lower is better, or neutral. */
@@ -55,6 +61,7 @@ const LOWER_IS_BETTER = new Set([
   'rejectedFetches',
   'promptTokens',
   'outputTokens',
+  'cachedTokens',
   'tokensPerAcceptedAnswer',
   'promptChars',
   'promptCharsPeak',
@@ -111,12 +118,50 @@ export function previousReport(dir, meta) {
       // no marker on it. Partitioned rather than labelled `incomparable` for
       // that reason: there is nothing here worth reading.
       if (levelOf(doc.meta) !== levelOf(meta)) continue
+      /**
+       * THE CORPUS HASH DOES NOT COVER THE VECTOR SPACE.
+       *
+       * `indexHash` is sha256 over chunk id and text, so one corpus embedded by
+       * two models is one prefix and two retrievals. Measured on this
+       * repository's own pair at corpus `08e7a87e` — `docs/public/rag` under
+       * `nvidia/nemotron-3-embed-1b:free` and `docs/public/rag-local` under
+       * `bge-m3` — recall@8 0.925 against 0.912, MRR 0.762 against 0.669 and
+       * negativesCaught 0.125 against 0.438 were reported as a change caused by
+       * whatever was edited in between.
+       *
+       * Absent reads as UNKNOWN and pairs, by the rule `goldenSha` established:
+       * a report written before the field existed must not announce a change to
+       * everybody on the day it lands.
+       */
+      if (doc.meta?.embedModel && meta.embedModel && doc.meta.embedModel !== meta.embedModel)
+        continue
       return doc
     } catch {
       // A half-written report is not a comparison; skip it.
     }
   }
   return null
+}
+
+/**
+ * The per-language keys, spelled `mrr[ru]`, appended to the tracked list.
+ *
+ * The 2-point revert rule is applied to whatever this function emits, and a
+ * headline mean can sit still while one language gains four points and the other
+ * loses four. Derived from the run being written rather than from a fixed list,
+ * because the languages a golden set contains are the author's business, not
+ * this module's.
+ */
+function languageKeys(summary) {
+  const langs = Object.keys(summary?.byLanguage || {})
+  const keys = []
+  for (const lang of langs) {
+    for (const metric of Object.keys(summary.byLanguage[lang] || {})) {
+      if (metric === 'positives' || metric === 'negatives') continue
+      keys.push({ key: `${metric}[${lang}]`, metric, lang })
+    }
+  }
+  return keys
 }
 
 export function diffSummaries(prev, next) {
@@ -128,6 +173,18 @@ export function diffSummaries(prev, next) {
     const delta = b - a
     if (!delta) continue
     const better = HIGHER_IS_BETTER.has(key) ? delta > 0 : delta < 0
+    out.push({ key, from: a, to: b, delta, better })
+  }
+  // A language present in one run and not the other has no delta to report: the
+  // two runs scored different populations, which is the same reason a level
+  // change partitions rather than annotates.
+  for (const { key, metric, lang } of languageKeys(next)) {
+    const a = prev?.summary?.byLanguage?.[lang]?.[metric]
+    const b = next.byLanguage[lang][metric]
+    if (typeof a !== 'number' || typeof b !== 'number') continue
+    const delta = b - a
+    if (!delta) continue
+    const better = HIGHER_IS_BETTER.has(metric) ? delta > 0 : delta < 0
     out.push({ key, from: a, to: b, delta, better })
   }
   return out
@@ -198,6 +255,25 @@ function markdown({ meta, summary, diff, incomparable, rows }) {
   }
   L.push('')
 
+  if (summary.byLanguage) {
+    const langs = Object.keys(summary.byLanguage)
+    L.push('## By language')
+    L.push('')
+    L.push('> The corpus has one language; the readers do not. A mean over the whole')
+    L.push('> set describes neither population when they differ.')
+    L.push('')
+    L.push('| lang | pos | neg | recall8 | mrr | answerF1 | identifierRecall | negCaught |')
+    L.push('|---|---|---|---|---|---|---|---|')
+    for (const lang of langs) {
+      const b = summary.byLanguage[lang]
+      L.push(
+        `| ${lang} | ${b.positives} | ${b.negatives} | ${fmt(b.recall8)} | ${fmt(b.mrr)} | ` +
+          `${fmt(b.answerF1)} | ${fmt(b.identifierRecall)} | ${fmt(b.negativesCaughtRate)} |`,
+      )
+    }
+    L.push('')
+  }
+
   if (incomparable.length) {
     L.push(`> **${incomparable.join(' · ')}** — every delta below is against a different setup.`)
     L.push('')
@@ -230,6 +306,61 @@ function markdown({ meta, summary, diff, incomparable, rows }) {
         `| ${r.id} | ${fmt(r.G)} | ${r.gatePass ? 'pass' : '**refused**'} | ${r.observed} | ${r.question.slice(0, 60)} |`,
       )
     }
+    L.push('')
+  }
+
+  if (summary.taxonomy) {
+    const buckets = Object.keys(summary.taxonomy).sort((a, b) => {
+      const rank = (k) => {
+        const i = TAXONOMY_ORDER.findIndex((t) => k === t || k.startsWith(`${t}:`))
+        return i === -1 ? TAXONOMY_ORDER.length : i
+      }
+      return rank(a) - rank(b) || a.localeCompare(b)
+    })
+    L.push('## Failure taxonomy')
+    L.push('')
+    L.push('> What moved, not how much. The four positive buckets have four')
+    L.push('> different fixes: a corpus edit, a ranking lever, the answer side,')
+    L.push('> and the gate.')
+    L.push('')
+    L.push('| bucket | n | ids |')
+    L.push('|---|---|---|')
+    for (const bucket of buckets) {
+      const ids = summary.taxonomy[bucket]
+      L.push(`| ${bucket} | ${ids.length} | ${ids.join(', ')} |`)
+    }
+    L.push('')
+  }
+
+  if (summary.missPages?.undescribed?.length) {
+    L.push('## Pages behind the misses that never say what they are for')
+    L.push('')
+    L.push('> A frontmatter `description` lands on the page\'s FIRST chunk and is')
+    L.push('> the one measured dense lever on this pipeline. A lead, not a verdict:')
+    L.push('> the answer may simply not be written anywhere.')
+    L.push('')
+    L.push('| page | records |')
+    L.push('|---|---|')
+    for (const p of summary.missPages.undescribed) {
+      L.push(`| \`${p.page}\` | ${p.records.join(', ')} |`)
+    }
+    L.push('')
+  }
+
+  if (summary.reSearch?.crossLanguage) {
+    const r = summary.reSearch
+    L.push('## Re-search')
+    L.push('')
+    L.push(
+      `${r.turns} of ${r.ofTurns} turns searched again in the model's own words; ` +
+        `**${r.crossLanguage}** of those crossed language.`,
+    )
+    L.push('')
+    L.push(
+      '> A re-search moves the lexical half only: the dense half still scores the' +
+        " reader's original question. " +
+        (r.crossLanguageIds.length ? `Records: ${r.crossLanguageIds.join(', ')}.` : ''),
+    )
     L.push('')
   }
 
@@ -274,6 +405,9 @@ function siblingMismatches(dir, meta) {
     // the counts do collide the mismatch report reads as three comparable models
     // measured on two different question lists.
     if (levelOf(m) !== levelOf(meta)) continue
+    // A row measured in another vector space is not a row of this matrix, for
+    // the same reason `previousReport` refuses the pair one screen up.
+    if (m.embedModel && meta.embedModel && m.embedModel !== meta.embedModel) continue
     if (m.promptHash !== meta.promptHash || m.records !== meta.records) continue
 
     const diffs = []

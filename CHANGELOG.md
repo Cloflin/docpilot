@@ -11,6 +11,54 @@ against `package.json`'s version and refuses the publish if they disagree.
 
 ### Changed
 
+**A report says what moved, not only how much.** Every number in the table was a
+mean over the whole golden set, and four different failures with four different
+fixes arrived as one figure. Four sections now separate them. A **failure
+taxonomy** files every record as `retrieval-miss` (the gold is not in the ranked
+eight — a corpus edit), `gold-below-primed` (it is in the eight and not in the
+window the model was primed with — a `GATE_K` and ranking problem),
+`primed-low-f1` (the evidence was in front of the model and the answer still
+missed), `over-refused`, or one of the two negative outcomes. A **by-language**
+table splits the same metrics by the language each question was asked in, because
+BM25 shares no term across writing systems and a mixed mean describes neither
+population. **Pages behind the misses that never say what they are for** names
+the markdown files whose frontmatter carries no `description` — the one measured
+dense lever on this pipeline, read as a lead and not a verdict. And a
+**re-search** line counts the turns where the model searched in a language other
+than the question's.
+
+**`citationRecall`, after two releases of being asked for.** `citationPrecision`
+divides by how many citations the ANSWERER chose, so at one gold entry the same
+retrieval scores 1.00 or 0.33 depending on terseness — the skill has said "read
+`citationRecall` beside it, always" while nothing computed one. It is the
+`covered` arm of `retrievalF1Loose` over the citations, so a page pin `path#` is
+covered by any anchor of that page and by no sibling route.
+
+**Cached prompt tokens, from the only party that knows.** Every observation is
+re-sent on every step, and whether that costs full price is a fact about the
+provider's prefix cache that nothing here could answer. `usage` now carries
+`cachedTokens` — `prompt_tokens_details.cached_tokens` on the OpenAI-compatible
+adapters, `cache_read_input_tokens` on Anthropic's — and the report prints
+`cachedShare`. **`null` is not zero**: a transport that reports no cache stays
+null through the sum, because averaging silence as a miss would invent a hit rate
+for it.
+
+**A report name carries the embedder, and this breaks pairing with older reports
+once.** The corpus hash is sha256 over chunk id and text, so it cannot tell two
+vector spaces apart — and this repository ships exactly that pair at corpus
+`08e7a87e`: `docs/public/rag` under `nvidia/nemotron-3-embed-1b:free` and
+`docs/public/rag-local` under `bge-m3`. Both wrote one filename. Each run
+overwrote the baseline the other was being compared against, and then printed the
+difference between two EMBEDDERS as "changes since the previous run" — measured
+here on one golden set with one gate: recall@8 0.925 against 0.912, MRR 0.762
+against 0.669, negativesCaught 0.125 against 0.438, with nothing on the page
+naming the cause. The name gains `-emb-<hash>` and `previousReport` refuses a
+cross-embedder pair, so the overwrite and the comparison are stopped by separate
+mechanisms. Absent on either side reads as UNKNOWN and still pairs, by the rule
+`goldenSha` established. `latest.json` is still one path for both indexes: read
+`meta.embedModel` before quoting it.
+
+
 **The window grid is 408, and the eval figures are gated.** `docs/guide/evaluation.md`
 said the window search had 272 candidates; spec 006 widened it to 408 two releases
 ago, and nothing caught it — the existing figures gate covers only the index

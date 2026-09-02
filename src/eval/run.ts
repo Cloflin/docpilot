@@ -42,6 +42,7 @@ import { composeQuery } from '../theme/docpilot/gate.js'
 import { detectTools, detectCapabilities } from '../theme/docpilot/llm.js'
 import { runTurn } from '../theme/docpilot/harness.js'
 import { promptHash } from '../theme/docpilot/prompt.js'
+import { fnv1a32 } from '../theme/docpilot/text.js'
 import {
   retrievalF1Loose,
   recallAtK,
@@ -51,7 +52,12 @@ import {
   identifierRecall,
   languageMatch,
   citationPrecision,
+  citationRecall,
+  normaliseAnswer,
+  pageOf,
   hallucinatedCitationRate,
+  classifyRow,
+  langOf,
   underPath,
   wilsonUpper95,
   mean,
@@ -62,7 +68,7 @@ import { writeReport } from './report.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
 
-import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot } from '../cli-context.js'
+import { ROOT, RAG, REPORTS, GOLDEN, DOCS, settings as docPilot } from '../cli-context.js'
 import { applyFileEnv } from '../cli-env.js'
 import { prefetchEmbeddings } from './prefetch.js'
 import { COMMANDS, entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
@@ -582,6 +588,12 @@ async function probeRecords(index, guard, records) {
       composedVec,
       g,
       retrievedIds,
+      // The ranked eight the two retrieval metrics are read off. It was built
+      // here and thrown away, so a report could say recall@8 was 1 and never say
+      // WHERE the gold sat — the difference between a ranking problem and a
+      // corpus problem, and the two have different fixes.
+      rankedIds,
+      goldPages: [...new Set(goldInScope.map((g) => pageOf(g)))],
       scoredAsNegative,
       retrieval_f1: goldInScope.length ? retrievalF1Loose(retrievedIds, goldInScope) : null,
       recall8: goldInScope.length ? recallAtK(rankedIds, goldInScope, 8) : null,
@@ -614,6 +626,15 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       channel: g.channel,
       gatePass: g.pass,
       retrievedIds: probe.retrievedIds,
+      rankedIds: probe.rankedIds,
+      // The record's own claim where it has one, detection where it does not.
+      // Every metric below is a mean over a set whose language composition is
+      // invisible in it: this corpus is English and a quarter of its readers are
+      // not, and the two populations do not score alike.
+      lang: langOf(rec),
+      // The pages the gold lives on, so a miss can name a PAGE and not just a
+      // record id. Retrieval is fixed on pages, not on question ids.
+      goldPages: probe.goldPages,
       retrieval: probe.retrieval_f1,
       recall8: probe.recall8,
       mrr: probe.mrr,
@@ -700,6 +721,19 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
     row.rejectedFetches = res.rejectedFetches
     row.support = res.support
     row.cost = res.cost
+    // What the model searched for on its own, and in which language. The turn's
+    // query vector is the reader's question whatever the model then asks for, so
+    // a re-search in another language scores a foreign sentence's vector against
+    // the corpus — the evidence spec 015 is written against, and it has to be
+    // measured before it is believed.
+    const searched = (res.trace || [])
+      .filter((t) => t.kind === 'search')
+      .map((t) => String(t.data?.query || ''))
+      .filter(Boolean)
+    row.reSearch = searched.filter(
+      (q) => normaliseAnswer(q) !== normaliseAnswer(rec.question),
+    )
+    row.reSearchLang = [...new Set(row.reSearch.map((q) => langOf({ question: q })))]
     row.hallucinated = hallucinatedCitationRate(res.citations, res.emitted)
     row.emittedContainment = scopeContainment(res.emitted, probe.scope)
 
@@ -711,6 +745,9 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       row.identifierRecall = identifierRecall(res.text, rec.identifiers)
       row.language = languageMatch(rec.question, res.text)
       row.citationPrecision = citationPrecision(res.citations, rec.gold_chunks)
+      // Precision divides by what the answerer chose and recall by what the
+      // record pinned; at |gold| = 1 the first moves with terseness alone.
+      row.citationRecall = citationRecall(res.citations, rec.gold_chunks)
     }
     row.text = res.text
     rows.push(row)
@@ -815,6 +852,7 @@ export function summarise(rows) {
     answerF1: mean(positives.map((r) => r.answerF1)),
     identifierRecall: mean(positives.map((r) => r.identifierRecall)),
     citationPrecision: mean(positives.map((r) => r.citationPrecision)),
+    citationRecall: mean(positives.map((r) => r.citationRecall)),
     supportPrecision: mean(supported.map((r) => r.support)),
     unsupportedAnswerRate: supported.length ? unsupported / supported.length : null,
     language: mean(positives.map((r) => r.language)),
@@ -832,6 +870,12 @@ export function summarise(rows) {
     requestsPerTurn: mean(rows.map((r) => r.requests)),
     promptTokens: mean(rows.map((r) => r.cost?.promptTokens)),
     outputTokens: mean(rows.map((r) => r.cost?.outputTokens)),
+    // Null on a transport that reports no cache — see `usageOf`. The share is
+    // what the number is FOR: every observation is re-sent on every step, and
+    // whether that costs full price is a fact about the provider's prefix cache
+    // that nothing here could previously answer.
+    cachedTokens: mean(rows.map((r) => r.cost?.cachedTokens)),
+    cachedShare: cachedShare(rows),
     // The headline economy number: everything the machine had to think about,
     // divided by the answers it actually delivered. A model that refuses cheaply
     // is not cheap.
@@ -855,7 +899,140 @@ export function summarise(rows) {
       })
       .map((r) => `${r.id}(${r.observed})`),
     languageFailures: positives.filter((r) => r.language === 0).map((r) => r.id),
+    byLanguage: byLanguage(positives, negatives),
+    taxonomy: taxonomyOf(rows),
+    reSearch: reSearchSummary(rows),
+    missPages: missPages(rows),
   }
+}
+
+/**
+ * The pages behind the retrieval misses, and whether each states what it is FOR.
+ *
+ * The measured dense lever on this pipeline is a frontmatter `description`: it
+ * lands on the page's first chunk and says, in the words a question uses, what
+ * every heading on the page phrases as a topic. On one page it moved that
+ * chunk's cosine 0.426 → 0.556. So a miss whose page has no `description` is a
+ * documentation edit before it is a retrieval constant, and that distinction is
+ * the whole reason `corpus` mode exists — but nothing pointed at the file.
+ *
+ * READ IT AS A LEAD, NOT A VERDICT. A page may be missing for three innocent
+ * reasons: the corpus was built from HTML or OpenAPI rather than markdown, the
+ * route does not map onto a path under `docsDir`, or the answer genuinely is not
+ * written anywhere. Only pages that resolve to a real markdown file are named,
+ * and a page whose file cannot be found is left out rather than guessed at.
+ */
+function missPages(rows) {
+  const missed = rows.filter((r) => {
+    const bucket = classifyRow(r)
+    return bucket === 'retrieval-miss' || bucket === 'gold-below-primed'
+  })
+  const pages = [...new Set(missed.flatMap((r) => r.goldPages || []))]
+  if (!pages.length) return null
+
+  const out = []
+  for (const page of pages) {
+    const rel = String(page).replace(/^\//, '')
+    const candidates = [`${rel}.md`, `${rel}/index.md`, `${rel}.mdx`]
+    let file = null
+    for (const c of candidates) {
+      const full = path.join(DOCS, c)
+      if (fs.existsSync(full)) {
+        file = full
+        break
+      }
+    }
+    if (!file) continue
+    let head = ''
+    try {
+      head = fs.readFileSync(file, 'utf8').slice(0, 2000)
+    } catch {
+      continue
+    }
+    // Frontmatter only: a `description:` further down the page is prose about
+    // something else, and the chunker reads the block at the top.
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(head)
+    const described = Boolean(fm && /^description:\s*\S/m.test(fm[1]))
+    out.push({ page, described, records: missed.filter((r) => r.goldPages?.includes(page)).map((r) => r.id) })
+  }
+  const undescribed = out.filter((p) => !p.described)
+  return undescribed.length ? { undescribed, checked: out.length } : null
+}
+
+/**
+ * How often the model re-searched, and how often it did so in another language
+ * than the question. The second number is the one that costs: the dense channel
+ * keeps scoring the reader's original sentence.
+ */
+function reSearchSummary(rows) {
+  const withSearch = rows.filter((r) => r.reSearch?.length)
+  if (!withSearch.length) return null
+  const crossed = withSearch.filter(
+    (r) => r.reSearchLang?.some((l) => l !== (r.lang || 'und')),
+  )
+  return {
+    turns: withSearch.length,
+    ofTurns: rows.length,
+    crossLanguage: crossed.length,
+    crossLanguageIds: crossed.map((r) => r.id),
+  }
+}
+
+/** Cached prompt tokens over prompt tokens, across the rows that report one. */
+function cachedShare(rows) {
+  const measured = rows.filter((r) => typeof r.cost?.cachedTokens === 'number')
+  if (!measured.length) return null
+  const prompt = measured.reduce((a, r) => a + (r.cost.promptTokens || 0), 0)
+  if (!prompt) return null
+  return measured.reduce((a, r) => a + r.cost.cachedTokens, 0) / prompt
+}
+
+/**
+ * The same metrics, split by the language the question was asked in.
+ *
+ * A mean over a mixed set hides the one difference that is structural rather
+ * than incidental: BM25 shares no term across writing systems, so a question in
+ * a language the corpus is not written in arrives ordered by the dense channel
+ * alone. Measured on the development deployment, MRR was 0.318 for one language
+ * and 0.509 for the other while the headline sat between them, describing
+ * neither. Only populations with something in them are emitted, so a
+ * single-language set gains one bucket and no noise.
+ */
+function byLanguage(positives, negatives) {
+  const langs = [...new Set([...positives, ...negatives].map((r) => r.lang || 'und'))].sort()
+  if (langs.length < 2) return null
+  const out = {}
+  for (const lang of langs) {
+    const pos = positives.filter((r) => (r.lang || 'und') === lang)
+    const neg = negatives.filter((r) => (r.lang || 'und') === lang)
+    const caught = neg.filter((r) => r.observed.startsWith('refuse')).length
+    out[lang] = {
+      positives: pos.length,
+      negatives: neg.length,
+      recall8: mean(pos.map((r) => r.recall8)),
+      mrr: mean(pos.map((r) => r.mrr)),
+      answerF1: mean(pos.map((r) => r.answerF1)),
+      identifierRecall: mean(pos.map((r) => r.identifierRecall)),
+      citationRecall: mean(pos.map((r) => r.citationRecall)),
+      language: mean(pos.map((r) => r.language)),
+      negativesCaughtRate: neg.length ? caught / neg.length : null,
+    }
+  }
+  return out
+}
+
+/**
+ * Every row filed under the failure it actually is — `metrics.js` decides, this
+ * only groups. Ids rather than counts: the point of the section is that a reader
+ * can go and look at the records, and a count of four is not a lead.
+ */
+function taxonomyOf(rows) {
+  const out = {}
+  for (const r of rows) {
+    const bucket = classifyRow(r)
+    ;(out[bucket] = out[bucket] || []).push(r.id)
+  }
+  return out
 }
 
 function printSummary(s) {
@@ -868,6 +1045,7 @@ function printSummary(s) {
   line('answer token-F1 (mean)', num(s.answerF1))
   line('identifier recall', pct(s.identifierRecall))
   line('citation precision', pct(s.citationPrecision))
+  line('citation recall', pct(s.citationRecall))
   line('support precision', num(s.supportPrecision))
   line('unsupported answers', pct(s.unsupportedAnswerRate))
   line('LANGUAGE MATCH', pct(s.language))
@@ -885,6 +1063,7 @@ function printSummary(s) {
   line('PROMPT TOKENS / turn', kchars(s.promptTokens))
   line('output tokens / turn', kchars(s.outputTokens))
   line('tokens / accepted answer', kchars(s.tokensPerAcceptedAnswer))
+  if (s.cachedShare != null) line('prompt served from cache', pct(s.cachedShare))
   line('prompt chars / turn', `${kchars(s.promptChars)}  peak ${kchars(s.promptCharsPeak)}`)
   line('observation chars', kchars(s.observationChars))
   line('answer chars', kchars(s.answerChars))
@@ -894,6 +1073,27 @@ function printSummary(s) {
     'latency p50 / p95',
     `${((s.latencyP50 || 0) / 1000).toFixed(0)}s / ${((s.latencyP95 || 0) / 1000).toFixed(0)}s`,
   )
+
+  if (s.byLanguage) {
+    console.log('  ── by language ──')
+    for (const [lang, b] of Object.entries<any>(s.byLanguage)) {
+      line(
+        `${lang}  (${b.positives}+ / ${b.negatives}-)`,
+        `recall8 ${num(b.recall8)}  mrr ${num(b.mrr)}  answerF1 ${num(b.answerF1)}`,
+      )
+    }
+  }
+  if (s.missPages?.undescribed?.length) {
+    console.log('  ── missed pages with no frontmatter description ──')
+    for (const p of s.missPages.undescribed) console.log(`  ${p.page}  ${p.records.join(' ')}`)
+  }
+  if (s.taxonomy) {
+    console.log('  ── taxonomy ──')
+    for (const [bucket, ids] of Object.entries<any>(s.taxonomy)) {
+      if (bucket === 'ok') continue
+      line(bucket, `${ids.length}  ${ids.slice(0, 8).join(' ')}`)
+    }
+  }
 
   console.log('')
   // Each gate says the threshold it broke, because "0.02 > 0" is a fact and
@@ -930,10 +1130,34 @@ function printSummary(s) {
  * every report on disk stops pairing with its successor and the whole history
  * goes dark on the day levels landed. So `ultra` — which is what "no flag" means
  * — adds no segment, and only a narrowed run is filed apart.
+ *
+ * `-emb-<hash>` IS THE THIRD HALF OF THE SAME RULE, and it was the one missing.
+ *
+ * `indexHash` is sha256 over chunk id and text — the CORPUS — and it does not
+ * cover the vector space. So a corpus indexed by two embedders produces two
+ * indexes, two different retrievals and one filename. This repository ships
+ * exactly that pair: `docs/public/rag` and `docs/public/rag-local` are the same
+ * corpus at `08e7a87e` under `nvidia/nemotron-3-embed-1b:free` and `bge-m3`.
+ * Measured here, the collision is not subtle — the same golden set, the same
+ * gate, the same levers: recall@8 0.925 against 0.912, MRR 0.762 against 0.669,
+ * negativesCaught 0.125 against 0.438. Each run overwrote the other's baseline
+ * and then reported the difference between two embedders as "changes since the
+ * previous run", with nothing on the page naming the cause.
+ *
+ * The name is hashed rather than spelled: a provider-qualified model id carries
+ * `/` and `:`, and a report name is a path. `fnv1a32` is the hash the prompt
+ * segment already uses.
+ *
+ * THIS BREAKS PAIRING WITH PRE-1.2.0 REPORTS ONCE, deliberately and visibly —
+ * the alternative is keeping a name that pairs two measurements which were never
+ * comparable. `previousReport` refuses the cross-embedder pair as well, so the
+ * wall is built twice: the filename stops the OVERWRITE, the filter stops the
+ * COMPARISON, and neither depends on the other being right.
  */
-export const reportName = ({ indexHash, model, vectorlessIndex, level }) =>
+export const reportName = ({ indexHash, model, vectorlessIndex, level, embedModel }) =>
   `report-${indexHash}-${String(model).replace(/[^\w.-]+/g, '_')}` +
   `${LEXICAL ? '-lexical' : ''}${vectorlessIndex ? '-novec' : ''}` +
+  `${embedModel ? `-emb-${fnv1a32(String(embedModel))}` : ''}` +
   `${!level || level === DEFAULT_RUN_LEVEL ? '' : `-lvl-${level}`}` +
   `-${PROMPT_HASH}.json`
 
@@ -1063,6 +1287,7 @@ async function main() {
           model,
           vectorlessIndex: vectorless,
           level: RUN_LEVEL,
+          embedModel: index.manifest.embedModel,
         }),
       )
       if (RESUME && fs.existsSync(reportPath)) {

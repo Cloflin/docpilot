@@ -576,10 +576,24 @@ function joinFragment(head, fragment) {
 /** Token counts from every request a reply took, so a turn is charged for all of them. */
 function addUsage(total, next) {
   if (!next) return total
-  if (!total) return { promptTokens: next.promptTokens || 0, outputTokens: next.outputTokens || 0 }
+  if (!total)
+    return {
+      promptTokens: next.promptTokens || 0,
+      outputTokens: next.outputTokens || 0,
+      cachedTokens: next.cachedTokens ?? null,
+    }
+  // `null` means the provider does not report a cache, and it survives a sum
+  // with a number: adding an unmeasured leg as 0 would report the pooled total
+  // as a measured miss. Two reporting legs add; a reporting leg and a silent one
+  // keep the number the reporting one gave.
+  const cached =
+    total.cachedTokens == null && next.cachedTokens == null
+      ? null
+      : (total.cachedTokens || 0) + (next.cachedTokens || 0)
   return {
     promptTokens: total.promptTokens + (next.promptTokens || 0),
     outputTokens: total.outputTokens + (next.outputTokens || 0),
+    cachedTokens: cached,
   }
 }
 

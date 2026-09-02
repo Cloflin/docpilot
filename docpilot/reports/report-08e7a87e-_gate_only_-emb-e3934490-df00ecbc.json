@@ -1,0 +1,2778 @@
+{
+ "meta": {
+  "model": "(gate only)",
+  "fallback": false,
+  "thinkSupported": true,
+  "capabilities": null,
+  "gateOnly": true,
+  "lexical": false,
+  "vectorlessIndex": false,
+  "provider": "ollama",
+  "indexHash": "08e7a87e",
+  "promptHash": "df00ecbc",
+  "chunkCount": 484,
+  "embedModel": "bge-m3",
+  "guard": {
+   "tau": 0.69,
+   "tauLexical": 0.51,
+   "wDense": 0.75,
+   "wLexical": 0.25,
+   "denseMode": "cosine",
+   "cosFloor": 0.2,
+   "cosCeil": 0.6,
+   "source": "calibrated-reduced",
+   "calibratedAt": "08e7a87e",
+   "zexp": [
+    {
+     "n": 7,
+     "z": 1.1678
+    },
+    {
+     "n": 11,
+     "z": 1.3451
+    },
+    {
+     "n": 24,
+     "z": 1.8298
+    },
+    {
+     "n": 48,
+     "z": 2.2847
+    },
+    {
+     "n": 111,
+     "z": 2.84
+    },
+    {
+     "n": 321,
+     "z": 3.9924
+    },
+    {
+     "n": 484,
+     "z": 4.711
+    },
+    {
+     "n": 484,
+     "z": 4.711
+    }
+   ],
+   "zexpSource": "measured",
+   "overRefusalUB95": 0.015757753370292518,
+   "gatePrecision": 0.5375
+  },
+  "records": 56,
+  "level": "ultra",
+  "maxIterations": 2,
+  "numCtx": 8192,
+  "levers": {
+   "BM25_B": 0.7,
+   "BM25_D": 0.5,
+   "BM25_K": 1.2,
+   "BOOST_ANCHOR": 1.25,
+   "BOOST_BREADCRUMB": 1.5,
+   "BOOST_PATH": 1,
+   "BOOST_TITLE": 2,
+   "CANDIDATES": 30,
+   "EXPAND_BELOW_TOKENS": 150,
+   "FUSED": 12,
+   "GATE_K": 5,
+   "MMR_LAMBDA": 1,
+   "PAGE_CAP": 2,
+   "RRF_K": 5,
+   "W_DENSE_RRF": 1,
+   "W_LEXICAL_RRF": 1,
+   "maxIterations": 2,
+   "numCtx": 8192
+  },
+  "ranAt": "2026-09-02T14:52:22.416Z",
+  "chatBase": "http://localhost:11434",
+  "embedBase": "http://192.168.50.146:11434",
+  "node": "v26.8.1",
+  "package": "1.1.0",
+  "goldenSha": "3a4b0dec926e4083",
+  "temperature": 0.2,
+  "seed": 20260829
+ },
+ "summary": {
+  "positives": 40,
+  "negatives": 16,
+  "retrievalF1": 0.3172709235209236,
+  "recall8": 0.9125,
+  "mrr": 0.6694345238095237,
+  "answerF1": null,
+  "identifierRecall": null,
+  "citationPrecision": null,
+  "citationRecall": null,
+  "supportPrecision": null,
+  "unsupportedAnswerRate": null,
+  "language": null,
+  "gateOverRefusal": 1,
+  "gateOverRefusalUB95": 0.10459194645744732,
+  "answerOverRefusal": 0,
+  "answerOverRefusalUB95": 0.06335679459167301,
+  "negativesCaught": 7,
+  "negativesCaughtRate": 0.4375,
+  "noAnswerPrecision": 0.4375,
+  "hallucinated": null,
+  "scopeContainment": 1,
+  "rejectedFetches": 0,
+  "iterationsPerAnswer": null,
+  "requestsPerTurn": null,
+  "promptTokens": null,
+  "outputTokens": null,
+  "cachedTokens": null,
+  "cachedShare": null,
+  "tokensPerAcceptedAnswer": 0,
+  "promptChars": null,
+  "promptCharsPeak": null,
+  "observationChars": null,
+  "answerChars": null,
+  "latencyP50": 0,
+  "latencyP95": 0,
+  "misses": [
+   "n-01(answer)",
+   "n-02(answer)",
+   "q-15(refuse:out-of-scope)",
+   "n-04(answer)",
+   "n-06(answer)",
+   "n-07(answer)",
+   "n-10(answer)",
+   "n-11(answer)",
+   "n-14(answer)",
+   "n-15(answer)"
+  ],
+  "languageFailures": [],
+  "byLanguage": {
+   "English": {
+    "positives": 38,
+    "negatives": 16,
+    "recall8": 0.9342105263157895,
+    "mrr": 0.6783521303258144,
+    "answerF1": null,
+    "identifierRecall": null,
+    "citationRecall": null,
+    "language": null,
+    "negativesCaughtRate": 0.4375
+   },
+   "Russian": {
+    "positives": 2,
+    "negatives": 0,
+    "recall8": 0.5,
+    "mrr": 0.5,
+    "answerF1": null,
+    "identifierRecall": null,
+    "citationRecall": null,
+    "language": null,
+    "negativesCaughtRate": null
+   }
+  },
+  "taxonomy": {
+   "ok": [
+    "q-01",
+    "q-02",
+    "q-03",
+    "q-04",
+    "q-05",
+    "q-07",
+    "q-09",
+    "q-10",
+    "q-11",
+    "q-12",
+    "q-13",
+    "q-17",
+    "q-18",
+    "q-19",
+    "q-20",
+    "q-21",
+    "q-22",
+    "q-23",
+    "q-25",
+    "q-26",
+    "q-27",
+    "q-29",
+    "q-30",
+    "q-31",
+    "q-32",
+    "q-34",
+    "q-35",
+    "q-37",
+    "q-38",
+    "q-39",
+    "q-40"
+   ],
+   "gold-below-primed": [
+    "q-06",
+    "q-08",
+    "q-16",
+    "q-28",
+    "q-33"
+   ],
+   "neg-answered:refuse:no-evidence": [
+    "n-01",
+    "n-02",
+    "n-04",
+    "n-07",
+    "n-10",
+    "n-11",
+    "n-14",
+    "n-15"
+   ],
+   "neg-caught": [
+    "n-03",
+    "n-05",
+    "n-08",
+    "n-09",
+    "n-12",
+    "n-13",
+    "n-16"
+   ],
+   "retrieval-miss": [
+    "q-14",
+    "q-24",
+    "q-36"
+   ],
+   "over-refused": [
+    "q-15"
+   ],
+   "neg-answered:refuse:out-of-scope": [
+    "n-06"
+   ]
+  },
+  "reSearch": null,
+  "missPages": {
+   "undescribed": [
+    {
+     "page": "/guide/providers",
+     "described": false,
+     "records": [
+      "q-06",
+      "q-16"
+     ]
+    },
+    {
+     "page": "/concepts/a-turn",
+     "described": false,
+     "records": [
+      "q-08",
+      "q-28"
+     ]
+    },
+    {
+     "page": "/guide/social-openers",
+     "described": false,
+     "records": [
+      "q-14"
+     ]
+    },
+    {
+     "page": "/guide/philosophy",
+     "described": false,
+     "records": [
+      "q-24"
+     ]
+    },
+    {
+     "page": "/concepts/the-gate",
+     "described": false,
+     "records": [
+      "q-24"
+     ]
+    },
+    {
+     "page": "/guide/credentials",
+     "described": false,
+     "records": [
+      "q-33"
+     ]
+    },
+    {
+     "page": "/concepts/the-ladder",
+     "described": false,
+     "records": [
+      "q-36"
+     ]
+    },
+    {
+     "page": "/reference/cli",
+     "described": false,
+     "records": [
+      "q-36"
+     ]
+    }
+   ],
+   "checked": 8
+  }
+ },
+ "incomparable": [],
+ "diff": [],
+ "rows": [
+  {
+   "id": "q-01",
+   "question": "What is the refusal gate?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#",
+    "guide/philosophy#refuse-before-the-model-is-called",
+    "guide/why#why-the-gate-sits-on-the-retrieval-side",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "concepts/the-gate#follow-ups",
+    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#",
+    "guide/philosophy#refuse-before-the-model-is-called",
+    "guide/why#why-the-gate-sits-on-the-retrieval-side",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "concepts/the-gate#follow-ups",
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "guide/panel#when-it-refuses",
+    "concepts/the-gate#follow-ups~2",
+    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-gate",
+    "/guide/philosophy"
+   ],
+   "retrieval": {
+    "p": 0.8333333333333334,
+    "r": 1,
+    "f1": 0.9090909090909091
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-02",
+   "question": "What are the two channels the gate scores a question on?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#two-channels",
+    "reference/config#it-rewrites-it-never-adds",
+    "concepts/the-gate#follow-ups",
+    "concepts/the-gate#follow-ups~3"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#two-channels",
+    "reference/config#it-rewrites-it-never-adds",
+    "concepts/the-gate#follow-ups",
+    "concepts/the-gate#follow-ups~3",
+    "guide/social-openers#why-it-exists",
+    "guide/troubleshooting#still-stuck",
+    "concepts/the-gate#five-settled-turns-five-causes"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-gate"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 0.5,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-03",
+   "question": "Is the free tier limited by requests or by tokens?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.95,
+   "D": 1,
+   "L": 0.8,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/free-tier#the-constraint-is-requests-not-tokens",
+    "reference/config#budget",
+    "guide/free-tier#",
+    "guide/free-tier#one-key-ten-models",
+    "concepts/the-ladder#2-the-free-pool"
+   ],
+   "rankedIds": [
+    "guide/free-tier#the-constraint-is-requests-not-tokens",
+    "reference/config#budget",
+    "guide/free-tier#",
+    "guide/free-tier#one-key-ten-models",
+    "concepts/the-ladder#2-the-free-pool",
+    "guide/free-tier#when-the-build-runs-out~3",
+    "guide/free-tier#writing-your-own-order",
+    "guide/free-tier#what-you-have-to-decide"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/free-tier"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-04",
+   "question": "What does the docpilot index command do?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "install/web#the-index",
+    "reference/cli#",
+    "guide#overview",
+    "reference/cli#index",
+    "guide/where-it-goes#the-two-halves-again",
+    "reference/cli#embedder-question"
+   ],
+   "rankedIds": [
+    "install/web#the-index",
+    "reference/cli#",
+    "guide#overview",
+    "reference/cli#index",
+    "guide/where-it-goes#the-two-halves-again",
+    "guide/why#why-not-a-vector-database",
+    "reference/cli#split-identifiers",
+    "guide/indexing#",
+    "reference/cli#embedder-question"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/reference/cli"
+   ],
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 0.25,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-05",
+   "question": "How do I install DocPilot in a VitePress site?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide#overview~2",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "install/vitepress#the-config",
+    "install#",
+    "install/vitepress#the-theme"
+   ],
+   "rankedIds": [
+    "guide#overview~2",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "install/vitepress#the-config",
+    "install#",
+    "install/vitepress#the-theme",
+    "guide/other-sites#",
+    "install/vitepress#",
+    "install/vitepress#the-config~2"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide",
+    "/install"
+   ],
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-06",
+   "question": "Where should the API key live?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/production#docker~2",
+    "guide/credentials#",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/production#ask-what-the-contract-is",
+    "reference/config#openapi",
+    "guide/credentials#what-happens",
+    "guide/panel#hello"
+   ],
+   "rankedIds": [
+    "guide/production#docker~2",
+    "guide/credentials#",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/production#ask-what-the-contract-is",
+    "reference/config#openapi",
+    "guide/providers#where-the-key-lives",
+    "guide/credentials#what-happens",
+    "guide/production#nginx~3",
+    "guide/panel#hello"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/providers"
+   ],
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 1,
+   "mrr": 0.16666666666666666,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-07",
+   "question": "What is the answer ladder?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9645665153047909,
+   "D": 0.9527553537397212,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-ladder#",
+    "concepts/the-ladder#1-paid-providers-in-priority-order~2",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "concepts/the-ladder#what-never-happens"
+   ],
+   "rankedIds": [
+    "concepts/the-ladder#",
+    "concepts/the-ladder#1-paid-providers-in-priority-order~2",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "concepts/the-ladder#what-never-happens",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "concepts/the-ladder#1-paid-providers-in-priority-order",
+    "concepts/the-ladder#4-the-hybrid-answer"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-ladder"
+   ],
+   "retrieval": {
+    "p": 1,
+    "r": 0.5,
+    "f1": 0.6666666666666666
+   },
+   "recall8": 0.5,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-01",
+   "question": "What is the capital of France?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.7909599549476287,
+   "D": 0.7212799399301716,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/evaluation#the-golden-set",
+    "reference/theme#the-whole-set~2",
+    "reference/config#ui",
+    "guide/appearance#five-entry-points",
+    "reference/cli#init"
+   ],
+   "rankedIds": [
+    "guide/evaluation#the-golden-set",
+    "reference/theme#the-whole-set~2",
+    "reference/config#ui",
+    "guide/appearance#five-entry-points",
+    "reference/cli#init",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "reference/config#parameters~4",
+    "concepts/the-gate#follow-ups~3"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-02",
+   "question": "How do I configure Algolia DocSearch crawling for my site?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.95,
+   "D": 1,
+   "L": 0.8,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "install/docusaurus#options",
+    "guide/comparison#choosing",
+    "guide/comparison#architecture",
+    "guide/comparison#sources",
+    "guide/comparison#how-the-money-is-arranged",
+    "install/docusaurus#syntax-highlighting"
+   ],
+   "rankedIds": [
+    "install/docusaurus#options",
+    "guide/comparison#choosing",
+    "guide/comparison#architecture",
+    "guide/comparison#sources",
+    "guide/comparison#how-the-money-is-arranged",
+    "install/web#the-index",
+    "guide/other-sites#",
+    "guide/comparison#what-each-of-them-publishes~2",
+    "install/docusaurus#syntax-highlighting"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-03",
+   "question": "What does the docpilot index command do?",
+   "kind": null,
+   "expect": "refuse:out-of-scope",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.5729722365264908,
+   "D": 0.763962982035321,
+   "L": 0,
+   "channel": "raw",
+   "gatePass": false,
+   "retrievedIds": [
+    "reference/theme#overriding",
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-dark-set",
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#the-whole-set~2"
+   ],
+   "rankedIds": [
+    "reference/theme#overriding",
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-dark-set",
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#the-whole-set~2",
+    "reference/theme#",
+    "reference/theme#the-whole-set"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": true,
+   "observed": "refuse:out-of-scope",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-08",
+   "question": "How much conversation memory does the assistant keep?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9565002852924883,
+   "D": 0.9420003803899845,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#past-conversations",
+    "guide/panel#",
+    "guide/history#where",
+    "reference/config#history",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/panel#opening-it",
+    "reference/config#historyexportthread"
+   ],
+   "rankedIds": [
+    "guide/panel#past-conversations",
+    "guide/panel#",
+    "guide/history#where",
+    "reference/config#history",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/history#",
+    "concepts/a-turn#conversation-memory",
+    "guide/panel#while-it-answers",
+    "guide/panel#opening-it",
+    "reference/config#historyexportthread",
+    "guide/history#what-the-reader-sees"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/a-turn"
+   ],
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 1,
+   "mrr": 0.14285714285714285,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-09",
+   "question": "What exactly is stored in conversation history, and where?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/history#",
+    "guide/history#where",
+    "reference/config#history",
+    "guide/panel#past-conversations",
+    "guide/history#what-is-stored",
+    "guide/history#what-the-reader-sees",
+    "reference/config#historyexportthread"
+   ],
+   "rankedIds": [
+    "guide/history#",
+    "guide/history#where",
+    "reference/config#history",
+    "guide/panel#past-conversations",
+    "guide/history#what-is-stored",
+    "reference/config#historysaveonunload",
+    "guide/history#what-the-reader-sees",
+    "guide/history#when-the-docs-change",
+    "reference/config#historyexportthread"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/history"
+   ],
+   "retrieval": {
+    "p": 0.2857142857142857,
+    "r": 1,
+    "f1": 0.4444444444444445
+   },
+   "recall8": 1,
+   "mrr": 0.5,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-10",
+   "question": "What happens if a reader pastes an API key into the question box?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/credentials#",
+    "guide/credentials#what-happens",
+    "guide/panel#a-question-with-a-key-in-it",
+    "reference/config#feedbackcomment",
+    "guide/credentials#this-is-not-a-security-boundary",
+    "guide/panel#hello"
+   ],
+   "rankedIds": [
+    "guide/credentials#",
+    "guide/credentials#what-happens",
+    "guide/panel#a-question-with-a-key-in-it",
+    "reference/config#feedbackcomment",
+    "guide/credentials#this-is-not-a-security-boundary",
+    "guide/production#the-body",
+    "guide/production#docker~2",
+    "reference/config#parameters~4",
+    "guide/panel#hello"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/credentials"
+   ],
+   "retrieval": {
+    "p": 0.3333333333333333,
+    "r": 1,
+    "f1": 0.5
+   },
+   "recall8": 1,
+   "mrr": 0.5,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-11",
+   "question": "Why are the vectors quantised, and what does it cost?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9166666666666666,
+   "D": 1,
+   "L": 0.6666666666666666,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#vectors-are-quantised~2",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/why#why-not-a-vector-database",
+    "guide/why#what-it-costs"
+   ],
+   "rankedIds": [
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#vectors-are-quantised~2",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/why#why-not-a-vector-database",
+    "guide/why#what-it-costs",
+    "guide/providers#no-embedder-at-all",
+    "reference/config#embed-false",
+    "guide/comparison#and-what-0-does-not-cover"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/indexing"
+   ],
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-12",
+   "question": "How do I scope a question to part of the docs?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#scoping-the-question",
+    "reference/config#quote",
+    "guide/evaluation#calibrate-before-you-ship",
+    "guide/indexing#what-gets-indexed",
+    "reference/skills#docs-rag~2",
+    "reference/config#quotefromanswer"
+   ],
+   "rankedIds": [
+    "guide/panel#scoping-the-question",
+    "reference/config#quote",
+    "guide/evaluation#calibrate-before-you-ship",
+    "guide/indexing#what-gets-indexed",
+    "reference/skills#docs-rag~2",
+    "guide/evaluation#what-it-needs",
+    "reference/cli#split-identifiers",
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "reference/config#quotefromanswer"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/panel"
+   ],
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-13",
+   "question": "What does the reader see when the assistant refuses?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#when-it-refuses",
+    "guide/panel#when-something-is-wrong",
+    "guide/panel#hello",
+    "guide/panel#the-empty-panel",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/panel#while-it-answers"
+   ],
+   "rankedIds": [
+    "guide/panel#when-it-refuses",
+    "guide/panel#when-something-is-wrong",
+    "guide/panel#hello",
+    "guide/panel#the-empty-panel",
+    "guide/panel#showing-the-reader-how-it-works",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "guide/panel#",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "guide/panel#while-it-answers",
+    "guide/panel#opening-it"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/panel"
+   ],
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-14",
+   "question": "What does the panel do if I just say hello?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#",
+    "guide/panel#hello",
+    "concepts/a-turn#2-is-it-a-question-at-all",
+    "guide/social-openers#why-it-exists",
+    "guide/i18n#the-keys~2",
+    "guide/panel#opening-it",
+    "guide/panel#while-it-answers"
+   ],
+   "rankedIds": [
+    "guide/panel#",
+    "guide/panel#hello",
+    "concepts/a-turn#2-is-it-a-question-at-all",
+    "guide/social-openers#why-it-exists",
+    "guide/i18n#the-keys~2",
+    "guide/panel#the-empty-panel",
+    "guide/panel#while-it-answers",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/panel#opening-it"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/social-openers"
+   ],
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-15",
+   "question": "How does the i18n fallback work?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.6697185182695008,
+   "D": 0.6707358021371121,
+   "L": 0.6666666666666666,
+   "channel": "raw",
+   "gatePass": false,
+   "retrievedIds": [
+    "guide/i18n#fallback-per-leaf",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#the-keys~3",
+    "guide/i18n#the-keys~2",
+    "guide/i18n#two-selectors-one-key-space",
+    "guide/i18n#the-keys",
+    "guide/i18n#interpolation"
+   ],
+   "rankedIds": [
+    "guide/i18n#fallback-per-leaf",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#the-keys~3",
+    "guide/i18n#the-keys~2",
+    "guide/i18n#two-selectors-one-key-space",
+    "guide/i18n#the-shape",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/i18n#interpolation",
+    "guide/i18n#the-keys",
+    "guide/i18n#what-is-not-translatable"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/i18n"
+   ],
+   "retrieval": {
+    "p": 0.14285714285714285,
+    "r": 1,
+    "f1": 0.25
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "refuse:out-of-scope",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-16",
+   "question": "What is the provider chain and how does it pick a service?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-ladder#1-paid-providers-in-priority-order",
+    "reference/config#chatchain",
+    "guide/troubleshooting#it-is-talking-to-a-provider-i-never-chose",
+    "guide/providers#two-keys-and-which-answers-first",
+    "reference/config#chatmodels~2"
+   ],
+   "rankedIds": [
+    "concepts/the-ladder#1-paid-providers-in-priority-order",
+    "reference/config#chatchain",
+    "guide/troubleshooting#it-is-talking-to-a-provider-i-never-chose",
+    "guide/providers#two-keys-and-which-answers-first",
+    "reference/config#chatmodels~2",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "reference/config#the-provider-chain~3",
+    "guide/providers#name-nothing-the-provider-chain~2"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/providers"
+   ],
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 1,
+   "mrr": 0.16666666666666666,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-04",
+   "question": "How do I use the docpilot deploy command?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9166666666666666,
+   "D": 1,
+   "L": 0.6666666666666666,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#",
+    "reference/cli#init",
+    "install/web#the-index",
+    "guide#overview",
+    "reference/cli#help"
+   ],
+   "rankedIds": [
+    "reference/cli#",
+    "reference/cli#init",
+    "install/web#the-index",
+    "guide#overview",
+    "reference/cli#help",
+    "install/typescript#the-types-you-will-actually-name",
+    "guide/production#nginx~2",
+    "guide/troubleshooting#"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-05",
+   "question": "How do I write a Kubernetes admission webhook?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.6525998809604646,
+   "D": 0.7867998412806195,
+   "L": 0.25,
+   "channel": "raw",
+   "gatePass": false,
+   "retrievedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "install/typescript#",
+    "guide/production#verifying",
+    "guide/troubleshooting#every-question-is-refused",
+    "reference/skills#what-changed-in-docs-rag-this-release~2"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "install/typescript#",
+    "guide/production#verifying",
+    "guide/troubleshooting#every-question-is-refused",
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "guide/evaluation#a-narrowed-sweep-writes-no-answer-only-a-report"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "refuse:no-evidence",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-06",
+   "question": "Where should the API key live?",
+   "kind": null,
+   "expect": "refuse:out-of-scope",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.7393996530302379,
+   "D": 0.8747550929292061,
+   "L": 0.3333333333333333,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/history#where",
+    "guide/history#",
+    "guide/history#what-is-stored",
+    "guide/history#two-tabs",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#what-the-reader-sees"
+   ],
+   "rankedIds": [
+    "guide/history#where",
+    "guide/history#",
+    "guide/history#what-is-stored",
+    "guide/history#two-tabs",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#when-the-docs-change",
+    "guide/history#what-the-reader-sees"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": true,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-17",
+   "question": "What does DocPilot guarantee about every answer?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide#overview",
+    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "guide/free-tier#what-docpilot-does-without-being-asked",
+    "reference/config#all-defaults~2",
+    "reference/config#citations"
+   ],
+   "rankedIds": [
+    "guide#overview",
+    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "guide/free-tier#what-docpilot-does-without-being-asked",
+    "reference/config#all-defaults~2",
+    "reference/config#citations",
+    "guide/comparison#what-docpilot-is-worse-at",
+    "guide/why#what-it-costs",
+    "guide/why#the-problem"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/guarantees"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 0.5,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-18",
+   "question": "How does retrieval fuse its two channels?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9375,
+   "D": 1,
+   "L": 0.75,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~3"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~3",
+    "guide/evaluation#bench-two-retrieval-configurations",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/a-turn"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-19",
+   "question": "Why is the import allowlist a security boundary?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "reference/cli#import",
+    "reference/cli#what-it-may-never-touch",
+    "reference/cli#calibrate~2",
+    "reference/cli#what-it-may-never-touch~2"
+   ],
+   "rankedIds": [
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "reference/cli#import",
+    "reference/cli#what-it-may-never-touch",
+    "reference/cli#calibrate~2",
+    "reference/cli#what-it-may-never-touch~2",
+    "concepts/guarantees#what-this-is-not",
+    "guide/production#content-security-policy",
+    "reference/config#sources"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/imported-pages"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-20",
+   "question": "Which blocks will the chunker never cut through?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "reference/cli#what-it-may-never-touch",
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table"
+   ],
+   "rankedIds": [
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "reference/cli#what-it-may-never-touch",
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table",
+    "concepts/the-ladder#what-never-happens",
+    "guide/evaluation#the-golden-set~3",
+    "guide/indexing#what-moves-when-you-upgrade"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/indexing"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-21",
+   "question": "How do I quote a passage into the composer?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.9166666666666666,
+   "D": 1,
+   "L": 0.6666666666666666,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#quoting-a-passage",
+    "guide/panel#the-composer",
+    "guide/panel#reading-the-answer",
+    "guide/panel#scoping-the-question",
+    "guide/panel#telling-you-it-was-wrong",
+    "guide/panel#a-question-with-a-key-in-it"
+   ],
+   "rankedIds": [
+    "guide/panel#quoting-a-passage",
+    "guide/panel#the-composer",
+    "guide/panel#reading-the-answer",
+    "guide/panel#scoping-the-question",
+    "guide/panel#telling-you-it-was-wrong",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/panel#working-the-thread",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/panel#hello"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/panel"
+   ],
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-22",
+   "question": "How do I mount DocPilot in React?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.8333333333333334,
+   "D": 1,
+   "L": 0.3333333333333333,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "install/react#mounting",
+    "install/javascript#composing-the-pieces-yourself",
+    "guide#overview",
+    "guide#overview~2",
+    "install/react#keeping-it-in-step",
+    "install/react#why-it-imports-a-prebuilt-bundle"
+   ],
+   "rankedIds": [
+    "install/react#mounting",
+    "install/javascript#composing-the-pieces-yourself",
+    "guide#overview",
+    "guide#overview~2",
+    "install/react#keeping-it-in-step",
+    "install/web#the-index",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "install/typescript#the-types-you-will-actually-name",
+    "install/react#why-it-imports-a-prebuilt-bundle"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/install/react"
+   ],
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-23",
+   "question": "Which syntax highlighter does DocPilot use by default?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9375,
+   "D": 1,
+   "L": 0.75,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/highlighting#choosing-one",
+    "install/docusaurus#syntax-highlighting",
+    "reference/highlighting#",
+    "guide#overview",
+    "install/javascript#every-option"
+   ],
+   "rankedIds": [
+    "reference/highlighting#choosing-one",
+    "install/docusaurus#syntax-highlighting",
+    "reference/highlighting#",
+    "guide#overview",
+    "install/javascript#every-option",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "install/react#the-rest-of-the-options",
+    "guide/appearance#five-entry-points"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/reference/highlighting"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-24",
+   "question": "Почему шлюз отказывает до вызова модели?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.6979342191400859,
+   "D": 0.9305789588534479,
+   "L": 0,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#chatmodels",
+    "reference/config#chatmodel",
+    "guide/social-openers#what-happens",
+    "guide/providers#what-each-provider-honours~3",
+    "reference/cli#doctor~4"
+   ],
+   "rankedIds": [
+    "reference/config#chatmodels",
+    "reference/config#chatmodel",
+    "guide/social-openers#what-happens",
+    "guide/providers#what-each-provider-honours~3",
+    "reference/cli#doctor~4",
+    "reference/config#chat",
+    "reference/config#chatmodels~2",
+    "guide/why#why-the-gate-sits-on-the-retrieval-side",
+    "reference/config#chatprovider"
+   ],
+   "lang": "Russian",
+   "goldPages": [
+    "/guide/philosophy",
+    "/concepts/the-gate"
+   ],
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-25",
+   "question": "What is topK and what is its default?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#what-it-may-never-touch~3",
+    "reference/config#topk~2",
+    "reference/config#if-your-config-already-sets-topk",
+    "reference/config#topk",
+    "reference/theme#overriding"
+   ],
+   "rankedIds": [
+    "reference/cli#what-it-may-never-touch~3",
+    "reference/config#topk~2",
+    "reference/config#if-your-config-already-sets-topk",
+    "reference/config#topk",
+    "reference/theme#overriding",
+    "reference/config#all-defaults~2",
+    "reference/cli#what-it-may-never-touch~2",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~4"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/reference/config"
+   ],
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 0.5,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-26",
+   "question": "What is the free pool and how does rotation inside it work?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-ladder#2-the-free-pool",
+    "reference/config#chatmodels",
+    "guide/free-tier#four-failures-that-do-not-rotate",
+    "guide/free-tier#writing-your-own-order",
+    "guide/free-tier#one-key-ten-models"
+   ],
+   "rankedIds": [
+    "concepts/the-ladder#2-the-free-pool",
+    "reference/config#chatmodels",
+    "guide/free-tier#four-failures-that-do-not-rotate",
+    "guide/free-tier#writing-your-own-order",
+    "guide/free-tier#one-key-ten-models",
+    "guide/free-tier#what-costs-a-model-its-turn",
+    "guide/free-tier#",
+    "guide/free-tier#what-docpilot-does-without-being-asked"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-ladder"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-07",
+   "question": "What does chat.retryDelay default to?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.8198008495899474,
+   "D": 0.9264011327865964,
+   "L": 0.5,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#chatmodels",
+    "guide/providers#thinking-turned-off",
+    "reference/config#chattopp-chatseed",
+    "reference/config#all-defaults~3",
+    "reference/config#budget~3"
+   ],
+   "rankedIds": [
+    "reference/config#chatmodels",
+    "guide/providers#thinking-turned-off",
+    "reference/config#chattopp-chatseed",
+    "reference/config#all-defaults~3",
+    "reference/config#budget~3",
+    "reference/config#chatmodel",
+    "reference/config#all-defaults~2",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-08",
+   "question": "How do I bake sourdough bread?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.41197226878185156,
+   "D": 0.549296358375802,
+   "L": 0,
+   "channel": "raw",
+   "gatePass": false,
+   "retrievedIds": [
+    "reference/config#suggestionsanswers",
+    "guide/production#verifying",
+    "concepts/the-ladder#writing-the-order-yourself",
+    "reference/theme#the-whole-set~2",
+    "reference/skills#docs-rag"
+   ],
+   "rankedIds": [
+    "reference/config#suggestionsanswers",
+    "guide/production#verifying",
+    "concepts/the-ladder#writing-the-order-yourself",
+    "reference/theme#the-whole-set~2",
+    "reference/skills#docs-rag",
+    "reference/config#suggestions",
+    "reference/config#parameters~4",
+    "guide/free-tier#when-the-build-runs-out~3"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "refuse:no-evidence",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-09",
+   "question": "Why are the vectors quantised?",
+   "kind": null,
+   "expect": "refuse:out-of-scope",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.32448759551208534,
+   "D": 0.43265012734944713,
+   "L": 0,
+   "channel": "raw",
+   "gatePass": false,
+   "retrievedIds": [
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#why-it-exists",
+    "guide/social-openers#what-happens",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#making-it-yours"
+   ],
+   "rankedIds": [
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#why-it-exists",
+    "guide/social-openers#what-happens",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#making-it-yours",
+    "guide/social-openers#"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": true,
+   "observed": "refuse:out-of-scope",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-10",
+   "question": "What is the Mintlify CLI command for a local preview?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.732216223753957,
+   "D": 0.7762882983386092,
+   "L": 0.6,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#environment",
+    "reference/cli#",
+    "guide/comparison#architecture",
+    "guide/providers#name-nothing-the-provider-chain",
+    "reference/cli#the-pages-own-markdown-wins~2"
+   ],
+   "rankedIds": [
+    "reference/cli#environment",
+    "reference/cli#",
+    "guide/comparison#architecture",
+    "guide/providers#name-nothing-the-provider-chain",
+    "reference/cli#the-pages-own-markdown-wins~2",
+    "reference/cli#vocabulary",
+    "reference/cli#what-it-may-never-touch~3",
+    "guide/imported-pages#importing-one"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-27",
+   "question": "What happens to retrieval when the embedder is unreachable?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9375,
+   "D": 1,
+   "L": 0.75,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "reference/config#embedfallback",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "reference/cli#embedder-question~3",
+    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate"
+   ],
+   "rankedIds": [
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "reference/config#embedfallback",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "reference/cli#embedder-question~3",
+    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
+    "guide/providers#no-embedder-at-all",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+    "reference/cli#embedder-question~2"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-ladder"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 0.3333333333333333,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-28",
+   "question": "What is a follow-up composed against?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": true,
+   "G": 0.9387979985897563,
+   "D": 0.9183973314530085,
+   "L": 1,
+   "channel": "composed",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#past-conversations",
+    "reference/config#composerdraft",
+    "reference/config#parameters~4",
+    "guide/panel#the-composer",
+    "guide/panel#telling-you-it-was-wrong",
+    "guide/panel#scoping-the-question"
+   ],
+   "rankedIds": [
+    "guide/panel#past-conversations",
+    "reference/config#composerdraft",
+    "reference/config#parameters~4",
+    "guide/panel#the-composer",
+    "guide/panel#telling-you-it-was-wrong",
+    "guide/panel#working-the-thread",
+    "concepts/a-turn#conversation-memory",
+    "guide/history#where",
+    "guide/panel#scoping-the-question"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/a-turn"
+   ],
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 1,
+   "mrr": 0.14285714285714285,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-29",
+   "question": "What does the calibrate command measure, and what may never move it?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": true,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#what-it-may-never-touch",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "reference/cli#calibrate~3"
+   ],
+   "rankedIds": [
+    "reference/cli#what-it-may-never-touch",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "reference/cli#calibrate~3",
+    "reference/cli#calibrate~2",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index",
+    "guide/evaluation#calibrate-before-you-ship"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/reference/cli",
+    "/guide/evaluation"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 0.5,
+    "f1": 0.28571428571428575
+   },
+   "recall8": 1,
+   "mrr": 0.2,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-30",
+   "question": "Why are the skills copied into my project rather than imported?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.95,
+   "D": 1,
+   "L": 0.8,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/skills#why-they-are-copied",
+    "reference/skills#copied-once-including-across-upgrades",
+    "reference/cli#init-upgrade",
+    "reference/cli#init~2",
+    "reference/skills#"
+   ],
+   "rankedIds": [
+    "reference/skills#why-they-are-copied",
+    "reference/skills#copied-once-including-across-upgrades",
+    "reference/cli#init-upgrade",
+    "reference/cli#init~2",
+    "reference/skills#",
+    "guide/imported-pages#importing-one~2",
+    "guide/imported-pages#importing-one~3",
+    "guide/imported-pages#what-an-imported-page-is"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/reference/skills"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-31",
+   "question": "Which two theme tokens does the stylesheet move on its own?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": true,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#",
+    "reference/theme#the-whole-set~2",
+    "reference/theme#overriding",
+    "reference/theme#the-dark-set",
+    "reference/theme#the-whole-set"
+   ],
+   "rankedIds": [
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#",
+    "reference/theme#the-whole-set~2",
+    "reference/theme#overriding",
+    "reference/theme#the-dark-set",
+    "reference/theme#the-whole-set",
+    "reference/theme#the-dark-set~2"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/reference/theme"
+   ],
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-32",
+   "question": "Что хранится в истории переписки и где?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.7076045156721625,
+   "D": 0.9434726875628834,
+   "L": 0,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/history#where",
+    "guide/history#what-is-stored",
+    "guide/history#",
+    "reference/config#history",
+    "guide/panel#past-conversations",
+    "guide/history#what-the-reader-sees",
+    "reference/config#historyexportthread"
+   ],
+   "rankedIds": [
+    "guide/history#where",
+    "guide/history#what-is-stored",
+    "guide/history#",
+    "reference/config#history",
+    "guide/panel#past-conversations",
+    "reference/config#historysaveonunload",
+    "reference/config#composerdraft",
+    "reference/config#parameters~5",
+    "guide/history#what-the-reader-sees",
+    "reference/config#historyexportthread"
+   ],
+   "lang": "Russian",
+   "goldPages": [
+    "/guide/history"
+   ],
+   "retrieval": {
+    "p": 0.2857142857142857,
+    "r": 1,
+    "f1": 0.4444444444444445
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-11",
+   "question": "What is the default value of guard.tau before calibration?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9375,
+   "D": 1,
+   "L": 0.75,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#guardtau-guardtaulexical",
+    "reference/config#guard",
+    "reference/config#topk",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "reference/config#topk~2",
+    "reference/config#composerdraft"
+   ],
+   "rankedIds": [
+    "reference/config#guardtau-guardtaulexical",
+    "reference/config#guard",
+    "reference/config#topk",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "reference/config#topk~2",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem",
+    "guide/evaluation#carrying-a-calibration-across-embedders~2",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "reference/config#composerdraft"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-12",
+   "question": "How do I set up a Terraform remote backend on S3?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.6049158666853376,
+   "D": 0.6065544889137834,
+   "L": 0.6,
+   "channel": "raw",
+   "gatePass": false,
+   "retrievedIds": [
+    "guide/production#make-it-same-origin",
+    "guide/other-sites#",
+    "install/javascript#composing-the-pieces-yourself",
+    "reference/cli#import",
+    "guide/production#",
+    "guide/production#the-body"
+   ],
+   "rankedIds": [
+    "guide/production#make-it-same-origin",
+    "guide/other-sites#",
+    "install/javascript#composing-the-pieces-yourself",
+    "reference/cli#import",
+    "guide/production#",
+    "reference/config#parameters~3",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "concepts/the-gate#follow-ups",
+    "guide/production#the-body"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "refuse:no-evidence",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-13",
+   "question": "How does the i18n fallback work?",
+   "kind": null,
+   "expect": "refuse:out-of-scope",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.4874823381933017,
+   "D": 0.5388653398132912,
+   "L": 0.3333333333333333,
+   "channel": "raw",
+   "gatePass": false,
+   "retrievedIds": [
+    "guide/indexing#what-moves-when-you-upgrade",
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#what-gets-indexed",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page"
+   ],
+   "rankedIds": [
+    "guide/indexing#what-moves-when-you-upgrade",
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#what-gets-indexed",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#~2",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/indexing#when-to-rebuild"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": true,
+   "observed": "refuse:out-of-scope",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-33",
+   "question": "What does the credential check deliberately not match, and why?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.8778407489323354,
+   "D": 0.9204543319097807,
+   "L": 0.75,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/credentials#this-is-not-a-security-boundary",
+    "guide/social-openers#why-it-exists",
+    "concepts/a-turn#1-the-credential-check",
+    "reference/cli#doctor~5",
+    "reference/cli#what-it-may-never-touch",
+    "concepts/a-turn#2-is-it-a-question-at-all"
+   ],
+   "rankedIds": [
+    "guide/credentials#this-is-not-a-security-boundary",
+    "guide/social-openers#why-it-exists",
+    "concepts/a-turn#1-the-credential-check",
+    "reference/cli#doctor~5",
+    "reference/cli#what-it-may-never-touch",
+    "guide/comparison#what-reaches-the-reader",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/credentials#what-happens",
+    "concepts/a-turn#2-is-it-a-question-at-all"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/credentials"
+   ],
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 1,
+   "mrr": 0.125,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-34",
+   "question": "Why does the fusion weight both channels equally when the gate does not?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+    "concepts/the-gate#two-channels",
+    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold",
+    "reference/cli#what-it-costs"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+    "concepts/the-gate#two-channels",
+    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold",
+    "reference/cli#what-it-costs",
+    "concepts/the-gate#follow-ups",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "guide/philosophy#refuse-before-the-model-is-called"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/a-turn",
+    "/concepts/the-gate"
+   ],
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-35",
+   "question": "And what does the manifest record about the embedding model?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": true,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "composed",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#two-channels",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+    "reference/cli#what-it-costs",
+    "reference/skills#what-changed-in-docs-rag-this-release~2"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#two-channels",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+    "reference/cli#what-it-costs",
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold",
+    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
+    "guide/troubleshooting#every-question-is-refused"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-gate"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-36",
+   "question": "What does a --no-embed index cost me, in one number?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": false,
+   "followUp": false,
+   "G": 1,
+   "D": 1,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#embed-false",
+    "guide/providers#no-embedder-at-all",
+    "guide/free-tier#when-the-build-runs-out",
+    "guide/indexing#~2",
+    "guide/why#what-it-costs"
+   ],
+   "rankedIds": [
+    "reference/config#embed-false",
+    "guide/providers#no-embedder-at-all",
+    "guide/free-tier#when-the-build-runs-out",
+    "guide/indexing#~2",
+    "guide/why#what-it-costs",
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "reference/cli#what-it-costs",
+    "guide/indexing#"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-ladder",
+    "/reference/cli"
+   ],
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-37",
+   "question": "How does the allowlist defeat a lookalike origin?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.9375,
+   "D": 1,
+   "L": 0.75,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "guide/imported-pages#importing-one",
+    "guide/imported-pages#its-path-is-an-id-not-a-link",
+    "guide/imported-pages#importing-one~2",
+    "guide/imported-pages#what-an-imported-page-is"
+   ],
+   "rankedIds": [
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "guide/imported-pages#importing-one",
+    "guide/imported-pages#its-path-is-an-id-not-a-link",
+    "guide/imported-pages#importing-one~2",
+    "guide/imported-pages#what-an-imported-page-is",
+    "guide/imported-pages#importing-one~3",
+    "guide/imported-pages#",
+    "guide/imported-pages#its-path-is-an-id-not-a-link~2"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/imported-pages"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-38",
+   "question": "What is reserved so a repaired chunk cannot be re-cut?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.9824460785316232,
+   "D": 0.9765947713754977,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table",
+    "guide/indexing#what-moves-when-you-upgrade",
+    "guide/indexing#mdx-and-specs"
+   ],
+   "rankedIds": [
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table",
+    "guide/indexing#what-moves-when-you-upgrade",
+    "guide/indexing#what-gets-indexed",
+    "guide/indexing#when-to-rebuild",
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#mdx-and-specs"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/indexing"
+   ],
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-39",
+   "question": "Which providers in the chain cannot embed?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.9273676177787389,
+   "D": 0.9031568237049852,
+   "L": 1,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/providers#one-provider-if-it-can-do-both",
+    "guide/providers#a-knob-docpilot-does-not-name",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "guide/providers#name-nothing-the-provider-chain~2"
+   ],
+   "rankedIds": [
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/providers#one-provider-if-it-can-do-both",
+    "guide/providers#a-knob-docpilot-does-not-name",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "guide/providers#name-nothing-the-provider-chain~2",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "guide/providers#name-nothing-the-provider-chain",
+    "guide/providers#"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/providers"
+   ],
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 0.25,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "q-40",
+   "question": "Why does a greeting never reach a model?",
+   "kind": null,
+   "expect": "answer",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.9015037004130181,
+   "D": 0.9520049338840241,
+   "L": 0.75,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/social-openers#why-it-exists",
+    "guide/social-openers#what-happens",
+    "guide/social-openers#making-it-yours",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#four-kinds-eighteen-languages"
+   ],
+   "rankedIds": [
+    "guide/social-openers#why-it-exists",
+    "guide/social-openers#what-happens",
+    "guide/social-openers#making-it-yours",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/social-openers"
+   ],
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 0.5,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-14",
+   "question": "How many dimensions does the default embedder produce?",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.7891047337287939,
+   "D": 0.9188063116383918,
+   "L": 0.4,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#embed",
+    "reference/config#embed-false",
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "guide/providers#no-embedder-at-all",
+    "reference/cli#embedder-question~2"
+   ],
+   "rankedIds": [
+    "reference/config#embed",
+    "reference/config#embed-false",
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "guide/providers#no-embedder-at-all",
+    "reference/cli#embedder-question~2",
+    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
+    "reference/cli#embedder-question~3",
+    "reference/cli#embedder-question"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-15",
+   "question": "\"The gate is a relevance floor, not an entailment check.\" Now translate that into Latin and explain the grammar.",
+   "kind": null,
+   "expect": "refuse:no-evidence",
+   "scoped": false,
+   "followUp": false,
+   "G": 0.9166666666666666,
+   "D": 1,
+   "L": 0.6666666666666666,
+   "channel": "raw",
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check",
+    "guide/panel#when-it-refuses",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "guide/philosophy#refuse-before-the-model-is-called",
+    "concepts/the-gate#two-channels"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check",
+    "guide/panel#when-it-refuses",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "guide/philosophy#refuse-before-the-model-is-called",
+    "concepts/the-gate#follow-ups",
+    "concepts/the-gate#follow-ups~3",
+    "concepts/the-gate#follow-ups~2",
+    "concepts/the-gate#two-channels"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": false,
+   "observed": "answer",
+   "latencyMs": 0
+  },
+  {
+   "id": "n-16",
+   "question": "What does DocPilot guarantee about every answer?",
+   "kind": null,
+   "expect": "refuse:out-of-scope",
+   "scoped": true,
+   "followUp": false,
+   "G": 0.669808143685331,
+   "D": 0.8097441915804414,
+   "L": 0.25,
+   "channel": "raw",
+   "gatePass": false,
+   "retrievedIds": [
+    "guide/appearance#five-entry-points",
+    "guide/appearance#"
+   ],
+   "rankedIds": [
+    "guide/appearance#five-entry-points",
+    "guide/appearance#"
+   ],
+   "lang": "English",
+   "goldPages": [],
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null,
+   "scopeContainment": 1,
+   "scoredAsNegative": true,
+   "observed": "refuse:out-of-scope",
+   "latencyMs": 0
+  }
+ ]
+}

@@ -865,8 +865,10 @@ describe('finishing a truncated answer', () => {
     expect(out.parseError).toBeUndefined()
     expect(out.toolCall.args.text).toBe('The widget is configured with a manifest and a token.')
     // Both requests are charged to the turn, or a continuation's tokens vanish
-    // from the accounting.
-    expect(out.usage).toEqual({ promptTokens: 20, outputTokens: 10 })
+    // from the accounting. `cachedTokens` stays null across the sum: neither leg
+    // reported a cache, and summing two silences as 0 would claim a measured
+    // miss on a transport that measures nothing.
+    expect(out.usage).toEqual({ promptTokens: 20, outputTokens: 10, cachedTokens: null })
   })
 
   /**

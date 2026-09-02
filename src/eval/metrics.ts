@@ -219,10 +219,138 @@ export function citationPrecision(cited, gold) {
   return cited.filter((id) => matchesGold(id, gold)).length / cited.length
 }
 
+/**
+ * How much of the gold the citations COVER — the other half of the pair above.
+ *
+ * `citationPrecision` divides by how many citations the ANSWERER chose, so at
+ * |gold| = 1 the same retrieval scores 1.00 or 0.33 depending on how terse the
+ * answer was. That makes it a statement about restraint, not about whether the
+ * evidence the reader needs was named at all, and the skill has said "read
+ * citationRecall beside it, always" while nothing here computed one.
+ *
+ * Per gold entry, mirroring the `covered` arm of `retrievalF1Loose`, so a page
+ * pin `path#` counts as covered by any anchor of that page and a sibling route
+ * cannot cover it. An answer with no citations covers nothing and scores 0 —
+ * `null` is reserved for a record that pinned no gold to cover.
+ */
+export function citationRecall(cited, gold) {
+  if (!gold?.length) return null
+  return gold.filter((g) => cited.some((id) => matchesGold(id, [g]))).length / gold.length
+}
+
 export function hallucinatedCitationRate(cited, observed) {
   if (!cited.length) return 0
   const seen = new Set(observed)
   return cited.filter((id) => !seen.has(id)).length / cited.length
+}
+
+// ── failure taxonomy ─────────────────────────────────────────────────────────
+
+/**
+ * Below this, an answer that had its evidence in front of it is not an answer.
+ *
+ * Read against the ceiling `tokenF1` carries: a 25-word gold against a 150-word
+ * answer caps P at ~0.29 whatever the model writes, so this is a floor on the
+ * INSTRUMENT, not a quality bar. Records under it are the ones where the
+ * evidence was primed and the answer still shares almost nothing with the gold —
+ * a different failure from a retrieval miss, and it has a different fix.
+ */
+export const LOW_ANSWER_F1 = 0.25
+
+/**
+ * Which failure a row is — RAG-SPEC 5, the diagnosis half.
+ *
+ * The metric table says how much moved; it never says WHAT moved, and the four
+ * buckets below have four different fixes that no summary number separates:
+ *
+ *   `retrieval-miss`      the gold is not in the ranked eight at all — a corpus,
+ *                         chunking or vocabulary problem.
+ *   `gold-below-primed`   the gold IS in the ranked eight and did not make the
+ *                         window the model was primed with — a `GATE_K` and
+ *                         ranking problem, and the one a `tune` sweep can reach.
+ *   `primed-low-f1`       the evidence was in front of the model and the answer
+ *                         still missed — an answer-side problem: the prompt, the
+ *                         model, or a gold_answer written at the wrong length.
+ *   `over-refused`        the gate admitted it and the turn refused anyway.
+ *
+ * PURE, and a function of the row alone. `retrieval.r` is the share of the gold
+ * covered by the chunks that PRIMED the turn; `recall8` is the same share over
+ * the ranked eight. The gap between those two is the whole distinction between
+ * the first two buckets, which is why both are recorded per row.
+ */
+export function classifyRow(row) {
+  if (!row || row.observed === 'error') return 'error'
+
+  const negative = String(row.expect || '').startsWith('refuse') || row.scoredAsNegative
+  if (negative) {
+    return String(row.observed || '').startsWith('refuse')
+      ? 'neg-caught'
+      : `neg-answered:${row.expect}`
+  }
+
+  if (!String(row.observed || '').startsWith('answer')) return 'over-refused'
+
+  // A record with no gold to find cannot miss it; it is scored on its answer.
+  const primed = row.retrieval?.r
+  if (typeof primed === 'number' && primed === 0) {
+    return row.recall8 ? 'gold-below-primed' : 'retrieval-miss'
+  }
+
+  if (typeof row.answerF1 === 'number' && row.answerF1 < LOW_ANSWER_F1) return 'primed-low-f1'
+  return 'ok'
+}
+
+/** Every bucket, in the order a reader should meet them. Report column order. */
+export const TAXONOMY_ORDER = [
+  'ok',
+  'gold-below-primed',
+  'retrieval-miss',
+  'primed-low-f1',
+  'over-refused',
+  'neg-caught',
+  'neg-answered',
+  'error',
+]
+
+/**
+ * The language a record is asked in, as ONE name whatever the source said.
+ *
+ * The record's own `lang` wins where an author wrote one — a claim about intent
+ * that a detector cannot make — and detection fills in for every golden file
+ * that predates the field, which is all of this package's own.
+ *
+ * THE TWO SOURCES DO NOT SPEAK THE SAME LANGUAGE, and merging them naively is a
+ * report with `ru` and `Russian` as separate rows over one population: golden
+ * files write the ISO code, `detectLanguage` returns the English name. The code
+ * is widened into the name rather than the other way round, because the name is
+ * what the panel already says to the model in `languageDirective` and there is
+ * no reverse table to keep in step. `Intl.DisplayNames` is the widening — a tag
+ * it cannot resolve comes back as itself, so an unknown or already-spelled-out
+ * value passes through instead of being dropped.
+ */
+let displayNames = null
+export function langOf(rec) {
+  const declared = rec?.lang
+  // Only a TAG is widened. `Intl.DisplayNames` accepts anything that parses as
+  // one and answers `russian` for the string `Russian` — lowercasing a name that
+  // was already correct — so a value that is not a 2-3 letter primary subtag is
+  // taken as already spelled out and returned untouched.
+  if (declared && /^[a-z]{2,3}(-[a-z0-9]+)*$/i.test(declared)) {
+    if (!displayNames) {
+      try {
+        displayNames = new Intl.DisplayNames(['en'], { type: 'language' })
+      } catch {
+        displayNames = { of: (x) => x }
+      }
+    }
+    try {
+      return displayNames.of(declared) || declared
+    } catch {
+      return declared
+    }
+  }
+  if (declared) return declared
+  return detectLanguage(rec?.question || '') || 'und'
 }
 
 // ── statistics ───────────────────────────────────────────────────────────────

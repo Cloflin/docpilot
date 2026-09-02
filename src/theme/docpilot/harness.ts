@@ -204,6 +204,7 @@ export async function runTurn(options: RunTurnOptions) {
   let steps = 0
   let promptTokens = 0
   let outputTokens = 0
+  let cachedTokens = null
   const measure = (messages) => {
     let n = 0
     for (const m of messages) n += String(m.content || '').length
@@ -217,6 +218,10 @@ export async function runTurn(options: RunTurnOptions) {
     if (reply?.usage) {
       promptTokens += reply.usage.promptTokens || 0
       outputTokens += reply.usage.outputTokens || 0
+      // Stays null until a provider reports one, so a transport with no cache
+      // accounting is not recorded as a turn that cached nothing.
+      if (reply.usage.cachedTokens != null)
+        cachedTokens = (cachedTokens || 0) + reply.usage.cachedTokens
     }
     return reply
   }
@@ -388,7 +393,14 @@ export async function runTurn(options: RunTurnOptions) {
         return { observation: searchCache.get(key), free: true }
       }
       onPhase?.({ phase: 'searching' })
-      const chunks = retrieval.search({ query: args.query || question, queryVec, k: args.k, kind: args.kind })
+      // The query the MODEL chose, recorded rather than inferred. It is the one
+      // thing about a re-search that is not visible afterwards: the vector this
+      // search scores against belongs to the reader's question, so a model that
+      // rephrases — into another language above all — moves the lexical half and
+      // leaves the dense half pointing at the sentence it replaced.
+      const searchQuery = args.query || question
+      debug('search', { query: searchQuery, k: args.k ?? null, kind: args.kind || null })
+      const chunks = retrieval.search({ query: searchQuery, queryVec, k: args.k, kind: args.kind })
       for (const c of chunks) emittedIds.add(c.id)
       const obs = observation(
         'search_docs',
@@ -898,6 +910,7 @@ export async function runTurn(options: RunTurnOptions) {
       cost: {
         promptTokens,
         outputTokens,
+        cachedTokens,
         promptChars,
         promptCharsPeak,
         observationChars: observationChars(),

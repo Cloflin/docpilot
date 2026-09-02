@@ -66,6 +66,11 @@ import {
   hardGatesFailed,
   underPath,
   recallAtK,
+  citationRecall,
+  citationPrecision,
+  classifyRow,
+  langOf,
+  LOW_ANSWER_F1,
 } from '../src/eval/metrics.js'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -879,6 +884,54 @@ describe('provider adapters', () => {
     expect(seen.body.messages.some((m) => m.role === 'tool')).toBe(false)
     expect(seen.body.messages[1]).toEqual({ role: 'user', content: 'obs' })
     expect(reply.toolCall).toEqual({ name: 'answer', args: { text: 'hi' } })
+  })
+
+  /**
+   * What the prefix cache actually saved, from the only party that knows.
+   *
+   * Every observation is re-sent on every step, so whether a turn's prompt costs
+   * full price is a fact about the provider's cache and not about the harness.
+   * `null` where a provider reports nothing is load-bearing: averaged as 0 it
+   * would state a measured cache miss for a transport that never measured.
+   */
+  it('openai: reads cached prompt tokens, and ollama reports none', async () => {
+    capture({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '{"text":"hi"}' } }],
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 10,
+          prompt_tokens_details: { cached_tokens: 768 },
+        },
+      }),
+    })
+    const reply = await chat({
+      provider: 'openai',
+      baseURL: '/ai',
+      model: 'm',
+      messages: [],
+      schema: { type: 'object' },
+    })
+    expect(reply.usage).toEqual({ promptTokens: 1000, outputTokens: 10, cachedTokens: 768 })
+
+    capture({
+      ok: true,
+      json: async () => ({
+        message: { content: '{"text":"hi"}' },
+        prompt_eval_count: 900,
+        eval_count: 12,
+      }),
+    })
+    const local = await chat({
+      provider: 'ollama',
+      baseURL: 'http://h:11434',
+      model: 'm',
+      messages: [],
+      schema: { type: 'object' },
+    })
+    expect(local.usage.promptTokens).toBe(900)
+    expect(local.usage.cachedTokens).toBe(null)
   })
 
   it('openai: concatenates tool-call arguments across SSE frames', async () => {
@@ -2781,6 +2834,72 @@ describe('metrics', () => {
     const r = retrievalF1Loose(['a/b#x', 'c/d#y'], ['a/b'])
     expect(r.r).toBe(1)
     expect(r.p).toBe(0.5)
+  })
+
+  /**
+   * The pair, and why one of them alone says nothing.
+   *
+   * Precision divides by what the ANSWERER chose, so at |gold| = 1 a terse
+   * answer scores 1.00 and a thorough one 0.33 off the same retrieval. Recall
+   * divides by what the record pinned, which is the question a reader has.
+   */
+  it('citation recall divides by the gold, precision by the citations', () => {
+    expect(citationRecall(['a/b#x', 'c/d#y'], ['a/b'])).toBe(1)
+    expect(citationPrecision(['a/b#x', 'c/d#y'], ['a/b'])).toBe(0.5)
+    // Two gold entries, one named: half covered, and the citation that named it
+    // is still perfectly precise.
+    expect(citationRecall(['a/b#x'], ['a/b', 'e/f'])).toBe(0.5)
+    // A page pin is covered by any anchor of that page and by no sibling route.
+    expect(citationRecall(['guide/scoped-page#x'], ['guide/scope#'])).toBe(0)
+    expect(citationRecall(['guide/scope#x'], ['guide/scope#'])).toBe(1)
+    // No gold to cover is not a score of zero.
+    expect(citationRecall(['a/b#x'], [])).toBe(null)
+  })
+
+  /**
+   * The taxonomy separates four failures a single mean cannot.
+   *
+   * `retrieval.r` is the share of the gold inside the chunks that PRIMED the
+   * turn; `recall8` the same share over the ranked eight. The gap between them
+   * is a ranking problem; both at zero is a corpus problem.
+   */
+  it('classifyRow separates a ranking miss from a corpus miss', () => {
+    const base = { expect: 'answer', observed: 'answer', answerF1: 0.4 }
+    expect(classifyRow({ ...base, retrieval: { r: 1 } })).toBe('ok')
+    expect(classifyRow({ ...base, retrieval: { r: 0 }, recall8: 1 })).toBe('gold-below-primed')
+    expect(classifyRow({ ...base, retrieval: { r: 0 }, recall8: 0 })).toBe('retrieval-miss')
+    expect(
+      classifyRow({ ...base, retrieval: { r: 1 }, answerF1: LOW_ANSWER_F1 - 0.01 }),
+    ).toBe('primed-low-f1')
+    expect(classifyRow({ ...base, observed: 'refuse:not-answerable' })).toBe('over-refused')
+  })
+
+  it('classifyRow files a negative by what it was asked to do', () => {
+    expect(classifyRow({ expect: 'refuse:no-evidence', observed: 'refuse:no-evidence' })).toBe(
+      'neg-caught',
+    )
+    expect(classifyRow({ expect: 'refuse:no-evidence', observed: 'answer' })).toBe(
+      'neg-answered:refuse:no-evidence',
+    )
+    // A positive whose gold falls outside its own scope is scored as a negative
+    // everywhere else, and has to be filed as one here too.
+    expect(classifyRow({ expect: 'answer', observed: 'answer', scoredAsNegative: true })).toBe(
+      'neg-answered:answer',
+    )
+    expect(classifyRow({ expect: 'answer', observed: 'error' })).toBe('error')
+  })
+
+  /**
+   * One population, one row. Golden files write `ru`; `detectLanguage` returns
+   * `Russian`, and a report that merged them naively would split one language
+   * across two rows depending on which records happened to declare a `lang`.
+   */
+  it('langOf prefers the record and speaks one name', () => {
+    expect(langOf({ lang: 'ru', question: 'How do I start?' })).toBe('Russian')
+    expect(langOf({ lang: 'Russian', question: 'How do I start?' })).toBe('Russian')
+    expect(langOf({ question: 'как включить комментирование?' })).toBe('Russian')
+    expect(langOf({ question: 'How do I enable commenting?' })).toBe('English')
+    expect(langOf({ question: '' })).toBe('und')
   })
 })
 
@@ -8319,6 +8438,30 @@ describe('golden-set levels — report comparability and lint (W3 consumers)', (
     expect(previousReport(dir, meta({ level: 'high' }))).toBeNull()
   })
 
+  /**
+   * The second wall. The filename stops the overwrite; this stops the
+   * comparison, and neither may depend on the other being right.
+   */
+  it('never pairs two reports that measured different vector spaces', () => {
+    const dir = fresh()
+    put(dir, 'report-abc12345-m1-bge.json', meta({ embedModel: 'bge-m3' }))
+
+    expect(previousReport(dir, meta({ embedModel: 'text-embedding-3-small' }))).toBeNull()
+    expect(previousReport(dir, meta({ embedModel: 'bge-m3' })).meta.embedModel).toBe('bge-m3')
+    // Absent reads as unknown and still pairs — the rule `goldenSha` set, so an
+    // upgrade does not announce a change to everybody at once. Absent on either
+    // side: the report on disk predates the field, or the run does.
+    const blind = meta({})
+    delete blind.embedModel
+    expect(previousReport(dir, blind)).not.toBeNull()
+
+    const legacyDir = fresh()
+    const legacy = meta({})
+    delete legacy.embedModel
+    put(legacyDir, 'report-abc12345-m1-legacy.json', legacy)
+    expect(previousReport(legacyDir, meta({ embedModel: 'bge-m3' }))).not.toBeNull()
+  })
+
   it('still calls a golden set that grew inside one level incomparable', () => {
     const dir = fresh()
     put(dir, 'report-abc12345-m1-old.json', meta({ level: 'low', records: 10 }), 1e9)
@@ -8863,6 +9006,25 @@ describe('eval run.js — --level and the lever fingerprint', () => {
       expect(reportName({ ...NAMED, level: 'ultra' })).toBe(`report-abc123-qwen3_8b-${hash}.json`)
       // Same for a caller that passes no level at all.
       expect(reportName(NAMED)).toBe(`report-abc123-qwen3_8b-${hash}.json`)
+    })
+  })
+
+  /**
+   * One corpus, two embedders, one filename — measured on this repository's own
+   * pair before it was fixed. `indexHash` is sha256 over chunk id and text, so
+   * it cannot tell the two vector spaces apart; each run overwrote the other's
+   * baseline and reported the difference between two embedders as a change.
+   */
+  it('files two embedders of one corpus apart', async () => {
+    await withRun({}, async ({ reportName }) => {
+      const a = reportName({ ...NAMED, embedModel: 'bge-m3' })
+      const b = reportName({ ...NAMED, embedModel: 'nvidia/nemotron-3-embed-1b:free' })
+      expect(a).not.toBe(b)
+      // A provider-qualified id carries `/` and `:`; a report name is a path.
+      expect(a).toMatch(/^report-abc123-qwen3_8b-emb-[0-9a-z]+-/)
+      expect(b).not.toMatch(/[/:]/)
+      // Absent keeps the name every report on disk already has.
+      expect(reportName(NAMED)).not.toContain('-emb-')
     })
   })
 
