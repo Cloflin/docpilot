@@ -1181,6 +1181,22 @@ describe('prompt', () => {
     expect(a).toBe(systemText({ scope: base.scope }))
   })
 
+  /**
+   * engine-spec 014. The gate cannot reach this case and does not pretend to:
+   * it scores closeness, and a question about a feature the corpus does not
+   * have sits in the same band as one it does. Measured on this corpus, ten of
+   * ten such questions passed at tau 0.69, G from 0.735 to 1.000. So the refusal
+   * has to come from the instruction, and it has to name the case: the excerpts
+   * are not empty, they are about the neighbour.
+   */
+  it('names the neighbouring-feature case and the not-a-question case', () => {
+    expect(CORE).toContain('neighbouring feature, integration or API')
+    expect(CORE).toContain('the documentation does not cover it')
+    expect(CORE).toContain('not a question about the documentation')
+    // Both land on the mechanism that already exists rather than a new one.
+    expect(CORE.match(/confidence 0/g).length).toBeGreaterThanOrEqual(3)
+  })
+
   // §4.4 block 2a. These four lines are published copy AND the only instruction
   // covering what credentials.js declines to match, so a silent deletion is a
   // product regression with no other tripwire.

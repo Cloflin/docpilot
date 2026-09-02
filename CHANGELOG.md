@@ -54,6 +54,20 @@ scope applies and a chunk that left the corpus is dropped rather than trusted.
 The gate never sees them: `G` is unchanged and a refusal is still its decision
 about this turn. `DOCPILOT_SEED_FROM_HISTORY` sweeps the ceiling.
 
+**The instruction names the case the gate cannot reach — engine-spec 014.** The
+gate scores closeness, and a question about a feature the corpus does not have
+sits in the same band as one it does: measured on this package's own corpus at
+tau 0.69, ten of ten such questions passed, G from 0.735 to 1.000. No threshold
+separates them, because the positives live there too. The shipped instruction
+covered "the excerpts do not contain the answer" and said nothing about the case
+where they are not empty at all — they are about the neighbouring feature, in the
+same product. Two sentences now name it, and the second names the other thing
+the instruction never described: a message that is not a question about the
+documentation. Both land on `confidence 0`, the mechanism that already exists.
+
+**This moves `PROMPT_HASH`**, so reports across it are marked incomparable — as
+they should be. Applied alone, on its own commit, for that reason.
+
 **The feedback receiver ships, and `init` copies it in.** `feedbackEndpoint`
 makes the panel POST one object per vote, fire and forget — so a receiver that
 404s looks, from the reader's side, exactly like one that works, and the endpoint
