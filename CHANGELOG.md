@@ -11,6 +11,17 @@ against `package.json`'s version and refuses the publish if they disagree.
 
 ### Changed
 
+**One embedding purchase per run.** `eval`, `tune` and `bench emit` bought one
+vector per request — 58 requests for this repository's golden set, against a
+free tier that allows fifty a day. They now use the same batcher `calibrate` has
+used since 1.0.0, which is 2. The batcher moved out of `calibrate.ts` into
+`src/eval/prefetch.ts` with its behaviour unchanged to the letter — same batch of
+32, same retryable statuses, same refusal to guess at a short batch, same
+`retry-after` with a twenty-second ceiling, same silent fallback to the per-text
+path — and gained the direct tests none of that had. It is a cache and never a
+second code path: a provider that will not batch degrades to the loop that
+already worked.
+
 **The eval report names its witnesses, and the seed is finally sent.** `meta`
 carried eighteen fields and every one described the *input* — the corpus hash,
 the prompt hash, the levers, the flags. A report taken against a metered

@@ -31,7 +31,20 @@ import { ROOT, RAG, GOLDEN } from '../cli-context.js'
 import { underPath } from './metrics.js'
 import { LEVELS, DEFAULT_RECORD_LEVEL, levelRank, levelHistogram } from './levels.js'
 import { entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
+import { applyFileEnv } from '../cli-env.js'
 import { printError, FAILED, USAGE } from '../cli-exit.js'
+
+/**
+ * `.env.local`, as a SECOND belt.
+ *
+ * The launcher applies it before it dispatches (spec 010), so under
+ * `npx docpilot …` this is a no-op — every key it would add is already set.
+ * It is here for the other caller: `node dist/eval/…` run directly, which is
+ * how this module is driven in a shard and in a script. A command that reads
+ * the file under the launcher and not under `node` is the same divergence one
+ * level down.
+ */
+await applyFileEnv()
 
 /**
  * THE FLAGS, read by the table that already validated them.

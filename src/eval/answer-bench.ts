@@ -54,7 +54,21 @@ import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 
 import { ROOT, RAG, GOLDEN, DOCPILOT_DIR, settings as docPilot } from '../cli-context.js'
 import { entryFlagError, flagValue } from '../cli-flags.js'
+import { prefetchEmbeddings } from './prefetch.js'
+import { applyFileEnv } from '../cli-env.js'
 import { printError, codeFor, FAILED, USAGE } from '../cli-exit.js'
+
+/**
+ * `.env.local`, as a SECOND belt.
+ *
+ * The launcher applies it before it dispatches (spec 010), so under
+ * `npx docpilot …` this is a no-op — every key it would add is already set.
+ * It is here for the other caller: `node dist/eval/…` run directly, which is
+ * how this module is driven in a shard and in a script. A command that reads
+ * the file under the launcher and not under `node` is the same divergence one
+ * level down.
+ */
+await applyFileEnv()
 
 /** Bench artefacts sit beside the golden set, under the configured `evalDir`. */
 const BENCH = path.join(DOCPILOT_DIR, 'bench')
@@ -88,6 +102,24 @@ if (BAD_FLAG) {
 const FLAGS = process.argv.slice(2)
 const arg = (name: string, dflt?: string) => flagValue('bench', FLAGS, name) ?? dflt
 const list = (name) => String(arg(name, '')).split(',').map((s) => s.trim()).filter(Boolean)
+
+/**
+ * What the batch above bought, and the per-text path it falls back to.
+ *
+ * A cache and never a second code path: a provider that will not batch leaves
+ * the map short and every text goes through `embedQuery` exactly as it did,
+ * including the failure wording, which lives here.
+ */
+const PREFETCHED = new Map<string, Float64Array>()
+
+const embedOne = async (text, model) =>
+  PREFETCHED.get(text) ??
+  (await embedQuery(text, {
+    baseURL: EMBED_BASE,
+    model,
+    provider: EMBED_PROVIDER,
+    apiKey: EMBED_KEY,
+  }).catch((e) => die(`embed failed (${EMBED_BASE}): ${e.message}`)))
 
 /** Kept in step with harness.js — the excerpt ceiling is the same sweepable knob. */
 const SEARCH_CHARS = Number(process.env.DOCPILOT_SEARCH_CHARS || '') || 1200
@@ -259,6 +291,35 @@ async function emit() {
   const tasks = []
   let skippedGate = 0
 
+  /**
+   * ONE PURCHASE FOR THE WHOLE EMIT — see `src/eval/prefetch.ts`.
+   *
+   * `task()` below embedded one text per request, and a follow-up costs two, so
+   * this pass was one request per question against a tier that allows fifty a
+   * day. Both channels are bought here, including the `#prev` question a
+   * follow-up's stage-1 pass asks for and the `prev\nquestion` string its
+   * stage-2 pass composes — the same three spellings `task()` reaches for, built
+   * the same way so a text bought here and a text asked for there cannot drift.
+   *
+   * A CACHE, never a second path: a short map falls through to `embedQuery`.
+   */
+  const vectorlessIndex = index.manifest.vectors === null
+  if (!vectorlessIndex) {
+    const wanted = records.flatMap((rec) =>
+      rec.prev_question
+        ? [rec.prev_question, rec.question, `${rec.prev_question}\n${rec.question}`]
+        : [rec.question],
+    )
+    const { vectors, requests } = await prefetchEmbeddings(wanted, {
+      provider: EMBED_PROVIDER,
+      baseURL: EMBED_BASE,
+      apiKey: EMBED_KEY,
+      model: index.manifest.embedModel,
+    })
+    for (const [t, v] of vectors) PREFETCHED.set(t, v)
+    if (vectors.size) console.error(`  embedded ${vectors.size} queries in ${requests} request(s)`)
+  }
+
   for (const rec of records) {
     const scope = scopeOf(rec)
     // `tuning` is not optional here even though the parameter is — the same rule
@@ -331,25 +392,13 @@ async function emit() {
     // lexical channel too, and skipping it scores the follow-up on the raw
     // question alone.
     const vectorless = index.manifest.vectors === null
-    const vec = vectorless
-      ? null
-      : await embedQuery(question, {
-          baseURL: EMBED_BASE,
-          model: index.manifest.embedModel,
-          provider: EMBED_PROVIDER,
-          apiKey: EMBED_KEY,
-        }).catch((e) => die(`embed failed (${EMBED_BASE}): ${e.message}`))
+    const vec = vectorless ? null : await embedOne(question, index.manifest.embedModel)
 
     let composedVec
     if (history.length) {
       composedVec = vectorless
         ? null
-        : await embedQuery(`${history[0].question}\n${question}`, {
-            baseURL: EMBED_BASE,
-            model: index.manifest.embedModel,
-            provider: EMBED_PROVIDER,
-            apiKey: EMBED_KEY,
-          })
+        : await embedOne(`${history[0].question}\n${question}`, index.manifest.embedModel)
     }
 
     const g = retrieval.evaluate({

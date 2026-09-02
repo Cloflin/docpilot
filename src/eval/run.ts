@@ -64,8 +64,9 @@ import { nodeEmbedTarget } from '../config.js'
 
 import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot } from '../cli-context.js'
 import { applyFileEnv } from '../cli-env.js'
+import { prefetchEmbeddings } from './prefetch.js'
 import { COMMANDS, entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
-import { printError, codeFor, FAILED, USAGE } from '../cli-exit.js'
+import { printError, codeFor, tick, tock, FAILED, USAGE } from '../cli-exit.js'
 
 /**
  * The hash of the instruction THIS project sends, not of the shipped default.
@@ -410,13 +411,36 @@ function endpointHelp(what, url, provider, e) {
   return `${what} endpoint unreachable at ${url} — ${e.message || e}${hint}`
 }
 
+/**
+ * ONE PURCHASE FOR THE WHOLE RUN.
+ *
+ * `embed()` below sends one text per request, which is right for a reader typing
+ * a question and wrong for a measurement: this repository's golden set is 58
+ * requests that way and 2 through the batcher `calibrate` has used since spec
+ * 008. Against a fifty-a-day free tier that is the difference between a run you
+ * can repeat and a run you cannot.
+ *
+ * The map is a CACHE and never a second code path: every failure inside
+ * `prefetchEmbeddings` leaves it short, and `embed()` falls through to
+ * `embedQuery` exactly as it always did — including the endpoint diagnosis,
+ * which lives there and is worded better than anything a batcher could say.
+ */
+const PREFETCHED = new Map<string, Float64Array>()
+
 async function embed(text, model) {
-  const vec = await embedQuery(text, {
-    provider: EMBED_PROVIDER,
-    baseURL: EMBED_BASE,
-    model,
-    apiKey: EMBED_KEY,
-  })
+  // The batch and the per-text path produce the same vector to the bit —
+  // `scaleToIndexDomain` is `embedQuery`'s own tail — so the width check below
+  // applies to both. Checking only the fetched half would let the batcher's
+  // vectors past the one guard that stops a foreign vector space being reported
+  // as this corpus's retrieval quality.
+  const vec =
+    PREFETCHED.get(text) ??
+    (await embedQuery(text, {
+      provider: EMBED_PROVIDER,
+      baseURL: EMBED_BASE,
+      model,
+      apiKey: EMBED_KEY,
+    }))
   // Fail loudly on a width mismatch instead of degrading.
   //
   // The retriever's own response to a foreign vector is to drop queryVec and
@@ -454,6 +478,30 @@ const kchars = (v) => (v == null ? ' — ' : `${(v / 1000).toFixed(1)}k`)
  * before any model is contacted and reused across the whole matrix.
  */
 async function probeRecords(index, guard, records) {
+  /**
+   * Every text this pass will ask for, bought before the loop asks for the
+   * first. Both channels: a follow-up record embeds its composed query too, and
+   * missing it here would leave a quarter of the run buying one at a time.
+   */
+  if (!LEXICAL) {
+    const wanted = records.flatMap((rec) => [
+      rec.question,
+      composeQuery(rec.question, rec.prev_question),
+    ])
+    const { vectors, requests } = await prefetchEmbeddings(
+      wanted,
+      {
+        provider: EMBED_PROVIDER,
+        baseURL: EMBED_BASE,
+        apiKey: EMBED_KEY,
+        model: index.manifest.embedModel,
+      },
+      { onTick: (done, total) => tick(`embedded ${done}/${total} queries…`) },
+    )
+    for (const [t, v] of vectors) PREFETCHED.set(t, v)
+    if (vectors.size) tock(`embedded ${vectors.size} queries in ${requests} request(s)`)
+  }
+
   const probes = []
   for (const rec of records) {
     const scope = rec.scope || ALL_SCOPE

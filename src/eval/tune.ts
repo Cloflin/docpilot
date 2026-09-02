@@ -70,6 +70,7 @@ import { retrievalF1Loose, recallAtK, mrr, underPath, mean } from './metrics.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
 import { applyFileEnv } from '../cli-env.js'
+import { prefetchEmbeddings } from './prefetch.js'
 import { flagErrors, flagValue, flagGiven } from '../cli-flags.js'
 import { printError, codeFor, tick, tock, FAILED, USAGE } from '../cli-exit.js'
 
@@ -395,13 +396,29 @@ function loadGolden(level) {
   return { all, records: LIMIT ? atLevel.slice(0, LIMIT) : atLevel }
 }
 
+/**
+ * ONE PURCHASE FOR THE WHOLE SWEEP — see `src/eval/prefetch.ts`.
+ *
+ * Stage A is the only part of `tune` that touches a network at all, and it
+ * bought one text per request. The map is a cache and never a second code path:
+ * a provider that will not batch leaves it short and every text falls through
+ * to `embedQuery` exactly as it did, including the endpoint diagnosis below.
+ */
+const PREFETCHED = new Map<string, Float64Array>()
+
 async function embed(text, index) {
-  const vec = await embedQuery(text, {
-    provider: EMBED_PROVIDER,
-    baseURL: EMBED_BASE,
-    model: index.manifest.embedModel,
-    apiKey: EMBED_KEY,
-  })
+  // Cached or fetched, the width check below applies: the batch path uses
+  // `embedQuery`'s own tail, so the two produce the same vector, and a guard
+  // that skipped the cached half would let a foreign vector space be reported
+  // as this corpus's retrieval quality.
+  const vec =
+    PREFETCHED.get(text) ??
+    (await embedQuery(text, {
+      provider: EMBED_PROVIDER,
+      baseURL: EMBED_BASE,
+      model: index.manifest.embedModel,
+      apiKey: EMBED_KEY,
+    }))
   if (vec.length !== index.manifest.dims) {
     die(
       `embed model mismatch: ${EMBED_PROVIDER} returned ${vec.length} dims, the index is ` +
@@ -427,6 +444,21 @@ async function embed(text, index) {
  * it once is what keeps the grid's numbers identical to `eval`'s.
  */
 async function probeRecords(index, records, lexical) {
+  if (!lexical) {
+    const { vectors, requests } = await prefetchEmbeddings(
+      records.flatMap((rec) => [rec.question, composeQuery(rec.question, rec.prev_question)]),
+      {
+        provider: EMBED_PROVIDER,
+        baseURL: EMBED_BASE,
+        apiKey: EMBED_KEY,
+        model: index.manifest.embedModel,
+      },
+      { onTick: (done, total) => tick(`embedded ${done}/${total} queries…`) },
+    )
+    for (const [t, v] of vectors) PREFETCHED.set(t, v)
+    if (vectors.size) tock(`embedded ${vectors.size} queries in ${requests} request(s)`)
+  }
+
   const probes = []
   let embedded = 0
   for (const rec of records) {
@@ -479,9 +511,12 @@ async function probeRecords(index, records, lexical) {
       scoredAsNegative,
       positive: rec.expect === 'answer' && !scoredAsNegative,
     })
-    if (embedded && embedded % 20 === 0) tick(`embedded ${embedded}…`)
+    // Not "embedded": the purchase happened above, in one pass. This counts the
+    // vectors the sweep NEEDS, which is the number the line has always meant and
+    // which the batch above may have served entirely from one request.
+    if (embedded && embedded % 20 === 0) tick(`vectors ${embedded}…`)
   }
-  if (embedded) tock(`embedded ${embedded} queries for ${probes.length} records`)
+  if (embedded) tock(`${embedded} query vectors for ${probes.length} records`)
   return probes
 }
 

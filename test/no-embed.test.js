@@ -1100,10 +1100,25 @@ describe('the eval commands — all three loaders, not two', () => {
     const src = readers.find(([f]) => f === 'answer-bench.js')[1]
     const fn = src.match(/async function task\(\{[\s\S]*?\n    const g = retrieval\.evaluate/)[0]
     expect(fn).toContain('const vectorless = index.manifest.vectors === null')
-    expect(fn).toContain('const vec = vectorless\n      ? null')
+    // Both channels short-circuit on `vectorless` BEFORE anything is embedded.
+    // Written as a match rather than as a literal because the call moved behind
+    // `embedOne` when the run gained its one-purchase batch, and the invariant
+    // under test is the guard, not the formatting around it.
+    expect(fn).toMatch(/const vec = vectorless\s*\?\s*null/)
     // `null` runs the composed channel with no vector; `undefined` skips it.
     // Skipping it scores every follow-up on the raw question alone.
-    expect(fn).toContain('composedVec = vectorless\n        ? null')
+    expect(fn).toMatch(/composedVec = vectorless\s*\?\s*null/)
+  })
+
+  /**
+   * The batch, too. A vectorless index names no model and no host, and the
+   * one-purchase pass runs BEFORE `task()` — so the guard has to be there as
+   * well, or the emit opens with a request against `null`.
+   */
+  it('buys nothing up front on a vectorless index either', () => {
+    const src = readers.find(([f]) => f === 'answer-bench.js')[1]
+    expect(src).toContain('const vectorlessIndex = index.manifest.vectors === null')
+    expect(src).toMatch(/if \(!vectorlessIndex\) \{\s*\n\s*const wanted/)
   })
 })
 
