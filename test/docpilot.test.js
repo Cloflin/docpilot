@@ -9998,6 +9998,105 @@ describe('the CLI contract — codes, streams and the shape of an error', () => 
 })
 
 /**
+ * ONE LAW FOR `.env.local` — spec 010, decision 9.
+ *
+ * It was written down in `cli-context.ts:73` and followed by three of the seven
+ * readers. The launcher inverted it, `vocabulary` inverted it, a fourth put the
+ * file in a private object that never reached `process.env`, and `bench` and
+ * `lint` did not read it at all — while this CLI's own help told the reader to
+ * put their key there.
+ */
+describe('the environment, and who wins', () => {
+  const ROOT_DIR = path.resolve(import.meta.dirname, '..')
+  const CLI = path.join(ROOT_DIR, 'bin/docpilot.js')
+
+  /**
+   * The source with its comments removed.
+   *
+   * Every assertion below is about what the code DOES, and this package's
+   * comments quote the very spellings being asserted gone — the note explaining
+   * why `{ ...process.env, ...loadEnv(…) }` was wrong contains it verbatim.
+   */
+  const codeOnly = (rel) =>
+    srcText(rel)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|\s)\/\/[^\n]*/g, '$1')
+
+  const inTmp = async (files, run) => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-env-'))
+    try {
+      for (const [name, body] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true })
+        fs.writeFileSync(path.join(dir, name), body)
+      }
+      return await run(dir)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  const doctorJson = async (dir, env) => {
+    const { spawnSync } = await import('node:child_process')
+    const r = spawnSync(process.execPath, [CLI, 'doctor', '--json'], {
+      cwd: dir,
+      encoding: 'utf8',
+      // A clean environment, so the box this runs on cannot answer for the file.
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env },
+    })
+    try {
+      return JSON.parse(r.stdout)
+    } catch {
+      throw new Error(`doctor --json wrote no object:\n${r.stdout}\n${r.stderr}`)
+    }
+  }
+
+  it('reads the file, so a key that lives only there is found', async () => {
+    const seen = await inTmp({ '.env.local': 'GROQ_API_KEY=k-from-file\n' }, (d) => doctorJson(d, {}))
+    expect(seen.chat.provider).toBe('groq')
+  })
+
+  /** The case the law exists for: a one-off export beating a committed file. */
+  it('lets the shell win over the file', async () => {
+    const seen = await inTmp({ '.env.local': 'GROQ_API_KEY=k-from-file\n' }, (d) =>
+      doctorJson(d, { GROQ_API_KEY: '', DEEPSEEK_API_KEY: 'k-from-shell' }),
+    )
+    // Both are set now, and the chain's own order decides — the point is that
+    // the file did not overwrite what the shell had already said.
+    expect(seen.chat.provider).toBe('deepseek')
+  })
+
+  it('is applied by the launcher, so the two commands that never read it see it', async () => {
+    // `bench` and `lint` carried no loader at all. Nothing in either file
+    // changed; the launcher fills `process.env` before it dispatches.
+    for (const f of ['src/eval/answer-bench.js', 'src/eval/lint-golden.js']) {
+      expect(codeOnly(f), f).not.toContain('loadEnv')
+    }
+    expect(codeOnly('bin/docpilot.js')).toContain('applyFileEnv')
+  })
+
+  /**
+   * `fileEnv` had to leave `cli-context.ts`: that module resolves `settings` at
+   * module scope from a global the launcher writes LATER, so importing it for
+   * one function would cache every path against an empty config.
+   */
+  it('keeps the loader in a module that resolves nothing at import time', async () => {
+    const src = codeOnly('src/cli-env.js')
+    expect(src).toContain('export async function fileEnv')
+    expect(src).not.toContain('__DOCPILOT_SETTINGS__')
+    expect(codeOnly('bin/docpilot.js')).not.toContain("dist/cli-context.js")
+  })
+
+  /** The two copies that inverted the law are gone. */
+  it('has no second law left anywhere', async () => {
+    for (const f of ['bin/docpilot.js', 'src/build/vocabulary.js']) {
+      expect(codeOnly(f), f).not.toContain('...process.env, ...loadEnv')
+    }
+  })
+})
+
+/**
  * Every command that MEASURES this deployment builds its retrieval from this
  * deployment's levers.
  *

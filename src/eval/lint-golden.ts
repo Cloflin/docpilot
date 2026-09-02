@@ -30,7 +30,7 @@ import { pathToFileURL } from 'node:url'
 import { ROOT, RAG, GOLDEN } from '../cli-context.js'
 import { underPath } from './metrics.js'
 import { LEVELS, DEFAULT_RECORD_LEVEL, levelRank, levelHistogram } from './levels.js'
-import { entryFlagError, flagValue } from '../cli-flags.js'
+import { entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
 import { printError, FAILED, USAGE } from '../cli-exit.js'
 
 /**
@@ -48,6 +48,19 @@ const FLAGS = process.argv.slice(2)
 const arg = (name: string, dflt?: string) => flagValue('lint', FLAGS, name) ?? dflt
 
 const FILE = arg('file') ? path.resolve(ROOT, arg('file')) : GOLDEN
+
+/**
+ * `--json` — the whole of stdout is one object.
+ *
+ * Same contract as `doctor --json`: the counts and the two lists a script wants
+ * to act on, the exit code unchanged, and every human line silenced rather than
+ * interleaved. The prose form stays the default because it is what a person
+ * reads while editing the golden set.
+ */
+const JSON_OUT = flagGiven('lint', FLAGS, 'json')
+const say = (m) => {
+  if (!JSON_OUT) console.log(m)
+}
 
 /**
  * EVERY FLAG THIS COMMAND TAKES, CHECKED FIRST — before a config is read, before
@@ -224,24 +237,53 @@ function main() {
   const byKind = {}
   for (const r of records) byKind[r.kind || '?'] = (byKind[r.kind || '?'] || 0) + 1
 
-  console.log(`\ngolden lint — ${path.relative(ROOT, FILE)} against index ${manifest.hash}\n`)
-  console.log(`  records          ${records.length}`)
-  console.log(`  positives / neg  ${positives} / ${negatives}`)
-  console.log(`  scoped           ${scoped}`)
-  console.log(`  follow-up        ${followUps}`)
-  console.log(`  by kind          ${JSON.stringify(byKind)}`)
-  console.log(`  by level         ${levelSummary(records)}`)
+  if (JSON_OUT) {
+    console.log(
+      JSON.stringify(
+        {
+          file: path.relative(ROOT, FILE),
+          indexHash: manifest.hash,
+          records: records.length,
+          positives,
+          negatives,
+          scoped,
+          followUps,
+          byKind,
+          byLevel: levelSummary(records),
+          warnings,
+          errors,
+          ok: errors.length === 0,
+        },
+        null,
+        2,
+      ),
+    )
+    // The object is the report; the sentence explaining the code still goes to
+    // stderr, and the code is the same one the prose form returns.
+    if (errors.length) {
+      fail(`${errors.length} error(s) — the golden set does not match the index`)
+    }
+    return
+  }
+
+  say(`\ngolden lint — ${path.relative(ROOT, FILE)} against index ${manifest.hash}\n`)
+  say(`  records          ${records.length}`)
+  say(`  positives / neg  ${positives} / ${negatives}`)
+  say(`  scoped           ${scoped}`)
+  say(`  follow-up        ${followUps}`)
+  say(`  by kind          ${JSON.stringify(byKind)}`)
+  say(`  by level         ${levelSummary(records)}`)
 
   if (warnings.length) {
-    console.log(`\n  ${warnings.length} warning(s):`)
-    for (const w of warnings) console.log(`    ~ ${w}`)
+    say(`\n  ${warnings.length} warning(s):`)
+    for (const w of warnings) say(`    ~ ${w}`)
   }
   if (errors.length) {
-    console.log(`\n  ${errors.length} error(s):`)
-    for (const e of errors) console.log(`    ! ${e}`)
+    say(`\n  ${errors.length} error(s):`)
+    for (const e of errors) say(`    ! ${e}`)
     fail(`${errors.length} error(s) — the golden set does not match the index`)
   }
-  console.log('\n  ok\n')
+  say('\n  ok\n')
 }
 
 function fail(m) {

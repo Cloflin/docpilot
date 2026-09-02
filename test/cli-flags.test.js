@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process'
 
 import {
   COMMANDS,
+  DOCS_URL,
   entryFlagError,
   flagErrors,
   flagGiven,
@@ -352,6 +353,103 @@ describe('helpFor', () => {
     // failed RUN returns, so a script could not tell a typo from an outage.
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('Did you mean: doctor?')
+  })
+})
+
+/**
+ * THE HELP HAS ONE RENDERER AND ONE ADDRESS — spec 010, decision 7.
+ */
+describe('help, spelled every way it is spelled', () => {
+  const cli = (...args) =>
+    spawnSync(process.execPath, [path.join(ROOT, 'bin/docpilot.js'), ...args], { encoding: 'utf8' })
+
+  it('answers `help <command>` with exactly what `<command> --help` answers', () => {
+    for (const c of Object.keys(COMMANDS)) {
+      const viaWord = cli('help', c)
+      const viaFlag = cli(c, '--help')
+      expect(viaWord.status, c).toBe(0)
+      expect(viaWord.stdout, c).toBe(viaFlag.stdout)
+    }
+  })
+
+  it('answers a bare `help` with the global block', () => {
+    expect(cli('help').stdout).toBe(cli('--help').stdout)
+  })
+
+  /**
+   * `help` is deliberately NOT a command: `COMMANDS` in bin/docpilot.js is held
+   * against the flag table as an exact set a few tests above, and a "command"
+   * with no flags of its own would have to be invented on both sides.
+   */
+  it('is not in the command list, and does not need to be', () => {
+    expect(Object.keys(COMMANDS)).not.toContain('help')
+  })
+
+  it('names the version flag where somebody looking for it would look', () => {
+    expect(cli('--help').stdout).toContain('--version')
+    expect(cli('--version').status).toBe(0)
+  })
+
+  /**
+   * Three flags in this package have a second spelling and the help named none
+   * of them. An alias nobody can discover is an alias for the person who wrote
+   * it.
+   */
+  it('shows the alias of a flag that has one', () => {
+    expect(helpFor('index')).toContain('--yes, -y')
+    expect(helpFor('init')).toContain('--yes, -y')
+    // And the dash count follows the alias's own length, the same rule the
+    // parser applies — `-y` is a short option, `--dry-run` is a long one.
+    expect(helpFor('import')).toContain('--dry, --dry-run')
+  })
+
+  /**
+   * The footer was the second address in this package written by hand, and
+   * `package.json`'s `homepage` is NOT it — that field is the package's page,
+   * and a "Full reference" line pointing there sends a reader looking for
+   * `--level` to a README.
+   */
+  it('takes the documentation address from the one constant', () => {
+    expect(DOCS_URL).toMatch(/^https:\/\//)
+    for (const c of Object.keys(COMMANDS)) {
+      expect(helpFor(c), c).toContain(`Full reference: ${DOCS_URL}/reference/cli#${c}`)
+    }
+    // And the hand-written second copy is gone from the module that had one.
+    expect(read('src/feedback/cli.ts')).not.toContain('docpilot feedback <mode> --from <source>')
+  })
+})
+
+/**
+ * `--json` — one object on stdout, the exit code untouched.
+ */
+describe('the machine-readable half', () => {
+  const cli = (...args) =>
+    spawnSync(process.execPath, [path.join(ROOT, 'bin/docpilot.js'), ...args], { encoding: 'utf8' })
+
+  it('gives doctor a parsable object, and keeps the prose off stdout', () => {
+    const r = cli('doctor', '--json')
+    const parsed = JSON.parse(r.stdout)
+    expect(parsed).toHaveProperty('ready')
+    expect(parsed).toHaveProperty('version')
+    expect(parsed.chat).toHaveProperty('provider')
+    expect(r.stdout).not.toContain('[docpilot] config')
+    // The verdict in the object and the verdict in the code are one answer.
+    expect(r.status).toBe(parsed.ready ? 0 : 1)
+  })
+
+  it('gives lint one too', () => {
+    const r = cli('lint', '--json')
+    const parsed = JSON.parse(r.stdout)
+    expect(parsed).toHaveProperty('records')
+    expect(parsed).toHaveProperty('errors')
+    expect(r.stdout).not.toContain('golden lint —')
+    expect(r.status).toBe(parsed.ok ? 0 : 1)
+  })
+
+  it('never prints a key value into either object', () => {
+    const doctor = cli('doctor', '--json').stdout
+    // Variable NAMES are facts of a configuration; values are not.
+    expect(doctor).not.toMatch(/sk-[A-Za-z0-9]/)
   })
 })
 

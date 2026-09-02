@@ -33,11 +33,37 @@ const COMMANDS = [
   'init',
 ]
 
-const [, , cmd, ...rest] = process.argv
+let [, , cmd, ...rest] = process.argv
+
+/**
+ * `docpilot help [command]` — the spelling half the world types first.
+ *
+ * It is rewritten into the flag rather than handled twice: `help eval` becomes
+ * `eval --help`, `help` alone becomes the global block below. That keeps ONE
+ * renderer and one set of words, and it is why `help` is deliberately NOT in
+ * `COMMANDS` — `test/cli-flags.test.js:42` holds that array against the flag
+ * table as an exact set, and a "command" with no flags of its own would have to
+ * be invented on both sides to satisfy it.
+ *
+ * Here, above everything: like `--help` it must need no config, no key, no
+ * network and no built `dist/`.
+ */
+if (cmd === 'help') {
+  const target = rest.find((a) => !a.startsWith('-'))
+  cmd = target ?? undefined
+  rest = target ? ['--help'] : []
+}
 
 if (!cmd || cmd === '--help' || cmd === '-h') {
   console.log(`
   docpilot <command>
+
+  Installed in a project, every runner reaches this bin by the bare name:
+  npx docpilot, pnpm exec docpilot, yarn docpilot, bunx docpilot. Run ONCE
+  without installing, the name has to be the package's own — the unscoped
+  "docpilot" on npm is not this package:
+
+    npx @cloflin/docpilot init
 
     index       build the retrieval index from your docs
                 asks which embedder to build with; the config's own answer is
@@ -79,10 +105,12 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
   Every command reads .vitepress/config.mjs — or docpilot.config.mjs — for its
   settings.
 
-  npx docpilot <command> --help  lists that command's flags, what each one does
-  and what it costs. It needs no config, no key and no network, which is the
-  point: it used to RUN the command, and on four of them that was a purchase
-  order.
+  npx docpilot <command> --help  — or  npx docpilot help <command>  — lists that
+  command's flags, what each one does and what it costs. It needs no config, no
+  key and no network, which is the point: it used to RUN the command, and on
+  four of them that was a purchase order.
+
+  npx docpilot --version  prints the installed version, and nothing else.
 
   "feedback" sits outside the loop: it reads what your own endpoint collected
   and PROPOSES probes for it, and with "feedback faq" the empty state's three
@@ -258,26 +286,14 @@ async function loadSettings() {
  * This block used to pull fifteen names out of `dist/config.js`, six out of
  * `embed-choices.js` and three whole modules besides, because `doctor` and
  * `init` were written in this file. They are `src/cli-doctor.js` and
- * `src/cli-init.js` now, they import what they use, and the launcher imports
- * only what is left: resolving the settings, and the embedder question `index`
- * asks before the indexer is loaded.
+ * `src/cli-init.js` now, they import what they use, and what is left here is
+ * the one thing every command past this point needs: the resolver, and the
+ * search that finds the config to hand it. `dist/config.js` is 212 KB — the
+ * file counts them itself — so the four commands whose settings are resolved
+ * for them still pay for it, and the ones that reach neither (`--help`,
+ * `--version`, `init`) now dispatch above this line and pay nothing.
  */
-const { resolveDocPilot, indexDirOf, resolveChain, nodeEmbedTarget } = await import(
-  '../dist/config.js'
-)
-/**
- * The embedder question's pure half — what `index` has to know before it can ask
- * which embedder to build with, and what `doctor --embed` prints instead of
- * asking. Decisions there, stdin here; the same split `cli-init.js` documents.
- */
-const { embedChoices, embedOverrideSnippet, embedQuestion, indexDirQuestion, parseEmbedFlags } =
-  await import('../dist/embed-choices.js')
-// Which local embedding servers are actually running — free, and the one thing
-// no amount of reading config files can answer. It sits beside the discovery it
-// uses, because `doctor --embed` asks it too.
-const { probeLocalEmbedders } = await import('../dist/build/lib/embed-discovery.js')
-// One question at a terminal, shared with `init` — which asks two of its own.
-const { askOne } = await import('../dist/cli-ask.js')
+const { resolveDocPilot } = await import('../dist/config.js')
 const { CONFIG_CANDIDATES, findConfig } = await import('../dist/cli-init.js')
 
 /**
@@ -303,27 +319,37 @@ if (cmd === 'init') {
 }
 
 
+
+
 /**
- * Read the environment the way the BUILD reads it, not the way a shell does.
+ * `.env.local`, APPLIED ONCE, HERE, AND NOWHERE ELSE — spec 010, decision 9.
  *
  * `doctor` reporting a key as missing because it lives in `.env.local` — where
  * every VitePress project is told to put it, and where the build finds it — is
- * a false alarm from the one command whose entire job is to not raise one.
- * vitepress is a peer dependency, so it resolves from the project this is being
- * run in; a project without it is not a project this CLI has anything to say to.
+ * a false alarm from the one command whose entire job is to not raise one. So
+ * the file is read; what changed is who wins and who sees it.
+ *
+ * WHO WINS: the shell. This function used to return `{ ...process.env,
+ * ...loadEnv(…) }`, which put the file on TOP, so a one-off
+ * `OPENROUTER_API_KEY=… npx docpilot eval` was silently overruled by a
+ * checked-in `.env`. `cli-context.ts:73` had already written the opposite law
+ * down and three of the seven readers followed it; this is the launcher joining
+ * them rather than a new rule.
+ *
+ * WHO SEES IT: everything. The old merge went into a local `env` that was
+ * passed to the commands that took one — so `bench` and `lint`, which read
+ * neither the file nor that object, could not see a key the CLI's own help
+ * (`:503`, `:925`) told the reader to put there. Writing the missing keys into
+ * `process.env` fixes both without a line changing in either command.
+ *
+ * vitepress is a convenience, not a dependency: without it there is no file to
+ * read and the shell stands alone.
  */
-async function loadEnvironment() {
-  try {
-    const { loadEnv } = await import('vitepress')
-    return { ...process.env, ...loadEnv('', process.cwd(), '') }
-  } catch {
-    return process.env
-  }
-}
-
+const { applyFileEnv } = await import('../dist/cli-env.js')
+await applyFileEnv()
+const env = process.env
 
 const { settings, configPath } = await loadSettings()
-const env = await loadEnvironment()
 /**
  * `let`, for the one command that may be told to build with something other than
  * what the config names. An override is REBUILT rather than patched — `embed` is
@@ -424,6 +450,20 @@ if (cmd === 'doctor') {
 let dispatchArgs = rest
 
 if (cmd === 'index') {
+  /**
+   * IMPORTED INSIDE THE BRANCH, because only this branch asks the question.
+   *
+   * The embedder prompt's pure half, the local-server probe and the readline
+   * helper are `index`'s alone now that `doctor --embed` reads them from
+   * `src/cli-doctor.js`. Three modules and three names off the path of every
+   * other command, for no change in what any of them do.
+   */
+  const { indexDirOf, resolveChain, nodeEmbedTarget } = await import('../dist/config.js')
+  const { embedChoices, embedOverrideSnippet, embedQuestion, indexDirQuestion, parseEmbedFlags } =
+    await import('../dist/embed-choices.js')
+  const { probeLocalEmbedders } = await import('../dist/build/lib/embed-discovery.js')
+  const { askOne } = await import('../dist/cli-ask.js')
+
   const flags = parseEmbedFlags(rest)
   if (flags.unknown.length) {
     console.error(`[docpilot] cannot use: ${flags.unknown.join(' ')}`)

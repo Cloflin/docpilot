@@ -17,7 +17,7 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs'
 import path from 'node:path'
 import {DOCPILOT_DIR, REPORTS} from '../cli-context.js'
-import {flagErrors, spaceFormWarning} from '../cli-flags.js'
+import {flagErrors, spaceFormWarning, helpFor} from '../cli-flags.js'
 import {USAGE} from '../cli-exit.js'
 import {aggregate, merge} from './aggregate.js'
 import {parseRows, fetchRows, TOKEN_ENV} from './source.js'
@@ -29,24 +29,17 @@ import {openerQuestions} from '../theme/docpilot/openers.js'
 const MODES = ['pull', 'report', 'faq']
 const CANDIDATES = path.join(DOCPILOT_DIR, 'candidates.jsonl')
 
-const HELP = `
-  docpilot feedback <mode> --from <source>
-
-    pull      aggregate votes into ${path.basename(CANDIDATES)} for review
-    report    write a markdown summary of what readers said
-    faq       rank the questions readers ask, grouped the way the panel groups
-              them, and propose a \`suggestions.questions\` block to paste
-
-  --from <path|url>   a JSONL/JSON export of your own storage, or a GET endpoint
-  --since <ISO>       passed through to a URL source as ?since=
-  --max-pages <n>     stop after n pages of a paginated URL source (default 50)
-  --out <path>        override the output path
-
-  This package ships no database driver: the panel POSTs to an endpoint you run,
-  into storage you chose, and you export from it. \`--from ./export.jsonl\` reads
-  anything — including what \`window.__docPilot.exportFeedback()\` prints. A URL
-  source sends \`Authorization: Bearer $${TOKEN_ENV}\` when that variable is set.
-`
+/**
+ * THE HELP, RENDERED FROM THE TABLE — there is no second one here any more.
+ *
+ * A hand-written usage block beside a parser is a usage block that drifts from
+ * it, and this one had: it showed `--from <source>` in the space form for four
+ * flags while the table's `example` for each shows `=`, it named no `faq`
+ * defaults, and it was the second place a reader could be told what `feedback`
+ * takes. `helpFor` reads `COMMANDS` and nothing else, which is the whole reason
+ * the table exists.
+ */
+const HELP = () => helpFor('feedback')
 
 function parseArgs(argv): {
     mode: string | null
@@ -113,11 +106,11 @@ export async function runFeedback({docPilot, argv = [], env = {}}) {
   }
 
   if (args.help || !args.mode) {
-    console.log(HELP)
+    console.log(HELP())
     return args.help ? 0 : USAGE
   }
   if (args.unknown) {
-    console.error(`[docpilot] unknown option "${args.unknown}"\n${HELP}`)
+    console.error(`[docpilot] unknown option "${args.unknown}"\n${HELP()}`)
     return USAGE
   }
   if (!MODES.includes(args.mode)) {

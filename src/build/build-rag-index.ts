@@ -36,7 +36,6 @@ import {
   CONFIG,
   VOCABULARY_OUT,
   EMBED_CACHE_DIR,
-  fileEnv,
 } from '../cli-context.js'
 import { openEmbedCache } from './lib/embed-cache.js'
 import { l2normalise, toInt8, quantisationError } from './lib/quantize.js'
@@ -46,6 +45,7 @@ import { openerQuestions } from '../theme/docpilot/openers.js'
 import { questionsHash } from '../theme/docpilot/text.js'
 import { promptHash } from '../theme/docpilot/prompt.js'
 import { nodeChatTarget } from '../config.js'
+import { applyFileEnv } from '../cli-env.js'
 import { entryFlagError, flagValue } from '../cli-flags.js'
 import { printError, tick, FAILED, USAGE } from '../cli-exit.js'
 import {
@@ -161,8 +161,17 @@ const EMBED_FALLBACK_LEXICAL = resolveEmbed(docPilot).fallback === 'lexical'
  * The chat half needs it too now — the openers pass writes answers with the
  * shipped harness — and re-reading `.env.local` for the second caller would be
  * a second answer to "which key is this build using".
+ *
+ * IT IS `process.env` NOW, not a private merge of it. The spread above put the
+ * file underneath the shell, which is the right law — but it put the result in
+ * an object nobody else could see, so `.env.local` reached this module's two
+ * resolvers and nothing else in the same process. `applyFileEnv` writes the
+ * missing keys into `process.env` itself, so every reader downstream sees one
+ * environment. The launcher has usually done it already; this call is what
+ * keeps `node dist/build/build-rag-index.js` honest.
  */
-const BUILD_ENV = { ...(await fileEnv()), ...process.env }
+await applyFileEnv()
+const BUILD_ENV = process.env
 const EMBED = nodeEmbedTarget(NO_EMBED ? { ...docPilot, embed: false } : docPilot, BUILD_ENV)
 const EMBED_URL = EMBED.baseURL
 /**

@@ -76,6 +76,18 @@ const FEEDBACK_MODES = ['pull', 'report', 'faq']
  * `docs/reference/cli.md`, which the help points at, and `test/cli-flags.test.js`
  * holds the two in agreement in both directions.
  */
+/**
+ * THE DOCUMENTATION SITE, NAMED ONCE.
+ *
+ * It was written by hand in the footer of every command's help, and `homepage`
+ * in `package.json` is NOT this address — that field is the package's page, and
+ * pointing a "Full reference" line at it would send a reader looking for
+ * `--level` to a README. So the address gets a name, here, beside the table
+ * whose help prints it, and `test/cli-flags.test.js` reads the same constant
+ * rather than a second copy of the string.
+ */
+export const DOCS_URL = 'https://docpilot.dev'
+
 export const COMMANDS = {
   index: {
     summary: 'build the retrieval index from your docs',
@@ -201,6 +213,7 @@ export const COMMANDS = {
     summary: 'check the golden set against the index it measures',
     flags: [
       { name: 'file', kind: 'value', example: 'docpilot/golden.jsonl', help: 'lint this file instead of ${evalDir}/golden.jsonl' },
+      { name: 'json', kind: 'bool', help: 'one object on stdout instead of the report; the exit code is unchanged' },
     ],
   },
 
@@ -217,12 +230,19 @@ export const COMMANDS = {
     epilogue:
       'This package ships no database driver: the panel POSTs to an endpoint you\n' +
       'run, into storage you chose, and you export from it. It never writes to the\n' +
-      'eval sets — a stratum is a judgement and a gold answer is written by a person.',
+      'eval sets — a stratum is a judgement and a gold answer is written by a person.\n' +
+      '\n' +
+      // Carried over from the hand-written usage block this help replaced: it is
+      // the one fact about `--from` that neither the flag's own line nor the
+      // reference page states, and a URL source is unauthenticated without it.
+      'A URL source sends `Authorization: Bearer $DOCPILOT_FEEDBACK_TOKEN` when\n' +
+      'that variable is set.',
   },
 
   doctor: {
     summary: 'check the configuration without a full build',
     flags: [
+      { name: 'json', kind: 'bool', help: 'one object on stdout instead of the report; the exit code is unchanged' },
       { name: 'proxy', kind: 'bool', help: 'print the contract a production reverse proxy has to satisfy' },
       { name: 'embed', kind: 'bool', help: 'list every embedder this project could build with, and the command that picks each' },
       { name: 'models', kind: 'bool', help: "check a free pool against the provider's live catalogue — the only flag here that reaches a third party" },
@@ -290,6 +310,22 @@ function longFormOf(spec, token) {
 /** `--level=low`, as the message shows it. */
 const exampleOf = (flag) =>
   flag.kind === 'bool' ? `--${flag.name}` : `--${flag.name}=${flag.example ?? 'value'}`
+
+/**
+ * The same, plus the alias — for the HELP only.
+ *
+ * Three flags in this package have a second spelling and the help named none of
+ * them: `-y` for `--yes` on `index` and `init`, `--dry-run` for `--dry` on
+ * `import`. A documented alias nobody can discover is an alias that exists only
+ * for the person who wrote it. Error messages keep `exampleOf` — a reader who
+ * mistyped a flag wants the one spelling to use, not two.
+ */
+const helpExampleOf = (flag) =>
+  // The alias gets the dash count its own LENGTH earns, the same rule the
+  // parser applies: `-y` is a short option, `--dry-run` is a long one.
+  flag.alias
+    ? `${exampleOf(flag)}, ${flag.alias.length === 1 ? '-' : '--'}${flag.alias}`
+    : exampleOf(flag)
 
 /**
  * The value a flag was given, or null when it was not given.
@@ -532,13 +568,13 @@ export function helpFor(command) {
     lines.push(`  <${spec.positional.name}>  one of: ${spec.positional.values.join(', ')}`, '')
   }
 
-  const width = Math.max(...spec.flags.map((f) => exampleOf(f).length))
+  const width = Math.max(...spec.flags.map((f) => helpExampleOf(f).length))
   for (const flag of spec.flags) {
-    lines.push(`  ${exampleOf(flag).padEnd(width)}  ${flag.help}`)
+    lines.push(`  ${helpExampleOf(flag).padEnd(width)}  ${flag.help}`)
   }
 
   if (spec.epilogue) lines.push('', ...spec.epilogue.split('\n').map((l) => `  ${l}`))
-  lines.push('', `  Full reference: https://docpilot.dev/reference/cli#${command}`, '')
+  lines.push('', `  Full reference: ${DOCS_URL}/reference/cli#${command}`, '')
   return lines.join('\n')
 }
 

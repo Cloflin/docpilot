@@ -11,6 +11,34 @@ against `package.json`'s version and refuses the publish if they disagree.
 
 ### Changed
 
+**`doctor --json` and `lint --json`, `docpilot help <command>`, and one law for
+`.env.local`.** `doctor` is documented as a CI gate and answered only in prose,
+so gating on it meant grepping wording that is not a contract; `--json` puts one
+object on stdout — the same facts the rows carry, plus the installed version and
+`ready` as a boolean — while the diagnosis still goes to stderr, so
+`doctor --json | jq .ready` shows the report to the operator and the answer to
+the script. The exit code is unchanged in both commands.
+
+`.env` and `.env.local` are now read **once, by the launcher, and the existing
+environment wins**. That law was written down in `cli-context.ts` and followed by
+three of seven readers: `bin/docpilot.js` and `vocabulary` inverted it, so a
+one-off `OPENROUTER_API_KEY=… npx docpilot …` was overruled by a checked-in
+`.env`; `index` put the file in a private object that never reached
+`process.env`; and `bench` and `lint` did not read it at all, while this CLI's
+own help told you to put your key there. All six copies are gone and every
+command sees one environment.
+
+Help gained `docpilot help <command>` as a synonym for `--help`, `--version` in
+the global block and in the reference, and the short spelling of a flag that has
+one (`--yes, -y`). `feedback`'s hand-written usage block is deleted — it is
+rendered from the flag table like every other command's — and the "Full
+reference" footer takes its address from one named constant instead of a string
+copied into the renderer.
+
+`npx docpilot <command>` is correct once the package is installed and wrong as a
+one-off, because the unscoped name on npm is not this package. The help and the
+reference now say so and show `npx @cloflin/docpilot`.
+
 **Four exit codes, and diagnostics on stderr.** There were two, and cancelling
 was one of them: Ctrl-C or Ctrl-D at either of the package's prompts returned
 `0`, telling a script that the thing it asked for had been done. It returns

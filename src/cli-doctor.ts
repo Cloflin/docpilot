@@ -82,9 +82,35 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
    * of `config`, `index` and `ready`, which is close enough to read as a
    * rendering fault rather than as two labels of different lengths.
    */
-  const say = (label, value) => console.log(`[docpilot] ${label.padEnd(10)}${value}`)
+  /**
+   * `--json` — THE WHOLE OF STDOUT IS ONE OBJECT.
+   *
+   * `docs/reference/cli.md` documents this command as a CI gate and it answered
+   * only in prose, so gating on it meant grepping a report whose wording is not
+   * a contract. Under the flag every `say` becomes a no-op and the object below
+   * is the only thing on stdout; the diagnosis still goes to stderr, so
+   * `doctor --json | jq .ready` shows the report to the operator and the answer
+   * to the script.
+   *
+   * The EXIT CODE is unchanged, deliberately: `ready` in the object and the
+   * code are the same verdict, and two ways to read one answer is one way for
+   * them to disagree.
+   */
+  const json = given('--json')
+  const say = (label, value) => {
+    if (!json) console.log(`[docpilot] ${label.padEnd(10)}${value}`)
+  }
   /** The same row, on the stream a refusal belongs on. */
-  const err = (label, value) => console.error(`[docpilot] ${label.padEnd(10)}${value}`)
+  const err = (label, value) => {
+    if (!json) console.error(`[docpilot] ${label.padEnd(10)}${value}`)
+  }
+  /**
+   * The continuation lines. Under `--json` they are the same no-op `say` is:
+   * every one of them is a detail of a row, and the object carries the facts.
+   */
+  const line = (text) => {
+    if (!json) console.log(text)
+  }
   const PAD = ' '.repeat(21)
 
   say('config', configPath || 'none — shipped defaults + your environment')
@@ -153,7 +179,7 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
           : t.found
             ? ' ←'
             : ' ←  nothing matched — fall-through'
-      console.log(
+      line(
         `${PAD}${mark} ${t.id.padEnd(12)}${(t.envKey || 'no key needed').padEnd(22)}${here}`.trimEnd(),
       )
     }
@@ -164,7 +190,7 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
      */
     for (const t of tried) {
       if (t.found && !at.has(t.id)) {
-        console.log(`${PAD}  ${''.padEnd(12)}${''.padEnd(22)}skipped — no model and no pool`)
+        line(`${PAD}  ${''.padEnd(12)}${''.padEnd(22)}skipped — no model and no pool`)
       }
     }
   }
@@ -188,25 +214,25 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
     const caps = capsOf(docPilot.chat.provider) || {}
     const tuning = resolveTuning(docPilot)
     const chat = docPilot.chat
-    console.log('')
+    line('')
     say('knobs', `${docPilot.chat.provider} · ${adapter.id} adapter`)
 
     const wire = (knob, value, field) => {
       if (value == null) return
-      if (field) console.log(`${PAD}✓ ${knob.padEnd(12)}${String(value).padEnd(9)}→ ${field}`)
-      else console.log(`${PAD}· ${knob.padEnd(12)}${String(value).padEnd(9)}NOT honoured by ${docPilot.chat.provider}`)
+      if (field) line(`${PAD}✓ ${knob.padEnd(12)}${String(value).padEnd(9)}→ ${field}`)
+      else line(`${PAD}· ${knob.padEnd(12)}${String(value).padEnd(9)}NOT honoured by ${docPilot.chat.provider}`)
     }
 
     // Reasoning first, and it prints even at its default, because "what does
     // 'auto' do here" is the question this whole feature raises.
     if (tuning.style === 'none') {
-      console.log(`${PAD}· reasoning   ${String(chat.reasoning === false ? 'false' : 'auto').padEnd(9)}${caps.mandatory ? `${docPilot.chat.provider} cannot turn reasoning off` : 'not offered by this provider'}`)
+      line(`${PAD}· reasoning   ${String(chat.reasoning === false ? 'false' : 'auto').padEnd(9)}${caps.mandatory ? `${docPilot.chat.provider} cannot turn reasoning off` : 'not offered by this provider'}`)
     } else {
       const asked = chat.reasoning && typeof chat.reasoning === 'object' ? chat.reasoning.effort : null
       const shown = chat.reasoning === false ? 'false' : (asked ?? 'auto')
       const field = {effort: 'reasoning_effort', unified: 'reasoning:{}', thinking: 'thinking', think: 'think'}[tuning.style]
       const moved = asked && tuning.effort && tuning.effort !== asked ? `  CLAMPED to '${tuning.effort}' — ${docPilot.chat.provider} has no '${asked}'` : ''
-      console.log(`${PAD}✓ ${'reasoning'.padEnd(12)}${String(shown).padEnd(9)}→ ${field}${moved}`)
+      line(`${PAD}✓ ${'reasoning'.padEnd(12)}${String(shown).padEnd(9)}→ ${field}${moved}`)
     }
 
     wire('temperature', chat.temperature, caps.temperature === false ? null : adapter.supports?.temperature)
@@ -221,19 +247,19 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
     // request into a 400 when it is wrong.
     if (adapter.id !== 'ollama' && adapter.id !== 'anthropic' && chat.model) {
       const field = /(^|\/)(o[1-9](\b|-)|gpt-5|codex-mini)/i.test(chat.model) ? 'max_completion_tokens' : 'max_tokens'
-      if (field !== 'max_tokens') console.log(`${PAD}  ${chat.model} takes ${field}, not max_tokens`)
+      if (field !== 'max_tokens') line(`${PAD}  ${chat.model} takes ${field}, not max_tokens`)
     }
 
     if (caps.unknown) {
-      console.log(`${PAD}! ${docPilot.chat.provider} names a host, not a service — DocPilot cannot know what`)
-      console.log(`${PAD}  your gateway accepts, so every knob above is sent as written`)
+      line(`${PAD}! ${docPilot.chat.provider} names a host, not a service — DocPilot cannot know what`)
+      line(`${PAD}  your gateway accepts, so every knob above is sent as written`)
     } else if (caps.modelDependent && tuning.style !== 'none') {
-      console.log(`${PAD}! support varies by model here — a level is sent and the service decides`)
+      line(`${PAD}! support varies by model here — a level is sent and the service decides`)
     }
     // The interaction nobody would predict, and the one that turns an answerable
     // question into "no provider available" on a thin free pool.
     if (tuning.style === 'unified' && tuning.effort && docPilot.chat.extraBody?.provider?.require_parameters !== false) {
-      console.log(`${PAD}! reasoning + provider.require_parameters narrows routing a second time`)
+      line(`${PAD}! reasoning + provider.require_parameters narrows routing a second time`)
     }
 
     /**
@@ -255,7 +281,7 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
         const off = t.style === 'none' && tuning.style !== 'none'
         if (!dropped.length && !off) continue
         const what = [...dropped, ...(off ? ['reasoning'] : [])].join(', ')
-        console.log(`${PAD}  ${m.id.padEnd(12)}drops ${what}`)
+        line(`${PAD}  ${m.id.padEnd(12)}drops ${what}`)
       }
     }
   } catch (e) {
@@ -271,11 +297,11 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
      * So it is caught, printed as a row like every other finding, and the rest
      * of the diagnosis runs. The exit code is still `readiness`'s to decide.
      */
-    console.log('')
+    line('')
     // The resolver's own message already wears the prefix; a row that carried
     // it twice would read as a rendering fault rather than as a finding.
     say('knobs', `cannot resolve this provider — ${e.message.replace(/^\[docpilot\] /, '')}`)
-    console.log(`${PAD}the readiness block below says what is missing`)
+    line(`${PAD}the readiness block below says what is missing`)
     if (env.DOCPILOT_DEBUG === '1') console.error(e.stack)
   }
 
@@ -293,13 +319,13 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
    */
   if (given('--proxy')) {
     const contract = proxyContract(docPilot, env)
-    console.log('')
+    line('')
     for (const r of contract.routes) {
       say('proxy', r.path)
-      console.log(`${PAD}→ ${r.upstream}${r.rewrite}`)
+      line(`${PAD}→ ${r.upstream}${r.rewrite}`)
       const cred = r.keyless ? 'no key needed' : r.envKey ? `<${r.envKey}>` : 'NO KEY — none set'
-      console.log(`${PAD}${r.header}: ${cred}`)
-      if (r.local) console.log(`${PAD}! LOCAL ADDRESS — a deployed proxy cannot reach it`)
+      line(`${PAD}${r.header}: ${cred}`)
+      if (r.local) line(`${PAD}! LOCAL ADDRESS — a deployed proxy cannot reach it`)
     }
     /**
      * The members with NO route — a local Ollama, which the browser calls at its
@@ -308,16 +334,16 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
      */
     for (const d of contract.direct) {
       say('direct', `${d.provider} → ${d.baseURL}`)
-      console.log(`${PAD}! the browser calls this itself — no proxy route, and none possible`)
+      line(`${PAD}! the browser calls this itself — no proxy route, and none possible`)
     }
     if (contract.routes.length) {
-      for (const n of contract.notes) console.log(`  · ${n}`)
+      for (const n of contract.notes) line(`  · ${n}`)
     } else {
       // Printing four rules for a proxy that does not exist reads as four things
       // left undone.
       say('proxy', 'none needed — every provider is called directly')
     }
-    console.log('')
+    line('')
   }
   /**
    * `--embed` — the same list `npx docpilot index` asks from, printed instead of
@@ -335,24 +361,24 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
    */
   if (given('--embed')) {
     const choices = embedChoices(settings, env, { probed: await probeLocalEmbedders(env) })
-    console.log('')
+    line('')
     choices.forEach((c, i) => {
       // The cross is the whole point of the row it is on: with nothing in the
       // environment the chain still ends at its shipped fallback, and a list
       // that offered that without saying it would 401 is the same silence this
       // flag was added to end.
       say('embed', `${i + 1}. ${c.label}${c.ready ? '' : '   ✗ cannot run here'}`)
-      console.log(`${PAD}${c.hint}`)
+      line(`${PAD}${c.hint}`)
       // The command that takes this answer, spelled out — an agent reading this
       // should not have to infer the flags from the label.
-      console.log(`${PAD}npx docpilot index ${indexCommandFor(c)}`)
+      line(`${PAD}npx docpilot index ${indexCommandFor(c)}`)
     })
     if (!choices.some((c) => c.ready && c.source !== 'lexical')) {
-      console.log('')
-      console.log(`${PAD}Nothing here can embed. Either put a provider key in .env.local, or`)
-      console.log(`${PAD}run \`ollama serve\` and \`ollama pull bge-m3\` and ask again.`)
+      line('')
+      line(`${PAD}Nothing here can embed. Either put a provider key in .env.local, or`)
+      line(`${PAD}run \`ollama serve\` and \`ollama pull bge-m3\` and ask again.`)
     }
-    console.log('')
+    line('')
   }
 
   /**
@@ -369,7 +395,7 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
    */
   if (given('--models')) {
     const { fetchFreePool } = await import('./theme/docpilot/openrouter.js')
-    console.log('')
+    line('')
     for (const [half, shipped] of [
       ['chat', chatModels(docPilot)],
       ['embed', embedModels(docPilot)],
@@ -395,9 +421,9 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
       const gone = shipped.filter((m) => !live.includes(m))
       const fresh = live.filter((m) => !shipped.includes(m))
       say(half, `${shipped.length} in the pool, ${live.length} free upstream`)
-      if (gone.length) console.log(`${PAD}RETIRED: ${gone.join(', ')}`)
-      if (fresh.length) console.log(`${PAD}new upstream: ${fresh.slice(0, 6).join(', ')}`)
-      if (!gone.length && !fresh.length) console.log(`${PAD}the shipped pool matches the catalogue`)
+      if (gone.length) line(`${PAD}RETIRED: ${gone.join(', ')}`)
+      if (fresh.length) line(`${PAD}new upstream: ${fresh.slice(0, 6).join(', ')}`)
+      if (!gone.length && !fresh.length) line(`${PAD}the shipped pool matches the catalogue`)
     }
 
     /**
@@ -450,18 +476,18 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
           // Not a failure and not a name to fix: this service answers with the
           // weights it was started with, whatever the config says.
           say('model', `${target.id} serves whatever it loaded${seen.loaded ? ` — ${seen.loaded}` : ''}`)
-          console.log(`${PAD}chat.model is a placeholder here and is ignored${extra.length ? ` · ${extra.join(' · ')}` : ''}`)
+          line(`${PAD}chat.model is a placeholder here and is ignored${extra.length ? ` · ${extra.join(' · ')}` : ''}`)
         } else if (seen.verdict === 'served') {
           say('model', `${target.model} — ${hosted ? `served by ${target.id}` : `pulled by ${target.id}`}`)
-          if (extra.length) console.log(`${PAD}${extra.join(' · ')}`)
+          if (extra.length) line(`${PAD}${extra.join(' · ')}`)
         } else if (seen.verdict === 'not-served') {
           const n = seen.serves.length
           say('model', `${target.model} — NOT ${hosted ? `in ${target.id}'s list of ${n}` : `pulled by ${target.id} (${n} available)`}`)
           // The ACTIONABLE line, and it differs by service. Nothing an author
           // types fixes a local server that has not downloaded the weights.
-          if (hosted) console.log(`${PAD}name one in chat.model, or upgrade the package`)
-          else if (target.modelAuto) console.log(`${PAD}${target.id} pull ${target.model}   — or name one you have in chat.model`)
-          else console.log(`${PAD}${target.id} pull ${target.model}`)
+          if (hosted) line(`${PAD}name one in chat.model, or upgrade the package`)
+          else if (target.modelAuto) line(`${PAD}${target.id} pull ${target.model}   — or name one you have in chat.model`)
+          else line(`${PAD}${target.id} pull ${target.model}`)
         } else if (seen.serves === null) {
           say('model', `${target.model} — cannot reach ${target.id}`)
         } else {
@@ -499,15 +525,53 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
       const probe = adapter.embedUrl && url ? await probeEmbedEndpoint(target) : null
       if (probe) {
         say('embed?', `${target.id} answers ${url.replace(target.baseURL, '')} after all — ${probe}`)
-        console.log(`${PAD}embed: {provider: '${target.id}'} drops the borrowed ${embedNow.provider} key`)
+        line(`${PAD}embed: {provider: '${target.id}'} drops the borrowed ${embedNow.provider} key`)
       }
     }
-    console.log('')
+    line('')
+  }
+
+  /**
+   * THE OBJECT, when `--json` was given — and it is the WHOLE of stdout.
+   *
+   * The keys are the rows above, named the way the rows are: nothing here is a
+   * second computation, and `ready` is the same `readiness()` the exit code is
+   * taken from. Every value is a fact of the configuration; no key holds a
+   * secret, which is the same rule the prose obeys — variable NAMES, never
+   * values.
+   */
+  if (json) {
+    const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    console.log(
+      JSON.stringify(
+        {
+          version,
+          configPath,
+          docsDir: docPilot.docsDir,
+          indexDir: indexDirOf(docPilot),
+          chat: {
+            provider: docPilot.chat.provider,
+            model: docPilot.chat.model ?? null,
+            providerAuto: Boolean(docPilot.chat.providerAuto),
+            chain: resolveChatChain(docPilot, env).map((m) => m.id),
+          },
+          embed: (() => {
+            const e = resolveEmbed(docPilot)
+            return { provider: e.provider ?? null, borrowed: Boolean(e.borrowed) }
+          })(),
+          ready: ready.ok,
+          missing: ready.missing.map((m) => ({ what: m.what, fix: m.fix })),
+          notes: ready.notes,
+        },
+        null,
+        2,
+      ),
+    )
   }
 
   if (ready.ok) {
     say('ready', 'yes — the panel will render')
-    for (const n of ready.notes) console.log(`  · ${n}`)
+    for (const n of ready.notes) line(`  · ${n}`)
     return 0
   }
   /**
@@ -520,8 +584,10 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
    * report cannot be piped to `jq` on the way past.
    */
   err('ready', `NO — ${ready.missing.length} to fix\n`)
-  for (const m of ready.missing) console.error(`  · ${m.what}\n      ${m.fix}`)
-  for (const n of ready.notes) console.error(`  · ${n}`)
+  if (!json) {
+    for (const m of ready.missing) console.error(`  · ${m.what}\n      ${m.fix}`)
+    for (const n of ready.notes) console.error(`  · ${n}`)
+  }
   // Exit 1 so CI can gate on it. The BUILD never fails for these; `doctor` is
   // the opt-in place to turn the same facts into a failure.
   return 1

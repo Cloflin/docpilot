@@ -61,7 +61,8 @@ import { writeReport } from './report.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
 
-import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot, fileEnv } from '../cli-context.js'
+import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot } from '../cli-context.js'
+import { applyFileEnv } from '../cli-env.js'
 import { COMMANDS, entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
 import { printError, codeFor, FAILED, USAGE } from '../cli-exit.js'
 
@@ -85,9 +86,17 @@ const PROMPT_HASH = promptHash(docPilot.prompt, docPilot.product)
  * key has to exist. Existing environment wins, so CI and a one-off export both
  * still override it.
  */
-for (const [k, v] of Object.entries(await fileEnv())) {
-  if (process.env[k] === undefined) process.env[k] = v
-}
+/**
+ * `.env.local`, applied by the LAUNCHER now — see `src/cli-env.ts`.
+ *
+ * The loop that stood here was one of five copies of the same six lines, and
+ * two other copies elsewhere in the package inverted the law they implemented.
+ * It is kept as a no-op-when-already-applied call rather than deleted outright,
+ * because this module is also runnable on its own (`node dist/eval/…`), and a
+ * command that reads the file under the launcher and not under `node` is the
+ * same divergence one level down.
+ */
+await applyFileEnv()
 
 /**
  * THE FLAGS, read by the table that already validated them.

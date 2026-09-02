@@ -463,12 +463,20 @@ export async function runVocabulary({ docPilot, argv = [], env = {}, out = null 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { settings } = await import('../cli-context.js')
   const { resolveDocPilot } = await import('../config.js')
-  let env = process.env
-  try {
-    const { loadEnv } = await import('vitepress')
-    env = { ...process.env, ...loadEnv('', process.cwd(), '') }
-  } catch {
-    /* vitepress is a peer dependency; a project without it gets the shell alone */
-  }
+  /**
+   * ONE LAW, AND IT USED TO BE INVERTED HERE.
+   *
+   * `{ ...process.env, ...loadEnv(…) }` put the FILE on top of the shell, so a
+   * one-off `OPENROUTER_API_KEY=… npx docpilot vocabulary` was overruled by a
+   * checked-in `.env` — the opposite of what `cli-context.ts:73` had written
+   * down and of what the three eval commands did. `applyFileEnv` fills only
+   * what is missing, into `process.env`, once.
+   *
+   * vitepress is a convenience and not a dependency: without it the file is
+   * simply not there and the shell stands alone.
+   */
+  const { applyFileEnv } = await import('../cli-env.js')
+  await applyFileEnv()
+  const env = process.env
   process.exit(await runVocabulary({ docPilot: resolveDocPilot(settings, env), argv: process.argv.slice(2), env }))
 }

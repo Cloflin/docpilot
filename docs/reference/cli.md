@@ -4,6 +4,12 @@
 npx docpilot <command>
 ```
 
+Installed in a project, every runner reaches this bin by the bare name — `npx docpilot`, `pnpm exec docpilot`, `yarn docpilot`, `bunx docpilot`. To run it **once without installing**, the name has to be the package's own, because the unscoped `docpilot` on npm is not this package:
+
+```bash
+npx @cloflin/docpilot init
+```
+
 Every command finds `.vitepress/config.mjs` relative to the directory you run it from and reads the `docPilot` named export. There is no second place to state which model embeds or where the docs live.
 
 The loop is `index → calibrate → lint → eval → bench`, with `import` ahead of it whenever the corpus gains a page from somewhere else, `vocabulary` ahead of it whenever the words readers use are not the words the docs use, and `tune` wherever it is retrieval itself that has to move. The first two are what the panel needs to work at all; the last three are what tells you whether it works well.
@@ -11,6 +17,23 @@ The loop is `index → calibrate → lint → eval → bench`, with `import` ahe
 `tune` sends you back to the start. It writes a file and stops; `index` is the step that inlines a swept lever into the manifest a reader downloads, and until it runs a tuned lever is a file on disk and nothing more.
 
 `feedback` sits outside the loop. It reads what your own endpoint collected and **proposes** probes for it; it never writes to the eval sets.
+
+## Help, and the version {#help}
+
+```bash
+npx docpilot --help            # every command, and what the loop is
+npx docpilot <command> --help  # that command's flags, what each does, what it costs
+npx docpilot help <command>    # the same thing, spelled the other way
+npx docpilot --version         # the installed version, and nothing else
+```
+
+Help costs nothing and needs nothing: no config file, no key, no network, no built index. That is deliberate — it used to *run* the command, and on `index`, `eval`, `calibrate` and `vocabulary` that made `--help` a purchase order. Every command's flag list is rendered from the same table that validates the flags, so a flag that exists is a flag the help names, including its short spelling where it has one (`--yes, -y`).
+
+## The environment, and who wins {#environment}
+
+`.env` and `.env.local` are read once, by the launcher, the way the VitePress build reads them — and **the existing environment wins**. A variable already set in your shell or by CI is never overwritten by the file, so a one-off `OPENROUTER_API_KEY=… npx docpilot eval` beats a checked-in `.env`, which is the case the rule exists for.
+
+Every command sees the result, including `bench` and `lint`, which used to read the file not at all while this CLI's own help told you to put your key in it. A project without VitePress installed simply has no file to read, and the shell stands alone.
 
 ## Exit codes {#exit-codes}
 
@@ -278,9 +301,12 @@ Run it again after a corpus change, an embedder change, or a prompt override.
 ```bash
 npx docpilot lint
 npx docpilot lint --file=<path>
+npx docpilot lint --json
 ```
 
 Checks the golden set against the index it claims to measure. A `gold_chunks` entry naming a page that has since been renamed never matches, so the record reports a flat 0 that reads as a retrieval regression — this turns that into an error with the id named.
+
+`--json` puts one object on stdout instead of the report: the counts, `warnings`, `errors` and `ok`. The exit code is the same one the prose form returns, and the sentence explaining a failure still goes to stderr.
 
 Run it before every `eval`, and after every `index`. **Run it after upgrading this package, too**: the second and later parts of a split section are now `#anchor~2`, `#anchor~3` where they used to be `#anchor-2`, `#anchor-3`, so every gold entry pinned at a continuation part matches nothing until it is repointed. `-N` now means only "the Nth heading with this title", which is what VitePress means by it. See [Building the index](/guide/indexing#what-moves-when-you-upgrade).
 
@@ -596,6 +622,7 @@ One thing does outrank a tuned lever: a [`topK`](/reference/config#topk) you set
 
 ```bash
 npx docpilot doctor
+npx docpilot doctor --json
 npx docpilot doctor --proxy
 npx docpilot doctor --embed
 npx docpilot doctor --models
@@ -617,6 +644,21 @@ It also prints [the provider chain](/guide/providers#name-nothing-the-provider-c
 The build log stays quiet about this when a provider is named, because a line restating your config file is noise in a block people read at every start. `doctor` is the opposite: it is run precisely when the question is *why is it talking to that*, and which variables are set is not visible anywhere else. Only the **name** of a variable is ever printed, never its value.
 
 It runs without a config file at all, on the shipped defaults and your environment. That is the zero-config install, and a command that exited there could not check it.
+
+`--json` puts one object on stdout and nothing else — the same facts the rows carry, plus the installed `version`, and `ready` as a boolean. The diagnosis still goes to stderr, so `npx docpilot doctor --json | jq .ready` gives the script its answer while the operator still sees the report. **The exit code is unchanged**: `ready` and the code are one verdict, and two ways of reading one answer is one way for them to disagree. No key value appears in the object, the same rule the prose obeys.
+
+```json
+{
+  "version": "1.1.0",
+  "configPath": "docs/.vitepress/config.mjs",
+  "indexDir": "docs/public/rag",
+  "chat": { "provider": "openrouter", "model": null, "providerAuto": false, "chain": ["openrouter"] },
+  "embed": { "provider": "openrouter", "borrowed": false },
+  "ready": true,
+  "missing": [],
+  "notes": ["…"]
+}
+```
 
 `--proxy` additionally prints the contract a production reverse proxy has to satisfy: the exact paths, the upstream for each, and the name of the header the key goes in. The key value is never printed. See [Production](/guide/production) for what to do with it.
 

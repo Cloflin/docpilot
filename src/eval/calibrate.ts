@@ -40,6 +40,7 @@ import { embeddingsOf } from '../build/build-rag-index.js'
 import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { wilsonUpper95 } from './metrics.js'
 import { nodeEmbedTarget } from '../config.js'
+import { applyFileEnv } from '../cli-env.js'
 import { entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
 import { printError, tick, tock, FAILED, USAGE } from '../cli-exit.js'
 
@@ -49,7 +50,6 @@ import {
   CALIBRATION_SET,
   CALIBRATION_OUT,
   settings as docPilot,
-  fileEnv,
 } from '../cli-context.js'
 const EVAL = path.dirname(CALIBRATION_SET)
 const PROBES = path.join(EVAL, 'calibration.jsonl')
@@ -58,9 +58,17 @@ const OUT_JSON_DEFAULT = path.join(EVAL, 'calibration.json')
 const OUT_MD = path.join(EVAL, 'calibration.report.md')
 
 /** `.env.local` through the loader config.mjs uses. Existing environment wins. */
-for (const [k, v] of Object.entries(await fileEnv())) {
-  if (process.env[k] === undefined) process.env[k] = v
-}
+/**
+ * `.env.local`, applied by the LAUNCHER now — see `src/cli-env.ts`.
+ *
+ * The loop that stood here was one of five copies of the same six lines, and
+ * two other copies elsewhere in the package inverted the law they implemented.
+ * It is kept as a no-op-when-already-applied call rather than deleted outright,
+ * because this module is also runnable on its own (`node dist/eval/…`), and a
+ * command that reads the file under the launcher and not under `node` is the
+ * same divergence one level down.
+ */
+await applyFileEnv()
 
 /**
  * THE FLAGS, read by the table that already validated them.

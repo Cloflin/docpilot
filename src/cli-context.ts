@@ -61,26 +61,16 @@ export const CONFIG = globalThis.__DOCPILOT_CONFIG__
   : path.join(DOCS, '.vitepress', 'config.mjs')
 
 /**
- * `.env` and `.env.local`, read the way the VitePress build reads them — and
- * `{}` when VitePress is not installed at all.
+ * `.env` and `.env.local` moved to `src/cli-env.ts`, and the law with them.
  *
- * Every command used to import `loadEnv` from `vitepress` at module scope,
- * which made a hard dependency out of a convenience: the indexer, the
- * calibrator and the eval runner all died on a resolution error in a project
- * whose docs are not a VitePress site, before printing anything about what they
- * were being asked to do. The corpus is markdown either way.
- *
- * The existing environment wins at every call site, so CI and a one-off
- * `export` still override a file.
+ * Re-exported here because five modules imported it from this file, and because
+ * the reason it left is worth finding from the file it left: this module
+ * resolves `settings` at line 38 out of a global the launcher writes LATER, so
+ * anything that imports it merely to read an environment variable runs that
+ * resolution against an empty config and caches the answer. The launcher is
+ * exactly such a caller — it applies the file once, before it dispatches.
  */
-export async function fileEnv() {
-  try {
-    const {loadEnv} = await import('vitepress')
-    return loadEnv('', ROOT, '')
-  } catch {
-    return {}
-  }
-}
+export { fileEnv, applyFileEnv } from './cli-env.js'
 
 /**
  * Evaluation artefacts live in the PROJECT, not the package: a golden set is a
