@@ -7584,6 +7584,148 @@ describe('createRetrieval', () => {
  * maxIterations)` never came due. The only thing that ended such a turn was the
  * reader pressing stop, and every lap was a full chat() call.
  */
+/**
+ * Engine-spec 013 — a follow-up starts with the evidence its antecedent used.
+ *
+ * `primed` was exactly this turn's `gateResult.chunks`, and `emittedIds` was
+ * filled from it alone — so the chunk the last answer stood on was neither in
+ * front of the model nor reachable by `fetch_section`, which refuses every id
+ * outside that set. The model's only trace of the previous turn is its own text,
+ * cut to 300 characters.
+ */
+describe('runTurn — a follow-up inherits what the last turn cited', () => {
+  const DIMS = 4
+  const GUARD = {
+    tau: 0.3,
+    tauLexical: 0.3,
+    wDense: 0.75,
+    wLexical: 0.25,
+    denseMode: 'cosine',
+    cosFloor: 0.44,
+    cosCeil: 0.64,
+    zexp: null,
+  }
+
+  let n = 0
+  /** Two pages, so one can be cited and the other left outside a narrow scope. */
+  const twoPageIndex = () => {
+    const chunks = [
+      {
+        id: 'a#one',
+        path: '/a',
+        anchor: 'one',
+        title: 'Alpha',
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: 'The alpha widget is configured with a manifest and a token.',
+        next: 'a#two',
+      },
+      {
+        id: 'a#two',
+        path: '/a',
+        anchor: 'two',
+        title: 'Alpha, continued',
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: 'Turning the alpha widget off is a single flag in the manifest.',
+        next: null,
+      },
+      {
+        id: 'b#one',
+        path: '/b',
+        anchor: 'one',
+        title: 'Beta',
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: 'The beta widget is a different subject entirely.',
+        next: null,
+      },
+    ]
+    const vectors = new Int8Array(DIMS * chunks.length)
+    for (let i = 0; i < chunks.length; i++) vectors[i * DIMS] = 127
+    return assembleIndex({
+      manifest: {
+        version: 3,
+        hash: `seed-${++n}`,
+        embedModel: 'test',
+        dims: DIMS,
+        chunkCount: chunks.length,
+        vectors: 'vectors.seed.bin',
+        pages: [
+          { path: '/a', title: 'Alpha', tail: 'Docs' },
+          { path: '/b', title: 'Beta', tail: 'Docs' },
+        ],
+        guard: GUARD,
+      },
+      shards: [chunks],
+      vectorBuffer: vectors.buffer,
+      dfDoc: { df: {} },
+    })
+  }
+
+  /** The turn answers immediately; the first observation is what is under test. */
+  const primedIdsFor = async ({ history, scope }) => {
+    const bodies = []
+    vi.stubGlobal('fetch', async (_url, init) => {
+      bodies.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({ message: { content: 'done' } }) }
+    })
+    const index = twoPageIndex()
+    const retrieval = createRetrieval({
+      index,
+      scope: scope || { kind: 'all', paths: [], label: 'All docs' },
+      guard: GUARD,
+    })
+    const res = await runTurn({
+      retrieval,
+      // The gate found the OTHER page, so anything from `/a` in the prompt got
+      // there by inheritance and by nothing else.
+      gateResult: { G: 1, pass: true, chunks: [index.byId.get('b#one')] },
+      question: 'and how do I turn it off?',
+      history,
+      addendum: '',
+      config: { llm: { provider: 'ollama', baseURL: 'http://x', model: 'm' }, maxIterations: 4 },
+      fallback: true,
+      queryVec: null,
+    })
+    const first = bodies[0].messages.map((m) => String(m.content)).join('\n')
+    return { prompt: first, emitted: res.emitted }
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('puts the cited chunk and its neighbour in front of the model', async () => {
+    const { prompt, emitted } = await primedIdsFor({
+      history: [{ question: 'how is the alpha widget configured?', answer: 'With a manifest.', citations: ['a#one'] }],
+    })
+    expect(prompt).toContain('a#one')
+    // `next` rides along: an answer that ran past the end of a section is the
+    // common case, and the neighbour costs a lookup rather than a step.
+    expect(prompt).toContain('a#two')
+    // Visible is not enough — an uncitable chunk is worse than an absent one,
+    // because an answer resting on it is withdrawn for having no citations.
+    expect(emitted).toContain('a#one')
+    expect(emitted).toContain('b#one')
+  })
+
+  it('leaves a turn with no history byte-identical', async () => {
+    const withNone = await primedIdsFor({ history: [] })
+    const withUnanswered = await primedIdsFor({
+      history: [{ question: 'a refused one', answer: '', citations: [] }],
+    })
+    expect(withNone.prompt).toBe(withUnanswered.prompt)
+    expect(withNone.prompt).not.toContain('a#one')
+  })
+
+  it('resolves through the scope, so a narrowed reader inherits nothing outside it', async () => {
+    const { prompt } = await primedIdsFor({
+      history: [{ question: 'how is the alpha widget configured?', answer: 'With a manifest.', citations: ['a#one'] }],
+      scope: { kind: 'pages', paths: ['/b'], label: 'Beta' },
+    })
+    expect(prompt).not.toContain('a#one')
+  })
+})
+
 describe('runTurn — the free-step ceiling', () => {
   const DIMS = 4
   const GUARD = {

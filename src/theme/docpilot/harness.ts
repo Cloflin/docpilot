@@ -68,6 +68,49 @@ const SEARCH_CHARS = tune('SEARCH_CHARS', 1200)
 const FETCH_CHARS = tune('FETCH_CHARS', 4000)
 
 /**
+ * How many of the last turn's citations a follow-up inherits — engine-spec 013.
+ *
+ * Three, because a cited list is rarely longer and because a ceiling is what
+ * stops a chain: turn N inherits from turn N-1, which may itself have inherited,
+ * and without a cap a long conversation drags its own opening into every prompt.
+ * Only the LAST answered turn is a source, so the recursion is one deep by
+ * construction.
+ */
+const SEED_FROM_HISTORY = tune('SEED_FROM_HISTORY', 3)
+
+/**
+ * The chunks the previous answer stood on, resolved against THIS turn's scope.
+ *
+ * `retrieval.fetch` is the same door `fetch_section` uses, which is the point:
+ * a chunk that left the scope when the reader narrowed it, or left the corpus
+ * when the index was rebuilt, comes back `ok: false` and is simply not added.
+ * The seam needs no staleness check of its own because the one that exists is
+ * the one that decides.
+ *
+ * `next` rides along for the same reason `sectionExpand` exists: an answer that
+ * ran past the end of a section is the common case, and the neighbour costs one
+ * lookup rather than a step.
+ */
+function seedFromHistory(retrieval, history) {
+  const last = [...(history || [])].reverse().find((h) => h?.answer?.trim() && h.citations?.length)
+  if (!last) return []
+  const out = []
+  const seen = new Set()
+  for (const id of last.citations.slice(0, SEED_FROM_HISTORY)) {
+    const res = retrieval.fetch(String(id || ''))
+    if (!res.ok || seen.has(res.section.id)) continue
+    seen.add(res.section.id)
+    out.push(res.section)
+    const next = res.section.next ? retrieval.fetch(String(res.section.next)) : null
+    if (next?.ok && !seen.has(next.section.id)) {
+      seen.add(next.section.id)
+      out.push(next.section)
+    }
+  }
+  return out
+}
+
+/**
  * The shape the forced final call must produce, enforced server-side by every
  * provider: Ollama's `format`, OpenAI's strict `json_schema`, and — since that
  * API has no schema parameter at all — a forced `answer` tool on Anthropic.
@@ -362,11 +405,34 @@ export async function runTurn(options: RunTurnOptions) {
    */
   const abandoned = onStream ? () => onStream({ start: true }) : null
 
-  // Step 1 — priming. The retrieval already performed by the gate is supplied as
-  // the first observation, and every id in it, POST-GATE-2 ONLY, enters the
-  // citable set. Writing this set before the scope filter would leave a dropped
-  // id citable.
-  const primed = gateResult.chunks
+  /**
+   * Step 1 — priming. The retrieval already performed by the gate is supplied as
+   * the first observation, and every id in it, POST-GATE-2 ONLY, enters the
+   * citable set. Writing this set before the scope filter would leave a dropped
+   * id citable.
+   *
+   * A FOLLOW-UP ALSO INHERITS WHAT THE LAST TURN CITED — engine-spec 013.
+   *
+   * `gateResult` belongs to THIS turn. The composed channel (`gate.js`) makes it
+   * better than it looks by changing what is SEARCHED, but it carries no memory:
+   * not one chunk the previous answer stood on arrives here. What the model has
+   * of that turn is its own text, cut to 300 characters (`prompt.js`), and it
+   * cannot reach for more — `fetch_section` refuses every id outside
+   * `emittedIds`, which this turn fills from its own retrieval alone. So "and
+   * how do I turn it off?" was being asked to answer from an excerpt of itself.
+   *
+   * The citations rather than the whole of the last `primed`: a citation is the
+   * subset the model actually used, and re-sending the eight chunks it was given
+   * would re-send the half it discarded and pay tokens for it.
+   */
+  const inherited = seedFromHistory(retrieval, history)
+  const primed = [...gateResult.chunks]
+  const already = new Set(primed.map((c) => c.id))
+  for (const c of inherited) {
+    if (already.has(c.id)) continue
+    already.add(c.id)
+    primed.push(c)
+  }
   for (const c of primed) emittedIds.add(c.id)
   observations.push(
     observation(

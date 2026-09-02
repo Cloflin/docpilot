@@ -43,6 +43,41 @@ adapters, `cache_read_input_tokens` on Anthropic's — and the report prints
 null through the sum, because averaging silence as a miss would invent a hit rate
 for it.
 
+**A follow-up starts with the evidence the last turn bought — engine-spec 013.**
+`primed` was exactly this turn's `gateResult.chunks`, and `emittedIds` was filled
+from it alone, so the chunk the previous answer stood on was neither in front of
+the model nor reachable: `fetch_section` refuses every id outside that set. What
+the model had of the turn before was its own text, cut to 300 characters. A
+follow-up now also inherits up to three chunks that answer cited, plus their
+`next`, resolved through the same `retrieval.fetch` the tool uses — so the turn's
+scope applies and a chunk that left the corpus is dropped rather than trusted.
+The gate never sees them: `G` is unchanged and a refusal is still its decision
+about this turn. `DOCPILOT_SEED_FROM_HISTORY` sweeps the ceiling.
+
+**The feedback receiver ships, and `init` copies it in.** `feedbackEndpoint`
+makes the panel POST one object per vote, fire and forget — so a receiver that
+404s looks, from the reader's side, exactly like one that works, and the endpoint
+is worth nothing without something listening. That something has to run in the
+consumer's deployment, where a file living unpublished in this repository arrives
+never (engine-spec 012, FB-5). `lib/feedback-receiver.mjs` is now published and
+`npx docpilot init` writes it to `docpilot/feedback-receiver.mjs`, on the same
+terms as the skills and for the same reason. It is copied rather than imported
+because a deployment edits it: its store is a seam, and NDJSON, SQLite or
+Postgres is a decision about their infrastructure. `test/feedback-receiver.test.js`
+pins the gate order, the byte-exact body limit, the refusal on a comment over 500
+and on an absent `revision`, `retracted` on `verdict: null`, and the property
+that makes the seam a seam — NDJSON and SQLite produce byte-identical
+`aggregate()` output on a retraction and on a reversed pair. The skill gains the
+triage rules the reference has no place for.
+
+**`opener-candidates.js` runs where it is copied to.** It resolved `dist/` from
+the current working directory, which is the package repository's own layout —
+and the skill is copied into consumer projects by `npx docpilot init`, because a
+skill inside `node_modules` is discovered by nobody. There it resolved the
+consumer's own `dist`, or nothing at all, and died on an import before printing a
+line. It now resolves the built modules relative to its own location, falling
+back to the cwd form for the package's own checkout.
+
 **A report name carries the embedder, and this breaks pairing with older reports
 once.** The corpus hash is sha256 over chunk id and text, so it cannot tell two
 vector spaces apart — and this repository ships exactly that pair at corpus

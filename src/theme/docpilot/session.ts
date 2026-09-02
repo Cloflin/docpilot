@@ -1363,6 +1363,8 @@ export interface Turn {
   state: string
   answerHtml: string
   answerText: string
+  /** The chunk ids this answer cited, for the next turn to inherit (spec 013). */
+  citationIds?: string[]
   sources: any[]
   results: any[]
   noStrongMatches: boolean
@@ -1459,6 +1461,17 @@ function settleAnswer(turn, result, started) {
   // hook. `cited` holds one entry per citation and `rows` the deduped set, so
   // re-rendering without it would silently drop markers.
   turn.cited = cited
+  /**
+   * The chunk ids this answer stood on, kept for the NEXT turn — engine-spec 013.
+   *
+   * `sources` is the deduped, reader-facing set and carries hrefs; a follow-up
+   * needs the ids the retriever answers to, which is what `result.citations`
+   * already is. Not persisted: `slimTurn` drops `gate.chunks` on purpose, and a
+   * restored conversation faces an index that may have been rebuilt since — the
+   * seam resolves through `retrieval.fetch`, so a stale id is dropped rather
+   * than trusted, but there is no reason to write one down.
+   */
+  turn.citationIds = result.citations
   const { html, delinked } = renderAnswer(result.text, knownPaths.value, cited)
   turn.answerText = result.text
   turn.answerHtml = html
@@ -2168,9 +2181,14 @@ export async function submit(question, { quote = '' } = {}) {
       // as a string of non sequiturs: "what does this mean?" with no `this` in
       // it. buildMessages clamps it harder than the live one — see
       // HISTORY_QUOTE_MAX.
-      history: state.turns
-        .slice(0, -1)
-        .map((t) => ({ question: t.question, answer: t.answerText, quote: t.quote || '' })),
+      history: state.turns.slice(0, -1).map((t) => ({
+        question: t.question,
+        answer: t.answerText,
+        quote: t.quote || '',
+        // What that turn cited, so a follow-up can be primed with the evidence
+        // rather than with 300 characters of the answer that used it.
+        citations: t.citationIds || [],
+      })),
       addendum: state.instruction,
       config: { ...cfg, guard: guard.value },
       fallback: state.fallback,

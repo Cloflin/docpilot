@@ -686,7 +686,15 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
         report(row)
         continue
       }
-      if (first?.text?.trim()) history.push({ question: rec.prev_question, answer: first.text })
+      // The citations travel with the answer: spec 013 primes a follow-up with the
+      // evidence its antecedent stood on, and a history entry without them would
+      // measure the turn the panel does not run.
+      if (first?.text?.trim())
+        history.push({
+          question: rec.prev_question,
+          answer: first.text,
+          citations: first.citations || [],
+        })
     }
 
     const t0 = Date.now()
