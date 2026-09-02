@@ -9424,7 +9424,8 @@ describe('docpilot tune — the sweep refuses what it cannot honestly measure', 
    */
   it('rejects a bare --level instead of silently meaning ultra', async () => {
     const r = await runTune(['--level', 'low'], { cwd: bare })
-    expect(r.status).toBe(1)
+    // `2`, not `1`: the command line was wrong and nothing was attempted.
+    expect(r.status).toBe(2)
     expect(r.out).toContain('--level takes a value: --level=low')
     // And it never reached the work, so no report was written under a pool
     // nobody asked for.
@@ -9438,7 +9439,7 @@ describe('docpilot tune — the sweep refuses what it cannot honestly measure', 
       ['--limit', '--limit=10'],
     ]) {
       const r = await runTune([flag, '5'], { cwd: bare })
-      expect(r.status, flag).toBe(1)
+      expect(r.status, flag).toBe(2)
       expect(r.out).toContain(`${flag} takes a value: ${shown}`)
     }
   })
@@ -9446,7 +9447,7 @@ describe('docpilot tune — the sweep refuses what it cannot honestly measure', 
   it('rejects a flag it does not recognise, and lists the ones it does', async () => {
     for (const bad of ['--levl=low', '--gate-only', '--verbose']) {
       const r = await runTune([bad], { cwd: bare })
-      expect(r.status, bad).toBe(1)
+      expect(r.status, bad).toBe(2)
       expect(r.out).toContain('unknown flag')
       expect(r.out).toContain(bad)
       expect(r.out).toContain('--level=low')
@@ -9459,7 +9460,7 @@ describe('docpilot tune — the sweep refuses what it cannot honestly measure', 
     // wrote the shipped artefact, which is both surprises at once.
     for (const bad of ['abc', '0', '2.5', '-3']) {
       const r = await runTune([`--limit=${bad}`], { cwd: bare })
-      expect(r.status, bad).toBe(1)
+      expect(r.status, bad).toBe(2)
       expect(r.out).toContain('must be a positive whole number')
     }
   })
@@ -9469,7 +9470,7 @@ describe('docpilot tune — the sweep refuses what it cannot honestly measure', 
     // an allowlist.
     for (const bad of ['--constructor=x', '--toString']) {
       const r = await runTune([bad], { cwd: bare })
-      expect(r.status, bad).toBe(1)
+      expect(r.status, bad).toBe(2)
       expect(r.out).toContain('unknown flag')
     }
   })
@@ -9846,15 +9847,16 @@ describe('the eval commands — a value-taking flag written without its =', () =
     // before `parseLevelArg` defaults the tier away.
     const check = src.indexOf("entryFlagError('eval', import.meta.url)")
     expect(check).toBeGreaterThan(-1)
-    expect(src).toContain('if (BAD_FLAG) die(BAD_FLAG)')
+    // `2`, not `die`'s `1`: nothing was attempted.
+    expect(src).toContain('process.exit(USAGE)')
     // Above `RUN_LEVEL`, or the default has already been chosen by then.
     expect(check).toBeLessThan(src.indexOf('RUN_LEVEL = parseLevelArg('))
   })
 
   /**
-   * The bench is checked by RUNNING it. Importing answer-bench.js starts a CLI —
-   * it dispatches on `process.argv[2]` at the top level and `die`s into
-   * `process.exit` — which is why the rest of this suite reads it as source.
+   * The bench is checked by RUNNING it. It carries an entry guard now, so
+   * importing it no longer starts a CLI — but a spawn is still what answers
+   * "which exit code", and the rest of this suite reads it as source.
    */
   describe('bench emit, as a process', () => {
     const bench = async (...args) => {
@@ -9866,10 +9868,10 @@ describe('the eval commands — a value-taking flag written without its =', () =
       return { status: r.status, out: `${r.stdout}${r.stderr}` }
     }
 
-    it('refuses a bare --level with the = form, and exits 1', async () => {
+    it('refuses a bare --level with the = form, and exits 2', async () => {
       const r = await bench('emit', '--config=base', '--level', 'low')
       expect(r.out).toContain('--level takes a value: --level=low')
-      expect(r.status).toBe(1)
+      expect(r.status).toBe(2)
       // It never got as far as emitting anything.
       expect(r.out).not.toContain('task(s) →')
     })
@@ -9886,7 +9888,9 @@ describe('the eval commands — a value-taking flag written without its =', () =
       const r = await bench('emit', '--config=base', '--level=hgih')
       expect(r.out).toContain('unknown level "hgih"')
       expect(r.out).toContain('low, medium, high, xhigh, max, ultra')
-      expect(r.status).toBe(1)
+      // A value nobody could have meant is a usage error too — `codeFor` carries
+      // that off the throw, four frames from the exit that reads it.
+      expect(r.status).toBe(2)
     })
 
     /** The usage names the COMMAND. Nobody types `answer-bench.js`. */
@@ -9910,6 +9914,86 @@ describe('the eval commands — a value-taking flag written without its =', () =
       expect(`${r.stdout}${r.stderr}`).not.toContain('usage: docpilot bench')
       expect(r.status).toBe(0)
     })
+  })
+})
+
+/**
+ * THE FOUR EXIT CODES, AND THE TWO STREAMS — spec 010, phase 2.
+ *
+ * There were two codes and cancelling was one of them. Everything is spawned
+ * rather than imported, because a code is the one thing an in-process test
+ * cannot observe: `process.exit` would take the runner with it.
+ */
+describe('the CLI contract — codes, streams and the shape of an error', () => {
+  const CLI = path.resolve(import.meta.dirname, '..', 'bin/docpilot.js')
+  const run = async (args, env = {}) => {
+    const { spawnSync } = await import('node:child_process')
+    const r = spawnSync(process.execPath, [CLI, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+    })
+    return { status: r.status, out: r.stdout, err: r.stderr }
+  }
+
+  it('exits 0 on the two things that need nothing built', async () => {
+    expect((await run(['--help'])).status).toBe(0)
+    expect((await run(['--version'])).status).toBe(0)
+  })
+
+  it('exits 2 on a command line it cannot parse, whichever half is wrong', async () => {
+    // The command, the flag, the dash count, the repeat and the value.
+    expect((await run(['docter'])).status).toBe(2)
+    expect((await run(['eval', '--levle=low'])).status).toBe(2)
+    expect((await run(['eval', '-level=low'])).status).toBe(2)
+    expect((await run(['eval', '--level=low', '--level=high'])).status).toBe(2)
+    expect((await run(['eval', '--level=hgih'])).status).toBe(2)
+    expect((await run(['doctor', '--proxyy'])).status).toBe(2)
+  })
+
+  /**
+   * Diagnostics on stderr, and one form for all of them. The five entry modules
+   * wrote a `  FAIL  ` frame with two blank lines around it; `import`,
+   * `feedback` and `vocabulary` wrote `[docpilot] `. One sentence, not two
+   * dialects of one.
+   */
+  it('writes every refusal to stderr, prefixed once', async () => {
+    for (const args of [['docter'], ['eval', '-level=low'], ['doctor', '--proxyy']]) {
+      const r = await run(args)
+      expect(r.err, args.join(' ')).toContain('[docpilot] ')
+      expect(r.err, args.join(' ')).not.toContain('FAIL  ')
+      expect(r.err.match(/\[docpilot\] \[docpilot\]/), args.join(' ')).toBeNull()
+      expect(r.out, args.join(' ')).toBe('')
+    }
+  })
+
+  /** The stack is not lost, it is asked for. */
+  it('keeps the stack behind DOCPILOT_DEBUG=1', async () => {
+    const quiet = await run(['eval', '--level=hgih'])
+    expect(quiet.err).not.toMatch(/^\s+at /m)
+    const loud = await run(['eval', '--level=hgih'], { DOCPILOT_DEBUG: '1' })
+    expect(loud.err).toMatch(/^\s+at /m)
+    // Same code either way: the switch changes what is printed, not what happened.
+    expect(loud.status).toBe(quiet.status)
+  })
+
+  /**
+   * `\r` was written unconditionally, to stdout, in seven places. Piped into a
+   * file that is one line holding every counter value the run ever had — and on
+   * the two commands that also write a report to stdout, in the middle of it.
+   */
+  it('never redraws a line when nobody is watching', async () => {
+    // spawnSync gives the child pipes, so `stderr.isTTY` is false throughout.
+    const r = await run(['lint'])
+    expect(r.out).not.toContain('\r')
+    expect(r.err).not.toContain('\r')
+  })
+
+  it('does not print a progress redraw into the product stream', async () => {
+    const src = srcText('src/eval/calibrate.js') + srcText('src/eval/tune.js') +
+      srcText('src/build/build-rag-index.js')
+    // The whole point of the helper: `process.stdout.write('\r…')` is gone from
+    // every one of the seven places, and the gate lives in one module.
+    expect(src).not.toMatch(/process\.stdout\.write\(`\\r/)
   })
 })
 

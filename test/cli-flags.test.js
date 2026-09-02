@@ -348,7 +348,9 @@ describe('helpFor', () => {
     const r = spawnSync(process.execPath, [path.join(ROOT, 'bin/docpilot.js'), 'docter'], {
       encoding: 'utf8',
     })
-    expect(r.status).toBe(1)
+    // `2`: an unknown command is a usage error. It was `1`, which is the code a
+    // failed RUN returns, so a script could not tell a typo from an outage.
+    expect(r.status).toBe(2)
     expect(r.stderr).toContain('Did you mean: doctor?')
   })
 })
@@ -371,8 +373,12 @@ const READERS = {
   tune: ['src/eval/tune.ts'],
   lint: ['src/eval/lint-golden.ts'],
   feedback: ['src/feedback/cli.ts'],
-  doctor: ['bin/docpilot.js'],
-  init: ['src/cli-init.ts', 'bin/docpilot.js'],
+  // Both moved out of `bin/docpilot.js` under the `run*` contract. The launcher
+  // still MENTIONS `--proxy`, `--embed` and `--models` in its global help, so
+  // leaving this pointing at it would have kept passing on the help text while
+  // the reader was somewhere else entirely.
+  doctor: ['src/cli-doctor.ts'],
+  init: ['src/cli-init.ts'],
 }
 
 /** The `## \`command\`` section of the CLI reference, up to the next `## `. */

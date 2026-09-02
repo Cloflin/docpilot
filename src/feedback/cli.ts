@@ -18,6 +18,7 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs'
 import path from 'node:path'
 import {DOCPILOT_DIR, REPORTS} from '../cli-context.js'
 import {flagErrors, spaceFormWarning} from '../cli-flags.js'
+import {USAGE} from '../cli-exit.js'
 import {aggregate, merge} from './aggregate.js'
 import {parseRows, fetchRows, TOKEN_ENV} from './source.js'
 import {renderReport} from './report.js'
@@ -28,7 +29,7 @@ import {openerQuestions} from '../theme/docpilot/openers.js'
 const MODES = ['pull', 'report', 'faq']
 const CANDIDATES = path.join(DOCPILOT_DIR, 'candidates.jsonl')
 
-const USAGE = `
+const HELP = `
   docpilot feedback <mode> --from <source>
 
     pull      aggregate votes into ${path.basename(CANDIDATES)} for review
@@ -105,23 +106,23 @@ export async function runFeedback({docPilot, argv = [], env = {}}) {
     const [bad] = flagErrors('feedback', argv)
     if (bad) {
       console.error(`[docpilot] ${bad}`)
-      return 1
+      return USAGE
     }
     const spaceForm = spaceFormWarning('feedback', argv)
     if (spaceForm) console.error(`[docpilot] ${spaceForm}`)
   }
 
   if (args.help || !args.mode) {
-    console.log(USAGE)
-    return args.mode ? 0 : args.help ? 0 : 1
+    console.log(HELP)
+    return args.help ? 0 : USAGE
   }
   if (args.unknown) {
-    console.error(`[docpilot] unknown option "${args.unknown}"\n${USAGE}`)
-    return 1
+    console.error(`[docpilot] unknown option "${args.unknown}"\n${HELP}`)
+    return USAGE
   }
   if (!MODES.includes(args.mode)) {
     console.error(`[docpilot] unknown mode "${args.mode}". One of: ${MODES.join(', ')}`)
-    return 1
+    return USAGE
   }
   if (!args.from) {
     console.error(

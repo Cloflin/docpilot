@@ -3,12 +3,15 @@
  * running a CLI.
  *
  * `init` writes files and, since the panel grew placements to choose between,
- * also asks two questions. The asking is in `bin/docpilot.js` because it owns stdin; the
- * DECISIONS are here: where the config is, what the flags said, and what the
- * snippet the reader has to paste looks like.
+ * also asks two questions. Both halves live here now — the decisions (where the
+ * config is, what the flags said, what the snippet the reader pastes looks
+ * like) and `runInit` at the foot of the file, which writes.
  */
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from 'node:fs'
 import path from 'node:path'
+
+import { resolveDocPilot, indexDirOf } from './config.js'
+import { askOne, CANCELLED } from './cli-ask.js'
 
 import {
   resolveUi,
@@ -195,3 +198,279 @@ export const UI_QUESTIONS = [
     default: UI_DEFAULTS.panel,
   },
 ]
+
+/**
+ * `npx docpilot init` — the scaffolding half, under the `run*` contract.
+ *
+ * It used to be 242 lines of `bin/docpilot.js`, which is where the asking had
+ * to be because that file owned stdin. The decisions were already here; now the
+ * writing is too, so the whole command is one typed function that returns a
+ * code instead of ending the process — the same contract `import.ts:328-330`
+ * writes down and for the same reason.
+ *
+ * `configPath` comes IN rather than being looked up: the launcher has already
+ * found the config, and a command that went looking a second time would be free
+ * to answer differently from the launcher that loaded it. `init` is exactly the
+ * command where that matters, because "there is no config yet" is a normal
+ * answer it prints a line about.
+ *
+ * @param {{argv: string[], configPath: string|null}} opts
+ * @returns {Promise<number>} an exit code
+ */
+export async function runInit({ argv = [], configPath = null } = {}) {
+  /**
+   * The package root, from a module that is one level below it either way:
+   * `dist/cli-init.js` when the CLI runs it and `src/cli-init.ts` when vitest
+   * imports it. `../src/templates/…` was right from `bin/docpilot.js` and would
+   * have been `src/src/…` from here under the test runner.
+   */
+  const PKG = new URL('../', import.meta.url)
+  const wrote = []
+  const skipped = []
+
+  /**
+   * Two questions, and every way of not asking them.
+   *
+   * Non-interactive is the DEFAULT, not the fallback: `npx --yes`, a CI job and
+   * a Dockerfile all run this with no terminal, and a prompt there is a hang
+   * with no output. So it asks only when both streams are a TTY and no flag has
+   * already answered — which is the same rule `vitepress init` follows.
+   *
+   * A project with no config file gets one honest line instead: the two
+   * settings live in a file that does not exist yet, and inventing one is the
+   * kind of "help" that overwrites somebody's work later.
+   */
+  const flags = parseUiFlags(argv)
+  if (flags.unknown.length) {
+    /**
+     * `2`, not `1`. A command line this package cannot parse is a USAGE error,
+     * and the shell convention every other CLI here now follows keeps that
+     * separate from `1`, which means the work was attempted and failed. The
+     * distinction is the whole reason a script can tell a typo from an outage.
+     */
+    console.error(`[docpilot] unknown option${flags.unknown.length === 1 ? '' : 's'}: ${flags.unknown.join(' ')}`)
+    console.error('  init accepts --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup, --yes')
+    return 2
+  }
+
+  const answered = Object.keys(flags.ui).length > 0
+  const interactive =
+    !answered && !flags.yes && !!configPath && !!process.stdin.isTTY && !!process.stdout.isTTY
+
+  let ui = validateUi(flags.ui)
+
+  if (!configPath) {
+    console.log('[docpilot] no config file here yet — skipping the placement questions.\n')
+  } else if (interactive) {
+    const { createInterface } = await import('node:readline/promises')
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    // Ctrl-C during a question is an answer too: leave, with the files already
+    // written still written, and a zero exit — cancelling is not an error.
+    // Asked BEFORE anything is written, so cancelling leaves the project exactly
+    // as it was found.
+    // Ctrl-C is not success. It used to exit `0`, which told a script that the
+    // scaffolding it asked for had been written.
+    rl.on('SIGINT', () => {
+      console.error('\n  Cancelled — nothing was written.')
+      rl.close()
+      process.exit(CANCELLED)
+    })
+    try {
+      const picked = {}
+      for (const q of UI_QUESTIONS) {
+        picked[q.key] = await askOne(rl, q)
+      }
+      ui = validateUi(picked)
+    } catch {
+      // Ctrl-D closes stdin mid-question and readline rejects. Same intent as
+      // Ctrl-C, same outcome — and an unhandled rejection here would print a
+      // stack trace at someone who simply changed their mind.
+      console.error('\n  Cancelled — nothing was written.')
+      rl.close()
+      return CANCELLED
+    } finally {
+      rl.close()
+    }
+  }
+
+  const put = (rel, contents) => {
+    const target = path.resolve(rel)
+    if (existsSync(target)) return skipped.push(rel)
+    mkdirSync(path.dirname(target), { recursive: true })
+    writeFileSync(target, contents)
+    wrote.push(rel)
+  }
+
+  // Read from `src/templates/`, written as `.env.example`. The source cannot be
+  // a dotfile at the package root: npm excludes dotfiles from the tarball unless
+  // they are named outright, and `files` lists directories — so the published
+  // package shipped without it and `npx docpilot init` died of ENOENT on every
+  // real install while working perfectly from a clone.
+  put('.env.example', readFileSync(new URL('src/templates/env.example', PKG), 'utf8'))
+
+  // Three starter records, one of which must be REFUSED. A golden set with no
+  // negative measures how often the model answers, not how often it is right to.
+  //
+  // `level` is the pool a record ENTERS at, and the pools nest: `--level=low`
+  // scores q-01 and n-01, `--level=medium` scores all three, and no flag scores
+  // everything. The negative is in the smallest pool on purpose — a smoke pool
+  // that can only pass measures how often the model answers, again.
+  put(
+    'docpilot/golden.jsonl',
+    [
+      {
+        id: 'q-01',
+        question: 'How do I get started?',
+        expect: 'answer',
+        level: 'low',
+        gold_chunks: ['guide/getting-started#'],
+        // A chunk id carries NO leading slash and ends at its anchor; `path#`
+        // prefix-matches every anchor of that page and nothing else.
+        gold_answer: 'Replace this with the answer your docs actually give, at the length the panel produces.',
+        identifiers: [],
+        promptStock: true,
+      },
+      {
+        id: 'q-02',
+        question: 'How do I authenticate a request?',
+        expect: 'answer',
+        level: 'medium',
+        gold_chunks: ['guide/authentication#'],
+        gold_answer: 'Replace this too. Anchored chunk ids, verified by running the retriever.',
+        identifiers: [],
+        promptStock: true,
+      },
+      {
+        id: 'n-01',
+        question: 'What is the capital of France?',
+        expect: 'refuse:no-evidence',
+        level: 'low',
+        gold_chunks: [],
+        promptStock: true,
+      },
+    ]
+      .map((r) => JSON.stringify(r))
+      .join('\n') + '\n',
+  )
+
+  // Six probes, half of them answerable. `calibrate` measures the threshold
+  // between the two halves, so a set that is all positives has nothing to
+  // separate and fails with `no-feasible-tau`.
+  put(
+    'docpilot/calibration.jsonl',
+    [
+      { id: 'u-01', question: 'How do I get started?', stratum: 'U' },
+      { id: 'u-02', question: 'Where do I put my API key?', stratum: 'U' },
+      { id: 'u-03', question: 'How do I configure the editor?', stratum: 'U' },
+      { id: 'n4-01', question: 'What is the capital of France?', stratum: 'N4' },
+      { id: 'n4-02', question: 'How do I bake sourdough?', stratum: 'N4' },
+      { id: 'n2-01', question: 'How do I enable the quantum billing endpoint?', stratum: 'N2' },
+    ]
+      .map((r) => JSON.stringify(r))
+      .join('\n') + '\n',
+  )
+
+  put(
+    'docpilot/.gitignore',
+    [
+      '# Re-derivable from the probe set and the index; large, and rewritten every run.',
+      'calibration.raw.jsonl',
+      '',
+      '# Bench artefacts are per-run scratch — see the docs-rag skill on why the',
+      '# stable filenames must not be committed.',
+      'bench/',
+      '',
+      '# Vectors `npx docpilot index` has already bought, keyed by model and text.',
+      'embed-cache/',
+      '',
+    ].join('\n'),
+  )
+
+  /**
+   * One entry into one `.gitignore`, appended rather than `put`.
+   *
+   * `put` skips a file that exists, and every project that has run `init` once
+   * has these files — which is how the index rule ended up being a documented
+   * behaviour that nothing implemented for the projects that needed it most.
+   * Appending is the only form that reaches them.
+   *
+   * Idempotent: the entry is matched before anything is written, so running
+   * `init` twice adds it once. One helper rather than two copies, because two
+   * copies of an idempotence check is one check that silently stops matching.
+   */
+  const ignore = (rel, entry, why) => {
+    const target = path.resolve(rel)
+    const current = existsSync(target) ? readFileSync(target, 'utf8') : ''
+    if (current.split('\n').some((l) => l.trim() === entry)) {
+      skipped.push(`${rel} — ${entry}`)
+      return
+    }
+    const block = ['', ...why.map((l) => `# ${l}`), entry, ''].join('\n')
+    mkdirSync(path.dirname(target), { recursive: true })
+    writeFileSync(target, current ? `${current.replace(/\n*$/, '\n')}${block}` : block.replace(/^\n/, ''))
+    wrote.push(`${rel}   (+ ${entry})`)
+  }
+
+  // The SHIPPED path, not this project's: `init` runs before the config is
+  // loaded — it is the command for a project that does not have one yet — so
+  // there is no `indexDir` to have been moved. A project that later moves it is
+  // a project editing this line anyway.
+  //
+  // A project that DELIBERATELY commits its index — this one does, so its deploy
+  // makes zero API requests — deletes the line.
+  ignore('.gitignore', `${indexDirOf(resolveDocPilot({})).replace(/\\/g, '/').replace(/\/*$/, '')}/`, [
+    'DocPilot: the built retrieval index. Megabytes of quantised vectors,',
+    'rewritten whole by every `npx docpilot index`. Delete this line if you',
+    'would rather commit it — a deploy that ships the index makes no API',
+    'requests of its own.',
+  ])
+
+  // The build cache. Same three properties as `calibration.raw.jsonl` directly
+  // above it in that file — re-derivable, large, rewritten every run — and one
+  // more that decides it: it holds float32 vectors of the whole corpus, so
+  // committing it is committing the index twice at four times the width.
+  ignore('docpilot/.gitignore', 'embed-cache/', [
+    'Vectors `npx docpilot index` has already bought, keyed by model and text.',
+    'Re-derivable at the cost of one embedding request per 32 chunks; large.',
+  ])
+
+  /**
+   * The skills, copied into the project.
+   *
+   * Not a convenience: `.claude/` inside `node_modules` is not discovered, so a
+   * skill that stays in the package reaches nobody. This is the only way they
+   * arrive, which is why it is part of `init` rather than a documented step.
+   */
+  const skillsDir = new URL('skills/', PKG)
+  const copyTree = (from, to) => {
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const src = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, from)
+      if (entry.isDirectory()) copyTree(src, `${to}/${entry.name}`)
+      else put(`${to}/${entry.name}`, readFileSync(src, 'utf8'))
+    }
+  }
+  if (existsSync(skillsDir)) copyTree(skillsDir, '.claude/skills')
+
+  for (const f of wrote) console.log(`[docpilot] wrote    ${f}`)
+  for (const f of skipped) console.log(`[docpilot] kept     ${f}   (already there)`)
+
+  console.log(`\n${uiSnippet(ui, configPath)}\n`)
+
+  console.log(`
+  Next:
+    1. cp .env.example .env.local  and fill in ONE key — any one. The provider
+       chain reads it and picks the service; nothing else has to be configured.
+    2. add the plugin to .vitepress/config.mjs, and the theme to
+       .vitepress/theme/index.js — see the README. The settings argument is
+       optional:
+
+         const ai = defineDocPilot({}, loadEnv('', process.cwd(), ''))
+
+    3. npx docpilot index
+    4. npx docpilot calibrate
+    5. edit docpilot/golden.jsonl for your corpus, then: npx docpilot lint && npx docpilot eval
+
+  npx docpilot doctor  says which provider your environment selected.
+`)
+  return 0
+}

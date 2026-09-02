@@ -31,6 +31,7 @@ import { ROOT, RAG, GOLDEN } from '../cli-context.js'
 import { underPath } from './metrics.js'
 import { LEVELS, DEFAULT_RECORD_LEVEL, levelRank, levelHistogram } from './levels.js'
 import { entryFlagError, flagValue } from '../cli-flags.js'
+import { printError, FAILED, USAGE } from '../cli-exit.js'
 
 /**
  * THE FLAGS, read by the table that already validated them.
@@ -55,8 +56,8 @@ const FILE = arg('file') ? path.resolve(ROOT, arg('file')) : GOLDEN
  */
 const BAD_FLAG = entryFlagError('lint', import.meta.url)
 if (BAD_FLAG) {
-  console.error(`\n  FAIL  ${BAD_FLAG}\n`)
-  process.exit(1)
+  printError(BAD_FLAG)
+  process.exit(USAGE)
 }
 
 /** The band `CORE`'s "under 200 words" actually yields. */
@@ -244,13 +245,22 @@ function main() {
 }
 
 function fail(m) {
-  console.error(`\n  FAIL  ${m}\n`)
-  process.exit(1)
+  printError(m)
+  process.exit(FAILED)
 }
 
 // Guarded the way build-rag-index.js and calibrate.js are: `lintRecords` is a
 // pure function of the records and the suite imports it, and an unguarded
 // `main()` would read a manifest that is not there and exit(1) mid-test-run.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main()
+  // `lint` and `bench` were the two commands that caught nothing at all, so a
+  // missing manifest or an unreadable golden set left the process as an
+  // unhandled rejection: node's own banner, this package's stack, and no
+  // sentence naming the file.
+  try {
+    main()
+  } catch (e) {
+    printError(e.message || String(e), e)
+    process.exit(FAILED)
+  }
 }

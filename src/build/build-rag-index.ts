@@ -47,6 +47,7 @@ import { questionsHash } from '../theme/docpilot/text.js'
 import { promptHash } from '../theme/docpilot/prompt.js'
 import { nodeChatTarget } from '../config.js'
 import { entryFlagError, flagValue } from '../cli-flags.js'
+import { printError, tick, FAILED, USAGE } from '../cli-exit.js'
 import {
   terms,
   estTokens,
@@ -71,8 +72,8 @@ const FAIL_BYTES = 5 * 1024 * 1024
  */
 const BAD_FLAG = entryFlagError('index', import.meta.url)
 if (BAD_FLAG) {
-  console.error(`\n  FAIL  ${BAD_FLAG}\n`)
-  process.exit(1)
+  printError(BAD_FLAG)
+  process.exit(USAGE)
 }
 
 const DRY = process.argv.includes('--dry')
@@ -187,8 +188,8 @@ const EXCLUDE = new Set(['/index', '/new-file'])
 
 const warn = (m) => console.warn(`  warn  ${m}`)
 const die = (m) => {
-  console.error(`\n  FAIL  ${m}\n`)
-  process.exit(1)
+  printError(m)
+  process.exit(FAILED)
 }
 
 // A provider the adapters cannot reach without the `/ai` rewrite in front of
@@ -591,7 +592,10 @@ async function embedAll(texts) {
           'Vectors already collected are discarded: one index, one vector space.',
       )
     },
-    onProgress: (done, total) => process.stdout.write(`\r  embedding ${done}/${total}`),
+    // The one caller that does NOT throttle itself: `createEmbedder` reports
+    // per batch, and a log wants a tenth of that.
+    onProgress: (done, total) =>
+      tick(`embedding ${done}/${total}`, done === total || done % Math.max(1, Math.ceil(total / 10)) === 0),
     onCache: (hits, total) => {
       if (hits) console.log(`  cache     ${hits}/${total} vectors already bought`)
     },
@@ -1798,5 +1802,8 @@ async function main() {
 // module must not start a build. Nothing else in here is importable, and that is
 // deliberate.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((e) => die(e.stack || e.message))
+  main().catch((e) => {
+    printError(e.message || String(e), e)
+    process.exit(FAILED)
+  })
 }

@@ -16,7 +16,7 @@
  * both carry the same named `docPilot` export.
  */
 import { pathToFileURL, fileURLToPath } from 'node:url'
-import { existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const COMMANDS = [
@@ -108,6 +108,17 @@ if (cmd === '--version' || cmd === '-v' || cmd === '-V') {
   process.exit(0)
 }
 
+/**
+ * THE FOUR EXIT CODES, from the one module that declares them.
+ *
+ * Imported HERE — below the global help and `--version`, above everything else
+ * — for the reason the help block above gives: those two must work with nothing
+ * built, no config and no key. `dist/cli-exit.js` has no imports of its own, so
+ * this is the cheapest module in the package and every path past this line
+ * needs it.
+ */
+const { FAILED, USAGE, CANCELLED } = await import('../dist/cli-exit.js')
+
 if (!COMMANDS.includes(cmd)) {
   // `docter`, `evals`, `calibrat` — one edit away, and worth naming rather than
   // making somebody diff their typo against a list of eleven.
@@ -120,7 +131,9 @@ if (!COMMANDS.includes(cmd)) {
       `  One of: ${COMMANDS.join(', ')}\n` +
       '  npx docpilot --help  says what each one does.\n',
   )
-  process.exit(1)
+  // `2`: the command line was wrong. Nothing was attempted, so a script that
+  // retries on `1` — a provider that was down — must not retry this.
+  process.exit(USAGE)
 }
 
 /**
@@ -202,7 +215,27 @@ async function loadSettings() {
     )
     return { settings: {}, configPath: null }
   }
-  const mod = await import(pathToFileURL(path.resolve(found)).href)
+  /**
+   * THE IMPORT THAT RAN BARE.
+   *
+   * This is a consumer's own config file being evaluated: a syntax error in it,
+   * a missing dependency it imports, a `defineConfig` that throws — all of them
+   * arrived as a raw stack trace out of the launcher, naming a file inside this
+   * package as the top frame. The one thing a reader needs is which file failed
+   * and why, and neither was said.
+   */
+  let mod
+  try {
+    mod = await import(pathToFileURL(path.resolve(found)).href)
+  } catch (e) {
+    console.error(
+      `[docpilot] ${found} could not be loaded — ${e.message}\n\n` +
+        '  Every command reads this file for its settings, so nothing can run until\n' +
+        '  it does. DOCPILOT_DEBUG=1 prints the stack.\n',
+    )
+    if (process.env.DOCPILOT_DEBUG === '1') console.error(e.stack)
+    process.exit(FAILED)
+  }
   if (!mod.docPilot) {
     console.warn(
       `[docpilot] ${found} has no \`docPilot\` export — continuing on the shipped\n` +
@@ -219,48 +252,33 @@ async function loadSettings() {
   return { settings: mod.docPilot, configPath: found }
 }
 
-const {
-  resolveDocPilot,
-  readiness,
-  provisionalGuardNote,
-  indexDirOf,
-  proxyContract,
-  chatModels,
-  embedModels,
-  poolProviderOf,
-  resolveChain,
-  resolveChatChain,
-  nodeChatTarget,
-  nodeEmbedTarget,
-  resolveEmbed,
-  resolveTuning,
-  capsOf,
-} = await import('../dist/config.js')
+/**
+ * WHAT THE LAUNCHER ITSELF NEEDS, and no longer what its commands need.
+ *
+ * This block used to pull fifteen names out of `dist/config.js`, six out of
+ * `embed-choices.js` and three whole modules besides, because `doctor` and
+ * `init` were written in this file. They are `src/cli-doctor.js` and
+ * `src/cli-init.js` now, they import what they use, and the launcher imports
+ * only what is left: resolving the settings, and the embedder question `index`
+ * asks before the indexer is loaded.
+ */
+const { resolveDocPilot, indexDirOf, resolveChain, nodeEmbedTarget } = await import(
+  '../dist/config.js'
+)
 /**
  * The embedder question's pure half — what `index` has to know before it can ask
  * which embedder to build with, and what `doctor --embed` prints instead of
  * asking. Decisions there, stdin here; the same split `cli-init.js` documents.
  */
-const {
-  embedChoices,
-  embedOverrideSnippet,
-  embedQuestion,
-  indexCommandFor,
-  indexDirQuestion,
-  parseEmbedFlags,
-} = await import('../dist/embed-choices.js')
-// The catalogue reader `npx docpilot index` uses, so `doctor --models` proposes
-// the same candidates the build would.
-const { discoverEmbedModels, probeEmbedEndpoint } = await import('../dist/build/lib/embed-discovery.js')
-// Its answering-half sibling: what a local server has actually loaded, asked
-// through the adapters' own paths and reporting `unknown` rather than throwing,
-// so a laptop with Ollama switched off never changes what this command exits.
-const { inspectChatTarget } = await import('../dist/build/lib/chat-preflight.js')
-// The adapters, for the ONE thing `doctor --models` needs from them: the path a
-// service lists its models at, and the shape of what comes back.
-const { providerFor } = await import('../dist/theme/docpilot/providers.js')
-const { CONFIG_CANDIDATES, findConfig, parseUiFlags, validateUi, uiSnippet, UI_QUESTIONS } =
-  await import('../dist/cli-init.js')
+const { embedChoices, embedOverrideSnippet, embedQuestion, indexDirQuestion, parseEmbedFlags } =
+  await import('../dist/embed-choices.js')
+// Which local embedding servers are actually running — free, and the one thing
+// no amount of reading config files can answer. It sits beside the discovery it
+// uses, because `doctor --embed` asks it too.
+const { probeLocalEmbedders } = await import('../dist/build/lib/embed-discovery.js')
+// One question at a terminal, shared with `init` — which asks two of its own.
+const { askOne } = await import('../dist/cli-ask.js')
+const { CONFIG_CANDIDATES, findConfig } = await import('../dist/cli-init.js')
 
 /**
  * `init` scaffolds the WHOLE loop, not just a key.
@@ -273,271 +291,17 @@ const { CONFIG_CANDIDATES, findConfig, parseUiFlags, validateUi, uiSnippet, UI_Q
  * Nothing is ever overwritten. Every file is reported as written or skipped, so
  * running it twice is safe and running it in an existing project is honest.
  */
-if (cmd === 'init') {
-  const wrote = []
-  const skipped = []
-
-  /**
-   * Two questions, and every way of not asking them.
-   *
-   * Non-interactive is the DEFAULT, not the fallback: `npx --yes`, a CI job and
-   * a Dockerfile all run this with no terminal, and a prompt there is a hang
-   * with no output. So it asks only when both streams are a TTY and no flag has
-   * already answered — which is the same rule `vitepress init` follows.
-   *
-   * A project with no config file gets one honest line instead: the two
-   * settings live in a file that does not exist yet, and inventing one is the
-   * kind of "help" that overwrites somebody's work later.
-   */
-  const flags = parseUiFlags(rest)
-  if (flags.unknown.length) {
-    console.error(`[docpilot] unknown option${flags.unknown.length === 1 ? '' : 's'}: ${flags.unknown.join(' ')}`)
-    console.error('  init accepts --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup, --yes')
-    process.exit(1)
-  }
-
-  const configPath = findConfig()
-  const answered = Object.keys(flags.ui).length > 0
-  const interactive =
-    !answered && !flags.yes && !!configPath && !!process.stdin.isTTY && !!process.stdout.isTTY
-
-  let ui = validateUi(flags.ui)
-
-  if (!configPath) {
-    console.log('[docpilot] no config file here yet — skipping the placement questions.\n')
-  } else if (interactive) {
-    const { createInterface } = await import('node:readline/promises')
-    const rl = createInterface({ input: process.stdin, output: process.stdout })
-    // Ctrl-C during a question is an answer too: leave, with the files already
-    // written still written, and a zero exit — cancelling is not an error.
-    // Asked BEFORE anything is written, so cancelling leaves the project exactly
-    // as it was found.
-    rl.on('SIGINT', () => {
-      console.log('\n  Cancelled — nothing was written.')
-      rl.close()
-      process.exit(0)
-    })
-    try {
-      const picked = {}
-      for (const q of UI_QUESTIONS) {
-        picked[q.key] = await askOne(rl, q)
-      }
-      ui = validateUi(picked)
-    } catch {
-      // Ctrl-D closes stdin mid-question and readline rejects. Same intent as
-      // Ctrl-C, same outcome — and an unhandled rejection here would print a
-      // stack trace at someone who simply changed their mind.
-      console.log('\n  Cancelled — nothing was written.')
-      rl.close()
-      process.exit(0)
-    } finally {
-      rl.close()
-    }
-  }
-
-  const put = (rel, contents) => {
-    const target = path.resolve(rel)
-    if (existsSync(target)) return skipped.push(rel)
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(target, contents)
-    wrote.push(rel)
-  }
-
-  // Read from `src/templates/`, written as `.env.example`. The source cannot be
-  // a dotfile at the package root: npm excludes dotfiles from the tarball unless
-  // they are named outright, and `files` lists directories — so the published
-  // package shipped without it and `npx docpilot init` died of ENOENT on every
-  // real install while working perfectly from a clone.
-  put('.env.example', readFileSync(new URL('../src/templates/env.example', import.meta.url), 'utf8'))
-
-  // Three starter records, one of which must be REFUSED. A golden set with no
-  // negative measures how often the model answers, not how often it is right to.
-  //
-  // `level` is the pool a record ENTERS at, and the pools nest: `--level=low`
-  // scores q-01 and n-01, `--level=medium` scores all three, and no flag scores
-  // everything. The negative is in the smallest pool on purpose — a smoke pool
-  // that can only pass measures how often the model answers, again.
-  put(
-    'docpilot/golden.jsonl',
-    [
-      {
-        id: 'q-01',
-        question: 'How do I get started?',
-        expect: 'answer',
-        level: 'low',
-        gold_chunks: ['guide/getting-started#'],
-        // A chunk id carries NO leading slash and ends at its anchor; `path#`
-        // prefix-matches every anchor of that page and nothing else.
-        gold_answer: 'Replace this with the answer your docs actually give, at the length the panel produces.',
-        identifiers: [],
-        promptStock: true,
-      },
-      {
-        id: 'q-02',
-        question: 'How do I authenticate a request?',
-        expect: 'answer',
-        level: 'medium',
-        gold_chunks: ['guide/authentication#'],
-        gold_answer: 'Replace this too. Anchored chunk ids, verified by running the retriever.',
-        identifiers: [],
-        promptStock: true,
-      },
-      {
-        id: 'n-01',
-        question: 'What is the capital of France?',
-        expect: 'refuse:no-evidence',
-        level: 'low',
-        gold_chunks: [],
-        promptStock: true,
-      },
-    ]
-      .map((r) => JSON.stringify(r))
-      .join('\n') + '\n',
-  )
-
-  // Six probes, half of them answerable. `calibrate` measures the threshold
-  // between the two halves, so a set that is all positives has nothing to
-  // separate and fails with `no-feasible-tau`.
-  put(
-    'docpilot/calibration.jsonl',
-    [
-      { id: 'u-01', question: 'How do I get started?', stratum: 'U' },
-      { id: 'u-02', question: 'Where do I put my API key?', stratum: 'U' },
-      { id: 'u-03', question: 'How do I configure the editor?', stratum: 'U' },
-      { id: 'n4-01', question: 'What is the capital of France?', stratum: 'N4' },
-      { id: 'n4-02', question: 'How do I bake sourdough?', stratum: 'N4' },
-      { id: 'n2-01', question: 'How do I enable the quantum billing endpoint?', stratum: 'N2' },
-    ]
-      .map((r) => JSON.stringify(r))
-      .join('\n') + '\n',
-  )
-
-  put(
-    'docpilot/.gitignore',
-    [
-      '# Re-derivable from the probe set and the index; large, and rewritten every run.',
-      'calibration.raw.jsonl',
-      '',
-      '# Bench artefacts are per-run scratch — see the docs-rag skill on why the',
-      '# stable filenames must not be committed.',
-      'bench/',
-      '',
-      '# Vectors `npx docpilot index` has already bought, keyed by model and text.',
-      'embed-cache/',
-      '',
-    ].join('\n'),
-  )
-
-  /**
-   * One entry into one `.gitignore`, appended rather than `put`.
-   *
-   * `put` skips a file that exists, and every project that has run `init` once
-   * has these files — which is how the index rule ended up being a documented
-   * behaviour that nothing implemented for the projects that needed it most.
-   * Appending is the only form that reaches them.
-   *
-   * Idempotent: the entry is matched before anything is written, so running
-   * `init` twice adds it once. One helper rather than two copies, because two
-   * copies of an idempotence check is one check that silently stops matching.
-   */
-  const ignore = (rel, entry, why) => {
-    const target = path.resolve(rel)
-    const current = existsSync(target) ? readFileSync(target, 'utf8') : ''
-    if (current.split('\n').some((l) => l.trim() === entry)) {
-      skipped.push(`${rel} — ${entry}`)
-      return
-    }
-    const block = ['', ...why.map((l) => `# ${l}`), entry, ''].join('\n')
-    mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(target, current ? `${current.replace(/\n*$/, '\n')}${block}` : block.replace(/^\n/, ''))
-    wrote.push(`${rel}   (+ ${entry})`)
-  }
-
-  // The SHIPPED path, not this project's: `init` runs before the config is
-  // loaded — it is the command for a project that does not have one yet — so
-  // there is no `indexDir` to have been moved. A project that later moves it is
-  // a project editing this line anyway.
-  //
-  // A project that DELIBERATELY commits its index — this one does, so its deploy
-  // makes zero API requests — deletes the line.
-  ignore('.gitignore', `${indexDirOf(resolveDocPilot({})).replace(/\\/g, '/').replace(/\/*$/, '')}/`, [
-    'DocPilot: the built retrieval index. Megabytes of quantised vectors,',
-    'rewritten whole by every `npx docpilot index`. Delete this line if you',
-    'would rather commit it — a deploy that ships the index makes no API',
-    'requests of its own.',
-  ])
-
-  // The build cache. Same three properties as `calibration.raw.jsonl` directly
-  // above it in that file — re-derivable, large, rewritten every run — and one
-  // more that decides it: it holds float32 vectors of the whole corpus, so
-  // committing it is committing the index twice at four times the width.
-  ignore('docpilot/.gitignore', 'embed-cache/', [
-    'Vectors `npx docpilot index` has already bought, keyed by model and text.',
-    'Re-derivable at the cost of one embedding request per 32 chunks; large.',
-  ])
-
-  /**
-   * The skills, copied into the project.
-   *
-   * Not a convenience: `.claude/` inside `node_modules` is not discovered, so a
-   * skill that stays in the package reaches nobody. This is the only way they
-   * arrive, which is why it is part of `init` rather than a documented step.
-   */
-  const skillsDir = new URL('../skills/', import.meta.url)
-  const copyTree = (from, to) => {
-    for (const entry of readdirSync(from, { withFileTypes: true })) {
-      const src = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, from)
-      if (entry.isDirectory()) copyTree(src, `${to}/${entry.name}`)
-      else put(`${to}/${entry.name}`, readFileSync(src, 'utf8'))
-    }
-  }
-  if (existsSync(skillsDir)) copyTree(skillsDir, '.claude/skills')
-
-  for (const f of wrote) console.log(`[docpilot] wrote    ${f}`)
-  for (const f of skipped) console.log(`[docpilot] kept     ${f}   (already there)`)
-
-  console.log(`\n${uiSnippet(ui, configPath)}\n`)
-
-  console.log(`
-  Next:
-    1. cp .env.example .env.local  and fill in ONE key — any one. The provider
-       chain reads it and picks the service; nothing else has to be configured.
-    2. add the plugin to .vitepress/config.mjs, and the theme to
-       .vitepress/theme/index.js — see the README. The settings argument is
-       optional:
-
-         const ai = defineDocPilot({}, loadEnv('', process.cwd(), ''))
-
-    3. npx docpilot index
-    4. npx docpilot calibrate
-    5. edit docpilot/golden.jsonl for your corpus, then: npx docpilot lint && npx docpilot eval
-
-  npx docpilot doctor  says which provider your environment selected.
-`)
-  process.exit(0)
-}
-
 /**
- * One question, answered by number or by name, empty for the default.
- *
- * Garbage is re-asked ONCE and then takes the default rather than looping: a
- * prompt that will not let go is worse than a wrong-but-stated placement, which
- * is two words in a config file to change.
+ * `init` is the one command that runs before there is anything to load — no
+ * config, no key, no `dist/` of the consumer's own — so it dispatches here,
+ * above `loadSettings()`, and takes only the two things it cannot find out for
+ * itself: the flags, and where the config is (or that there is none).
  */
-async function askOne(rl, q) {
-  const list = q.options
-    .map((o, i) => `    ${i + 1}. ${o}${o === q.default ? '  (default)' : ''}  — ${q.hints[o]}`)
-    .join('\n')
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = (await rl.question(`\n  ${q.label}\n${list}\n  > `)).trim()
-    if (!raw) return q.default
-    const byNumber = /^\d+$/.test(raw) ? q.options[Number(raw) - 1] : undefined
-    if (byNumber) return byNumber
-    if (q.options.includes(raw)) return raw
-    console.log(`  "${raw}" is not one of them — ${q.options.join(', ')}.`)
-  }
-  return q.default
+if (cmd === 'init') {
+  const { findConfig, runInit } = await import('../dist/cli-init.js')
+  process.exit(await runInit({ argv: rest, configPath: findConfig() }))
 }
+
 
 /**
  * Read the environment the way the BUILD reads it, not the way a shell does.
@@ -557,52 +321,6 @@ async function loadEnvironment() {
   }
 }
 
-/**
- * Which local embedding servers are actually running.
- *
- * A hosted provider is offered on the strength of its key: `probeEmbedEndpoint`
- * sends a REAL embedding request, and spending one of OpenRouter's fifty free
- * daily requests to confirm something the key already says is the wrong trade.
- * A LOCAL server has no key to be found by, so the only way to know it is there
- * is to ask it — and offering an Ollama that nobody started is worse than not
- * offering one at all. That is also the case this exists for: nothing configured
- * anywhere, and the answer is the Ollama already on the machine.
- *
- * BOUNDED AND SILENT. One address, a short timeout, and every failure — refused,
- * slow, a body of the wrong shape — is the same answer: not running. Nothing
- * here may throw, because it runs in front of a build and a machine without
- * Ollama must reach the same list it always did.
- */
-async function probeLocalEmbedders(env, { timeoutMs = 2500 } = {}) {
-  const fetchImpl = (url, init = {}) =>
-    fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
-  const baseURL = env.OLLAMA_BASE_URL || 'http://localhost:11434'
-  try {
-    /**
-     * THE CATALOGUE, NOT AN EMBEDDING — and the difference is seconds.
-     *
-     * `probeEmbedEndpoint` is the thorough answer and the wrong one here: it
-     * POSTs a real embedding, which on a cold Ollama means LOADING the weights
-     * first. Measured against the box this was written on that is several
-     * seconds past any timeout worth putting in front of a prompt, and a probe
-     * that times out reports "not running" about a server that is.
-     *
-     * `/api/tags` answers both questions this needs — the server is up, and
-     * these are the embedding models it has pulled — in one GET. Whether a named
-     * model actually embeds is settled later and for free: `createEmbedder`
-     * walks its pool during the build and takes the first that answers.
-     */
-    const models = await discoverEmbedModels({
-      provider: 'ollama',
-      baseURL,
-      apiKey: null,
-      fetchImpl,
-    })
-    return models.length ? [{ id: 'ollama', model: models[0], baseURL }] : []
-  } catch {
-    return []
-  }
-}
 
 const { settings, configPath } = await loadSettings()
 const env = await loadEnvironment()
@@ -662,433 +380,12 @@ if (cmd === 'vocabulary') {
   process.exit(await runVocabulary({ docPilot: resolved, argv: rest, env }))
 }
 
+// The same shape as `import`, `feedback` and `vocabulary`: flags of its own, a
+// verdict of its own, and — since it prints the file the settings came from —
+// the path the launcher resolved rather than one it goes looking for again.
 if (cmd === 'doctor') {
-  const ready = readiness(resolved, env)
-
-  /**
-   * One column for every value, so the block reads as a table rather than as a
-   * list of sentences that happen to start alike.
-   *
-   * `[docpilot] ` plus a ten-wide label lands every value at column 21, which is
-   * what `PAD` is — the continuation lines are indented to the column their
-   * parent's value starts at, not to a count somebody typed. Held by hand, it
-   * drifted: `chat` and `embed` were padded to nine and printed one column short
-   * of `config`, `index` and `ready`, which is close enough to read as a
-   * rendering fault rather than as two labels of different lengths.
-   */
-  const say = (label, value) => console.log(`[docpilot] ${label.padEnd(10)}${value}`)
-  const PAD = ' '.repeat(21)
-
-  say('config', configPath || 'none — shipped defaults + your environment')
-  say('docs', resolved.docsDir)
-  say('index', indexDirOf(resolved))
-
-  /**
-   * The one readiness note that lives in a built artefact rather than in the
-   * config — so the fs read is here and the judgement is in `config.js`, where
-   * it can be run without a project on disk. See `provisionalGuardNote`.
-   */
-  {
-    const manifest = path.resolve(indexDirOf(resolved), 'manifest.json')
-    if (existsSync(manifest)) {
-      let note = null
-      try {
-        note = provisionalGuardNote(JSON.parse(readFileSync(manifest, 'utf8')).guard)
-      } catch {
-        // An unreadable manifest is the build's fault to report, not this
-        // line's to guess at. Every other check still runs.
-      }
-      if (note) ready.notes.push(note)
-    }
-  }
-
-  /**
-   * THE CHAIN, and this is the one command where it is printed unconditionally.
-   *
-   * The build log stays quiet about it when a provider is named, because a line
-   * restating the config file is noise in a block people read at every start.
-   * `doctor` is the opposite: it is run precisely when the question is "why is
-   * it talking to THAT", and the answer — which variables are set and which
-   * member of the chain they select — is not visible anywhere else. The key
-   * VALUE is never printed, only the name of the variable.
-   */
-  {
-    const { tried } = resolveChain(env)
-    const chosen = resolved.chat.provider
-    /**
-     * THE ROTATION ORDER, which is the question this command is run to answer
-     * once `chat.chain` can name more than one service. `←` becomes an ordinal
-     * so the order is readable at a glance; a single-member chain prints the
-     * bare arrow it always did, because an ordinal on a list of one is noise.
-     */
-    const chain = resolveChatChain(resolved, env)
-    const at = new Map(chain.map((m, i) => [m.id, i + 1]))
-    const many = chain.length > 1
-    say(
-      'chain',
-      many
-        ? `${resolved.chat.providerAuto ? 'auto' : chosen} → ${chain.length} will answer, in order`
-        : resolved.chat.providerAuto
-          ? `auto → ${chosen}`
-          : `${chosen} (named in config)`,
-    )
-    for (const t of tried) {
-      const mark = t.found ? '✓' : '·'
-      const n = at.get(t.id)
-      // `←` on a row that nothing selected would read as a contradiction — the
-      // dot says "not set" and the arrow says "this one". Name it instead: that
-      // row is where the walk LANDED rather than what it matched.
-      const here = !n
-        ? ''
-        : many
-          ? ` ← ${n}`
-          : t.found
-            ? ' ←'
-            : ' ←  nothing matched — fall-through'
-      console.log(
-        `${PAD}${mark} ${t.id.padEnd(12)}${(t.envKey || 'no key needed').padEnd(22)}${here}`.trimEnd(),
-      )
-    }
-    /**
-     * A member a key selected and the chain did not take. `resolveChatChain`
-     * drops it because there is nothing to send it, and a silent drop is exactly
-     * the "why is it not talking to that" this block exists to answer.
-     */
-    for (const t of tried) {
-      if (t.found && !at.has(t.id)) {
-        console.log(`${PAD}  ${''.padEnd(12)}${''.padEnd(22)}skipped — no model and no pool`)
-      }
-    }
-  }
-
-  /**
-   * WHAT THIS SERVICE WILL ACTUALLY DO WITH YOUR KNOBS.
-   *
-   * A capability matrix is worth nothing if reading it means opening the source,
-   * and the one fact nobody can get anywhere else is the WIRE NAME each setting
-   * turns into — `chat.maxTokens` is `options.num_predict` on Ollama and
-   * `max_completion_tokens` on GPT-5, and an author debugging a request they can
-   * see in a network tab has no way to connect it back to what they wrote.
-   *
-   * Read from the same two records the transport translates from — the adapter's
-   * `supports` and the brand's `caps` — so this cannot drift from the behaviour
-   * it describes. No network, no flag, and it NEVER changes the exit code: a
-   * knob this provider ignores is news, not a broken configuration.
-   */
-  {
-    const adapter = providerFor(nodeChatTarget(resolved, env).provider)
-    const caps = capsOf(resolved.chat.provider) || {}
-    const tuning = resolveTuning(resolved)
-    const chat = resolved.chat
-    console.log('')
-    say('knobs', `${resolved.chat.provider} · ${adapter.id} adapter`)
-
-    const wire = (knob, value, field) => {
-      if (value == null) return
-      if (field) console.log(`${PAD}✓ ${knob.padEnd(12)}${String(value).padEnd(9)}→ ${field}`)
-      else console.log(`${PAD}· ${knob.padEnd(12)}${String(value).padEnd(9)}NOT honoured by ${resolved.chat.provider}`)
-    }
-
-    // Reasoning first, and it prints even at its default, because "what does
-    // 'auto' do here" is the question this whole feature raises.
-    if (tuning.style === 'none') {
-      console.log(`${PAD}· reasoning   ${String(chat.reasoning === false ? 'false' : 'auto').padEnd(9)}${caps.mandatory ? `${resolved.chat.provider} cannot turn reasoning off` : 'not offered by this provider'}`)
-    } else {
-      const asked = chat.reasoning && typeof chat.reasoning === 'object' ? chat.reasoning.effort : null
-      const shown = chat.reasoning === false ? 'false' : (asked ?? 'auto')
-      const field = {effort: 'reasoning_effort', unified: 'reasoning:{}', thinking: 'thinking', think: 'think'}[tuning.style]
-      const moved = asked && tuning.effort && tuning.effort !== asked ? `  CLAMPED to '${tuning.effort}' — ${resolved.chat.provider} has no '${asked}'` : ''
-      console.log(`${PAD}✓ ${'reasoning'.padEnd(12)}${String(shown).padEnd(9)}→ ${field}${moved}`)
-    }
-
-    wire('temperature', chat.temperature, caps.temperature === false ? null : adapter.supports?.temperature)
-    wire('maxTokens', chat.maxTokens, adapter.supports?.maxTokens)
-    wire('numCtx', chat.numCtx, adapter.supports?.numCtx)
-    wire('verbosity', chat.verbosity, tuning.verbosity != null ? adapter.supports?.verbosity : null)
-    wire('topP', chat.topP, tuning.topP != null ? adapter.supports?.topP : null)
-    wire('seed', chat.seed, tuning.seed != null ? adapter.supports?.seed : null)
-
-    // The ceiling field is model-resolved, so it is the one line that can differ
-    // between two models on the SAME provider — and the one that turns every
-    // request into a 400 when it is wrong.
-    if (adapter.id !== 'ollama' && adapter.id !== 'anthropic' && chat.model) {
-      const field = /(^|\/)(o[1-9](\b|-)|gpt-5|codex-mini)/i.test(chat.model) ? 'max_completion_tokens' : 'max_tokens'
-      if (field !== 'max_tokens') console.log(`${PAD}  ${chat.model} takes ${field}, not max_tokens`)
-    }
-
-    if (caps.unknown) {
-      console.log(`${PAD}! ${resolved.chat.provider} names a host, not a service — DocPilot cannot know what`)
-      console.log(`${PAD}  your gateway accepts, so every knob above is sent as written`)
-    } else if (caps.modelDependent && tuning.style !== 'none') {
-      console.log(`${PAD}! support varies by model here — a level is sent and the service decides`)
-    }
-    // The interaction nobody would predict, and the one that turns an answerable
-    // question into "no provider available" on a thin free pool.
-    if (tuning.style === 'unified' && tuning.effort && resolved.chat.extraBody?.provider?.require_parameters !== false) {
-      console.log(`${PAD}! reasoning + provider.require_parameters narrows routing a second time`)
-    }
-
-    /**
-     * THE BLOCK ABOVE IS THE HEAD'S, and on a chain it is one member's answer to
-     * a question the reader asked about the deployment. Every member clamps the
-     * same neutral vocabulary to its own service, so a knob this one honours can
-     * be dropped by the next — and a knob nobody can see dropped is the
-     * "documented setting whose only reachable value is its default" defect,
-     * arriving one level up.
-     *
-     * One line per member that differs, and nothing at all when they agree.
-     */
-    const chain = resolveChatChain(resolved, env)
-    if (chain.length > 1) {
-      const shown = ['effort', 'verbosity', 'topP', 'seed', 'budgetTokens']
-      for (const m of chain.slice(1)) {
-        const t = resolveTuning(resolved, m.id)
-        const dropped = shown.filter((k) => tuning[k] != null && t[k] == null)
-        const off = t.style === 'none' && tuning.style !== 'none'
-        if (!dropped.length && !off) continue
-        const what = [...dropped, ...(off ? ['reasoning'] : [])].join(', ')
-        console.log(`${PAD}  ${m.id.padEnd(12)}drops ${what}`)
-      }
-    }
-  }
-
-  /**
-   * `--proxy` prints the contract a production reverse proxy has to satisfy.
-   *
-   * The dev server gets `/ai/*` for free from the Vite plugin; a BUILT site does
-   * not, and `vitepress preview` has no proxy at all — which is the point in the
-   * deployment where the panel stops working and nothing says why. Printing the
-   * resolved routes beats shipping one deployment's nginx.conf as a template:
-   * the paths, the upstreams and the header name are facts of this
-   * configuration, and the TLS termination and the process manager are not.
-   *
-   * The KEY is never printed. Only the name of the variable carrying it.
-   */
-  if (rest.includes('--proxy')) {
-    const contract = proxyContract(resolved, env)
-    console.log('')
-    for (const r of contract.routes) {
-      say('proxy', r.path)
-      console.log(`${PAD}→ ${r.upstream}${r.rewrite}`)
-      const cred = r.keyless ? 'no key needed' : r.envKey ? `<${r.envKey}>` : 'NO KEY — none set'
-      console.log(`${PAD}${r.header}: ${cred}`)
-      if (r.local) console.log(`${PAD}! LOCAL ADDRESS — a deployed proxy cannot reach it`)
-    }
-    /**
-     * The members with NO route — a local Ollama, which the browser calls at its
-     * own address. Printed under their own label because a five-member chain
-     * showing four routes and no account of the fifth reads as a bug here.
-     */
-    for (const d of contract.direct) {
-      say('direct', `${d.provider} → ${d.baseURL}`)
-      console.log(`${PAD}! the browser calls this itself — no proxy route, and none possible`)
-    }
-    if (contract.routes.length) {
-      for (const n of contract.notes) console.log(`  · ${n}`)
-    } else {
-      // Printing four rules for a proxy that does not exist reads as four things
-      // left undone.
-      say('proxy', 'none needed — every provider is called directly')
-    }
-    console.log('')
-  }
-  /**
-   * `--embed` — the same list `npx docpilot index` asks from, printed instead of
-   * asked.
-   *
-   * It exists because the asking half needs a terminal and the reader who most
-   * needs the answer often has not got one: an agent driving this package, a CI
-   * log, a reader who wants to see the options before committing to a build. So
-   * the choices are a report here and a prompt there, out of one function.
-   *
-   * IT TOUCHES THE NETWORK, and only localhost. `probeLocalEmbedders` asks the
-   * Ollama on this machine whether it is running, which is free and which no
-   * amount of reading config files can answer. No hosted provider is contacted
-   * and no metered request is spent — that is `--models`.
-   */
-  if (rest.includes('--embed')) {
-    const choices = embedChoices(settings, env, { probed: await probeLocalEmbedders(env) })
-    console.log('')
-    choices.forEach((c, i) => {
-      // The cross is the whole point of the row it is on: with nothing in the
-      // environment the chain still ends at its shipped fallback, and a list
-      // that offered that without saying it would 401 is the same silence this
-      // flag was added to end.
-      say('embed', `${i + 1}. ${c.label}${c.ready ? '' : '   ✗ cannot run here'}`)
-      console.log(`${PAD}${c.hint}`)
-      // The command that takes this answer, spelled out — an agent reading this
-      // should not have to infer the flags from the label.
-      console.log(`${PAD}npx docpilot index ${indexCommandFor(c)}`)
-    })
-    if (!choices.some((c) => c.ready && c.source !== 'lexical')) {
-      console.log('')
-      console.log(`${PAD}Nothing here can embed. Either put a provider key in .env.local, or`)
-      console.log(`${PAD}run \`ollama serve\` and \`ollama pull bge-m3\` and ask again.`)
-    }
-    console.log('')
-  }
-
-  /**
-   * `--models` is the only thing in this command that reaches a THIRD PARTY —
-   * `--embed` above touches the network too, but never past localhost — and it
-   * is a flag rather than a default for that reason: `doctor` runs in CI, and
-   * a check that fails when a third party is slow is a check that gets removed.
-   *
-   * What it answers is the one question a baked list cannot answer for itself —
-   * whether the free ids this package shipped with are still being served. They
-   * are retired weekly. A pool whose members have all been retired fails in the
-   * least legible way available: every model 404s in turn and the reader is told
-   * the last one's name.
-   */
-  if (rest.includes('--models')) {
-    const { fetchFreePool } = await import('../dist/theme/docpilot/openrouter.js')
-    console.log('')
-    for (const [half, shipped] of [
-      ['chat', chatModels(resolved)],
-      ['embed', embedModels(resolved)],
-    ]) {
-      if (!shipped?.length) continue
-      // Only where a catalogue exists to be asked. `chatModels` also returns an
-      // author's own list on a provider that publishes nothing, and checking a
-      // list of OpenAI ids against OpenRouter's catalogue reports every one of
-      // them retired.
-      const provider = poolProviderOf(resolved, half)
-      if (!provider) {
-        say(half, `${shipped.length} model(s), no catalogue to check them against`)
-        continue
-      }
-      // `fallback: false`: the merged list contains the baked one by
-      // construction, so asking "which of ours is gone" of it always answers
-      // "none" — the check would be a check that cannot fail.
-      const live = await fetchFreePool(half, { fallback: false })
-      if (!live) {
-        say(half, `${provider}'s catalogue is unreachable — cannot check`)
-        continue
-      }
-      const gone = shipped.filter((m) => !live.includes(m))
-      const fresh = live.filter((m) => !shipped.includes(m))
-      say(half, `${shipped.length} in the pool, ${live.length} free upstream`)
-      if (gone.length) console.log(`${PAD}RETIRED: ${gone.join(', ')}`)
-      if (fresh.length) console.log(`${PAD}new upstream: ${fresh.slice(0, 6).join(', ')}`)
-      if (!gone.length && !fresh.length) console.log(`${PAD}the shipped pool matches the catalogue`)
-    }
-
-    /**
-     * THE NAMED MODEL, checked against the service's own list.
-     *
-     * The pool check above answers "are the free ids we shipped still served",
-     * which was the only question worth asking while `chat.model` had one
-     * shipped value. Every provider carries its own default now, and a default
-     * ages exactly the way a free id does — `gpt-4o-mini` is a name in a table
-     * in this package, not a promise from OpenAI. The failure it produces is a
-     * 404 naming a model that appears nowhere in the reader's config, which is
-     * the same illegible failure the pool check exists to prevent.
-     *
-     * Asked of `/v1/models` — or Ollama's `/api/tags`, which lists what has been
-     * PULLED, the honest local equivalent — through the adapter, so there is no
-     * second copy of a path here. Every failure is reported as a failure to
-     * check rather than as a verdict: a catalogue that is unreachable, a key
-     * that is not set, a provider with no directly-callable base (Gemini serves
-     * its compatible surface under a rewrite the browser's `/ai` hides and a
-     * Node tool has nothing to hide it with).
-     */
-    const target = nodeChatTarget(resolved, env)
-    if (!target.models?.length && target.model) {
-      const adapter = providerFor(target.provider)
-      const url = adapter.modelsUrl?.(target.baseURL)
-      const hosted = target.id !== 'ollama'
-      if (!target.baseURL || !url) {
-        say('model', `${target.model} — ${target.id} publishes no list this can read`)
-      } else if (hosted && !target.apiKey) {
-        say('model', `${target.model} — no key set, cannot ask ${target.id}`)
-      } else {
-        /**
-         * ONE PROBE, IN ONE PLACE. This block used to hold its own `fetch`,
-         * its own error handling and its own idea of what a missing model
-         * means, and it got local servers wrong in both directions: it judged
-         * llama.cpp's placeholder against a catalogue it is not in, and it
-         * advised an Ollama user to "upgrade the package" when the thing to do
-         * is pull the model. `inspectChatTarget` answers all of it and never
-         * throws — see src/build/lib/chat-preflight.js for why it may not.
-         */
-        const seen = await inspectChatTarget(target)
-        const extra = []
-        if (seen.capabilities) {
-          extra.push(`tools ${seen.capabilities.tools ? 'yes' : 'no'}`)
-          extra.push(`thinking ${seen.capabilities.thinking ? 'yes' : 'no'}`)
-        }
-        if (seen.contextLength) extra.push(`ctx ${seen.contextLength}`)
-
-        if (seen.verdict === 'placeholder') {
-          // Not a failure and not a name to fix: this service answers with the
-          // weights it was started with, whatever the config says.
-          say('model', `${target.id} serves whatever it loaded${seen.loaded ? ` — ${seen.loaded}` : ''}`)
-          console.log(`${PAD}chat.model is a placeholder here and is ignored${extra.length ? ` · ${extra.join(' · ')}` : ''}`)
-        } else if (seen.verdict === 'served') {
-          say('model', `${target.model} — ${hosted ? `served by ${target.id}` : `pulled by ${target.id}`}`)
-          if (extra.length) console.log(`${PAD}${extra.join(' · ')}`)
-        } else if (seen.verdict === 'not-served') {
-          const n = seen.serves.length
-          say('model', `${target.model} — NOT ${hosted ? `in ${target.id}'s list of ${n}` : `pulled by ${target.id} (${n} available)`}`)
-          // The ACTIONABLE line, and it differs by service. Nothing an author
-          // types fixes a local server that has not downloaded the weights.
-          if (hosted) console.log(`${PAD}name one in chat.model, or upgrade the package`)
-          else if (target.modelAuto) console.log(`${PAD}${target.id} pull ${target.model}   — or name one you have in chat.model`)
-          else console.log(`${PAD}${target.id} pull ${target.model}`)
-        } else if (seen.serves === null) {
-          say('model', `${target.model} — cannot reach ${target.id}`)
-        } else {
-          say('model', `${target.model} — ${target.id} returned no list`)
-        }
-      }
-    }
-
-    /**
-     * DOES THE CHAT PROVIDER EMBED AFTER ALL?
-     *
-     * `PROVIDERS` carries `embedModel: null` for anthropic, groq, deepseek, xAI
-     * and cerebras, and that is a claim rather than a law: the same table
-     * asserted for months that OpenRouter ships no embeddings endpoint, which
-     * was true when it was written and silently wrong afterwards. The cost of
-     * the claim going stale is paid every build — `embed: 'auto'` borrows
-     * OpenRouter's free pool, so the deployment needs a SECOND key and posts the
-     * text of the whole corpus to a third party.
-     *
-     * So it is checked, here, where checking is free. It cannot be acted on
-     * automatically: the proxy that carries `/ai/v1/embeddings` is written from
-     * `resolveEmbed()` at config time, synchronously, with no network — so a
-     * build that decided mid-flight to embed somewhere else would leave every
-     * reader's query vector posted to the wrong upstream. This reports; the
-     * author writes the one line.
-     *
-     * Silent when the endpoint does not answer, which is the expected case and
-     * the one nobody needs told. Skipped outright for an adapter with no
-     * embeddings path at all — Anthropic — because there is nowhere to knock.
-     */
-    const embedNow = resolveEmbed(resolved)
-    if (embedNow.borrowed && target.baseURL) {
-      const adapter = providerFor(target.provider)
-      const url = adapter.embedUrl?.(target.baseURL)
-      const probe = adapter.embedUrl && url ? await probeEmbedEndpoint(target) : null
-      if (probe) {
-        say('embed?', `${target.id} answers ${url.replace(target.baseURL, '')} after all — ${probe}`)
-        console.log(`${PAD}embed: {provider: '${target.id}'} drops the borrowed ${embedNow.provider} key`)
-      }
-    }
-    console.log('')
-  }
-
-  if (ready.ok) {
-    say('ready', 'yes — the panel will render')
-    for (const n of ready.notes) console.log(`  · ${n}`)
-    process.exit(0)
-  }
-  say('ready', `NO — ${ready.missing.length} to fix\n`)
-  for (const m of ready.missing) console.log(`  · ${m.what}\n      ${m.fix}`)
-  for (const n of ready.notes) console.log(`  · ${n}`)
-  // Exit 1 so CI can gate on it. The BUILD never fails for these; `doctor` is
-  // the opt-in place to turn the same facts into a failure.
-  process.exit(1)
+  const { runDoctor } = await import('../dist/cli-doctor.js')
+  process.exit(await runDoctor({ docPilot: resolved, settings, argv: rest, env, configPath }))
 }
 
 /**
@@ -1135,7 +432,7 @@ if (cmd === 'index') {
         '  --embed-base-url=<url>, --index-dir=<path>, --yes\n' +
         '  npx docpilot doctor --embed  lists the ids this project can use.\n',
     )
-    process.exit(1)
+    process.exit(USAGE)
   }
   // Our flags do not travel on to the indexer: it has its own, and a flag it
   // does not know is a flag it silently ignores.
@@ -1157,10 +454,11 @@ if (cmd === 'index') {
     // Ctrl-C during a question is an answer too, and the whole exchange happens
     // before the indexer is imported — so cancelling leaves the project exactly
     // as it was found, and a cancelled build is not an error.
+    // Cancelling is not success. `0` told a script the index had been built.
     rl.on('SIGINT', () => {
-      console.log('\n  Cancelled — nothing was written.')
+      console.error('\n  Cancelled — nothing was written.')
       rl.close()
-      process.exit(0)
+      process.exit(CANCELLED)
     })
     try {
       const picked = await askOne(rl, embedQuestion(choices))
@@ -1177,9 +475,9 @@ if (cmd === 'index') {
       // Ctrl-D closes stdin mid-question and readline rejects. Same intent as
       // Ctrl-C, same outcome — and an unhandled rejection here would print a
       // stack trace at somebody who simply changed their mind.
-      console.log('\n  Cancelled — nothing was written.')
+      console.error('\n  Cancelled — nothing was written.')
       rl.close()
-      process.exit(0)
+      process.exit(CANCELLED)
     } finally {
       rl.close()
     }

@@ -70,6 +70,7 @@ import { retrievalF1Loose, recallAtK, mrr, underPath, mean } from './metrics.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
 import { flagErrors, flagValue, flagGiven } from '../cli-flags.js'
+import { printError, codeFor, tick, tock, FAILED, USAGE } from '../cli-exit.js'
 
 import {
   ROOT,
@@ -133,7 +134,11 @@ const has = (name: string) => flagGiven('tune', FLAGS, name)
  */
 function assertKnownFlags() {
   const [bad] = flagErrors('tune', process.argv.slice(2))
-  if (bad) die(bad)
+  // `2`, not `die`'s `1`: nothing was attempted, so this is not a failed sweep.
+  if (bad) {
+    printError(bad)
+    process.exit(USAGE)
+  }
 }
 
 const DRY = has('dry')
@@ -176,8 +181,8 @@ const EMBED_KEY = process.env.DOCPILOT_EMBED_KEY || EMBED_TARGET.apiKey || null
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 
 const die = (m) => {
-  console.error(`\n  FAIL  ${m}\n`)
-  process.exit(1)
+  printError(m)
+  process.exit(FAILED)
 }
 const num = (v, d = 3) => (v == null || Number.isNaN(v) ? '  —  ' : v.toFixed(d))
 const pct = (v) => (v == null ? '  — ' : `${(100 * v).toFixed(1)}%`)
@@ -466,9 +471,9 @@ async function probeRecords(index, records, lexical) {
       scoredAsNegative,
       positive: rec.expect === 'answer' && !scoredAsNegative,
     })
-    if (embedded && embedded % 20 === 0) process.stdout.write(`\r  embedded ${embedded}…`)
+    if (embedded && embedded % 20 === 0) tick(`embedded ${embedded}…`)
   }
-  if (embedded) process.stdout.write(`\r  embedded ${embedded} queries for ${probes.length} records\n`)
+  if (embedded) tock(`embedded ${embedded} queries for ${probes.length} records`)
   return probes
 }
 
@@ -638,15 +643,16 @@ async function main() {
   assertKnownFlags()
   assertNoPinnedAxis()
 
-  // Every flag that can be malformed is parsed through `die`, not through the
-  // catch at the bottom of the file: that one prints `e.stack`, and a stack
-  // trace under a message whose whole content is "you typed --level=hgih" buries
-  // the one line the operator needs in eight they cannot act on.
+  // Every flag that can be malformed is refused HERE, not by the catch at the
+  // bottom of the file: that one is for a sweep that started and failed, and it
+  // exits `1`. A value nobody could have meant is `2`, and it is printed as one
+  // line rather than under a stack the operator cannot act on.
   let level
   try {
     level = parseLevelArg(arg('level', DEFAULT_RUN_LEVEL))
   } catch (e) {
-    die(e.message)
+    printError(e.message, e)
+    process.exit(codeFor(e))
   }
 
   /**
@@ -1088,5 +1094,8 @@ function markdown(ctx) {
 // `process.argv[1]` to this module, so the comparison holds for `docpilot tune`
 // as well as for a direct `node src/eval/tune.js`.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((e) => die(e.stack || e.message))
+  main().catch((e) => {
+    printError(e.message || String(e), e)
+    process.exit(FAILED)
+  })
 }

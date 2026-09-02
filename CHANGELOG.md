@@ -11,6 +11,32 @@ against `package.json`'s version and refuses the publish if they disagree.
 
 ### Changed
 
+**Four exit codes, and diagnostics on stderr.** There were two, and cancelling
+was one of them: Ctrl-C or Ctrl-D at either of the package's prompts returned
+`0`, telling a script that the thing it asked for had been done. It returns
+`130` now. A command line this package cannot parse returns `2` — an unknown
+command, flag, mode or value — which separates a typo from `1`, the code a run
+that was attempted and failed returns. The scale is documented at
+[Exit codes](/reference/cli#exit-codes); before this it was promised nowhere,
+which is why this is a minor and not a major.
+
+`CALIBRATION FAILED` and `doctor`'s `ready NO` block moved to stderr, so
+`docpilot doctor | …` no longer swallows the only sentence explaining the
+refusal. Progress counters redraw in place only when stderr is a terminal —
+piped to a file they print whole lines instead of one line holding every value
+the counter ever had. Every error is one line prefixed `[docpilot] `, the shape
+`import`, `feedback` and `vocabulary` already used; the five entry modules' `
+FAIL ` frame is gone, and so is the stack trace four of them printed by
+default. `DOCPILOT_DEBUG=1` brings the stack back.
+
+**`doctor` and `init` are TypeScript, and `doctor` checks its own flags.** Both
+were written directly in `bin/docpilot.js` — 670 lines outside the type checker
+and outside the `run*` contract. `doctor --proxyy` used to produce no output
+about itself and exit on project readiness; it exits `2` and names the flag. A
+`chat.provider` the resolver refuses used to end the command in a stack trace
+before it printed the block that would have named the fault; it is now a row in
+the report and the diagnosis continues. Its stdout is byte-for-byte what it was.
+
 **One flag reader, and one dash is a short option.** `src/cli-flags.js` exported
 `flagValue` and `flagGiven` and nothing in production called them: seven
 hand-written copies read the flags instead, and they had drifted — `lint`

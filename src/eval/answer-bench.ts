@@ -54,6 +54,7 @@ import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 
 import { ROOT, RAG, GOLDEN, DOCPILOT_DIR, settings as docPilot } from '../cli-context.js'
 import { entryFlagError, flagValue } from '../cli-flags.js'
+import { printError, codeFor, FAILED, USAGE } from '../cli-exit.js'
 
 /** Bench artefacts sit beside the golden set, under the configured `evalDir`. */
 const BENCH = path.join(DOCPILOT_DIR, 'bench')
@@ -70,8 +71,8 @@ const MODE = process.argv[2]
  */
 const BAD_FLAG = entryFlagError('bench', import.meta.url)
 if (BAD_FLAG) {
-  console.error(`\n  FAIL  ${BAD_FLAG}\n`)
-  process.exit(1)
+  printError(BAD_FLAG)
+  process.exit(USAGE)
 }
 /**
  * THE FLAGS, read by the table that already validated them.
@@ -108,8 +109,8 @@ const EMBED_PROVIDER = process.env.DOCPILOT_EMBED_PROVIDER || EMBED_TARGET.provi
 const EMBED_KEY = EMBED_TARGET.apiKey
 
 const die = (m) => {
-  console.error(`\n  FAIL  ${m}\n`)
-  process.exit(1)
+  printError(m)
+  process.exit(FAILED)
 }
 
 /**
@@ -195,13 +196,13 @@ async function emit() {
   const config = arg('config') || die('emit needs --config=<name>')
   // `parseLevelArg` throws rather than defaulting, and a throw out of an async
   // main under top-level await prints a stack instead of the six legal values.
-  // The prefix is stripped because `die` already frames the line — it belongs to
-  // callers that print a bare one.
+  // A bad value exits `2` — see `codeFor`.
   let level
   try {
     level = parseLevelArg(arg('level'))
   } catch (e) {
-    die(e.message.replace(/^\[docpilot\] /, ''))
+    printError(e.message, e)
+    process.exit(codeFor(e))
   }
   // Defaulted rather than required: the bench directory is a resolved setting,
   // so there is nothing for the caller to decide the first time they run this.
@@ -788,16 +789,25 @@ function judgeScore() {
  * will.
  */
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (MODE === 'emit') await emit()
-  else if (MODE === 'shard') shard()
-  else if (MODE === 'score') score()
-  else if (MODE === 'runs') runs()
-  else if (MODE === 'judge-emit') judgeEmit()
-  else if (MODE === 'judge-score') judgeScore()
-  else {
-    die(
-      'usage: docpilot bench emit|shard|score|runs|judge-emit|judge-score …\n' +
-        '        emit --config=<name> [--out=<file>] [--history=<file>] [--level=low|medium|high|xhigh|max|ultra]',
-    )
+  // Caught, for the same reason `lint`'s is: these two were the pair whose
+  // failure left the process as an unhandled rejection.
+  try {
+    if (MODE === 'emit') await emit()
+    else if (MODE === 'shard') shard()
+    else if (MODE === 'score') score()
+    else if (MODE === 'runs') runs()
+    else if (MODE === 'judge-emit') judgeEmit()
+    else if (MODE === 'judge-score') judgeScore()
+    else {
+      // A missing mode is a USAGE error — nothing was attempted.
+      printError(
+        'usage: docpilot bench emit|shard|score|runs|judge-emit|judge-score …\n' +
+          '        emit --config=<name> [--out=<file>] [--history=<file>] [--level=low|medium|high|xhigh|max|ultra]',
+      )
+      process.exit(USAGE)
+    }
+  } catch (e) {
+    printError(e.message || String(e), e)
+    process.exit(FAILED)
   }
 }

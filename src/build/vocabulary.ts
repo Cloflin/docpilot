@@ -33,6 +33,7 @@ import { chat } from '../theme/docpilot/llm.js'
 import { setVocabulary, vocabularyHash } from '../theme/docpilot/text.js'
 import { nodeChatTarget, assertVocabulary } from '../config.js'
 import { flagErrors, flagValue, flagGiven } from '../cli-flags.js'
+import { USAGE } from '../cli-exit.js'
 
 /**
  * The reply shape, as a STRICT JSON schema — an array of pairs rather than the
@@ -329,7 +330,7 @@ export async function runVocabulary({ docPilot, argv = [], env = {}, out = null 
   const [bad] = flagErrors('vocabulary', argv)
   if (bad) {
     console.error(`[docpilot] ${bad}`)
-    return 1
+    return USAGE
   }
 
   const say = (m) => console.log(m)

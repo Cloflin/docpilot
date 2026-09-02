@@ -26,6 +26,7 @@ import { parseDocument } from './lib/dom.js'
 import { annotate } from './lib/annotate.js'
 import type { Annotation } from './lib/annotate.js'
 import { flagErrors, spaceFormWarning } from '../cli-flags.js'
+import { USAGE } from '../cli-exit.js'
 import {
   canonicalOf,
   declaredAlternates,
@@ -341,7 +342,7 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
   const [bad] = flagErrors('import', argv)
   if (bad) {
     log.error(`[docpilot] ${bad}`)
-    return 1
+    return USAGE
   }
   const spaceForm = spaceFormWarning('import', argv)
   if (spaceForm) log.error(`[docpilot] ${spaceForm}`)
@@ -349,7 +350,7 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
   const flags = parseImportFlags(argv)
   if (flags.unknown.length) {
     log.error(`[docpilot] unknown option: ${flags.unknown.join(', ')}`)
-    return 1
+    return USAGE
   }
   if (!flags.url) {
     log.error(

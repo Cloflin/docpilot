@@ -63,6 +63,7 @@ import { nodeEmbedTarget } from '../config.js'
 
 import { ROOT, RAG, REPORTS, GOLDEN, settings as docPilot, fileEnv } from '../cli-context.js'
 import { COMMANDS, entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
+import { printError, codeFor, FAILED, USAGE } from '../cli-exit.js'
 
 /**
  * The hash of the instruction THIS project sends, not of the shipped default.
@@ -110,8 +111,8 @@ const has = (name: string) => flagGiven('eval', FLAGS, name)
  * tier would print a ReferenceError instead of the six legal ones.
  */
 const die = (m) => {
-  console.error(`\n  FAIL  ${m}\n`)
-  process.exit(1)
+  printError(m)
+  process.exit(FAILED)
 }
 
 /**
@@ -158,7 +159,11 @@ export function bareValueFlag(argv, flags = VALUE_FLAGS) {
  * (neither 'on' nor 'off', so it silently meant 'auto').
  */
 const BAD_FLAG = entryFlagError('eval', import.meta.url)
-if (BAD_FLAG) die(BAD_FLAG)
+// `2`, not `die`'s `1`: nothing was attempted, so this is not a failed run.
+if (BAD_FLAG) {
+  printError(BAD_FLAG)
+  process.exit(USAGE)
+}
 
 // --models is the matrix; --model stays as the one-model alias it always was.
 const MODELS = String(arg('models', arg('model', 'qwen3:8b')))
@@ -180,14 +185,15 @@ const LIMIT = Number(arg('limit', '0'))
  *
  * `parseLevelArg` throws rather than defaulting: a typo that fell through to
  * `ultra` would print a pool nobody asked for and be read as the tier the author
- * thought they ran. The `[docpilot] ` prefix comes off because `die` frames the
- * line itself.
+ * thought they ran. It is a bad VALUE, so it exits `2` like every other
+ * mis-typed command line — `codeFor` carries that off the throw.
  */
 let RUN_LEVEL = DEFAULT_RUN_LEVEL
 try {
   RUN_LEVEL = parseLevelArg(arg('level'))
 } catch (e) {
-  die(e.message.replace(/^\[docpilot\] /, ''))
+  printError(e.message, e)
+  process.exit(codeFor(e))
 }
 const BASE = process.env.DOCPILOT_BASE_URL || 'http://localhost:11434'
 const GATE_ONLY = has('gate-only')
@@ -968,12 +974,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     .then((runs) => {
       const failed = runs.filter((r) => hardGatesFailed(r.summary)).map((r) => r.meta.model)
       if (!failed.length) return
-      console.error(
-        `  FAIL  hard gate breached: ${failed.join(', ')}\n` +
+      printError(
+        `hard gate breached: ${failed.join(', ')}\n` +
           `        every report was written first — the offending rows are in ` +
-          `${path.relative(ROOT, REPORTS)}/\n`,
+          `${path.relative(ROOT, REPORTS)}/`,
       )
-      process.exitCode = 1
+      process.exitCode = FAILED
     })
-    .catch((e) => die(e.stack || e.message))
+    .catch((e) => {
+      printError(e.message || String(e), e)
+      process.exit(FAILED)
+    })
 }

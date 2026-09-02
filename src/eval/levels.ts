@@ -92,12 +92,16 @@ export function parseLevelArg(raw) {
   const v = String(raw ?? '').trim().toLowerCase()
   if (!v) return DEFAULT_RUN_LEVEL
   if (levelRank(v) < 0) {
-    throw new Error(
+    const e: Error & { usage?: boolean } = new Error(
       `[docpilot] unknown level "${raw}"\n` +
         `    smallest to largest: ${LEVELS.join(', ')}\n` +
         `    levels are cumulative — --level=medium runs low + medium\n` +
         `    omit --level to run the whole set (${DEFAULT_RUN_LEVEL})`,
     )
+    // A bad value is a USAGE error, and the exit that catches this is four
+    // frames away — see `codeFor` in src/cli-exit.js.
+    e.usage = true
+    throw e
   }
   return v
 }

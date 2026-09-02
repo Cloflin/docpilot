@@ -214,3 +214,54 @@ export async function probeEmbedEndpoint(target, { fetchImpl = fetch, limit = 2 
   }
   return null
 }
+
+/**
+ * Which local embedding servers are actually running.
+ *
+ * A hosted provider is offered on the strength of its key: `probeEmbedEndpoint`
+ * above sends a REAL embedding, and spending one of OpenRouter's fifty free
+ * daily requests to confirm something the key already says is the wrong trade.
+ * A LOCAL server has no key to be found by, so the only way to know it is there
+ * is to ask it — and offering an Ollama that nobody started is worse than not
+ * offering one at all. That is also the case this exists for: nothing configured
+ * anywhere, and the answer is the Ollama already on the machine.
+ *
+ * BOUNDED AND SILENT. One address, a short timeout, and every failure — refused,
+ * slow, a body of the wrong shape — is the same answer: not running. Nothing
+ * here may throw, because it runs in front of a build and a machine without
+ * Ollama must reach the same list it always did.
+ *
+ * IT LIVES HERE rather than in the launcher because two commands ask it —
+ * `index`, to decide what to offer, and `doctor --embed`, to print the same
+ * list without asking — and the second of those has moved into `src/`.
+ */
+export async function probeLocalEmbedders(env: Record<string, string | undefined> = {}, { timeoutMs = 2500 } = {}) {
+  const fetchImpl = (url, init = {}) =>
+    fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
+  const baseURL = env.OLLAMA_BASE_URL || 'http://localhost:11434'
+  try {
+    /**
+     * THE CATALOGUE, NOT AN EMBEDDING — and the difference is seconds.
+     *
+     * `probeEmbedEndpoint` is the thorough answer and the wrong one here: it
+     * POSTs a real embedding, which on a cold Ollama means LOADING the weights
+     * first. Measured against the box this was written on that is several
+     * seconds past any timeout worth putting in front of a prompt, and a probe
+     * that times out reports "not running" about a server that is.
+     *
+     * `/api/tags` answers both questions this needs — the server is up, and
+     * these are the embedding models it has pulled — in one GET. Whether a named
+     * model actually embeds is settled later and for free: `createEmbedder`
+     * walks its pool during the build and takes the first that answers.
+     */
+    const models = await discoverEmbedModels({
+      provider: 'ollama',
+      baseURL,
+      apiKey: null,
+      fetchImpl,
+    })
+    return models.length ? [{ id: 'ollama', model: models[0], baseURL }] : []
+  } catch {
+    return []
+  }
+}

@@ -41,6 +41,7 @@ import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { wilsonUpper95 } from './metrics.js'
 import { nodeEmbedTarget } from '../config.js'
 import { entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
+import { printError, tick, tock, FAILED, USAGE } from '../cli-exit.js'
 
 import {
   ROOT,
@@ -83,8 +84,8 @@ const has = (name: string) => flagGiven('calibrate', FLAGS, name)
  */
 const BAD_FLAG = entryFlagError('calibrate', import.meta.url)
 if (BAD_FLAG) {
-  console.error(`\n  FAIL  ${BAD_FLAG}\n`)
-  process.exit(1)
+  printError(BAD_FLAG)
+  process.exit(USAGE)
 }
 
 const REFRESH = has('refresh')
@@ -138,12 +139,12 @@ const OUT_JSON = OUT_ARG
  * would make the wrong one arrive silently.
  */
 if (TRANSFER && path.resolve(ROOT, TRANSFER) === OUT_JSON) {
-  console.error(
-    `\n  FAIL  --transfer would overwrite the calibration it reads ` +
+  printError(
+    `--transfer would overwrite the calibration it reads ` +
       `(${path.relative(ROOT, OUT_JSON)}).\n` +
-      `        Name the target: --out=docpilot/calibration.<index>.json\n`,
+      `        Name the target: --out=docpilot/calibration.<index>.json`,
   )
-  process.exit(1)
+  process.exit(USAGE)
 }
 /**
  * The embedder, from the project's own settings.
@@ -216,8 +217,8 @@ const POSITIVE_STRATA = Object.keys(STRATA).filter((s) => STRATA[s].positive)
 const LADDER_N = [2, 6, 20, 40, 100, 300, 700, null] // null → the whole corpus
 
 const die = (m) => {
-  console.error(`\n  FAIL  ${m}\n`)
-  process.exit(1)
+  printError(m)
+  process.exit(FAILED)
 }
 const num = (v, d = 3) => (v == null || Number.isNaN(v) ? '  —  ' : v.toFixed(d))
 const pct = (v) => (v == null ? '  — ' : `${(100 * v).toFixed(1)}%`)
@@ -584,12 +585,10 @@ async function prefetchEmbeddings(texts, index) {
     }
     if (!vectors) return
     slice.forEach((t, j) => PREFETCHED.set(t, scaleToIndexDomain(vectors[j])))
-    process.stdout.write(`\r  embedded ${Math.min(i + BATCH, want.length)}/${want.length} probe texts…`)
+    tick(`embedded ${Math.min(i + BATCH, want.length)}/${want.length} probe texts…`)
   }
   if (want.length) {
-    process.stdout.write(
-      `\r  embedded ${want.length} probe texts in ${requests} request(s), ${BATCH} at a time\n`,
-    )
+    tock(`embedded ${want.length} probe texts in ${requests} request(s), ${BATCH} at a time`)
   }
 }
 
@@ -1291,9 +1290,9 @@ async function main() {
     row.sig = sig
     rows.push(row)
     embedded++
-    if (embedded % 20 === 0) process.stdout.write(`\r  probed ${embedded} new…`)
+    if (embedded % 20 === 0) tick(`probed ${embedded} new…`)
   }
-  if (embedded) process.stdout.write(`\r  probed ${embedded} new, ${rows.length - embedded} cached\n`)
+  if (embedded) tock(`probed ${embedded} new, ${rows.length - embedded} cached`)
   else console.log(`  all ${rows.length} probes served from the cache`)
 
   // Rewrite the cache with every row currently known, so a partial run still
@@ -1561,10 +1560,19 @@ async function main() {
   fs.writeFileSync(OUT_MD, markdown(doc, ctx))
 
   if (fails.length) {
-    console.log(`\n  CALIBRATION FAILED — ${path.relative(ROOT, OUT_JSON)} left untouched`)
-    console.log(`  diagnosis written to ${path.relative(ROOT, OUT_MD)}\n`)
-    for (const f of fails) console.log(`    ${f.name}\n      ${f.detail}\n`)
-    process.exit(1)
+    /**
+     * STDERR, because this is the failure and not the product.
+     *
+     * It went to stdout, which meant `docpilot calibrate > log.txt` swallowed
+     * the only sentence explaining why `calibration.json` had not moved, and a
+     * CI job showing the last twenty lines of stdout showed the report it DID
+     * write instead. The markdown diagnosis is still written first, and is
+     * still where the detail lives.
+     */
+    console.error(`\n  CALIBRATION FAILED — ${path.relative(ROOT, OUT_JSON)} left untouched`)
+    console.error(`  diagnosis written to ${path.relative(ROOT, OUT_MD)}\n`)
+    for (const f of fails) console.error(`    ${f.name}\n      ${f.detail}\n`)
+    process.exit(FAILED)
   }
 
   fs.writeFileSync(OUT_JSON, JSON.stringify(doc, null, 2) + '\n')
@@ -2230,5 +2238,8 @@ export { dOf, regate, chooseWindow, fitWindowAtTau, pickAnchors, WINDOWS }
 // segment does not survive plain concatenation, and the failure mode is this
 // whole command silently doing nothing and exiting 0.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((e) => die(e.stack || e.message))
+  main().catch((e) => {
+    printError(e.message || String(e), e)
+    process.exit(FAILED)
+  })
 }
