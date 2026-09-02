@@ -13,6 +13,7 @@ import { excerptWindow, TRUNCATED_NOTE } from './excerpt.js'
 import { chat, streamingAnswerText } from './llm.js'
 import { buildMessages, finalNote, OBS_NOTE } from './prompt.js'
 import { computeSupport } from './support.js'
+import { normalise } from './text.js'
 
 /**
  * Per-step ceiling. 30s is the right number for a hosted endpoint and far too
@@ -180,6 +181,8 @@ export interface RunTurnOptions {
   onStream?: ((...args: any[]) => void) | null
   signal?: AbortSignal
   budget?: any
+  /** Embed a string the model wrote — engine-spec 015. Absent buys nothing. */
+  embedQuery?: ((text: string) => Promise<any>) | null
 }
 
 export async function runTurn(options: RunTurnOptions) {
@@ -210,6 +213,21 @@ export async function runTurn(options: RunTurnOptions) {
   // eval runner and for any host that keeps no count, and absent means the same
   // thing an unknown budget means everywhere else: run the turn in full.
   budget = null,
+  /**
+   * Embed a string the MODEL wrote — engine-spec 015.
+   *
+   * `search_docs` already takes the model's own query and hands it to the
+   * lexical half; the dense half went on scoring the vector of the reader's
+   * original question, whatever was asked for. So a rephrase moved one of the
+   * two equally weighted RRF inputs, and a rephrase INTO THE CORPUS LANGUAGE —
+   * the one case where it matters most — moved nothing the dense channel could
+   * see.
+   *
+   * Absent means "do not buy vectors": the eval runner passes one, a host on a
+   * shared free-tier allowance may decline to, and either way the search still
+   * happens on the turn's vector.
+   */
+  embedQuery = null,
   } = options
 
   const scopeLabel = retrieval.scope?.label || 'All docs'
@@ -248,6 +266,8 @@ export async function runTurn(options: RunTurnOptions) {
   let promptTokens = 0
   let outputTokens = 0
   let cachedTokens = null
+  /** Vectors bought for the model's own queries — spec 015, visible in the report. */
+  let embedRequests = 0
   const measure = (messages) => {
     let n = 0
     for (const m of messages) n += String(m.content || '').length
@@ -466,7 +486,29 @@ export async function runTurn(options: RunTurnOptions) {
       // leaves the dense half pointing at the sentence it replaced.
       const searchQuery = args.query || question
       debug('search', { query: searchQuery, k: args.k ?? null, kind: args.kind || null })
-      const chunks = retrieval.search({ query: searchQuery, queryVec, k: args.k, kind: args.kind })
+      /**
+       * The vector follows the query it belongs to, or falls back — never fails.
+       *
+       * `normalise` is the same comparison `searchCache` keys on, so a query
+       * that differs from the question only in case or punctuation buys
+       * nothing. Every failure — a provider that refused, a reader who pressed
+       * stop, a target that returned nothing — leaves the search running on the
+       * turn's own vector, because an embedder having a bad minute must not
+       * cost the model its step.
+       */
+      let searchVec = queryVec
+      if (embedQuery && searchQuery && normalise(searchQuery) !== normalise(question)) {
+        try {
+          const v = await embedQuery(searchQuery)
+          if (v) {
+            searchVec = v
+            embedRequests++
+          }
+        } catch {
+          debug('search-embed-failed', searchQuery)
+        }
+      }
+      const chunks = retrieval.search({ query: searchQuery, queryVec: searchVec, k: args.k, kind: args.kind })
       for (const c of chunks) emittedIds.add(c.id)
       const obs = observation(
         'search_docs',
@@ -977,6 +1019,7 @@ export async function runTurn(options: RunTurnOptions) {
         promptTokens,
         outputTokens,
         cachedTokens,
+        embedRequests,
         promptChars,
         promptCharsPeak,
         observationChars: observationChars(),

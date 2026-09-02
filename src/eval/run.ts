@@ -631,6 +631,9 @@ async function probeRecords(index, guard, records) {
       // The gate the priming turn of a follow-up runs under; null for every
       // other record, and never consulted for the scored turn.
       prevGate,
+      // What the index was built with, so a turn can buy a vector for a query
+      // the model writes without reaching back for the manifest — spec 015.
+      embedModel: index.manifest.embedModel,
       retrievedIds,
       // The ranked eight the two retrieval metrics are read off. It was built
       // here and thrown away, so a report could say recall@8 was 1 and never say
@@ -823,8 +826,23 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
   return rows
 }
 
+/**
+ * `DOCPILOT_EMBED_MODEL_QUERY=1` — engine-spec 015, and OFF here for the reason
+ * the spec gives about itself.
+ *
+ * The lever lets a `search_docs` query the MODEL wrote reach the dense channel
+ * instead of scoring the reader's original question. On THIS corpus it has
+ * almost nothing to move: the report's own `Re-search` section counted two turns
+ * in seventy. So it ships switched off and is measured where re-searching
+ * actually happens — a corpus whose readers do not all write in its language.
+ */
+const EMBED_MODEL_QUERY = /^(1|true|yes)$/i.test(
+  String(process.env.DOCPILOT_EMBED_MODEL_QUERY || ''),
+)
+
 function turn({ probe, model, fallback, thinkSupported, guard, question, history }) {
   return runTurn({
+    embedQuery: EMBED_MODEL_QUERY ? (text) => embed(text, probe.embedModel) : null,
     retrieval: probe.retrieval,
     gateResult: probe.g,
     question,

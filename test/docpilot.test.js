@@ -7742,6 +7742,136 @@ describe('runTurn — a follow-up inherits what the last turn cited', () => {
   })
 })
 
+/**
+ * engine-spec 015 — the vector follows the query it belongs to.
+ *
+ * `search_docs` already handed the model's own query to the lexical half, and
+ * the dense half went on scoring the vector of the reader's original question.
+ * A rephrase moved one of two equally weighted RRF inputs; a rephrase into the
+ * corpus language moved nothing the dense channel could see.
+ */
+describe('runTurn — a re-search can buy its own vector', () => {
+  const DIMS = 4
+  const GUARD = {
+    tau: 0.3,
+    tauLexical: 0.3,
+    wDense: 0.75,
+    wLexical: 0.25,
+    denseMode: 'cosine',
+    cosFloor: 0.44,
+    cosCeil: 0.64,
+    zexp: null,
+  }
+
+  let n = 0
+  const oneChunkIndex = () => {
+    const chunk = {
+      id: 'a#one',
+      path: '/a',
+      anchor: 'one',
+      title: 'Alpha',
+      breadcrumb: 'Docs',
+      kind: 'guide',
+      text: 'The alpha widget is configured with a manifest and a token.',
+      next: null,
+    }
+    const vectors = new Int8Array(DIMS)
+    vectors[0] = 127
+    return assembleIndex({
+      manifest: {
+        version: 3,
+        hash: `research-${++n}`,
+        embedModel: 'test',
+        dims: DIMS,
+        chunkCount: 1,
+        vectors: 'vectors.research.bin',
+        pages: [{ path: '/a', title: 'Alpha', tail: 'Docs' }],
+        guard: GUARD,
+      },
+      shards: [[chunk]],
+      vectorBuffer: vectors.buffer,
+      dfDoc: { df: {} },
+    })
+  }
+
+  /** One `search_docs` with the given query, then an answer. */
+  const runWithSearch = async ({ query, embedQuery }) => {
+    let step = 0
+    vi.stubGlobal('fetch', async () => {
+      step++
+      if (step === 1)
+        return {
+          ok: true,
+          json: async () => ({
+            message: {
+              tool_calls: [{ function: { name: 'search_docs', arguments: JSON.stringify({ query }) } }],
+            },
+          }),
+        }
+      return { ok: true, json: async () => ({ message: { content: 'done' } }) }
+    })
+    const index = oneChunkIndex()
+    const retrieval = createRetrieval({
+      index,
+      scope: { kind: 'all', paths: [], label: 'All docs' },
+      guard: GUARD,
+    })
+    const searched = []
+    const spied = { ...retrieval, search: (args) => (searched.push(args), retrieval.search(args)) }
+    const res = await runTurn({
+      retrieval: spied,
+      gateResult: { G: 1, pass: true, chunks: index.chunks },
+      question: 'how is the alpha widget configured?',
+      history: [],
+      addendum: '',
+      config: { llm: { provider: 'ollama', baseURL: 'http://x', model: 'm' }, maxIterations: 4 },
+      fallback: true,
+      queryVec: Float64Array.from([127, 0, 0, 0]),
+      embedQuery,
+    })
+    return { searched, res }
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('embeds a query the model rewrote, and not one it merely echoed', async () => {
+    const asked = []
+    const embedQuery = async (t) => (asked.push(t), Float64Array.from([0, 127, 0, 0]))
+
+    const rewritten = await runWithSearch({ query: 'alpha widget manifest token', embedQuery })
+    expect(asked).toEqual(['alpha widget manifest token'])
+    expect(Array.from(rewritten.searched[0].queryVec)).toEqual([0, 127, 0, 0])
+    expect(rewritten.res.cost.embedRequests).toBe(1)
+
+    // The same question back is the vector the turn already holds.
+    asked.length = 0
+    const echoed = await runWithSearch({ query: 'How is the alpha widget configured?', embedQuery })
+    expect(asked).toEqual([])
+    expect(Array.from(echoed.searched[0].queryVec)).toEqual([127, 0, 0, 0])
+    expect(echoed.res.cost.embedRequests).toBe(0)
+  })
+
+  it('falls back to the turn vector when the embedder refuses', async () => {
+    const { searched, res } = await runWithSearch({
+      query: 'something else entirely',
+      embedQuery: async () => {
+        throw new Error('embedder down')
+      },
+    })
+    // The search still happened, on the vector the turn already had: an embedder
+    // having a bad minute must not cost the model its step.
+    expect(searched).toHaveLength(1)
+    expect(Array.from(searched[0].queryVec)).toEqual([127, 0, 0, 0])
+    expect(res.cost.embedRequests).toBe(0)
+  })
+
+  it('buys nothing at all when no embedder is handed in', async () => {
+    const { searched, res } = await runWithSearch({ query: 'something else', embedQuery: null })
+    expect(Array.from(searched[0].queryVec)).toEqual([127, 0, 0, 0])
+    expect(res.cost.embedRequests).toBe(0)
+  })
+})
+
 describe('runTurn — the free-step ceiling', () => {
   const DIMS = 4
   const GUARD = {

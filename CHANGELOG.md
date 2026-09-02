@@ -68,6 +68,22 @@ documentation. Both land on `confidence 0`, the mechanism that already exists.
 **This moves `PROMPT_HASH`**, so reports across it are marked incomparable — as
 they should be. Applied alone, on its own commit, for that reason.
 
+**A re-search can buy its own vector — engine-spec 015, and it ships OFF.**
+`search_docs` handed the model's own query to the lexical half and went on
+scoring the dense half against the reader's original question, so a rephrase
+moved one of two equally weighted RRF inputs and a rephrase into the corpus
+language moved nothing the dense channel could see. `runTurn` now takes an
+`embedQuery`, uses it when the model's query differs from the question, counts
+it in `cost.embedRequests`, and falls back to the turn's own vector on any
+failure — an embedder having a bad minute must not cost the model its step.
+
+**It is off because the number that would justify it does not exist yet.** The
+new `Re-search` section counted two turns in seventy on this package's own
+corpus, which is inside the run-to-run spread of every metric. The panel does not
+pass an embedder at all, and `DOCPILOT_EMBED_MODEL_QUERY=1` turns it on for a
+measurement — to be taken on a corpus whose readers do not all write in the
+language it is written in.
+
 **The feedback receiver ships, and `init` copies it in.** `feedbackEndpoint`
 makes the panel POST one object per vote, fire and forget — so a receiver that
 404s looks, from the reader's side, exactly like one that works, and the endpoint
