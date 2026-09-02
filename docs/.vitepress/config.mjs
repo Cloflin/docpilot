@@ -229,6 +229,7 @@ export const docPilot = {
         chat: {
           provider: 'openrouter',
           models: [
+            'openai/gpt-4o-mini',
             'openrouter/free',
             'dots-studio/dots-3-note-preview:free',
             'google/gemma-4-26b-a4b-it:free',
@@ -264,7 +265,11 @@ export const docPilot = {
          */
         embed: {
           provider: 'openrouter',
-          model: 'nvidia/nemotron-3-embed-1b:free',
+          models: [
+            'nvidia/nemotron-3-embed-1b:free',
+            'nvidia/llama-nemotron-embed-vl-1b-v2:free',
+            'liquid/lfm-2.5-embedding-350m:free',
+          ],
         },
       }),
   ui: { trigger: 'fab' },
