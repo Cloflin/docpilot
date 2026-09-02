@@ -457,6 +457,23 @@ export async function runInit({ argv = [], configPath = null } = {}) {
   }
   if (existsSync(skillsDir)) copyTree(skillsDir, '.claude/skills')
 
+  /**
+   * The feedback receiver, copied for the same reason and with more force.
+   *
+   * `feedbackEndpoint` makes the panel POST one object per vote, fire and
+   * forget: a receiver that 404s looks, from the reader's side, exactly like one
+   * that works. So the endpoint is worth nothing without something listening,
+   * and the something has to run in the CONSUMER's deployment — a file sitting
+   * unpublished in this package's repository reaches that pod never
+   * (engine-spec 013's sibling, 012 FB-5).
+   *
+   * A reference rather than a dependency: it is copied, not imported, because a
+   * deployment edits it — its store is a seam, and which of the three it picks
+   * is a decision about their infrastructure and not about this package.
+   */
+  const receiver = new URL('lib/feedback-receiver.mjs', PKG)
+  if (existsSync(receiver)) put('docpilot/feedback-receiver.mjs', readFileSync(receiver, 'utf8'))
+
   for (const f of wrote) console.log(`[docpilot] wrote    ${f}`)
   for (const f of skipped) console.log(`[docpilot] kept     ${f}   (already there)`)
 

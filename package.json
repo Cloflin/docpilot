@@ -127,6 +127,7 @@
     "README.md",
     "bin/",
     "dist/",
+    "lib/feedback-receiver.mjs",
     "skills/",
     "src/",
     "types/"

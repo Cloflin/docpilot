@@ -68,7 +68,32 @@ const TIERS = new Set(arg('tiers', 'faq,heading,template').split(',').filter(Boo
 /** A chunk under this many content terms cannot ground a question. */
 const MIN_TERMS = Number(arg('min-terms', '40'))
 
-const dist = path.join(ROOT, 'dist')
+/**
+ * WHERE `dist/` IS, from a consumer's directory rather than from this package's.
+ *
+ * `path.join(ROOT, 'dist')` is the package repository's own layout, and the
+ * skill is COPIED into consumer projects — `npx docpilot init` writes it to
+ * `.claude/skills/docs-rag/`, because a skill inside `node_modules` is
+ * discovered by nobody. There it resolved `<their project>/dist`, which either
+ * does not exist or is their build, and the script died on an import before
+ * printing a line.
+ *
+ * This file always sits at `<package>/skills/docs-rag/scripts/`, so the built
+ * modules are two directories up from here whichever tree it was copied into.
+ * The cwd form is kept as a fallback for the package's own checkout, where the
+ * two paths agree anyway.
+ */
+const HERE = path.dirname(new URL(import.meta.url).pathname)
+const CANDIDATE_DISTS = [path.resolve(HERE, '../../../dist'), path.join(ROOT, 'dist')]
+const dist = CANDIDATE_DISTS.find((d) => fs.existsSync(path.join(d, 'theme/docpilot/store.js')))
+if (!dist) {
+  console.error(
+    `[docpilot] no built modules found. Looked in:\n` +
+      CANDIDATE_DISTS.map((d) => `  ${d}`).join('\n') +
+      `\n  In the package repository, run \`npm run build:js\` first.`,
+  )
+  process.exit(1)
+}
 const { assembleIndex } = await import(pathToFileURL(path.join(dist, 'theme/docpilot/store.js')).href)
 const { createRetrieval } = await import(pathToFileURL(path.join(dist, 'theme/docpilot/retriever.js')).href)
 const { similarity, openerQuestions } = await import(pathToFileURL(path.join(dist, 'theme/docpilot/openers.js')).href)

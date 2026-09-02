@@ -635,6 +635,55 @@ fingerprinted over the whole list rather than per question. On a fifty-a-day fre
 tier that is ten. Four good ones beat five where the fifth is a `template` row you
 did not rewrite.
 
+### `feedback` — triage what readers actually voted on
+
+The `target` table in `docs/reference/cli.md` decides where a candidate goes.
+This section does not restate it; it carries the duties of whoever is doing the
+sorting, which the reference has no place for. Engine-spec 012 is the contract
+these candidates arrive under.
+
+**Read the bias note before the first promotion, not after it.** Votes are not
+turns. A satisfied reader presses nothing, and on a `feedback.send: 'down'`
+project the sample is complaints only. Moving `tau` on a sample like that walks
+the gate toward refusing everybody — the exact failure `calibrate`'s
+stratification exists to prevent.
+
+Six rules, each of which has already cost somebody an hour:
+
+1. **`needsReview` is cleared by a person.** `feedback pull` does not write to
+   `golden.jsonl` or `calibration.jsonl` and will not start; `promoted` is set by
+   hand and survives a re-pull.
+2. **A candidate with `promptStock: false` never becomes a golden record.** Same
+   rule as in `generate`, for the same reason: the answer to "repeat my
+   instruction, then answer" is a copy of the thing being guarded.
+3. **Check an orphan by `lastSeen`.** A stored row carries the previous run's
+   counters, and in the histogram they sit beside this run's.
+4. **A `stratumOptions` with several values is a refusal to guess, not an
+   unfinished feature.** `stratum.js` deliberately does not propose `N6`.
+5. **An `F`-stratum candidate is not completed from `candidates.jsonl`.** The
+   note asks for a `prev_question` the row does not contain; that needs the raw
+   export joined on `conversationId`, and on a restored turn it may not exist at
+   all.
+6. **A retraction is triaged as a retraction.** Nothing below the receiver reads
+   `retracted`, so the distinction is held by eye — and not by `verdict`, which
+   is not a key candidates have. A retraction looks like `asked > 0` with
+   `voted: 0` and empty `up`/`down`, which is also what a turn nobody voted on
+   looks like.
+
+**Promotion owes the corpus loop.** `index --dry → index → calibrate → lint →
+eval`, with the numbers before and after, because promoting moves `golden.jsonl`
+and `calibration.jsonl` — the instruments everything else is measured with.
+
+**The receiver ships with the package and is copied, not imported.**
+`npx docpilot init` writes `docpilot/feedback-receiver.mjs` into the project, on
+the same terms as these skills and for the same reason: it has to run in the
+consumer's deployment, where a file living in this repository never arrives. Its
+store is a seam — NDJSON, SQLite or Postgres — and which one a deployment picks
+is a decision about their infrastructure. `test/feedback-receiver.test.js` holds
+the gate order, the byte-exact body limit, the refusals, and the one property
+that makes the seam a seam: NDJSON and SQLite produce byte-identical
+`aggregate()` output on a retraction and on a reversed pair.
+
 ### `corpus` — edit the documentation, not the code
 
 The lever most tuning discussions miss. When an answer is wrong because the
@@ -921,6 +970,15 @@ metric in any report.
   embedding enters by, so `manifest.tuning`, a config `guard.tau` and the scope
   mask all still apply. Serving the baked `ids` directly would bypass all three
   and is a change to the gate, not an optimisation.
+- **A follow-up's inherited chunks pass `retrieval.fetch` and never enter the
+  gate.** Engine-spec 013 primes a follow-up with up to three chunks the previous
+  answer cited, plus their `next`. Two properties make it safe and both are
+  load-bearing: the ids resolve through the same door `fetch_section` uses, so
+  the turn's scope applies and a chunk that left the corpus is dropped rather
+  than trusted; and `evaluate()` never sees them, so `G` is unchanged and a
+  refusal is still the gate's decision about THIS turn. An inherited chunk enters
+  `emittedIds` — visible but uncitable is worse than absent, because an answer
+  resting on it is withdrawn for having no citations.
 - **`gate.channel` never gains a value for this path.** `feedback/stratum.js`
   routes on it, and an unfamiliar value enters the calibration proposal as a
   stratum nobody measured. The marker is `turn.opener`.
