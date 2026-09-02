@@ -174,6 +174,20 @@ as absent — which meant `ultra`, so the run scored the whole set, stamped
 against, in silence. The boolean flags (`--gate-only`, `--lexical`, `--resume`,
 `--dry`) are unaffected: for them the bare form is the form.
 
+**`npx docpilot eval` REBUILDS `dist/` before it runs, and that is a trap the
+moment you are measuring one change against another.** `package.json`'s
+`prepare` is `npm run build`, npx runs it, and the build takes whatever is in
+`src/` at that instant. So the sequence "revert the change, build, restore the
+source, run" — the obvious way to measure a lever you have already written —
+puts the restored source straight back into the tree the runner then executes.
+Measured here: a run that announced it had excluded a prompt change reported the
+prompt hash of the change it excluded, and the only reason it was caught is that
+the hash rides in the report NAME.
+
+**Use `node bin/docpilot.js eval …` for a measurement.** It runs the built tree
+and nothing else, so what you built is what you measure. `npx` is right for
+everything a consumer does and wrong for every A/B in this file.
+
 Three things to check before believing a delta:
 
 - **`incomparable`** in the report. A prompt, lever, golden-set or `num_ctx`
