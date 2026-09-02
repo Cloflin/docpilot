@@ -7,6 +7,163 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 1.2.0
+
+### Added
+
+**A follow-up starts from the evidence the last turn bought — engine-spec 013.**
+`primed` was exactly this turn's `gateResult.chunks` and `emittedIds` was filled
+from it alone, so the chunk the previous answer stood on was neither in front of
+the model nor reachable — `fetch_section` refuses every id outside that set. What
+the model had of the turn before was its own text, cut to 300 characters: "and
+how do I turn it off?" was being asked to answer from an excerpt of itself. A
+follow-up now also inherits up to three chunks that answer cited, plus their
+`next`, resolved through the same `retrieval.fetch` the tool uses — so the turn's
+scope applies and a chunk that left the corpus is dropped rather than trusted.
+They enter `emittedIds`, because visible-but-uncitable is worse than absent. The
+gate never sees them: `G` is unchanged and a refusal is still its decision about
+this turn. `Turn.citationIds` carries the ids and is deliberately not persisted;
+`DOCPILOT_SEED_FROM_HISTORY` sweeps the ceiling.
+
+**The instruction names the case the gate cannot reach — engine-spec 014.** The
+gate scores closeness — `G = wDense·D + wLexical·L` against tau — and a question
+about a feature the corpus does not have is close when a similar one is
+documented. Measured on this package's own corpus at tau 0.69: ten of ten
+questions about absent features passed, `G` from 0.735 to 1.000, against
+positives living in the same band. No threshold separates them, which is why this
+is an instruction and not a calibration. The old text said "if the excerpts do not
+contain the answer, call answer with confidence 0" — but in this case the
+excerpts are not empty and are not about another product; they are about the
+neighbouring feature of the same one. Observed on the development deployment as
+an answer about token authentication to a question about SAML SSO, support 1,
+zero hallucinated citations, the model faithfully retelling what it was handed.
+The second added sentence covers the other undescribed case: a message that is
+not a question about the documentation at all. Both land on `confidence 0`, which
+`session.js` already settles as a refusal — no new surface, no new state, no new
+model call. **This moves `PROMPT_HASH`**, so reports across it are incomparable.
+
+**The feedback receiver ships, and `init` copies it in.** `feedbackEndpoint` makes
+the panel POST one object per vote, fire and forget: its `.catch()` is silent
+unless `?dpdebug=1` is on, so a receiver that 404s, 500s or accepts-and-drops
+looks from the reader's side exactly like one that works. The something that
+listens has to run in the consumer's deployment, and a file living unpublished in
+this repository arrives there never — engine-spec 012, FB-5. So
+`lib/feedback-receiver.mjs` joins `package.json#files` and `npx docpilot init`
+writes it to `docpilot/feedback-receiver.mjs`. Copied rather than imported,
+because a deployment edits it: the store is a seam, and NDJSON, SQLite or
+Postgres is a decision about their infrastructure rather than about this package.
+Its 36 reference tests are ported to vitest, including the property that makes
+the seam a seam — NDJSON and SQLite produce byte-identical `aggregate()` output
+on a retraction and on a reversed pair.
+
+**A re-search can buy its own vector — engine-spec 015, shipped off.**
+`search_docs` takes the query the MODEL wrote and hands it to the lexical half;
+the dense half went on scoring the vector of the reader's original question,
+whatever was asked for. So a rephrase moved one of two equally weighted RRF
+inputs, and a rephrase into the corpus language — the case that matters most
+where readers do not all write in it — moved nothing the dense channel could see.
+`runTurn` now accepts `embedQuery` and uses it when the model's query differs
+from the question, compared with the same `normalise` the search cache keys on;
+every failure falls back to the turn's vector, and `cost.embedRequests` makes the
+purchase visible. **Off by default, on the spec's own argument**: the report
+counts two re-searches in seventy turns, inside the run-to-run spread of every
+metric it could move. The panel passes no embedder, so production is unchanged.
+`DOCPILOT_EMBED_MODEL_QUERY=1` turns it on for a measurement, which belongs on a
+corpus where re-searching actually happens.
+
+**`usage.cachedTokens`, from the only party that knows.** Every observation is
+re-sent on every step, and whether that costs full price is a fact about the
+provider's prefix cache that nothing here could answer.
+`prompt_tokens_details.cached_tokens` on the OpenAI-compatible adapters,
+`cache_read_input_tokens` on Anthropic's, both streaming and not. **`null` is not
+zero**: a transport that reports no cache stays null through the sum, because
+averaging silence as a miss would invent a hit rate for it.
+
+### Changed
+
+**A report that says what moved, not only how much.** Every number in the table
+was a mean over the whole golden set, so four failures with four different fixes
+arrived as one figure. A **failure taxonomy** files each record as
+`retrieval-miss` (the gold is not in the ranked eight — a corpus edit),
+`gold-below-primed` (it is in the eight and not in the window the model was primed
+with — a `GATE_K` and ranking problem), `primed-low-f1` (the evidence was in front
+of the model and the answer still missed), `over-refused`, or one of the two
+negative outcomes. A **by-language** table splits the same metrics by the language
+each question was asked in, because BM25 shares no term across writing systems and
+a mixed mean describes neither population. **Pages behind the misses that never
+say what they are for** names the markdown files whose frontmatter carries no
+`description` — the one measured dense lever on this pipeline, read as a lead and
+not a verdict. A **re-search** line counts the turns where the model searched in a
+language other than the question's. And **`citationRecall`** joins
+`citationPrecision`, which divides by how many citations the answerer chose and
+therefore moves with terseness alone at one gold entry; it is the `covered` arm of
+`retrievalF1Loose` over the citations, so a page pin `path#` is covered by any
+anchor of that page and by no sibling route. The report also prints `cachedShare`.
+
+**The report name carries the embedder.** The corpus hash cannot tell two vector
+spaces apart, and this repository ships that pair at `08e7a87e`: measured on one
+golden set with one gate, recall@8 0.925 against 0.912, MRR 0.762 against 0.669
+and negativesCaught 0.125 against 0.438 were being printed as "changes since the
+previous run". The name gains `-emb-<hash>`, and `previousReport` refuses the
+cross-embedder pair as well, so the overwrite and the comparison are stopped
+independently. Absent on either side reads as unknown and still pairs.
+
+**The golden set grows 56 → 70.** Eight follow-ups where there were two, and eight
+adjacent negatives — one record was 2.3 points of the positives. Every new
+record's gold was verified by running the retriever, and one was rewritten after
+it: "what happens if a key is missing" retrieves API keys, not translation keys.
+
+**`opener-candidates.js` resolves `dist/` from its own location.** It resolved
+from the working directory, which is this repository's layout — and the skill is
+copied into consumer projects, where that path is their build or nothing at all.
+The cwd form is kept as the fallback. The skill also gains a `feedback` triage
+section, starting with reading the bias note before the first promotion.
+
+### Fixed
+
+**A follow-up's priming turn runs under its own gate.** A follow-up record is two
+turns, and the first is a real turn: in production it runs its own retrieval and
+is primed with what ITS question found. The runner handed it `probe.g` — the gate
+of the SECOND question — so the priming turn answered the first question from
+evidence retrieved for the second. Two consequences: the answer that becomes
+history was written from the wrong excerpts, so the three-pair window §4.5
+exercises was not the window production builds; and anything the second turn
+inherits from the first landed in `primed` already and deduped away to nothing,
+which made spec 013 structurally unmeasurable here. It surfaced as absence rather
+than as a number — all eight follow-ups came back with byte-identical `answerF1`,
+`citationPrecision` and prompt tokens across a change that should have grown the
+prompt. The priming turn now evaluates `rec.prev_question` on its own, and that
+question joins the prefetch batch.
+
+**`npm test` pins the webstorage flag the DOM suite needs.** `test/mount.test.js`
+exercises the real `pagehide` → `saveIfRunning` → `slimTurn` → `localStorage`
+chain, and on Node 26 `localStorage` is unavailable unless the runtime is told
+where to keep it. Three assertions read an empty archive and failed, while `npx
+vitest run` and `npm test` disagreed about whether the suite passed. The flag was
+already documented in this repository's own instructions as being in this script;
+it was not.
+
+### Documented
+
+**engine-specs 013 through 016**, each written before its change, per that
+directory's rule. 013 carries its baseline — 70 records on qwen3:8b against corpus
+`08e7a87e` — and the row that says what the defect looks like here: three of the
+eight follow-ups cite nothing from their gold at all and none of them refuses, so
+the missing evidence surfaces as an answer resting on the wrong section rather
+than as a refusal, which is worse. 015 carries the measurement that argues against
+shipping it on this evidence. 016 is unimplemented: `vectors.bin` is 991 KB at
+2048 dimensions, 59% of the raw bytes every reader downloads before the first
+answer, and 496 KB at 1024 — with the two rules that make a truncation safe rather
+than cheap.
+
+**Two ways to measure the wrong thing, written down.** `package.json`'s `prepare`
+is `npm run build` and npx runs it, so the obvious way to measure one lever
+without another — revert it, build, restore the source, run — puts the restored
+source back into the tree the runner then executes. A run that printed "dist
+carries 013, not 014" produced a report whose name held the prompt hash of 014;
+the hash rides in the report name, which is the only reason it was caught. `node
+bin/docpilot.js eval …` runs the built tree and nothing else.
+
 ## 1.1.0
 
 ### Changed
