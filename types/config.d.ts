@@ -341,6 +341,13 @@ export interface SuggestionsSettings {
   answers?: boolean
   /** `false` retires the paraphrase test — `MATCH_NEVER`, engine-specs/009. */
   matchTau?: number | false
+  /**
+   * The same test in the VECTOR space, on the query the turn already bought —
+   * engine-specs/017. `false` retires it and leaves the lexical pass alone.
+   */
+  matchCos?: number | false
+  /** A baked answer is revealed progressively rather than placed whole. */
+  reveal?: boolean
 }
 
 export interface QuoteSettings {

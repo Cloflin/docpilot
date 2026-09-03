@@ -316,6 +316,13 @@ const sidebarForGuide = [
        * arrives after the decision it is supposed to inform.
        */
       { text: 'Where it can go', link: '/guide/where-it-goes' },
+      /**
+       * Third, and it is the page the panel's own openers stand on — the three
+       * questions a first-time reader actually asks, answered end to end. It
+       * sits here rather than under Reference because a reader who needs it has
+       * not decided to read a reference yet.
+       */
+      { text: 'Frequently asked', link: '/guide/faq' },
       { text: 'Philosophy', link: '/guide/philosophy' },
       { text: 'Why DocPilot', link: '/guide/why' },
       { text: 'How it compares', link: '/guide/comparison' },

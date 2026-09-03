@@ -639,6 +639,50 @@ corpus and these three questions; yours are yours. Both proposers emit the same
 paste-able block and score with the same `similarity()` at the same `matchTau`,
 so a site with reader data can run both and read the union.
 
+**`matchCos` is the same measurement in the vector space, and it is a different
+number.** `matchTau` is lexical coverage, so it returns exactly **zero** for a
+paraphrase built out of different words — `"How do I set this up?"` against
+`"How do I get started?"` scores 0.00 lexically and 0.81 by cosine. No threshold
+rescues a zero. `suggestions.matchCos` is the dense test that does, run after the
+query has been embedded, on the vector the turn bought anyway (engine-specs/017):
+
+```bash
+# free, on the second index, and a LOWER BOUND — a weaker embedder separates
+# less cleanly, so a threshold that holds here holds on the deployed one
+DOCPILOT_EMBED_LOCAL=1 node {{SKILL_DIR}}/scripts/opener-cosines.js \
+  --rag=docs/public/rag-local --limit=0
+```
+
+**It costs one request per probe**, which is the whole difference from its twin:
+`embedQuery` embeds one string, and that is also what guarantees the
+`search_query:` prefix a document-shaped batch would get wrong. Hence
+`--limit=100` by default, and hence the recipe above.
+
+It **refuses to run against an index it was not built for** — a cosine between a
+query from one vector space and an opener from another is a number that measures
+nothing, and this script's output is a threshold somebody then ships.
+
+Read it the way you read the lexical sweep, with one addition: **the spread
+matters as much as the maximum.** A dense embedder's cosines do not start at
+zero, so the gap between "unrelated" and "the same question" is narrower than the
+digits suggest. Measured here on bge-m3, 40 probes × 3 openers:
+
+```
+    max false positive   0.534      p50 0.408   min 0.265
+    clear paraphrases    0.78 and up
+    0.72                 0 probes wrongly captured   <- shipped default
+```
+
+The script cannot know your paraphrases — write four or five of your own, score
+them the same way, and put `matchCos` between the two groups. **If they overlap,
+your openers are too close to the corpus to be matched densely: set
+`suggestions.matchCos: false`** and leave the lexical pass alone. A wrong match
+here is not a worse answer, it is a whole written answer about something else,
+carrying citations that are real and about something else.
+
+The last block the script prints is the openers against **each other**. Within
+0.05 the panel refuses the tie, on the same principle as `COLLIDES`.
+
 **Three to five, and five is the ceiling.** The panel shows what you configure;
 `resolveSuggestions` drops and names anything past `SUGGESTION_LIMIT`. The
 built-in fallback is still three, so a site that configures none pays what it

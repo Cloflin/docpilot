@@ -14,7 +14,7 @@ import { embedQuery } from './embed.js'
 import { runTurn } from './harness.js'
 import { detectTools } from './llm.js'
 import { renderAnswer, renderPassage } from './markdown.js'
-import { matchOpener } from './openers.js'
+import { matchOpener, matchOpenerDense } from './openers.js'
 import { ensureHighlighter, onReady } from './highlight.js'
 import * as scopeApi from './scope.js'
 import * as instruction from './prompt-store.js'
@@ -71,7 +71,12 @@ const originHost = (url) => {
   }
 }
 
-const DEFAULTS = {
+/**
+ * EXPORTED so the suite can hold it to the resolvers it copies — the three
+ * `suggestions` literals drifted once, in silence, because nothing compared
+ * them. Not part of the package's surface: it is not on the `exports` map.
+ */
+export const DEFAULTS = {
   enabled: true,
   /**
    * SEARCH-ONLY — no model is called on any turn, and a question is answered
@@ -194,6 +199,8 @@ const DEFAULTS = {
     precomputed: true,
     answers: true,
     matchTau: 0.65,
+    matchCos: 0.72,
+    reveal: true,
   },
   quote: { fromAnswer: true, fromDocs: false },
   citations: { passage: false, inCopy: true, pagesRead: false },
@@ -1405,7 +1412,7 @@ export interface Turn {
    * proposes a calibration stratum, and an unfamiliar value there would enter
    * the loop as a stratum nobody measured.
    */
-  opener?: { matched: 'exact' | 'lexical'; score: number; baked: boolean }
+  opener?: { matched: 'exact' | 'lexical' | 'dense'; score: number; baked: boolean }
   notAnswerable?: unknown
   tentative?: boolean
   rateLimit?: any
@@ -1443,7 +1450,56 @@ export interface Turn {
  * carries the suffix — every part shares the `anchor` field the href is built
  * from — which is why both parts land on one row here.
  */
-function settleAnswer(turn, result, started) {
+/**
+ * A REVEAL, and everything about it is a paint schedule — engine-specs/017.
+ *
+ * Sixteen frames on the stream's own 90ms floor, so a baked answer arrives the
+ * way a written one does and the panel's first turn does not read as a help
+ * topic that was going to be shown whatever was asked. Nothing is generated, no
+ * request is made, and the string is in memory before the first frame.
+ *
+ * A FIXED FRAME COUNT rather than a fixed rate, which is the one decision here
+ * worth stating: these answers run from two to four kilobytes, and a rate that
+ * reads well on the short one takes eight seconds on the long one. Sixteen
+ * frames is about 1.4 seconds whatever the length — faster than the model that
+ * would otherwise have written it, and slow enough to read as writing.
+ *
+ * `prefers-reduced-motion` skips it, because it is motion. Stop skips it too and
+ * COMPLETES the answer rather than truncating it: there is nothing in flight to
+ * cancel, so a reader who presses Stop is asking to see the rest now.
+ */
+const REVEAL_FRAMES = 16
+
+function shouldReveal(cfg) {
+  if (cfg?.suggestions?.reveal === false) return false
+  // `matchMedia` is absent in SSR and in a test environment that has not asked
+  // for it; a missing preference is not a stated preference, so the default
+  // stands.
+  return !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+}
+
+function revealAnswer(turn, text, cited, signal) {
+  return new Promise((resolve) => {
+    const step = Math.ceil(text.length / REVEAL_FRAMES)
+    let at = 0
+    turn.streaming = true
+    const finish = () => {
+      clearInterval(timer)
+      signal?.removeEventListener('abort', finish)
+      turn.streaming = false
+      resolve(undefined)
+    }
+    const timer = setInterval(() => {
+      at += step
+      if (at >= text.length || signal?.aborted) return finish()
+      turn.answerText = text.slice(0, at)
+      turn.answerHtml = renderAnswer(turn.answerText, knownPaths.value, cited).html
+    }, RENDER_FLOOR_MS)
+    signal?.addEventListener('abort', finish, { once: true })
+  })
+}
+
+function settleAnswer(turn, result, started, signal = null) {
   // Sources first: the answer's inline markers link into this list, so it has
   // to exist before the markdown is rendered.
   const rows = []
@@ -1473,12 +1529,27 @@ function settleAnswer(turn, result, started) {
    * than trusted, but there is no reason to write one down.
    */
   turn.citationIds = result.citations
-  const { html, delinked } = renderAnswer(result.text, knownPaths.value, cited)
-  turn.answerText = result.text
-  turn.answerHtml = html
-  turn.delinked = delinked
-  turn.state = 'complete'
-  finishTurn(turn, started)
+  const settle = () => {
+    const { html, delinked } = renderAnswer(result.text, knownPaths.value, cited)
+    turn.answerText = result.text
+    turn.answerHtml = html
+    turn.delinked = delinked
+    turn.state = 'complete'
+    finishTurn(turn, started)
+  }
+
+  // The reveal is opt-in per CALL, not per turn: only the two baked-answer
+  // branches pass a signal, and a live answer has already been revealed by the
+  // stream that wrote it. `finishTurn` runs after the last frame either way, so
+  // the recorded duration is the reader's wait and not the paint schedule's.
+  // RETURNED, so `submit()` can await it. A caller that awaits the turn has
+  // asked when the reader can read the answer, and under a reveal that is the
+  // last frame rather than the first.
+  if (signal !== null && shouldReveal(state.config)) {
+    return revealAnswer(turn, result.text, cited, signal).then(settle)
+  }
+  settle()
+  return undefined
 }
 
 function makeTurn(question, frozen, quote = ''): Turn {
@@ -1720,9 +1791,18 @@ export async function submit(question, { quote = '' } = {}) {
    * sources and real markers. It is the same answer the same harness wrote from
    * the same corpus under the same prompt; the only thing that differs is when.
    *
-   * It does not stream, and it is not made to. Nothing is being generated, and a
-   * typing animation over a stored string would be the panel performing work it
-   * is not doing.
+   * IT IS REVEALED RATHER THAN PLACED — engine-specs/017, `suggestions.reveal`.
+   * This used to say the opposite, and the reasoning was that nothing is being
+   * generated, so an animation over a stored string is the panel performing work
+   * it is not doing. True, and beside the point the reader is making: an answer
+   * that lands whole and instantly does not read as fast, it reads as CANNED —
+   * as a help topic that was going to be shown whatever was asked. That is the
+   * one impression a grounded assistant cannot afford on its first turn. The
+   * reveal is a paint schedule, it is off under `prefers-reduced-motion`, and
+   * Stop completes it rather than truncating it.
+   *
+   * It takes a controller of its own, so Stop reaches the reveal at all. The
+   * turn owns no request, so the abort cancels a `setInterval` and nothing else.
    *
    * It carries no badge either. A "cached" label would be a reader-visible
    * action owing rule 11 a switch and an i18n key, to make a claim that is not
@@ -1731,12 +1811,14 @@ export async function submit(question, { quote = '' } = {}) {
    * a live one.
    */
   if (opener?.answer) {
+    stop()
+    controller = new AbortController()
     const turn = makeTurn(clean, frozen, selected)
     turn.opener = { matched: opener.matched, score: opener.score, baked: true }
     turn.gate = opener.entry.gate
     const started = performance.now()
     state.turns.push(turn)
-    settleAnswer(
+    await settleAnswer(
       turn,
       {
         text: opener.answer.text,
@@ -1745,6 +1827,7 @@ export async function submit(question, { quote = '' } = {}) {
           .filter(Boolean),
       },
       started,
+      controller.signal,
     )
     return
   }
@@ -1941,6 +2024,61 @@ export async function submit(question, { quote = '' } = {}) {
             `${state.retrievalError}. Retrieval is running lexical-only, which on an ` +
             'English corpus finds nothing for a question in another language.',
         )
+      }
+    }
+
+    /**
+     * ── the opener this question MEANT — engine-specs/017 ─────────────────────
+     *
+     * The second half of the match, and the half that needed a vector. The pass
+     * above `stop()` compares TEXT: it catches the click and the restatement and
+     * returns zero on a paraphrase that shares no rare words with the opener —
+     * `"How do I set this up?"` against `"How do I get started?"` is 0.00
+     * lexically and 0.81 by cosine, and the second number is the one the reader
+     * meant.
+     *
+     * HERE AND NOT EARLIER, because the vector is the whole point: at this line
+     * the turn has already bought it — from the embedder, or from the opener
+     * bake, or not at all in lexical-only, where this pass correctly does
+     * nothing. Placing it before `embed()` would mean buying a vector to decide
+     * whether to buy one.
+     *
+     * It cannot change what a turn retrieves. `matchOpenerDense` returns only a
+     * baked answer, never a vector and never a chunk list, so a turn it declines
+     * proceeds on exactly the state it was in.
+     */
+    if (!opener?.answer) {
+      const dense = matchOpenerDense(queryVec, {
+        index: state.index,
+        config: cfg,
+        scope: frozen,
+        quote: selected,
+        // The turn under construction is already on `state.turns`, so its own
+        // presence would read as "something came before this" and decline every
+        // first question on the site. What the rule is about is an ANTECEDENT.
+        turns: state.turns.filter((t) => t !== turn),
+        // BOTH selectors, on the same terms as the pass above — `answerFor`.
+        locale: localeOf(detectLanguage(clean)),
+        uiLocale: state.lang,
+      })
+      if (dense) {
+        turn.opener = { matched: dense.matched, score: dense.score, baked: true }
+        turn.gate = dense.entry.gate
+        // `busy` and `status` are cleared BEFORE the reveal rather than after
+        // it: the panel is not working during those frames, and a spinner over
+        // a string being painted is the claim this whole branch avoids making.
+        state.busy = false
+        state.status = null
+        await settleAnswer(
+          turn,
+          {
+            text: dense.answer.text,
+            sources: dense.answer.citations.map((id) => state.index.byId.get(id)).filter(Boolean),
+          },
+          started,
+          signal,
+        )
+        return
       }
     }
 

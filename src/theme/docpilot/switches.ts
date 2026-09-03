@@ -70,6 +70,8 @@ export const SUGGESTIONS_DEFAULTS = {
   precomputed: true,
   answers: true,
   matchTau: 0.65,
+  matchCos: 0.72,
+  reveal: true,
 }
 
 /**
@@ -735,6 +737,61 @@ export function resolveSuggestions(docPilot, warn = console.warn) {
       'suggestions.matchTau',
       warn,
     ),
+    /**
+     * How close a typed question has to be to a baked one IN THE VECTOR SPACE —
+     * engine-specs/017.
+     *
+     * `matchTau`'s sibling and its complement, because the two fail on opposite
+     * inputs. Lexical coverage is a fraction of the query's RARE TERMS that the
+     * opener's text contains, so it fires on a restatement and returns exactly
+     * zero on a paraphrase that shares no vocabulary — measured on this corpus,
+     * `"how to get started"` scores 1.00 against `"How do I get started?"` and
+     * `"How do I set this up?"` scores 0.00. Cosine scores the second at 0.81,
+     * because that is the question a dense embedder was built to recognise.
+     *
+     * IT COSTS NOTHING EXTRA, and that is why it can exist at all. The lexical
+     * pass runs BEFORE the query is embedded, which is the whole saving in
+     * engine-specs/009; this one runs AFTER, on the vector the turn had to buy
+     * anyway. A turn that reaches it has already paid for everything it uses.
+     *
+     * PROVISIONAL, and the number is a floor rather than a measurement of your
+     * corpus. It was measured here on bge-m3 against this package's own docs:
+     * seventeen paraphrases of three openers and eight questions that are about
+     * this corpus but not about any opener. The off-target questions topped out
+     * at 0.60 and the clear paraphrases sat at 0.78 and above, so 0.72 is the
+     * midpoint of a gap that is narrower than it looks — a dense embedder's
+     * cosines do not start at zero. Measure it on yours before trusting it: the
+     * cost of a wrong match here is a whole written answer about the wrong
+     * thing, with citations that are real and about the wrong thing.
+     *
+     * `false` retires it, which leaves the lexical pass exactly as it was.
+     */
+    matchCos: fraction(
+      object ? raw.matchCos : null,
+      MATCH_NEVER,
+      SUGGESTIONS_DEFAULTS.matchCos,
+      'suggestions.matchCos',
+      warn,
+    ),
+    /**
+     * Whether a baked answer is revealed progressively or appears whole.
+     *
+     * IT WAS OFF, AND THE ARGUMENT FOR OFF WAS GOOD: nothing is being generated,
+     * and an animation over a stored string is the panel performing work it is
+     * not doing. What that argument missed is what the reader is being told by
+     * the alternative. An answer that appears whole and instantly does not read
+     * as fast — it reads as canned, as a help topic that was going to be shown
+     * whatever was asked, which is the one impression a grounded assistant
+     * cannot afford in the first four seconds of its first turn.
+     *
+     * So it is a default rather than a truth claim, and the switch is here for
+     * the site that prefers the other reading. Nothing about the answer changes:
+     * no model is called, no request is made, the reveal is a paint schedule
+     * over a string that is already in memory. `prefers-reduced-motion` skips it
+     * outright, and so does Stop — which completes the answer rather than
+     * truncating it, because there is nothing to truncate.
+     */
+    reveal: flag(object ? raw.reveal : null, SUGGESTIONS_DEFAULTS.reveal, 'suggestions.reveal', warn),
   }
 }
 
