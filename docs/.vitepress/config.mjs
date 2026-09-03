@@ -229,16 +229,7 @@ export const docPilot = {
          */
         chat: {
           provider: 'openrouter',
-          models: [
-            'openai/gpt-4o-mini',
-            'nvidia/nemotron-3-ultra-550b-a55b:free',
-            'minimax/minimax-m3:free',
-            'poolside/laguna-s-2.1:free',
-            'nvidia/nemotron-3.5-lightning:free',
-            'inclusionai/ling-3.0-flash-fin:free',
-            'nvidia/nemotron-3-super-120b-a12b:free',
-            'minimax/minimax-m2.7:free',
-          ],
+          model: 'openai/gpt-4o-mini',
           reasoning: false,
         },
         /**
@@ -264,11 +255,7 @@ export const docPilot = {
          */
         embed: {
           provider: 'openrouter',
-          models: [
-            'nvidia/nemotron-3-embed-1b:free',
-            'nvidia/llama-nemotron-embed-vl-1b-v2:free',
-            'liquid/lfm-2.5-embedding-350m:free',
-          ],
+          model: 'openai/text-embedding-3-small',
         },
       }),
   /**
