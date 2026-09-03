@@ -7,6 +7,47 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 1.3.0
+
+### Breaking
+
+**`guard.mode` ships as `'off'` instead of `'dense-only'` — engine-spec 019.**
+Neither changes what an answer contains; both still score the verdict and
+record it on every turn.
+
+The lexical channel is 0 *by construction* for a question in a language the
+corpus is not written in — no threshold above a constant zero separates that
+question from one about nothing the site covers, and closing it needs a
+calibration per corpus *and* per language, which is not something this package
+can ship for every language a site's readers use. Measured on this package's
+own English docs: a Russian install question scored a hybrid verdict of 0.21
+against a 0.41 pass mark, while the same verdict's "closest pages" line named
+the three pages that actually answered it. `guard: {mode: 'calibrated'}` keeps
+the pre-1.3 behaviour for a single-language corpus with a probe set to
+calibrate against; `'dense-only'` is the same trade narrowed to a vectorless
+deployment, which is where it degrades to `'off'` on its own.
+
+`docpilot eval` now honours `guard.mode` instead of hard-coding a refusal on
+every failing verdict, so a negative probe reaches the model under the shipped
+default and lands on `refuse:not-answerable` or `answer` — the measurement
+that actually describes what ships. **Reports across this change are not
+comparable**; `meta.guardMode` is stamped into every report from here on so a
+diff can say why.
+
+### Added
+
+**A dense-matched opener that cannot serve its own text still hands the turn
+its evidence — engine-spec 018.** `matchOpenerDense` used to collapse a match
+to `null` whenever the reader's language blocked the author's written answer,
+throwing away a signal stronger than the raw question's own retrieval:
+measured on this package's own index, «С чего начать?» scores 0.745 against
+the opener "How do I get started?" while its own raw retrieval manages only
+0.28. The match now survives with `answer: null`, and the matched entry's own
+resolved chunks are primed into the turn exactly where a follow-up inherits
+what the last turn cited (engine-spec 013) — so a paraphrase of a configured
+opener, in any language, reaches the model with the right evidence in front of
+it rather than whatever the reader's own short phrase happened to retrieve.
+
 ## 1.2.0
 
 ### Added
