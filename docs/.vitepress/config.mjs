@@ -122,158 +122,16 @@ export const docPilot = {
   product: 'DocPilot',
   quote: { fromAnswer: true, fromDocs: true },
   citations: { passage: true, inCopy: true, pagesRead: true },
-  ...(LOCAL_EMBED
-    ? {
-        /**
-         * `indexDir` IS THE WHOLE OF "it writes somewhere else".
-         *
-         * The block above promises it and nothing implemented it: `indexDirOf`
-         * falls back to `${docsDir}/public/rag`, so a local build wrote over the
-         * committed index with a bge-m3 one — the exact outcome the paragraph
-         * about a spent quota describes, arrived at by the flag that exists to
-         * avoid it.
-         */
-        /**
-         * A THIRD index, and the reason it is a variable rather than an edit:
-         * `calibrate --transfer` has to be measured against ground truth, and
-         * ground truth means a genuinely different vector space over the SAME
-         * corpus. `qwen3-embedding` at 4096 dimensions against `bge-m3` at 1024
-         * is that, on one machine, for nothing.
-         *
-         *   DOCPILOT_EMBED_MODEL=qwen3-embedding npx docpilot index
-         *
-         * `indexDir` moves with it for the reason the block below states: two
-         * builds writing one directory is the local one overwriting the
-         * deployed index with a manifest the browser cannot use.
-         */
-        indexDir: env.DOCPILOT_EMBED_MODEL ? `docs/public/rag-${env.DOCPILOT_EMBED_MODEL.replace(/[^a-z0-9]+/gi, '-')}` : 'docs/public/rag-local',
-        /**
-         * The BROWSER's half of the same statement, and it has to move with
-         * `indexDir` or the two disagree in the one place nobody looks.
-         *
-         * `hostConfig` derives `ragBase` as `${base}rag`, so without this the
-         * panel fetched `/rag/manifest.json` — the OpenRouter index — while the
-         * build wrote `rag-local/`. The flag then showed the panel working on
-         * exactly the artefact it was supposed to be replacing.
-         */
-        host: { ragBase: '/rag-local' },
-        /**
-         * The CHAT half is switchable between the two ways the same server can
-         * be reached, so an A/B against a gateway is a variable rather than an
-         * edit — `DOCPILOT_CHAT_ADAPTER=custom npx docpilot eval`.
-         *
-         * `ollama` is the default and stays the default. The native adapter is
-         * the only one that maps `numCtx` onto `options.num_ctx`, and the eight
-         * excerpts a primed turn carries do not fit the server's own default
-         * context. `custom` is `openaiCompatible` with `caps: {unknown: true}`,
-         * so that knob has nowhere to go and the window is truncated by the
-         * server without a word in any report — which is the failure mode this
-         * comment exists to keep out of the numbers.
-         *
-         * `CUSTOM_BASE_URL` is the BARE host — no `/v1` on the end. Each adapter
-         * composes the path itself (`providers.js`): the openai one asks for
-         * `${baseURL}/v1/embeddings` and the native one for `${baseURL}/api/embed`,
-         * so a suffix here produces `…:11434/v1/v1/embeddings` and a 404 that
-         * reads as an unreachable endpoint rather than as a doubled path.
-         *
-         *   CUSTOM_BASE_URL=http://192.168.50.146:11434
-         *
-         * Moving the EMBED half across is safe against this index: both routes
-         * are the same bge-m3 on the same server, and the two vectors compare at
-         * cosine 1.000000 — measured, not assumed.
-         */
-        chat:
-          env.DOCPILOT_CHAT_ADAPTER === 'custom'
-            ? { provider: 'custom', model: 'qwen3:8b' }
-            : { provider: 'ollama', model: 'qwen3:8b' },
-        /**
-         * `baseURL` is stated rather than left to the environment, because for a
-         * NON-HOSTED provider `nodeEmbedTarget` reads `embed.baseURL ||
-         * LOCAL_BASE_URL` and never consults `OLLAMA_BASE_URL` — that variable
-         * selects the provider in the chain, it does not relocate one already
-         * named here. Left out, every `docpilot index` and `calibrate` silently
-         * embeds against `http://localhost:11434` whatever the variable says,
-         * which is only invisible while both hosts happen to serve the same
-         * model.
-         */
-        embed: {
-          provider: env.DOCPILOT_CHAT_ADAPTER === 'custom' ? 'custom' : 'ollama',
-          model: env.DOCPILOT_EMBED_MODEL || 'bge-m3',
-          baseURL: env.OLLAMA_BASE_URL || 'http://localhost:11434',
-        },
-      }
-    : {
-        /**
-         * THE POOL, WRITTEN DOWN. This is the list `chatModels(docPilot)`
-         * returned while the half was unnamed, copied rather than imported
-         * because `openrouter.js` is not on the package's `exports` map — and
-         * copied on purpose besides, since a deployment that wants to drop a
-         * model or reorder them should be able to do it in the file it already
-         * edits.
-         *
-         * `chat.models` KEEPS the rotation the unnamed form had: it is walked on
-         * a 429, a retired id or an empty answer, and the model that answered is
-         * tried first next time. The order is `openrouter.js`'s and it is not
-         * alphabetical — the final step pins its shape with a strict
-         * `response_format: json_schema`, so ids carrying `structured_outputs`
-         * lead, `response_format`-only ones follow, and the rest are the tail
-         * rotation reaches when nothing better is free. `openrouter/free` stays
-         * at the head: it is a router, so it sees the pool closer than this file
-         * can, and the explicit ids behind it are what runs when it will not.
-         *
-         * THE COST OF WRITING IT DOWN, stated because it is the whole trade: this
-         * list no longer tracks the shipped pool. When OpenRouter's free lineup
-         * moves, `openrouter.js` follows it on the next release and this file
-         * does not. That is the point of a pin, and it is also the reason these
-         * ids are worth a glance whenever the package is upgraded.
-         */
-        chat: {
-          provider: 'openrouter',
-          model: 'openai/gpt-4o-mini',
-          reasoning: false,
-        },
-        /**
-         * ONE id, and a list here would be a mistake rather than a safeguard:
-         * the embed half never rotates, because the index and every query have
-         * to land in ONE vector space. A second embedder is a second index, not
-         * a fallback.
-         *
-         * This is the model `docs/public/rag` was actually built with —
-         * `manifest.embedModel` says so — and naming it is what turns that from
-         * a fact about which of the two free embedders answered first that
-         * morning into something a rebuild reproduces. The other one,
-         * `nvidia/llama-nemotron-embed-vl-1b-v2:free`, is a vision-language
-         * model; both are 2048-dimensional, which makes them look
-         * interchangeable and is exactly why the width check alone would not
-         * catch a swap.
-         *
-         * If this id and `manifest.embedModel` ever disagree, the panel says so
-         * in the console once and drops to lexical-only rather than scoring a
-         * query against a foreign space — `embedderMatchesIndex` in
-         * `session.js`. Changing this id means rebuilding the index in the same
-         * commit.
-         */
-        embed: {
-          provider: 'openrouter',
-          model: 'openai/text-embedding-3-small',
-        },
-      }),
-  /**
-   * THE EMPTY STATE, ANSWERED IN ADVANCE — engine-specs/017.
-   *
-   * The built-in three were generic by necessity (`What is this documentation
-   * about?`), and this site has three questions it is actually opened for. Each
-   * carries its own answer, so the click that costs the most on any docs site —
-   * the first one, made by a reader who has not typed anything — costs no
-   * embedding request and no model call.
-   *
-   * `docs/.vitepress/openers.mjs` holds the prose and the ids it stands on.
-   */
+  chat: {
+    provider: 'openrouter',
+    model: 'openai/gpt-4o-mini',
+    reasoning: false,
+  },
+  embed: {
+    provider: 'openrouter',
+    model: 'openai/text-embedding-3-small',
+  },
   suggestions: { questions: openers },
-  // No `guard` override: `'off'` is the shipped default since 1.3 — see
-  // engine-specs/019 for the measurement that moved it, and `enforces()` in
-  // gate.js for the argument. `{ mode: 'calibrated' }` restores the pre-1.3
-  // refusal contract for a project that has calibrated one.
   ui: { trigger: 'fab' },
 }
 
