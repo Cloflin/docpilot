@@ -43,6 +43,9 @@ The rule this directory exists to enforce:
 | [014](014-a-neighbouring-feature-is-not-the-answer.md) | the instruction names the case the gate cannot reach: excerpts about the neighbouring feature |
 | [015](015-the-query-the-model-asked-for.md) | the model's own `search_docs` query reaches the dense channel, not just BM25 |
 | [016](016-half-the-bytes-the-same-answers.md) | `embed.dimensions` — a matryoshka model can hand back a third of the bytes, and the guard is re-measured for it |
+| [017](017-the-answer-the-author-wrote.md) | `{q, answer, cite}` — an opener's answer can be written by the author and shipped verbatim, never asked of the model |
+| [018](018-the-evidence-a-paraphrase-already-bought.md) | a dense-matched opener that cannot serve its own text still hands the turn its evidence — a paraphrase in another language stops working from a weaker signal |
+| [019](019-the-gate-cannot-read-the-readers-language.md) | `guard.mode` defaults to `'off'` — no threshold survives every language a site's readers use, so the model decides instead |
 
 ## Shape of a spec
 
