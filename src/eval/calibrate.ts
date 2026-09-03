@@ -1148,8 +1148,11 @@ function chooseTau(sweep) {
  *
  * So the constraint that carries over is the one step 5 states as a hard floor
  * rather than as a bound: a gate that cannot refuse a blatantly off-domain
- * question is indistinguishable from `guard.mode: 'off'`. The objective flips
- * with it — minimise over-refusal subject to the gate still being a gate:
+ * question refuses nothing calibration was for — `guard.mode: 'off'` already
+ * ships that outcome on purpose and says why (engine-spec 019); a calibrated
+ * threshold arriving there by accident is a failed calibration, not a
+ * deployment choice. The objective flips with it — minimise over-refusal
+ * subject to the gate still being a gate:
  *
  *   tauLexical = the SMALLEST threshold whose blatantRefusalRate >= 0.80.
  *
@@ -1463,8 +1466,10 @@ async function main() {
       name: 'blatant-refusal-below-floor',
       detail:
         `blatantRefusalRate ${pct(best.blatantRefusalRate)} < 80% at tau ${tau.toFixed(2)}: ` +
-        `a gate that cannot refuse an off-domain general question is indistinguishable ` +
-        `from guard.mode "off" and must never ship stamped as calibrated.`,
+        `a gate that cannot refuse an off-domain general question refuses nothing ` +
+        `calibration bought, and must never ship stamped as calibrated. guard.mode ` +
+        `"off" already ships that outcome on purpose, in the open — this would be ` +
+        `the same outcome by accident, under a threshold that claims to be doing work.`,
     })
   }
   if (retrievalMissRate > 0.05) {

@@ -38,7 +38,7 @@ import { pathToFileURL } from 'node:url'
 import { assembleIndex } from '../theme/docpilot/store.js'
 import { embedQuery } from '../theme/docpilot/embed.js'
 import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
-import { composeQuery } from '../theme/docpilot/gate.js'
+import { composeQuery, enforces } from '../theme/docpilot/gate.js'
 import { detectTools, detectCapabilities } from '../theme/docpilot/llm.js'
 import { runTurn } from '../theme/docpilot/harness.js'
 import { promptHash } from '../theme/docpilot/prompt.js'
@@ -701,7 +701,22 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       scoredAsNegative: probe.scoredAsNegative,
     }
 
-    if (!g.pass) {
+    /**
+     * `enforces`, NOT a bare `!g.pass` — engine-spec 019.
+     *
+     * `g` is scored the same whatever `docPilot.guard.mode` says; whether a
+     * failing one ends the row here is the same decision `session.js` makes
+     * before ever calling the model. Hard-coding `!g.pass` measured a
+     * behaviour the shipped default (`'off'`) does not produce: every negative
+     * probe would show up as `refuse:no-evidence`/`refuse:out-of-scope` here
+     * while the deployed panel sent every one of them to the model instead.
+     * With the gate not enforcing, a probe now falls through to the same
+     * model call an `answer`-expecting row makes, and lands on whatever
+     * `row.observed` the post-model check below assigns —
+     * `refuse:not-answerable` or `answer` — which is the measurement that
+     * actually describes what ships.
+     */
+    if (enforces(docPilot.guard.mode, g.mode) && !g.pass) {
       row.observed = g.wouldPassUnscoped ? 'refuse:out-of-scope' : 'refuse:no-evidence'
       row.latencyMs = 0
       rows.push(row)
@@ -1416,6 +1431,14 @@ async function main() {
       chunkCount: index.manifest.chunkCount,
       embedModel: index.manifest.embedModel,
       guard,
+      // WHETHER the verdict above ended a row, not what it was scored against —
+      // `guard.denseMode`/`guard.tau` describe the THRESHOLD; this describes the
+      // deployment's own `enforces()` decision, engine-spec 019. Two reports a
+      // tau apart are comparable; two a guardMode apart measure different
+      // systems — one where the model decided a probe's fate, one where a
+      // scalar did — and report.js's header says so rather than leaving it to
+      // be inferred from `refuse:*` counts that silently mean different things.
+      guardMode: docPilot.guard.mode,
       records: records.length,
       // Always written, `'ultra'` and all — never omitted for the unfiltered
       // case. report.js partitions the history on `meta.level ?? 'ultra'`, so an
