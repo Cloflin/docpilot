@@ -2271,7 +2271,7 @@ function assertProviders(docPilot) {
 }
 
 /** The three values `gate.enforces` knows. A fourth silently meant `'calibrated'`. */
-export const GUARD_MODES = ['dense-only', 'calibrated', 'off']
+export const GUARD_MODES = ['off', 'dense-only', 'calibrated']
 
 /** What `chat.verbosity` may be. Documented as a union and never checked as one. */
 export const VERBOSITY_LEVELS = ['low', 'medium', 'high']
@@ -2332,9 +2332,10 @@ export function assertGuard(docPilot) {
     throw new Error(
         `[docpilot] guard.mode is ${JSON.stringify(mode)}, which is not one of\n` +
             `  ${GUARD_MODES.map((m) => `'${m}'`).join(', ')}.\n` +
-            "  'dense-only' refuses only where a dense channel scored the verdict,\n" +
-            "  'calibrated' always refuses, 'off' never does. All three still score\n" +
-            '  every turn and record it.',
+            "  'off' never refuses before the model — THE DEFAULT since 1.3 — " +
+            "'dense-only' refuses only where a dense channel scored the verdict, " +
+            "'calibrated' always refuses. All three still score every turn and " +
+            'record it.',
     )
 }
 
@@ -3335,7 +3336,12 @@ export const DEFAULTS = {
      * is not a setting, for the same reason history.js's byte ceiling is not.
      */
     feedback: {send: 'both', comment: true, confirm: true},
-    guard: {mode: 'dense-only', tau: null, tauLexical: null, supportMinIdentifiers: 3},
+    // `'off'` — no threshold can be measured per reader language, so the model
+    // decides whether a question is answerable instead of a scalar deciding
+    // for it. `enforces()` in gate.js states the full argument and the
+    // measurement behind it (engine-spec 019); `'calibrated'` restores the
+    // pre-1.3 refusal contract exactly.
+    guard: {mode: 'off', tau: null, tauLexical: null, supportMinIdentifiers: 3},
     /**
      * THE DOCUMENTATION'S OWN NAME FOR THINGS READERS CALL BY OTHER NAMES.
      *
@@ -3995,27 +4001,51 @@ export function readiness(docPilot, env = {}) {
                 'Reproduce with `npx docpilot eval --gate-only --lexical`.',
         )
         /**
-         * WHAT THE SHIPPED GATE DOES ON THIS SHAPE, and what it costs.
+         * `'dense-only'` DEGRADES TO `'off'` ON EXACTLY THIS SHAPE, and an author
+         * who chose it over the shipped `'off'` default was choosing something
+         * narrower — worth telling them it did not land.
          *
-         * `dense-only` is the default and this is the only deployment it changes:
-         * a failing verdict computed from L alone no longer ends the turn, because
-         * L is 0 for a reader asking in another language or by another name and a
-         * refusal built on that says the corpus has nothing when the truth is that
-         * this channel cannot tell. The price is a model turn spent on a question
-         * the corpus really has nothing for — which on a shared free tier is one
-         * of fifty a day for the whole site, so it is worth saying rather than
-         * discovering.
+         * With no embedder G is L alone, and L is 0 for a reader asking in
+         * another language or by another name — a refusal built on that says the
+         * corpus has nothing when the truth is that this channel cannot tell, so
+         * `enforces('dense-only', 'lexical-only')` is `false` and every turn
+         * reaches the model regardless. Silent otherwise: this is a note about a
+         * setting not doing what it was written for, not about the shipped
+         * default, which gets its own note below.
          */
         if (docPilot.guard.mode === 'dense-only' && !noChat(docPilot)) {
             notes.push(
-                "guard.mode is 'dense-only' and this index has no vectors, so the gate scores " +
-                    'every turn and ends none of them — the model decides whether a question is ' +
-                    'answerable, which is the judgement it can make and the lexical channel ' +
-                    'cannot. It costs a model turn on questions the corpus has nothing for. ' +
-                    "Write guard: {mode: 'calibrated'} to refuse before the request instead, " +
-                    'and see `vocabulary` for the half of this a map closes.',
+                "guard.mode is 'dense-only' and this index has no vectors, so it behaves " +
+                    "exactly like the shipped 'off' here — every turn reaches the model, same " +
+                    "as if this line were not written. Write guard: {mode: 'calibrated'} for " +
+                    'the stricter behaviour this was probably reaching for, and see ' +
+                    '`vocabulary` for the half of the underlying gap a map closes.',
             )
         }
+    }
+
+    /**
+     * WHAT THE SHIPPED DEFAULT COSTS, said once, everywhere it applies —
+     * engine-spec 019.
+     *
+     * `'off'` ships because no threshold can be measured per reader language:
+     * `L` is 0 by construction for a question in a language the corpus is not
+     * written in, so a scalar gate cannot tell that question apart from one
+     * about nothing the site covers. The MODEL decides instead, on every
+     * deployment now rather than the one shape `dense-only` used to carve out.
+     * The price is the same one that note always named: a question the corpus
+     * has nothing for spends a model turn before that is known, which on a
+     * shared free tier is one of roughly fifty a day for the whole site. A
+     * note, not a warning — this is the default and it is deliberate.
+     */
+    if (docPilot.guard.mode === 'off' && !noChat(docPilot)) {
+        notes.push(
+            "guard.mode is 'off' — the default since 1.3 — so every question reaches the " +
+                'model, including one the corpus has nothing for: that turn spends a request ' +
+                'finding out, which on a shared free tier is one of roughly fifty a day for the ' +
+                "whole site. Write guard: {mode: 'calibrated'} to refuse before the request " +
+                'again, on a corpus you have calibrated a threshold against.',
+        )
     }
 
     /**

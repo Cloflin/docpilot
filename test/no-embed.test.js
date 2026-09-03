@@ -1369,9 +1369,10 @@ describe("embed.fallback: 'lexical' — when the embedder will not answer", () =
  *
  *   · `vocabulary` gives the lexical channel the reader's words, so a question
  *     that named the same thing differently scores at all;
- *   · `guard.mode: 'dense-only'`, which ships, stops a verdict computed from L
- *     alone from ending the turn — because the words a map does not carry are
- *     exactly the ones nobody thought to declare.
+ *   · `guard.mode: 'off'`, which ships, stops a verdict computed from L alone —
+ *     or from anything else — from ending the turn on ANY deployment, because
+ *     the words a map does not carry are exactly the ones nobody thought to
+ *     declare, on this shape and on every other one a scalar cannot see into.
  *
  * Retrieval is exercised directly rather than through `session.submit`: what is
  * under test is the gate's arithmetic, and a turn would add a transport to it.
@@ -1480,20 +1481,38 @@ describe('a question the lexical channel cannot see', () => {
   /**
    * THE SHIPPED GATE DOES NOT ACT ON ANY OF THIS, which is the second half. A
    * verdict off `L` alone is a statement about token overlap, not about the
-   * corpus, and `dense-only` is what stops it ending a turn.
+   * corpus, and the shipped `'off'` is what stops it ending a turn — on this
+   * vectorless shape and, since 1.3, on every other shape too. `enforces` is
+   * still exercised directly with all three modes so a future default change
+   * cannot silently narrow what it actually checks.
    */
-  it('is scored but not enforced on a vectorless deployment, as shipped', () => {
-    expect(resolveDocPilot({ embed: false }, ENV).guard.mode).toBe('dense-only')
+  it('is scored but not enforced by default, on any deployment shape', () => {
+    expect(resolveDocPilot({ embed: false }, ENV).guard.mode).toBe('off')
+    expect(enforces('off', 'lexical-only')).toBe(false)
+    expect(enforces('off', 'hybrid')).toBe(false)
     expect(enforces('dense-only', 'lexical-only')).toBe(false)
     expect(enforces('dense-only', 'hybrid')).toBe(true)
     expect(enforces('calibrated', 'lexical-only')).toBe(true)
-    expect(enforces('off', 'hybrid')).toBe(false)
   })
 
   /** And the build says so, because a spent request is worth one sentence. */
   it('says what that costs on a site with no vectors', () => {
     const notes = readiness(resolveDocPilot({ embed: false }, ENV), ENV).notes.join(' ')
-    expect(notes).toMatch(/guard\.mode is 'dense-only' and this index has no vectors/)
-    expect(notes).toMatch(/costs a model turn/)
+    expect(notes).toMatch(/guard\.mode is 'off' — the default since 1\.3/)
+    expect(notes).toMatch(/one of roughly fifty a day/)
+  })
+
+  /**
+   * THE OPT-IN THAT DOES NOT LAND HERE, said explicitly rather than silently.
+   * An author who writes `guard.mode: 'dense-only'` on a vectorless site is
+   * reaching for the pre-1.3 behaviour and getting the shipped default back
+   * instead — `enforces('dense-only', 'lexical-only')` is `false`, same as
+   * `'off'` — and `readiness` is the one place that says so.
+   */
+  it('says dense-only degrades to the shipped default here, if chosen explicitly', () => {
+    const notes = readiness(resolveDocPilot({ embed: false, guard: { mode: 'dense-only' } }, ENV), ENV).notes.join(
+      ' ',
+    )
+    expect(notes).toMatch(/dense-only.*behaves.*exactly like the shipped 'off'/)
   })
 })

@@ -73,6 +73,8 @@ export interface StoredTurn {
   rejectedFetches?: number
   support?: unknown
   gate?: unknown
+  opener?: unknown
+  notAnswerable?: unknown
 }
 
 export const HISTORY_KEY = 'docpilot:history'
@@ -211,6 +213,11 @@ export function slimTurn(turn, limits = LIMITS) {
   if (turn.quote) out.quote = turn.quote
   if (turn.credential) out.credential = turn.credential
   if (turn.social) out.social = turn.social
+  // Provenance only — nothing routes on it after restore, same as `turn.gate`.
+  // Without this a reopened thread cannot say whether an opener match fired,
+  // which is the one thing that explains why a bare paraphrase like «С чего
+  // начать?» got the evidence it did — engine-spec 018.
+  if (turn.opener) out.opener = turn.opener
   if (turn.verdict) out.verdict = turn.verdict
   if (turn.reasons?.length) out.reasons = turn.reasons
   if (turn.comment) out.comment = turn.comment
@@ -224,6 +231,12 @@ export function slimTurn(turn, limits = LIMITS) {
   if (turn.promptStock === false) out.promptStock = false
   if (turn.promptHash) out.promptHash = turn.promptHash
   if (turn.tentative) out.tentative = true
+  // Why the post-model check withdrew or hedged this turn — untraceable text,
+  // low confidence, or both. Written once at session.ts and, before this, read
+  // nowhere: a reopened thread had no way to tell an uncited answer from a
+  // hedged one apart from the sentence on screen, which is the same sentence
+  // for both.
+  if (turn.notAnswerable) out.notAnswerable = turn.notAnswerable
   if (typeof turn.latencyMs === 'number') out.latencyMs = turn.latencyMs
   if (typeof turn.iterations === 'number') out.iterations = turn.iterations
   if (typeof turn.rejectedFetches === 'number') out.rejectedFetches = turn.rejectedFetches

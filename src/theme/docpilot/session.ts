@@ -217,7 +217,9 @@ export const DEFAULTS = {
   // The configured DELTA only — the shipped tree lives in i18n.js and is looked
   // up behind it, so a project that overrides nothing ships no extra bytes.
   i18n: { translations: {}, locales: {} },
-  guard: { mode: 'dense-only', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
+  // `'off'` since 1.3 — the counterpart to `src/config.ts`'s copy, which must
+  // move with this one. `enforces()` in gate.js states the argument.
+  guard: { mode: 'off', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
   scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
   // The reader's own conversations, on their device. Off means "do not record
   // AND clear what is there" — see `configure` below.
@@ -1859,6 +1861,12 @@ export async function submit(question, { quote = '' } = {}) {
   let retrieval = null
   let queryVec = null
   let g = null
+  // A dense opener match this turn cannot serve as its own baked text — wrong
+  // language — but can still hand the model the matched question's own
+  // resolved evidence, engine-spec 018. Empty on every turn that isn't this
+  // exact case; merged into `primed` by `runTurn`, exactly where a follow-up's
+  // inherited chunks are.
+  let openerHint = []
   /**
    * The composed channel's query, hoisted beside `g` because the rows are built
    * after the verdict and outside the block that scored it.
@@ -1930,10 +1938,17 @@ export async function submit(question, { quote = '' } = {}) {
      * signal there is. `chat: false` says so in as many words: the gate is an
      * empty-state signal there rather than a suppressor.
      *
-     * `'off'` still silences it, because that is a deployment saying it does not
-     * want the verdict acted on at all.
+     * NOT KEYED ON `guard.mode` AT ALL, since 1.3 — engine-spec 019. It used to
+     * be, on the theory that `'off'` was a deployment SAYING it did not want the
+     * verdict acted on. That reading broke the moment `'off'` became the
+     * default: the default is not a statement by anyone, and the three call
+     * sites `fillResults` actually has all share one property that has nothing
+     * to do with `guard.mode` — there is no generated answer to show instead
+     * (search-only, the day's quota spent with nothing written, a failed
+     * transport). The sentence is true in exactly those places and would say
+     * nothing false in any other, so nothing gates it beyond `g` existing.
      */
-    if (g && cfg.guard.mode !== 'off' && !g.pass) {
+    if (g && !g.pass) {
       turn.noStrongMatches = true
       turn.wouldWiden = g.wouldPassUnscoped
     }
@@ -2043,11 +2058,45 @@ export async function submit(question, { quote = '' } = {}) {
      * nothing. Placing it before `embed()` would mean buying a vector to decide
      * whether to buy one.
      *
-     * It cannot change what a turn retrieves. `matchOpenerDense` returns only a
-     * baked answer, never a vector and never a chunk list, so a turn it declines
-     * proceeds on exactly the state it was in.
+     * It cannot change what `retrieval.search` RANKS. `matchOpenerDense` never
+     * returns a vector, so this pass has no way to reach into the ranking a live
+     * or opener-bake `queryVec` already produced. What a match CAN do — since
+     * engine-spec 018 — is add to what the turn is ADDITIONALLY shown: a match
+     * whose baked text is not servable in the reader's language still hands the
+     * matched entry's own resolved evidence forward as `openerHint`, below. A
+     * miss leaves the turn on exactly the state it was in, as before.
      */
-    if (!opener?.answer) {
+    // Hoisted above the dense-match block below: resolving a matched opener's
+    // own chunk ids as a priming hint (engine-spec 018) goes through the same
+    // door `fetch_section` and `seedFromHistory` use — `retrieval.fetch` — and
+    // that door has to exist first. Nothing between here and where this used to
+    // sit reads `retrieval`, so moving it earlier changes no other order.
+    retrieval = createRetrieval({
+      index: state.index,
+      scope: frozen,
+      guard: guard.value,
+      tuning: tuning.value,
+      dev: import.meta.env?.DEV,
+      onDebug: (kind, data) => state.debug && console.debug('[docpilot]', kind, data),
+    })
+
+    /**
+     * `!opener`, NOT `!opener?.answer` — a latent bug this pass's new return
+     * shape exposed rather than one it introduced.
+     *
+     * A lexical or paraphrase match reuses ITS OWN vector as `queryVec` (see
+     * `else if (opener?.queryVec)` above), so whenever `opener` is truthy the
+     * dense pass below would score that same vector against the bundle and,
+     * with the self-comparison at cosine ~1.0, re-find `opener.entry` itself —
+     * offering no new information, ever. Gating on `!opener?.answer` let this
+     * redundant pass run whenever a lexical match existed but its answer was
+     * withheld, and — once `matchOpenerDense` started reporting an unservable
+     * match instead of collapsing it to `null` — that redundant re-match
+     * started overwriting `turn.opener`'s correct `'exact'`/`'lexical'`
+     * provenance with `'dense'`. The doc comment above already said "runs
+     * after `matchOpener` has DECLINED"; the guard now matches it.
+     */
+    if (!opener) {
       const dense = matchOpenerDense(queryVec, {
         index: state.index,
         config: cfg,
@@ -2061,7 +2110,7 @@ export async function submit(question, { quote = '' } = {}) {
         locale: localeOf(detectLanguage(clean)),
         uiLocale: state.lang,
       })
-      if (dense) {
+      if (dense?.answer) {
         turn.opener = { matched: dense.matched, score: dense.score, baked: true }
         turn.gate = dense.entry.gate
         // `busy` and `status` are cleared BEFORE the reveal rather than after
@@ -2080,16 +2129,27 @@ export async function submit(question, { quote = '' } = {}) {
         )
         return
       }
+      /**
+       * A dense match with nothing servable — wrong language — is not nothing.
+       * `matchOpenerDense` cleared `matchCos` by a real margin, which is a
+       * stronger, more specific signal than the raw question's own retrieval:
+       * measured on this corpus, «С чего начать?» scores 0.745 against this
+       * opener and only D 0.28 against the 493 chunks directly. Provenance is
+       * recorded either way (`baked: false` mirrors the lexical miss above),
+       * and the matched opener's OWN resolved evidence rides into `runTurn` as
+       * `openerHint` — priming the model with the right chunks rather than
+       * leaving it to find them through the weaker raw signal alone. `g` (the
+       * gate's own verdict) is untouched: this widens what the model sees, not
+       * what the gate scored.
+       */
+      if (dense) {
+        turn.opener = { matched: dense.matched, score: dense.score, baked: false }
+        openerHint = dense.entry.ids
+          .map((id) => retrieval.fetch(String(id || '')))
+          .filter((r) => r.ok)
+          .map((r) => r.section)
+      }
     }
-
-    retrieval = createRetrieval({
-      index: state.index,
-      scope: frozen,
-      guard: guard.value,
-      tuning: tuning.value,
-      dev: import.meta.env?.DEV,
-      onDebug: (kind, data) => state.debug && console.debug('[docpilot]', kind, data),
-    })
 
     /**
      * The antecedent of the composed channel — RAG-SPEC 3.4.5, and the only
@@ -2205,11 +2265,15 @@ export async function submit(question, { quote = '' } = {}) {
 
     // ── the gate may end the turn here, before any model call ────────────────
     //
-    // MAY, and `enforces` is where that is decided. On a vectorless turn the
-    // shipped `dense-only` scores the verdict, records it, and lets the question
-    // through: G is L alone there, and L is 0 for a reader asking in another
-    // language or by another name — a refusal computed from that says the corpus
-    // has nothing when the truth is that this channel cannot tell.
+    // MAY, and `enforces` is where that is decided. The shipped `'off'` (1.3,
+    // engine-spec 019) always scores the verdict, records it, and lets the
+    // question through: L is 0 by construction for a reader asking in a
+    // language the corpus is not written in, or by a name the docs do not use
+    // — a refusal computed from that says the corpus has nothing when the
+    // truth is that this channel cannot tell, and no threshold above a
+    // constant zero closes it. `enforces('dense-only', ...)` narrows the same
+    // argument to a vectorless turn alone; `'calibrated'` restores the pre-1.3
+    // contract on a corpus calibrated for one language.
     if (enforces(cfg.guard.mode, g.mode) && !g.pass) {
       const cause = g.wouldPassUnscoped ? 'out-of-scope' : 'no-evidence'
       turn.state = 'no-answer'
@@ -2328,6 +2392,9 @@ export async function submit(question, { quote = '' } = {}) {
         // rather than with 300 characters of the answer that used it.
         citations: t.citationIds || [],
       })),
+      // The matched-opener evidence from a dense hit this turn could not serve
+      // as its own text — engine-spec 018. Empty unless that exact case fired.
+      openerHint,
       addendum: state.instruction,
       config: { ...cfg, guard: guard.value },
       fallback: state.fallback,
@@ -2874,6 +2941,15 @@ function writeFeedback(turn, {retracted = null} = {}) {
       reasons: [...turn.reasons],
       comment: turn.comment || null,
       refusal: turn.refusal?.cause || null,
+      // Why the post-model check withdrew or hedged, when it fired — the only
+      // refusal a deployment with `guard.mode: 'off'` still produces. Absent
+      // (not `null` on the wire) when it never ran, matching how `retrievedIds`
+      // is omitted above rather than sent empty.
+      ...(turn.notAnswerable ? {notAnswerable: turn.notAnswerable} : {}),
+      // Whether a dense or lexical opener match fired and whether it was
+      // served as its own text or only used to prime evidence — engine-spec
+      // 018. Same omit-rather-than-null convention as `notAnswerable`.
+      ...(turn.opener ? {opener: turn.opener} : {}),
       gate: turn.gate
         ? {
             G: turn.gate.G,

@@ -5217,6 +5217,7 @@ describe('history — a durable, tab-safe archive', () => {
     support: 0.83,
     delinked: ['/gone'],
     notAnswerable: { chars: 12 },
+    opener: { matched: 'dense', score: 0.9, baked: false },
     gate: {
       G: 0.71,
       threshold: 0.55,
@@ -5243,6 +5244,8 @@ describe('history — a durable, tab-safe archive', () => {
         'id',
         'iterations',
         'latencyMs',
+        'notAnswerable',
+        'opener',
         'question',
         'rejectedFetches',
         'scope',
@@ -5257,6 +5260,10 @@ describe('history — a durable, tab-safe archive', () => {
       ['G', 'channel', 'mode', 'n', 'threshold', 'wouldPassUnscoped'].sort(),
     )
     expect(slim.gate.chunks).toBeUndefined()
+    // Small, fixed-shape provenance — unlike `gate.chunks`, there is nothing on
+    // either of these worth trimming, so both survive whole (engine-spec 018).
+    expect(slim.notAnswerable).toEqual({ chars: 12 })
+    expect(slim.opener).toEqual({ matched: 'dense', score: 0.9, baked: false })
     // The whole point of the projection, in one number.
     expect(JSON.stringify(slim).length).toBeLessThan(JSON.stringify(t).length * 0.1)
   })
@@ -7680,7 +7687,7 @@ describe('runTurn — a follow-up inherits what the last turn cited', () => {
   }
 
   /** The turn answers immediately; the first observation is what is under test. */
-  const primedIdsFor = async ({ history, scope }) => {
+  const primedIdsFor = async ({ history, scope, openerHint }) => {
     const bodies = []
     vi.stubGlobal('fetch', async (_url, init) => {
       bodies.push(JSON.parse(init.body))
@@ -7699,6 +7706,7 @@ describe('runTurn — a follow-up inherits what the last turn cited', () => {
       gateResult: { G: 1, pass: true, chunks: [index.byId.get('b#one')] },
       question: 'and how do I turn it off?',
       history,
+      openerHint,
       addendum: '',
       config: { llm: { provider: 'ollama', baseURL: 'http://x', model: 'm' }, maxIterations: 4 },
       fallback: true,
@@ -7739,6 +7747,71 @@ describe('runTurn — a follow-up inherits what the last turn cited', () => {
       scope: { kind: 'pages', paths: ['/b'], label: 'Beta' },
     })
     expect(prompt).not.toContain('a#one')
+  })
+
+  /**
+   * `openerHint`'s sibling coverage — engine-spec 018.
+   *
+   * `history` is a citation's own chunk plus its `next` neighbour, resolved by
+   * `seedFromHistory`; `openerHint` is a dense-matched opener's own `ids`,
+   * resolved by `session.js` before `runTurn` is ever called (unlike history,
+   * which `runTurn` resolves itself). So this suite passes already-resolved
+   * `Section` objects rather than citation strings — `session.js`'s own
+   * `retrieval.fetch(id).section` shape — and checks the same two things the
+   * sibling suite checks: the chunk reaches the prompt, and it reaches
+   * `emitted` so a citation of it is not immediately rejected.
+   */
+  it('primes the prompt with a dense-matched opener\'s own evidence', async () => {
+    const index = twoPageIndex()
+    const { prompt, emitted } = await primedIdsFor({
+      history: [],
+      openerHint: [index.byId.get('a#one')],
+    })
+    expect(prompt).toContain('a#one')
+    expect(emitted).toContain('a#one')
+  })
+
+  /**
+   * NOT AN ABSOLUTE COUNT — how many times `'b#one'` legitimately appears in
+   * one observation is a serialisation detail this test should not have to
+   * know. What has to hold is that adding the SAME chunk through `openerHint`
+   * changes nothing: the merge loop's `already` set is what makes that true.
+   */
+  it('does not duplicate a chunk the gate already found', async () => {
+    const index = twoPageIndex()
+    const countOf = async (openerHint) => {
+      const bodies = []
+      vi.stubGlobal('fetch', async (_url, init) => {
+        bodies.push(JSON.parse(init.body))
+        return { ok: true, json: async () => ({ message: { content: 'done' } }) }
+      })
+      const retrieval = createRetrieval({
+        index,
+        scope: { kind: 'all', paths: [], label: 'All docs' },
+        guard: GUARD,
+      })
+      await runTurn({
+        retrieval,
+        gateResult: { G: 1, pass: true, chunks: [index.byId.get('b#one')] },
+        question: 'and how do I turn it off?',
+        history: [],
+        openerHint,
+        addendum: '',
+        config: { llm: { provider: 'ollama', baseURL: 'http://x', model: 'm' }, maxIterations: 4 },
+        fallback: true,
+        queryVec: null,
+      })
+      return bodies[0].messages.map((m) => String(m.content)).join('\n').split('b#one').length - 1
+    }
+    const withoutHint = await countOf(undefined)
+    const withSameChunkAsHint = await countOf([index.byId.get('b#one')])
+    expect(withSameChunkAsHint).toBe(withoutHint)
+  })
+
+  it('leaves a turn with no opener hint byte-identical', async () => {
+    const withNone = await primedIdsFor({ history: [] })
+    const withEmpty = await primedIdsFor({ history: [], openerHint: [] })
+    expect(withNone.prompt).toBe(withEmpty.prompt)
   })
 })
 

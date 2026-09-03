@@ -418,14 +418,17 @@ export interface GuardSettings {
    * Whether a failing verdict ENDS the turn before the model is called. Every
    * value still SCORES every turn and records the result; only the refusal moves.
    *
-   * `'dense-only'` — the default — refuses only where a dense channel scored it.
-   * With no embedder the hybrid score collapses to lexical coverage alone, and
-   * that is 0 for a reader asking in another language or calling the product by
-   * a name the docs do not use: a refusal built on it says the corpus has
-   * nothing when the truth is that the channel cannot tell. `'calibrated'`
-   * refuses always. `'off'` never does.
+   * `'off'` — the default since 1.3 — never refuses. The lexical channel is 0
+   * by construction for a reader asking in a language the corpus is not
+   * written in, and no threshold above a constant zero can separate that
+   * question from one about nothing the site covers — closing this requires a
+   * calibration per corpus AND per language, which is not a threshold this
+   * package can ship. `'dense-only'` refuses only where a dense channel
+   * scored it, narrowing the same argument to sites with no embedder at all.
+   * `'calibrated'` refuses always, for a single-language corpus with a probe
+   * set calibrated against it.
    */
-  mode?: 'dense-only' | 'calibrated' | 'off'
+  mode?: 'off' | 'dense-only' | 'calibrated'
   /** Null keeps the calibrated value from the manifest. */
   tau?: number | null
   tauLexical?: number | null

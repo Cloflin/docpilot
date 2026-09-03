@@ -148,23 +148,34 @@ export function assertWeights(guard) {
  * failing one refuses before the model is called, and the three values differ in
  * where they draw that line:
  *
- *   · `'calibrated'` — always. The behaviour that shipped, kept for a deployment
- *     that wants the refusal contract enforced whatever the channel.
+ *   · `'off'` — never. THE DEFAULT since 1.3, engine-spec 019, and the reason is
+ *     arithmetic rather than taste: `L` is token overlap between the question
+ *     and the corpus, so it is 0 BY CONSTRUCTION for any question asked in a
+ *     language the documentation is not written in — no threshold on top of a
+ *     zero can separate a reader asking about the product in Russian from one
+ *     asking about the weather. Measured on this package's own English docs: a
+ *     Russian install question scored G 0.21 against a 0.41 tau while the
+ *     refusal's own "closest pages" line named the three pages that answered
+ *     it. `vocabulary` closes the SAME-alphabet case — a reader who calls the
+ *     product by a name the docs do not use; nothing closes the cross-language
+ *     one, because there is no threshold to calibrate per language and no
+ *     bound on how many languages a site's readers use. So the verdict is
+ *     scored and kept for the record, and the MODEL decides whether the
+ *     question is answerable — the judgement a scalar cannot make and the one
+ *     the model can, since it is shown the passages and holds a refusal
+ *     contract of its own.
  *   · `'dense-only'` — only where there is a dense channel to have scored it
- *     with. THE DEFAULT, and the reason is arithmetic rather than taste: with no
- *     embedder G is L alone, and L is token overlap between the question and the
- *     corpus. A reader who asks in a language the corpus is not written in, or
- *     who calls the product by a name the docs do not use, scores L = 0 for a
- *     question that is squarely about the product — and the panel then answers
- *     "I couldn't find this in the docs", which is false. It did not look.
- *     `vocabulary` closes the second of those; nothing closes the first. So on a
- *     vectorless turn the verdict picks the copy and the MODEL decides whether
- *     the question is answerable, which is the judgement it can actually make.
- *   · `'off'` — never. Every question reaches the model on every deployment.
+ *     with. The narrower, opt-in middle ground: a vectorless deployment still
+ *     refuses nothing (same argument as `'off'`, restricted to the one shape
+ *     where `G` is `L` alone and the gap is worst), while a deployment with an
+ *     embedder gets the pre-1.3 refusal contract back.
+ *   · `'calibrated'` — always. The pre-1.3 default, for a deployment that wants
+ *     the refusal contract enforced whatever the channel — a single-language
+ *     site with a probe corpus to calibrate against is the case for it.
  *
- * WHAT IT COSTS, on the one deployment shape it changes: a question the corpus
- * has nothing for now spends a model turn before that is known. On a shared free
- * tier that is one of fifty a day for the whole site. `readiness` says so.
+ * WHAT `'off'` COSTS, on every deployment now rather than one: a question the
+ * corpus has nothing for spends a model turn before that is known. On a shared
+ * free tier that is one of fifty a day for the whole site. `readiness` says so.
  */
 export function enforces(guardMode, retrievalMode) {
   if (guardMode === 'off') return false

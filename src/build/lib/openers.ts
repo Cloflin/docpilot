@@ -454,9 +454,11 @@ export function renderOpenerReport({ entries, report, matchTau, configHash }) {
   for (const r of report.refused) {
     lines.push(
       `    REFUSED  ${JSON.stringify(r.q)} scores ${r.G.toFixed(2)} against tau ${r.threshold.toFixed(2)}.`,
-      `             This opener refuses on the reader's FIRST CLICK, in the one`,
-      `             state that exists to show the panel working. Rewrite it, drop`,
-      `             it, or write the page it asks for.`,
+      `             This opener is a bad first impression on 'guard.mode: calibrated'`,
+      `             or 'dense-only' — refused on the reader's FIRST CLICK, in the one`,
+      `             state that exists to show the panel working — and a weak signal`,
+      `             the model has to work harder for even on the shipped 'off'.`,
+      `             Rewrite it, drop it, or write the page it asks for.`,
     )
   }
   for (const c of report.collisions) {

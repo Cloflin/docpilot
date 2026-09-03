@@ -1172,7 +1172,19 @@ describe('openers — the paraphrase the vector caught', () => {
     expect(matchOpenerDense(null, args)).toBe(null)
   })
 
-  it('declines an opener with no baked answer — a match with nothing to give', () => {
+  /**
+   * A MATCH WITH NOTHING TO GIVE STILL REPORTS THE MATCH — engine-spec 018.
+   *
+   * `matchOpener` (the lexical/exact pass, above) has always worked this way:
+   * `'never serves an English answer to a Russian one'` asserts `hit.answer`
+   * is `null` on an object that is otherwise truthy. This test used to assert
+   * the dense pass collapsed the whole result to `null` instead — the one
+   * inconsistency between the two passes' contracts. `session.js` needs the
+   * match (the entry, the score) even when there is no answer to serve: it
+   * primes the turn with the matched opener's own evidence rather than
+   * leaving a strong, specific signal on the floor.
+   */
+  it('reports a match with no baked answer, rather than nothing at all', () => {
     const suggestions = resolveSuggestions({ suggestions: QUESTIONS }, () => {})
     const index = indexWith(
       {
@@ -1184,9 +1196,33 @@ describe('openers — the paraphrase the vector caught', () => {
       },
       { lexicalOnly: false },
     )
-    expect(
-      matchOpenerDense(query(127, 0, 0, 0), { ...ARGS, config: { suggestions, embed: {} }, index }),
-    ).toBe(null)
+    const hit = matchOpenerDense(query(127, 0, 0, 0), {
+      ...ARGS,
+      config: { suggestions, embed: {} },
+      index,
+    })
+    expect(hit.matched).toBe('dense')
+    expect(hit.entry.q).toBe(QUESTIONS[0])
+    expect(hit.answer).toBe(null)
+  })
+
+  /**
+   * THE CASE THIS PASS EXISTS FOR — a paraphrase in another language.
+   *
+   * «С чего начать?» against this package's own deployed index scores 0.745
+   * against "How do I get started?", clear of `matchCos` by a wide margin, and
+   * is refused by the raw retrieval gate at G 0.21 — the measurement behind
+   * engine-spec 018. The reader's language blocks the baked English text, same
+   * as the lexical pass; unlike the lexical pass before this change, the match
+   * itself must still come back so `session.js` can prime the turn with it.
+   */
+  it('matches a paraphrase in another language and withholds only the text', () => {
+    const { args } = setup()
+    const hit = matchOpenerDense(query(120, 40, 0, 0), { ...args, locale: 'ru' })
+    expect(hit.matched).toBe('dense')
+    expect(hit.entry.q).toBe(QUESTIONS[0])
+    expect(hit.score).toBeGreaterThan(0.9)
+    expect(hit.answer).toBe(null)
   })
 
   it('holds the three antecedent rules the text pass holds', () => {

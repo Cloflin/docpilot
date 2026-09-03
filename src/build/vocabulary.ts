@@ -6,8 +6,12 @@
  * widget has four names before anybody translates one, and the lexical channel
  * knows only the one the docs happened to use. A reader who types `виджет`
  * against a corpus that says `DocPilot` shares no token with it, so lexical
- * coverage L is 0 — and where there is no dense channel that is the whole score,
- * so the gate refuses a question ABOUT THE PRODUCT before any model is asked.
+ * coverage L is 0 — and where there is no dense channel that is the whole
+ * score, a bad verdict about a question ABOUT THE PRODUCT is what results,
+ * ending the turn before any model is asked wherever `guard.mode` enforces it
+ * (`'calibrated'`, or `'dense-only'` on this vectorless shape). The shipped
+ * `'off'` hands that verdict to the model instead, but the verdict itself is
+ * still the same wrong zero, still worth closing.
  *
  * IT PROPOSES AND NEVER DECIDES. The output is a file the author commits and
  * edits, on the same terms as the golden set: which words a reader is likely to

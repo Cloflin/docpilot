@@ -261,13 +261,19 @@ const DENSE_MARGIN = 0.05
  * product per opener — three of them, over 1024 or 2048 int8 lanes — and a miss
  * costs the same.
  *
- * IT ONLY EVER SERVES A BAKED ANSWER. There is no vector to hand back: the
- * caller already has the one it passed in, and the entry's own vector is for
- * comparison, not for retrieval. A dense match with nothing baked is a match
- * with nothing to give, so it declines and the turn proceeds — which also means
- * this pass cannot change which chunks a turn retrieves.
+ * `null` MEANS NOTHING CLEARED THE BAR. A cleared bar is reported even when the
+ * baked TEXT is not servable — wrong language, per `answerFor` — because the
+ * MATCH itself is real information a caller can use for something other than
+ * serving English prose to a Russian reader: `session.js` primes the turn with
+ * the matched entry's own resolved evidence, engine-spec 018. `answer` is
+ * therefore nullable on a non-null result; a caller that only wants the servable
+ * case checks `.answer`, not truthiness.
  *
- * @returns null | {entry, matched: 'dense', score, answer}
+ * This pass still never returns a VECTOR and never changes what `retrieval.
+ * search` ranks — the entry's vector is for comparison only, and priming is an
+ * addition to a turn's evidence, not a change to its retrieval.
+ *
+ * @returns null | {entry, matched: 'dense', score, answer}, answer possibly null
  */
 export function matchOpenerDense(queryVec, { index, config, scope, quote, turns, locale, uiLocale }) {
   const suggestions = config?.suggestions
@@ -307,7 +313,7 @@ export function matchOpenerDense(queryVec, { index, config, scope, quote, turns,
   if (runnerUp > -Infinity && bestScore - runnerUp < DENSE_MARGIN) return null
 
   const answer = answerFor(best, locale, uiLocale)
-  return answer ? { entry: best, matched: 'dense' as const, score: bestScore, answer } : null
+  return { entry: best, matched: 'dense' as const, score: bestScore, answer }
 }
 
 /**

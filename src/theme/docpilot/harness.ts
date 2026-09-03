@@ -171,6 +171,13 @@ export interface RunTurnOptions {
   question: string
   quote?: string
   history?: any[]
+  /**
+   * Resolved chunks from a dense-matched opener this turn could not serve as
+   * its own text — wrong language, engine-spec 018. Merged into `primed`
+   * exactly where `history`'s inherited chunks are; empty on every turn that
+   * isn't this exact case.
+   */
+  openerHint?: any[]
   addendum?: string
   config?: any
   fallback?: boolean
@@ -192,6 +199,7 @@ export async function runTurn(options: RunTurnOptions) {
   question,
   quote = '',
   history,
+  openerHint,
   addendum,
   config,
   fallback,
@@ -446,9 +454,14 @@ export async function runTurn(options: RunTurnOptions) {
    * would re-send the half it discarded and pay tokens for it.
    */
   const inherited = seedFromHistory(retrieval, history)
+  // A dense-matched opener's own evidence — engine-spec 018. Already resolved
+  // and scope-checked by the caller (`retrieval.fetch`, same as `inherited`),
+  // so this is a plain merge, not a second resolution pass. No cap: unlike
+  // conversation history, this set is bounded by the bake's own retrieval `k`
+  // at index time, not by how long the reader has been talking.
   const primed = [...gateResult.chunks]
   const already = new Set(primed.map((c) => c.id))
-  for (const c of inherited) {
+  for (const c of [...inherited, ...(openerHint || [])]) {
     if (already.has(c.id)) continue
     already.add(c.id)
     primed.push(c)
