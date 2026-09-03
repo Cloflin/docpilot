@@ -277,6 +277,10 @@ const ollama = {
   embedUrl: (baseURL) => `${baseURL}/api/embed`,
   embedBody: (model, input) => ({ model, input }),
   embedParse: (json) => json.embeddings?.[0] || json.embedding,
+  // `/api/embed` takes an array in the same `input` field and answers with one
+  // row per entry, in order. `/api/embeddings` — the older singular route — does
+  // not, which is why the URL above is the plural one.
+  embedParseAll: (json) => json.embeddings || (json.embedding ? [json.embedding] : null),
 
   /**
    * What this server will actually answer to — asked by `docpilot doctor
@@ -336,12 +340,37 @@ function maxTokensFieldFor(model, tuning) {
  * `resolveTuning` in config.js. So there is nothing to decide here except WHERE
  * each value goes, which is what an adapter is for. `style` is a body shape and
  * never a brand — that is what lets this file stay brand-blind.
+ *
+ * `askReasoning` SPLITS THE RECORD IN TWO, and the split is the whole reason
+ * this signature grew a third argument.
+ *
+ * `tuning` carries the sampling fields — `verbosity`, `top_p`, `seed`, the
+ * ceiling field — AND the reasoning ones, and only the second group is a
+ * per-STEP decision. The harness has always made that decision (`enableThink:
+ * false` on a loop step, `true` on the answer — harness.js) and this adapter
+ * has always ignored it, because `enableThink` was never destructured here.
+ * Two things followed, both measured on the deployed site:
+ *
+ *   · `chat.reasoning: 'high'` reasoned on every search step, contradicting the
+ *     contract config.js states in the author's own words — "it asks on the
+ *     answer and never on a search step".
+ *   · `chat.reasoning: false` put `reasoning: {enabled: false}` on the wire for
+ *     EVERY request including a model with no reasoning surface at all, and
+ *     beside OpenRouter's `provider.require_parameters` that is a routing
+ *     filter: the endpoint list is narrowed to upstreams publishing a parameter
+ *     the model does not have, and the answer is
+ *     `404 No endpoints found that can handle the requested parameters`.
+ *
+ * So: false means WRITE NO REASONING FIELD AT ALL — not "ask for none", which
+ * is a different request and is what `tuning.off` spells.
  */
-function applyTuning(body, tuning) {
+function applyTuning(body, tuning, askReasoning = true) {
   if (!tuning) return body
   if (tuning.verbosity) body.verbosity = tuning.verbosity
   if (tuning.topP != null) body.top_p = tuning.topP
   if (tuning.seed != null) body.seed = tuning.seed
+
+  if (!askReasoning) return body
 
   if (tuning.style === 'unified') {
     // OpenRouter's own normalisation across every upstream it routes to, which
@@ -387,7 +416,20 @@ const openai = {
     extraBody: true,
   },
 
-  body({ model, messages, temperature, streaming, tools, schemaBody, maxTokens, tuning, extraBody, continuing }) {
+  body({
+    model,
+    messages,
+    temperature,
+    streaming,
+    tools,
+    schemaBody,
+    maxTokens,
+    tuning,
+    extraBody,
+    continuing,
+    enableThink,
+    degrade,
+  }) {
     const body = {
       // The brand-specific fragment, and it goes FIRST so that nothing
       // configuration supplies can overwrite a field this adapter owns — a
@@ -420,7 +462,20 @@ const openai = {
     // truncated at that ceiling looked like a model failure rather than a
     // setting nobody was honouring.
     if (maxTokens) body[maxTokensFieldFor(model, tuning)] = maxTokens
-    applyTuning(body, tuning)
+    /**
+     * WHETHER A REASONING FIELD IS WRITTEN AT ALL — two independent nos.
+     *
+     * `enableThink === false` is the HARNESS's no, and it is positional: a loop
+     * step is choosing a tool, not composing an answer, so it asks for no
+     * thinking whatever the author configured. This adapter never read that flag
+     * before; ollama and anthropic did, which is why the contract held there and
+     * silently did not here.
+     *
+     * `degrade.reasoning` is the TRANSPORT's no, learned from a refusal: this
+     * model has no reasoning surface, the last request said so, and sending the
+     * field again buys the same 404. See `classifyResponse` in llm.js.
+     */
+    applyTuning(body, tuning, enableThink !== false && !degrade?.reasoning)
     // A CONTINUATION finishes a reply the provider cut off: the partial text is
     // the last assistant message and the model is being asked to carry on from
     // mid-sentence. Forcing a response shape is exactly what breaks that — under
@@ -428,7 +483,39 @@ const openai = {
     // be a whole valid object on its own, so the model re-emits the answer from
     // the top and runs into the same ceiling at the same place. Tools stay:
     // a continuation that decides to call one is still a legal next step.
-    if (schemaBody && !continuing) {
+    if (schemaBody && !continuing && degrade?.schemaAsTool) {
+      /**
+       * THE SAME SHAPE, ASKED FOR THE OTHER WAY.
+       *
+       * `response_format: json_schema` is the stronger pin and stays the default
+       * — it is enforced by the provider before a token reaches us. But it is
+       * also a parameter an endpoint either publishes or does not, and beside
+       * OpenRouter's `require_parameters` an endpoint that does not is removed
+       * from routing entirely: `404 No endpoints found that can handle the
+       * requested parameters`, once per pool member, for a call every member
+       * would have answered in the older shape.
+       *
+       * A forced tool call is that older shape. `tool_choice` pins the name, the
+       * schema rides as the tool's `parameters`, and `once()` in llm.js already
+       * returns a `toolCall` named `answer` ahead of every other parse — so
+       * nothing downstream can tell which of the two produced the object.
+       *
+       * NO `json_object` FALLBACK BELOW THIS. That branch would put a
+       * `response_format` back on the wire and re-lose the endpoint we just
+       * degraded to keep.
+       */
+      body.tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'answer',
+            description: 'Write the final answer, with citations, from the excerpts already given.',
+            parameters: schemaBody,
+          },
+        },
+      ]
+      body.tool_choice = { type: 'function', function: { name: 'answer' } }
+    } else if (schemaBody && !continuing) {
       body.response_format = {
         type: 'json_schema',
         json_schema: { name: 'answer', strict: true, schema: schemaBody },
@@ -550,6 +637,13 @@ const openai = {
   embedUrl: (baseURL) => `${baseURL}/v1/embeddings`,
   embedBody: (model, input) => ({ model, input }),
   embedParse: (json) => json.data?.[0]?.embedding,
+  // `data` is ordered by `index`, and the spec says so — but it is sorted here
+  // rather than trusted, because a proxy that reorders would silently swap two
+  // readers' vectors and the scores would merely look wrong.
+  embedParseAll: (json) =>
+    Array.isArray(json.data)
+      ? [...json.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0)).map((d) => d.embedding)
+      : null,
 
   /** `{data: [{id}]}` — the shape every service that copied this API kept. */
   modelsUrl: (baseURL) => `${baseURL}/v1/models`,

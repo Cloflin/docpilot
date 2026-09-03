@@ -413,20 +413,21 @@ export function stripVue(src) {
 
     let l = line
     if (closing) {
-      const end = closing.exec(l)
+      const end = closing.exec(blankCode(l))
       if (!end) return
       l = l.slice(end.index + end[0].length)
       closing = null
     }
 
     // Inline forms first, so a one-line island never opens the state machine.
-    l = l
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<FaqAccordion[\s\S]*?\/>/gi, '')
+    l = replaceOutsideCode(l, [
+      /<script[\s\S]*?<\/script>/gi,
+      /<style[\s\S]*?<\/style>/gi,
+      /<FaqAccordion[\s\S]*?\/>/gi,
+    ])
 
     // What is left of an opener runs to a later line.
-    const open = /<(script|style)\b[^>]*>|<FaqAccordion\b/i.exec(l)
+    const open = /<(script|style)\b[^>]*>|<FaqAccordion\b/i.exec(blankCode(l))
     if (open) {
       closing = open[1] ? new RegExp(`</${open[1]}>`, 'i') : /\/>/
       l = l.slice(0, open.index)
@@ -434,6 +435,61 @@ export function stripVue(src) {
     out.push(l)
   })
   return out.join('\n')
+}
+
+/**
+ * THE SAME LINE WITH ITS INLINE CODE SPANS BLANKED OUT, character for character.
+ *
+ * `eachLine` knows FENCED code and nothing about a backtick span, so every regex
+ * in `stripVue` used to read `` `<script>` `` in a sentence as a real island
+ * opening. What followed was not a mangled line but a deleted PAGE: `closing`
+ * latched, and the `if (!end) return` above dropped every later unfenced line
+ * until a `</script>` that a sentence about a tag never contains.
+ *
+ * Measured on this repository's own corpus before the fix — nine prose lines
+ * across `docs/` trip it, and the pages they are on are the pages that answer
+ * "how do I install this":
+ *
+ *   /guide/appearance       20,974 source chars →  1,890 indexed   (9%)
+ *   /guide/other-sites       6,095 →  1,056  (17%)
+ *   /guide/where-it-goes     3,895 →  1,162  (30%)
+ *   /guide (Getting started) 11,242 → 4,245  (38%)
+ *   /install                 7,646 →  4,379  (57%)
+ *
+ * The module comment at the top of this file names the FENCED version of this
+ * failure and fixed only that half; `applyLlmTags` fixed the span half for ITS
+ * tags with `maskCode` above. This is the same rule, arriving at `stripVue`.
+ *
+ * BLANKING RATHER THAN THE PLACEHOLDER `maskCode` USES, because every caller
+ * here needs the match's INDEX into the original line — `l.slice(0, open.index)`
+ * cuts there. Placeholders change the length and every offset with it; spaces of
+ * the same length keep the two strings in step while making the span
+ * unmatchable. `CODE_SPAN` decides what a span is, so both passes agree.
+ */
+function blankCode(line) {
+  return String(line).replace(CODE_SPAN, (m, ticks) =>
+    m.length >= ticks.length * 2 ? ticks + ' '.repeat(m.length - ticks.length * 2) + ticks : m,
+  )
+}
+
+/**
+ * Apply each pattern to the line, but only where the mask says it is prose.
+ *
+ * The patterns are run against the BLANKED copy and the spans they identify are
+ * cut out of the ORIGINAL, so a real island is removed exactly as before while
+ * one quoted in a sentence survives with its backticks intact.
+ */
+function replaceOutsideCode(line, patterns) {
+  let s = String(line)
+  for (const re of patterns) {
+    for (;;) {
+      re.lastIndex = 0
+      const m = re.exec(blankCode(s))
+      if (!m) break
+      s = s.slice(0, m.index) + s.slice(m.index + m[0].length)
+    }
+  }
+  return s
 }
 
 /**

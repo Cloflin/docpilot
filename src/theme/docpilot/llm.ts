@@ -22,6 +22,14 @@ type TransportError = Error & {
   status?: number
   retryAfterMs?: number
   rateLimit?: unknown
+  /** The service's own sentence about this refusal, when it sent one. */
+  reason?: string
+  /** What KIND of refusal, once the body has been read — see `classifyRefusal`. */
+  kind?: 'params' | 'policy' | null
+  /** Whether the body that earned this refusal asked for reasoning at all. */
+  sentReasoning?: boolean
+  /** Whether it carried the strict `json_schema` response format. */
+  sentSchema?: boolean
 }
 
 /**
@@ -50,6 +58,7 @@ export interface ChatOptions {
   onDelta?: ((...args: any[]) => boolean | void) | null
   onModel?: ((...args: any[]) => void) | null
   onAbandon?: ((...args: any[]) => void) | null
+  onDegrade?: ((...args: any[]) => void) | null
   extraBody?: Record<string, unknown> | null
   tuning?: unknown
   onHeaders?: ((...args: any[]) => void) | null
@@ -244,6 +253,20 @@ const MAX_ATTEMPTS = 4
  * one that will not take the strict `response_format` the final step sends, and
  * a 403 is a moderation refusal another model may not repeat.
  *
+ * ⚠️ A 404 IS NOT ONLY A RETIRED MODEL, and reading it as one is what made a
+ * single turn cost twelve requests. Measured against OpenRouter, the same status
+ * carries two other faults, both of which rotation answers badly:
+ *
+ *   · `Filter by Parameters` — the body named a parameter this endpoint does not
+ *     publish. Identical for every member, so rotating buys the same refusal
+ *     once per model. `classifyRefusal` calls it `params` and `onceOrSmaller`
+ *     retries the SAME model with less in the body.
+ *   · `Filter by Guardrails` — the ACCOUNT's own ZDR or data-policy settings
+ *     removed every endpoint for this model. Another model may still have an
+ *     eligible endpoint, so this one does rotate — but the sentence travels out
+ *     on `err.reason`, because nothing in the request can fix it and the reader
+ *     would otherwise be told the docs have no answer.
+ *
  * 401 is absent on purpose. A rejected key rejects every model in the pool, so
  * rotating turns one clear "your key is wrong" into N pointless requests and a
  * final error about whichever model happened to be last.
@@ -281,6 +304,190 @@ function statusError(message: string, status: number): TransportError {
   const e: TransportError = new Error(message)
   e.status = status
   return e
+}
+
+/**
+ * HOW MUCH OF A REFUSAL'S BODY IS WORTH READING: 8 KB.
+ *
+ * An error payload is a sentence and some metadata — OpenRouter's longest
+ * measured refusal is 444 bytes. What this cap is really for is the response
+ * that is NOT one: a proxy's HTML error page, or a gateway streaming something
+ * unbounded. Reading it whole to print two words of it is the mistake; reading
+ * nothing at all was the one this replaces.
+ */
+const ERROR_BODY_LIMIT = 8 * 1024
+
+/**
+ * THE SENTENCE THE SERVICE SENT, AND WHY IT MATTERS THAT IT WAS EVER READ.
+ *
+ * Until this existed a non-2xx became `chat 404 — model "openai/gpt-4o-mini"`
+ * and the body was dropped unread — the response was never consumed and never
+ * cancelled either, so the socket stayed open until the step's 120-second timer
+ * fired, minutes after the reader already had an answer from another model.
+ *
+ * What was in that body, measured against the deployed site:
+ *
+ *   {"error":{"message":"No endpoints found that can handle the requested
+ *     parameters.","code":404,"metadata":{"failed_routing_step":
+ *     "Filter by Parameters", …}}}
+ *
+ *   {"error":{"message":"0 endpoints out of 1 requested are available matching
+ *     your guardrail restrictions and data policy … ZDR violation (account
+ *     settings): 1 endpoint excluded","code":404,"metadata":{
+ *     "failed_routing_step":"Filter by Guardrails", …}}}
+ *
+ * Two different faults, one status, and neither is the "the catalogue retired
+ * this model" that `ROTATABLE` assumes. The first is fixable in the next
+ * request; the second is fixable only in the account's settings, and no amount
+ * of rotating makes either of them into an answer.
+ */
+async function readErrorBody(res) {
+  try {
+    const reader = res?.body?.getReader?.()
+    if (!reader) return null
+    const parts = []
+    let size = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      parts.push(value)
+      if (size >= ERROR_BODY_LIMIT) {
+        await reader.cancel().catch(() => {})
+        break
+      }
+    }
+    const bytes = new Uint8Array(size)
+    let at = 0
+    for (const part of parts) {
+      bytes.set(part, at)
+      at += part.byteLength
+    }
+    return new TextDecoder().decode(bytes).slice(0, ERROR_BODY_LIMIT)
+  } catch {
+    // A body already consumed, a stream that errored, an environment with no
+    // reader. The status is still the status.
+    return null
+  }
+}
+
+/**
+ * WHICH OF THE TWO REFUSALS THIS IS — and the reason it is worth telling apart.
+ *
+ * `params`: the request named a parameter this endpoint does not publish. It is
+ * a fact about the BODY, identical for every member of the pool, so rotating
+ * pays for the same refusal once per model — measured, five 404s in a row on a
+ * final call that the sixth model answered only because it happened to publish
+ * `response_format`. The right move is to send a smaller body to the SAME
+ * model, which is what `degrade` in providers.js is for.
+ *
+ * `policy`: the account's own guardrails removed every endpoint. Nothing in the
+ * request can fix it and no retry of any shape will, so the sentence has to
+ * reach a human — but another MODEL may still have an eligible endpoint, so the
+ * pool walk is still worth making.
+ *
+ * Everything else classifies as null and behaves exactly as it always has.
+ */
+function classifyRefusal(status, payload, text) {
+  if (status !== 400 && status !== 404 && status !== 422) return null
+  const step = payload?.error?.metadata?.failed_routing_step || ''
+  const blob = String(text || '')
+  if (step === 'Filter by Parameters') return 'params'
+  if (step === 'Filter by Guardrails') return 'policy'
+  if (/no endpoints found that can handle the requested parameters/i.test(blob)) return 'params'
+  if (/unsupported[_ ]parameter|unrecognized request argument|is not supported with this model|unknown (?:field|parameter)/i.test(blob)) {
+    return 'params'
+  }
+  if (/zdr|data policy|guardrail|ineligibility/i.test(blob)) return 'policy'
+  return null
+}
+
+/**
+ * Did this body ask for reasoning, in any of the four spellings this package
+ * emits? Read off the built body rather than the tuning record, because which
+ * spelling applies is the adapter's decision and this file does not hold that
+ * table — `reasoning` (OpenRouter's unified shape), `reasoning_effort` and
+ * `reasoning_budget` (the flat OpenAI-shaped fields), `think` (Ollama) and
+ * `thinking` (Anthropic).
+ */
+function hasReasoningField(body) {
+  if (!body || typeof body !== 'object') return false
+  return (
+    body.reasoning !== undefined ||
+    body.reasoning_effort !== undefined ||
+    body.reasoning_budget !== undefined ||
+    body.think !== undefined ||
+    body.thinking !== undefined
+  )
+}
+
+/** The service's own sentence, trimmed to something a panel can show. */
+function refusalReason(payload, text) {
+  const said = payload?.error?.message || payload?.message || ''
+  const line = String(said || text || '').trim().split('\n')[0]
+  return line ? line.slice(0, 300) : ''
+}
+
+/**
+ * WHAT THIS MODEL HAS ALREADY BEEN CAUGHT NOT SUPPORTING.
+ *
+ * Module scope, on the same reasoning as `POOLS` above: the fact is about the
+ * SERVICE and not about the conversation. A reader who asks a second question
+ * should not spend a second refusal rediscovering that `gpt-4o-mini` publishes
+ * no `reasoning` parameter, and a reader who opens a second panel should not
+ * either. Cleared by a reload, which is the right lifetime — an endpoint's
+ * published parameters change on that scale.
+ *
+ * `false` is the only value ever written: this map records what a service has
+ * REFUSED, never what it has allowed. Absence means "not yet known", which is
+ * what makes the full-strength body the default for every model that has not
+ * failed one.
+ */
+const CAPS = new Map()
+
+const capsKey = (provider, baseURL, model) => `${provider}|${baseURL}|${model}`
+
+/** The body-shape concessions this model has earned, or null while it has none. */
+function degradeFor(provider, baseURL, model) {
+  const known = CAPS.get(capsKey(provider, baseURL, model))
+  if (!known) return null
+  return {
+    reasoning: known.reasoning === false,
+    schemaAsTool: known.structuredOutputs === false,
+  }
+}
+
+/**
+ * The next concession to make to this model, or false when there are none left.
+ *
+ * TWO RUNGS, IN THIS ORDER, AND THE ORDER IS THE MEASUREMENT. `reasoning` is
+ * dropped first because it is the field nothing downstream reads — the panel is
+ * not showing a trace on a search step — so the request loses nothing. The
+ * strict schema is dropped second and reluctantly: it is what makes the final
+ * call's shape unforgeable, and the tool form that replaces it is a request the
+ * model can still decline. A model that fails both is a model to rotate past.
+ *
+ * `sentReasoning` / `sentSchema` say what was actually ON THE WIRE. Without
+ * them a model that never sent a reasoning field would still "spend" the first
+ * rung on it and reach the schema rung one request later than it should.
+ */
+function escalateCaps(provider, baseURL, model, { sentReasoning, sentSchema }) {
+  const key = capsKey(provider, baseURL, model)
+  const known = CAPS.get(key) || {}
+  if (sentReasoning && known.reasoning !== false) {
+    CAPS.set(key, { ...known, reasoning: false })
+    return 'reasoning'
+  }
+  if (sentSchema && known.structuredOutputs !== false) {
+    CAPS.set(key, { ...known, structuredOutputs: false })
+    return 'structuredOutputs'
+  }
+  return false
+}
+
+/** Test seam: the capability memory is module scope and outlives a turn. */
+export function resetCaps() {
+  CAPS.clear()
 }
 
 /** `retry-after`, in milliseconds, or undefined — the service's own number. */
@@ -678,6 +885,13 @@ export async function chat(options: ChatOptions) {
   onDelta = null,
   onModel = null,
   onAbandon = null,
+  /**
+   * A concession made to keep a model rather than rotate past it — fired with
+   * `{model, dropped, reason}` when a `params` refusal costs the request a
+   * parameter. Diagnostic only: nothing renders it, and a turn that never meets
+   * a refusal never fires it.
+   */
+  onDegrade = null,
   extraBody = null,
   /**
    * The connector record: the author's neutral request, already clamped to what
@@ -900,7 +1114,7 @@ export async function chat(options: ChatOptions) {
 
       let out
       try {
-        out = await once(chosen, delta, last)
+        out = await onceOrSmaller(chosen, delta, last)
       } catch (e) {
         lastError = e
         if (signal?.aborted || emitted || last || !rotating || !affordable() || !rotatable(e)) throw e
@@ -969,6 +1183,43 @@ export async function chat(options: ChatOptions) {
       return { ...out, model: chosen, provider: target.provider }
     }
     throw lastError || new Error('chat — no model in the pool answered')
+
+    /**
+     * THE SAME MODEL, ASKED WITH A SMALLER BODY — before the pool is walked.
+     *
+     * A `params` refusal is a fact about the REQUEST, not about the model: the
+     * endpoint does not publish a parameter this body named, and OpenRouter's
+     * `provider.require_parameters` turns that into `404 No endpoints found that
+     * can handle the requested parameters`. Every member of the pool gets the
+     * identical body, so the rotation that used to follow bought the identical
+     * refusal once per member — measured on the deployed site, five 404s in a
+     * row, ~1.2 s and one charged request each, before a sixth model answered
+     * for no better reason than that it happened to publish `response_format`.
+     *
+     * So the first move is to drop what was refused and ask the SAME model
+     * again. Two rungs exist (`escalateCaps`), each concession is remembered for
+     * the rest of the session, and a model that runs out of rungs falls through
+     * to exactly the rotation it would have had. Worst case per model is
+     * therefore two extra requests ONCE, against a pool walk on every turn.
+     *
+     * `affordable()` gates each retry the way it gates each rotation: a turn
+     * with no request left to spend does not spend one here either.
+     */
+    async function onceOrSmaller(chosen, onFrame, last) {
+      for (;;) {
+        try {
+          return await once(chosen, onFrame, last)
+        } catch (e) {
+          if (e?.kind !== 'params' || signal?.aborted || painted || !affordable()) throw e
+          const rung = escalateCaps(target.provider, target.baseURL, chosen, {
+            sentReasoning: e.sentReasoning,
+            sentSchema: e.sentSchema,
+          })
+          if (!rung) throw e
+          onDegrade?.({ model: chosen, dropped: rung, reason: e.reason })
+        }
+      }
+    }
 
     /**
      * One model's whole reply, however many requests it took to get it.
@@ -1095,6 +1346,10 @@ export async function chat(options: ChatOptions) {
         extraBody: target.extraBody,
         tuning: target.tuning,
         continuing: Boolean(prefill),
+        // WHAT THIS MODEL HAS ALREADY REFUSED, if anything. Null for every model
+        // that has not failed a request, so the full-strength body stays the
+        // default and a healthy endpoint never sees a degraded one.
+        degrade: degradeFor(target.provider, target.baseURL, chosen),
       })
 
       const { res, kind } = await fetchWithRetry(
@@ -1132,7 +1387,38 @@ export async function chat(options: ChatOptions) {
         err.rateLimit = rateLimitOf(res, err.retryAfterMs, kind)
         throw err
       }
-      if (!res.ok) throw statusError(`chat ${res.status} — model "${chosen}"`, res.status)
+      if (!res.ok) {
+        // READ, THEN CLASSIFY, THEN THROW — and reading it is what closes the
+        // socket. The old line threw on the status alone, so the body was never
+        // consumed and never cancelled: five refused requests on one turn held
+        // five sockets open for the step's whole 120-second timeout, long after
+        // the reader had their answer.
+        const text = await readErrorBody(res)
+        let payload = null
+        try {
+          payload = text ? JSON.parse(text) : null
+        } catch {
+          /* an HTML error page from a proxy — the sentence is whatever text holds */
+        }
+        const reason = refusalReason(payload, text)
+        const err = statusError(
+          reason ? `chat ${res.status} — model "${chosen}": ${reason}` : `chat ${res.status} — model "${chosen}"`,
+          res.status,
+        )
+        err.reason = reason || undefined
+        err.kind = classifyRefusal(res.status, payload, text)
+        // WHAT THE FAILED REQUEST ACTUALLY CARRIED, read off the body that was
+        // just sent rather than re-derived from the tuning record. The adapter
+        // owns the spelling — `reasoning`, `reasoning_effort`, `think`,
+        // `thinking` are four brands' words for one idea — and asking the body
+        // is the only way to know without a second copy of that table here.
+        err.sentReasoning = hasReasoningField(body)
+        // Only the STRICT schema has a smaller form to fall back to. A bare
+        // `json_object` has none, so claiming it as a rung would spend a request
+        // to send the identical body again.
+        err.sentSchema = body?.response_format?.type === 'json_schema'
+        throw err
+      }
       return streaming && res.body ? await p.readStream(res, onFrame) : p.parse(await res.json())
     }
   }

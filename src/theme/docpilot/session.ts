@@ -8,7 +8,7 @@
 import { reactive, computed } from 'vue'
 import { loadIndex } from './store.js'
 import { createRetrieval } from './retriever.js'
-import { enforces } from './gate.js'
+import { composeQuery, enforces } from './gate.js'
 import { resultRows } from './results.js'
 import { embedQuery } from './embed.js'
 import { runTurn } from './harness.js'
@@ -1824,6 +1824,18 @@ export async function submit(question, { quote = '' } = {}) {
       turn,
       {
         text: opener.answer.text,
+        /**
+         * THE IDS TRAVEL AS WELL AS THE ROWS — engine-spec 013.
+         *
+         * `sources` is the deduped reader-facing set; `citations` is what
+         * `settleAnswer` writes to `turn.citationIds`, and a follow-up inherits
+         * its evidence through that field alone (`seedFromHistory`, which
+         * requires `h.citations?.length`). Both baked branches passed `sources`
+         * and nothing else, so a chip click left `citationIds` undefined and the
+         * next question started from nothing — the one turn shape where the
+         * panel KNOWS which chunks the reader just read.
+         */
+        citations: opener.answer.citations,
         sources: opener.answer.citations
           .map((id) => state.index.byId.get(id))
           .filter(Boolean),
@@ -1896,6 +1908,31 @@ export async function submit(question, { quote = '' } = {}) {
    * would escape `ask()` entirely, leaving the panel busy with a turn that never
    * settles. The rows are a courtesy; the settle is the contract.
    */
+  /**
+   * THE ONE TRANSPORT FAILURE ONLY THE SITE'S OWNER CAN FIX, said out loud.
+   *
+   * A reader sees the same sentence for every unreachable model, by design —
+   * they cannot act on a stack trace. But a `policy` refusal is not a model
+   * being busy: it is the ACCOUNT's own guardrails removing every endpoint the
+   * configured model has, and no retry, no rotation and no config edit will move
+   * it. Measured on this deployment, `openai/gpt-4o-mini` answered every single
+   * request with `ZDR violation (account settings): 1 endpoint excluded` — and
+   * the panel said the models were unreachable, which read as an outage.
+   *
+   * Console rather than the panel, on the same terms as the unreachable-embedder
+   * line above: it is a message to whoever deployed the site, and it owes no
+   * i18n key because no reader is its audience.
+   */
+  function reportPolicyRefusal(e) {
+    if (e?.kind !== 'policy') return
+    // eslint-disable-next-line no-console
+    console.error(
+      `[docpilot] the chat service refused on ACCOUNT POLICY, not on the request: ${e.reason || e.message}. ` +
+        'No model in the pool can answer until that setting changes — for OpenRouter it is ' +
+        'openrouter.ai/settings/privacy (zero-data-retention and allowed providers).',
+    )
+  }
+
   function safeResults(turn) {
     try {
       fillResults(turn)
@@ -1978,6 +2015,47 @@ export async function submit(question, { quote = '' } = {}) {
     let mode = 'hybrid'
     state.retrieval = 'hybrid'
     state.retrievalError = ''
+
+    /**
+     * ── WHAT THE COMPOSED CHANNEL NEEDS, DECIDED BEFORE THE EMBEDDER IS ASKED ──
+     *
+     * This block used to sit two hundred lines below, next to the gate that
+     * consumes it, and buying its vector there made a follow-up cost TWO
+     * embedding requests: one for the question and one for the question glued to
+     * its antecedent. On a free tier that meters REQUESTS rather than tokens
+     * that is not a rounding error — it is double the metered cost of every
+     * follow-up a reader asks, and `docs/guide/free-tier.md` promised one.
+     *
+     * Nothing here needs the vector, so nothing here needed to wait: `selected`
+     * is the reader's quote, resolved before the turn began, and
+     * `priorAntecedent` reads `state.turns`, onto which this turn was pushed
+     * before the gate ran. Moving the DECISION up lets both texts go out in one
+     * request; the gate below still reads `composedQuery`/`composedVec` exactly
+     * where it always did.
+     */
+    const previous = priorAntecedent(state.turns)
+    const antecedent = selected || previous
+    /**
+     * `null` is not `undefined` here, and `evaluate()` reads the difference:
+     * undefined means "there is no second query to score", null means "score it
+     * with no vector".
+     *
+     * A lexical-only turn still HAS a composed channel — composing is a string
+     * operation, and `L` is computed over the composed query either way — and
+     * `docpilot calibrate` sweeps `tauLexical` with that channel running
+     * (`probeLexicalOnly`, and `eval/run.js` under `--lexical`). Leaving it
+     * undefined here scored every follow-up on the raw question alone against a
+     * threshold measured on both, which shows up as "and for backend calls?"
+     * being refused on the one deployment shape that cannot fall back to a
+     * dense channel.
+     *
+     * ONE SPELLING OF THE COMPOSITION, and it is the gate's. `evaluate()`
+     * composes the same string independently through `composeQuery` (gate.js);
+     * a second hand-written `${antecedent}\n${q}` here agreed with it only by
+     * inspection, and the day it stopped agreeing the embedded vector would have
+     * belonged to a different string than the query it was scored against.
+     */
+    composedQuery = composeQuery(q, antecedent)
     /**
      * A deployment that DECLARED no embedder is not one whose embedder is down,
      * and everything the branch below does is a report of an outage: it names an
@@ -2021,7 +2099,22 @@ export async function submit(question, { quote = '' } = {}) {
     } else {
       try {
         if (!embedderMatchesIndex()) throw new Error('embedder does not match the index')
-        queryVec = await embed(q, cfg, signal)
+        /**
+         * BOTH VECTORS, ONE REQUEST. `embedQuery` takes a list and every
+         * OpenAI-shaped `/v1/embeddings` and Ollama's `/api/embed` answer with
+         * one row per entry, in order — so the composed channel now costs a
+         * follow-up nothing beyond what the question already cost it.
+         *
+         * A first turn has no antecedent, so the list holds one text and this is
+         * the request it always was, to the byte.
+         */
+        if (composedQuery) {
+          const [raw, composed] = await embed([q, composedQuery], cfg, signal)
+          queryVec = raw
+          composedVec = composed
+        } else {
+          queryVec = await embed(q, cfg, signal)
+        }
       } catch (e) {
         // A reader who pressed stop is not an outage. `embedQuery` is handed the
         // turn's signal, so cancelling it lands here, and treating that as an
@@ -2122,6 +2215,10 @@ export async function submit(question, { quote = '' } = {}) {
           turn,
           {
             text: dense.answer.text,
+            // The same inheritance the chip-click branch above carries, for the
+            // same reason: a paraphrase answered from the bake is still an
+            // answer that stood on chunks, and the next question needs them.
+            citations: dense.answer.citations,
             sources: dense.answer.citations.map((id) => state.index.byId.get(id)).filter(Boolean),
           },
           started,
@@ -2144,7 +2241,31 @@ export async function submit(question, { quote = '' } = {}) {
        */
       if (dense) {
         turn.opener = { matched: dense.matched, score: dense.score, baked: false }
-        openerHint = dense.entry.ids
+        /**
+         * THE AUTHOR'S CITATIONS FIRST, THE BUILD'S RETRIEVAL SECOND.
+         *
+         * `entry.ids` is what the gate retrieved for this opener AT BUILD TIME,
+         * and openers.js says so in as many words — "the build's own report, and
+         * NOT what the panel reads". Spec 018 made it exactly that without
+         * changing the sentence, and on this corpus the two disagree badly: the
+         * bake for "How do I get started?" resolved to a reverse-proxy paragraph
+         * and two FAQ fragments with no `/install/` chunk among them, and the
+         * appearance opener resolved to `reference/config#chatprovider` with no
+         * appearance chunk at all. A Russian paraphrase that dense-matched
+         * either one was primed with evidence for a different question — which
+         * is the "irrelevant answer" this reads as.
+         *
+         * An AUTHORED entry carries something better: the `cite` its author
+         * wrote, which the build has already checked against the index it
+         * produced and which costs the whole answer if one of them has moved
+         * (openers.js). That is a statement about what answers this question;
+         * `ids` is a statement about what one retrieval run returned.
+         *
+         * The fallback is unchanged for a baked entry, which has no `cite`.
+         */
+        const cited = dense.entry.answer?.citations
+        const hint = Array.isArray(cited) && cited.length ? cited : dense.entry.ids
+        openerHint = hint
           .map((id) => retrieval.fetch(String(id || '')))
           .filter((r) => r.ok)
           .map((r) => r.section)
@@ -2152,43 +2273,26 @@ export async function submit(question, { quote = '' } = {}) {
     }
 
     /**
-     * The antecedent of the composed channel — RAG-SPEC 3.4.5, and the only
-     * place a quote is allowed to touch the gate.
+     * ── THE COMPOSED CHANNEL'S VECTOR, SETTLED ────────────────────────────────
      *
-     * A selection is a BETTER antecedent than the previous question, and it is
-     * the one the reader chose: "explain this" resolves against the passage
-     * under the cursor, not against whatever was asked one turn ago. So when a
-     * quote is attached it takes the slot.
+     * `antecedent` and `composedQuery` were decided before the embedder was
+     * asked, so that both texts could ride one request — see the block above the
+     * embed branch, which also carries the reasoning about the quote taking the
+     * antecedent slot. Three of the four ways a turn reaches this line have
+     * already settled `composedVec`:
      *
-     * What it is NOT is part of `question`. Gluing the two would put the quote's
-     * terms into the raw query, where `lexicalCoverage` would count them — and a
-     * quote lifted from an answer this corpus produced matches this corpus by
-     * construction, so L would saturate on every question carrying one. That is
-     * exactly the "off-topic question padded with domain nouns" the gate's
-     * `df ?? 0` default exists to catch, arriving through the front door. Here it
-     * can only raise G through a channel `admissible()` still polices against the
-     * reader's OWN words, and G is a maximum, so refusals can only decrease.
+     *   · the batched embed above returned both vectors;
+     *   · lexical-only never had a dense channel to score;
+     *   · the embed threw, and the turn fell to lexical-only with it.
+     *
+     * What is left is the BAKED OPENER: `queryVec` came from the index build
+     * rather than from a request, so a follow-up to a chip click still has a
+     * composed query with nothing behind it. That one buys its own vector, and
+     * it is the only turn shape that still spends a second embedding request.
      */
-    const previous = priorAntecedent(state.turns)
-    const antecedent = selected || previous
-    /**
-     * `null` is not `undefined` here, and `evaluate()` reads the difference:
-     * undefined means "there is no second query to score", null means "score it
-     * with no vector".
-     *
-     * A lexical-only turn still HAS a composed channel — composing is a string
-     * operation, and `L` is computed over the composed query either way — and
-     * `docpilot calibrate` sweeps `tauLexical` with that channel running
-     * (`probeLexicalOnly`, and `eval/run.js` under `--lexical`). Leaving it
-     * undefined here scored every follow-up on the raw question alone against a
-     * threshold measured on both, which shows up as "and for backend calls?"
-     * being refused on the one deployment shape that cannot fall back to a
-     * dense channel.
-     */
-    composedQuery = antecedent ? `${antecedent}\n${q}` : null
     if (antecedent && mode === 'lexical-only') {
       composedVec = null
-    } else if (antecedent && queryVec) {
+    } else if (antecedent && queryVec && composedVec === undefined) {
       try {
         composedVec = await embed(composedQuery, cfg, signal)
       } catch (e) {
@@ -2634,10 +2738,12 @@ export async function submit(question, { quote = '' } = {}) {
       turn.error = String(e.message || e)
       turn.gate = g
       safeResults(turn)
+      reportPolicyRefusal(e)
       if (state.debug) console.error('[docpilot] no model answered — hybrid settle', e)
     } else {
       turn.state = 'error'
       turn.error = String(e.message || e)
+      reportPolicyRefusal(e)
       // The panel renders one sentence for every transport failure, by design —
       // a reader cannot act on a stack trace. But `?dpdebug=1` exists to print
       // the trace, and the failure that ends the turn is the one thing worth

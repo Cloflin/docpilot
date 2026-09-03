@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 
-import { chat, resetPools } from '../src/theme/docpilot/llm.js'
+import { chat, resetPools, resetCaps } from '../src/theme/docpilot/llm.js'
 import { providerFor } from '../src/theme/docpilot/providers.js'
 import { assembleIndex } from '../src/theme/docpilot/store.js'
 import { createHistory } from '../src/theme/docpilot/history.js'
@@ -52,6 +52,53 @@ const tooManyRequests = (source, headers = {}) => {
     clone: () => make(),
   })
   return make()
+}
+
+/**
+ * A REFUSAL WITH A BODY, which is the only kind this transport can now learn
+ * from. Both shapes are copied from live OpenRouter responses captured against
+ * the deployed site — the same status, two different faults:
+ *
+ *   `params`  the body named a parameter this endpoint does not publish. Every
+ *             member of the pool would refuse the identical body, so the fix is
+ *             a smaller body to the same model.
+ *   `policy`  the ACCOUNT's guardrails removed every endpoint for this model.
+ *             Nothing in the request can fix it; another model might still have
+ *             an eligible endpoint.
+ */
+const refusal = (kind, status = 404) => {
+  const payload =
+    kind === 'params'
+      ? {
+          error: {
+            message:
+              'No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection',
+            code: status,
+            metadata: { failed_routing_step: 'Filter by Parameters' },
+          },
+        }
+      : {
+          error: {
+            message:
+              '0 endpoints out of 1 requested are available matching your guardrail restrictions and data policy. We removed them for the following reasons (an endpoint may have matched multiple reasons):\nZDR violation (account settings): 1 endpoint excluded',
+            code: status,
+            metadata: { failed_routing_step: 'Filter by Guardrails' },
+          },
+        }
+  const text = JSON.stringify(payload)
+  return {
+    ok: false,
+    status,
+    headers: new Headers(),
+    body: new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(text))
+        c.close()
+      },
+    }),
+    json: async () => payload,
+    clone: () => ({ json: async () => payload }),
+  }
 }
 
 const sse = (frames) =>
@@ -1084,17 +1131,27 @@ describe('a turn on a metered service', () => {
     return s
   }
 
-  /** Records every chat body; embeddings answer with the index's own axis. */
+  /**
+   * Records every chat body; embeddings answer with the index's own axis.
+   *
+   * ONE ROW PER INPUT, because `input` is a list whenever a turn has an
+   * antecedent to compose against — the question and the composed query ride one
+   * request (embed.js). A mock that answered with a fixed single row would hand
+   * a follow-up two inputs and one vector, which `embedQuery` correctly refuses
+   * as a short list, and every follow-up here would quietly retrieve
+   * lexical-only instead of testing what it says it tests.
+   */
   const transport = (onChat) => {
     const chats = []
     vi.stubGlobal('fetch', async (url, init) => {
       const body = JSON.parse(init.body)
       if (String(url).includes('/embeddings')) {
+        const rows = (Array.isArray(body.input) ? body.input : [body.input]).map(() => [1, 0, 0, 0])
         return {
           ok: true,
           status: 200,
           headers: new Headers(),
-          json: async () => ({ data: [{ embedding: [1, 0, 0, 0] }] }),
+          json: async () => ({ data: rows.map((embedding, index) => ({ embedding, index })) }),
         }
       }
       chats.push(body)
@@ -1347,6 +1404,53 @@ describe('a turn on a metered service', () => {
    * `embed.provider` exists precisely so they need not, and an Ollama embedder
    * beside a hosted chat model draws on nobody's daily anything.
    */
+  /**
+   * ── ONE EMBEDDING REQUEST PER TURN, FOLLOW-UPS INCLUDED ────────────────────
+   *
+   * A follow-up scores two queries: the reader's question, and the question
+   * glued to its antecedent — the composed channel that keeps "and for backend
+   * calls?" from retrieving nothing (RAG-SPEC 3.4.5). Both need a vector, and
+   * buying them separately made every follow-up cost TWO of a daily allowance
+   * that counts requests rather than tokens. `docs/guide/free-tier.md` said one.
+   *
+   * They go out together now. This test counts REQUESTS and asserts the second
+   * one carries both texts, because the cheap way to "fix" the count is to stop
+   * composing — which would silently retire the channel this site's `tauLexical`
+   * was calibrated with.
+   */
+  it('buys both of a follow-up’s vectors in one request', async () => {
+    const inputs = []
+    const s = await start({ embed: { provider: 'openrouter', model: 'test-embed' } })
+    vi.stubGlobal('fetch', async (url, init) => {
+      const body = JSON.parse(init.body)
+      if (String(url).includes('/embeddings')) {
+        inputs.push(body.input)
+        const rows = (Array.isArray(body.input) ? body.input : [body.input]).map(() => [1, 0, 0, 0])
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ data: rows.map((embedding, index) => ({ embedding, index })) }),
+        }
+      }
+      return reply(FINAL_ANSWER)
+    })
+
+    await s.submit('how is the alpha widget configured?')
+    // A first turn has no antecedent, so it embeds one string — the request it
+    // always was, to the byte.
+    expect(inputs).toHaveLength(1)
+    expect(inputs[0]).toBe('how is the alpha widget configured?')
+
+    await s.submit('and what does the token do?')
+    // ONE more request, carrying BOTH texts. Two requests here is the defect.
+    expect(inputs).toHaveLength(2)
+    expect(inputs[1]).toEqual([
+      'and what does the token do?',
+      'how is the alpha widget configured?\nand what does the token do?',
+    ])
+  })
+
   it('counts an embedding that shares the chat allowance, and only that one', async () => {
     /** Chat refuses for the day; the embedder answers on the index's own axis. */
     const bothHalves = (embedUrl) => {
@@ -1598,7 +1702,14 @@ describe('a turn on a metered service', () => {
    *   D  one response, one classification, read by the transport and the ledger.
    */
   describe('the request-count matrix', () => {
-    beforeEach(() => resetPools())
+    // The capability memory is module scope and outlives a turn by design, which
+    // is exactly why each row has to start from nothing: a row that inherited
+    // the previous row's concession would assert a request count bought by a
+    // test above it.
+    beforeEach(() => {
+      resetPools()
+      resetCaps()
+    })
 
     /** A loop step that answers outright, which is what a strong model does. */
     const answers = () =>
@@ -1607,6 +1718,143 @@ describe('a turn on a metered service', () => {
         citations: ['a#one'],
         confidence: 0.8,
       })
+
+    /**
+     * ── A PARAMETER REFUSAL COSTS ONE EXTRA REQUEST, NOT ONE PER MODEL ────────
+     *
+     * This row is the twelve-request turn, reduced to its cause. OpenRouter
+     * answers `404 Filter by Parameters` when the body names a parameter the
+     * endpoint does not publish, and `provider.require_parameters` is what makes
+     * that a routing failure rather than a silently dropped field. The body is
+     * identical for every pool member, so the rotation this used to trigger
+     * bought the same refusal once per member — five of them, live, before a
+     * sixth model answered.
+     *
+     * The fix is to ask the SAME model again with less in it. One extra request,
+     * once, and the concession is remembered for the rest of the session.
+     */
+    it('a params refusal retries the same model smaller: 2 requests', async () => {
+      const r = await turn({
+        remaining: 50,
+        settings: { mode: 'one-shot' },
+        llm: { model: 'a', models: ['a', 'b', 'c'], tuning: { style: 'unified', off: true } },
+        onChat: (body, i) => (i === 1 ? refusal('params') : reply(FINAL_ANSWER)),
+      })
+      expect(r.requests).toBe(2)
+      expect(r.text).toContain('manifest')
+      // The SAME model, not the next one — which is the whole point of the row.
+      expect(r.chats.map((c) => c.model)).toEqual(['a', 'a'])
+      // The refused request asked for reasoning; the retry does not. Both still
+      // carry the strict schema, because that rung has not been reached.
+      expect(r.chats[0].reasoning).toEqual({ enabled: false })
+      expect(r.chats[1].reasoning).toBeUndefined()
+      expect(r.chats[1].response_format?.type).toBe('json_schema')
+    })
+
+    /**
+     * AND THE COMMONEST CASE NO LONGER HAPPENS AT ALL.
+     *
+     * `chat.reasoning: false` used to put `reasoning: {enabled: false}` on every
+     * request including the search steps, because the openai adapter never read
+     * the `enableThink` the harness has always passed it. Beside
+     * `require_parameters` that field is a routing filter, so the deployed site
+     * spent its FIRST request of every turn on a 404 from a model with no
+     * reasoning surface. A loop step now asks for none, so there is nothing to
+     * be refused for.
+     */
+    it('asks for no reasoning on a search step, whatever the author configured', async () => {
+      const r = await turn({
+        remaining: 50,
+        llm: { model: 'a', models: ['a'], tuning: { style: 'unified', effort: 'high' } },
+        onChat: searching(),
+      })
+      const [step] = r.chats
+      expect(step.tools).toBeTruthy()
+      expect(step.reasoning).toBeUndefined()
+      // The one call whose output a reader reads still gets the author's depth.
+      expect(r.chats.at(-1).reasoning).toEqual({ effort: 'high' })
+    })
+
+    /**
+     * AND THE CONCESSION OUTLIVES THE TURN. `CAPS` is module scope on the same
+     * reasoning as the pool's stickiness: an endpoint's published parameters are
+     * a fact about the SERVICE, so a reader's second question must not pay a
+     * second refusal to rediscover it.
+     */
+    it('remembers the concession, so the next turn pays nothing: 1 request', async () => {
+      const llm = { model: 'a', models: ['a'], tuning: { style: 'unified', off: true } }
+      await turn({
+        remaining: 50,
+        settings: { mode: 'one-shot' },
+        llm,
+        onChat: (body, i) => (i === 1 ? refusal('params') : reply(FINAL_ANSWER)),
+      })
+      const again = await turn({
+        remaining: 50,
+        settings: { mode: 'one-shot' },
+        llm,
+        onChat: () => reply(FINAL_ANSWER),
+      })
+      expect(again.requests).toBe(1)
+      expect(again.text).toContain('manifest')
+      // It opened already degraded, which is what "remembered" means.
+      expect(again.chats[0].reasoning).toBeUndefined()
+    })
+
+    /**
+     * THE STRICT SCHEMA IS THE SECOND RUNG, AND IT IS THE FINAL CALL'S.
+     *
+     * A model with no `structured_outputs` refuses the forced answer call and
+     * only that call — the loop steps carry `tools` and go through. Dropping the
+     * schema entirely would lose the shape that makes an answer citable, so it
+     * is re-asked as a forced tool call instead: same object, a parameter the
+     * endpoint publishes.
+     */
+    it('a schema refusal falls back to a forced tool call rather than rotating', async () => {
+      const r = await turn({
+        remaining: 50,
+        llm: { model: 'a', models: ['a', 'b'] },
+        onChat: (body) => {
+          if (body.response_format?.type === 'json_schema') return refusal('params')
+          if (body.tool_choice) {
+            return toolReply('answer', {
+              text: 'The alpha widget takes a manifest [1].',
+              citations: ['a#one'],
+              confidence: 0.8,
+            })
+          }
+          return toolReply('search_docs', { query: 'alpha' })
+        },
+      })
+      expect(r.text).toContain('manifest')
+      // Every request went to the first model: nothing rotated.
+      expect(new Set(r.chats.map((c) => c.model))).toEqual(new Set(['a']))
+      // The degraded final call names the tool it wants and sends no
+      // `response_format` at all — a `json_object` fallback would have put one
+      // back and re-lost the endpoint.
+      const finalCall = r.chats.at(-1)
+      expect(finalCall.tool_choice).toEqual({ type: 'function', function: { name: 'answer' } })
+      expect(finalCall.response_format).toBeUndefined()
+      expect(finalCall.tools.map((t) => t.function.name)).toEqual(['answer'])
+    })
+
+    /**
+     * A POLICY REFUSAL STILL ROTATES, and it must: the account's guardrails
+     * removed this model's endpoints, and the next model may have one that
+     * survives. What changes is that the service's own sentence travels with the
+     * error, so a reader is told about a data-policy setting rather than told
+     * the documentation has no answer.
+     */
+    it('rotates past a policy refusal and keeps its sentence: 2 requests', async () => {
+      const r = await turn({
+        remaining: 50,
+        llm: { model: null, models: ['a', 'b'] },
+        onChat: (body, i) => (i === 1 ? refusal('policy') : answers()),
+      })
+      expect(r.requests).toBe(2)
+      expect(r.chats.map((c) => c.model)).toEqual(['a', 'b'])
+      expect(r.text).toContain('manifest')
+    })
 
     it('unrationed agentic, answered on lap one: 1 request', async () => {
       const r = await turn({ remaining: 50, onChat: () => answers() })

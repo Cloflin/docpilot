@@ -44,7 +44,7 @@ const MAX_ATTEMPTS = 3
  * BOTH is a bug worth naming rather than a request worth sending.
  */
 export async function embedQuery(
-  text: string,
+  text: string | string[],
   {
     provider = 'ollama',
     baseURL,
@@ -63,12 +63,23 @@ export async function embedQuery(
   if (!p.embedUrl) throw new Error(`provider ${provider} has no embeddings endpoint`)
   if (!model) throw new Error('no embedding model — the index names it; rebuild with `npx docpilot index`')
 
+  // ONE STRING IN, ONE VECTOR OUT — the shape every existing caller passes and
+  // the shape they all still get back. A LIST in returns a list of vectors in
+  // the same order, and costs the SAME single request, which is the whole point:
+  // a follow-up turn needs the question and the question-with-its-antecedent
+  // both embedded (session.js), and buying them separately doubled the metered
+  // cost of every follow-up on a free tier that counts requests rather than
+  // tokens.
+  const many = Array.isArray(text)
+  const inputs = (many ? text : [text]).map((t) => `${queryPrefix(model)}${t}`)
+  if (many && inputs.length === 0) return []
+
   let res
   for (let attempt = 1; ; attempt++) {
     res = await fetch(p.embedUrl(baseURL), {
       method: 'POST',
       headers: p.headers(apiKey),
-      body: JSON.stringify(p.embedBody(model, `${queryPrefix(model)}${text}`)),
+      body: JSON.stringify(p.embedBody(model, many ? inputs : inputs[0])),
       signal,
     })
     if (res.ok || !RETRYABLE.has(res.status) || attempt >= MAX_ATTEMPTS || signal?.aborted) break
@@ -93,11 +104,33 @@ export async function embedQuery(
   }
   if (!res.ok) throw new Error(`embed ${res.status}`)
   const json = await res.json()
-  const vec = p.embedParse(json)
-  if (!vec) throw new Error('embed response has no vector')
 
-  // L2-normalise, then scale to the index's int8 domain so the runtime dot
-  // product is the cosine without any per-query rescaling.
+  if (!many) {
+    const vec = p.embedParse(json)
+    if (!vec) throw new Error('embed response has no vector')
+    return scale(vec)
+  }
+
+  const rows = p.embedParseAll?.(json)
+  // A SHORT LIST IS A WRONG ANSWER, not a partial one. The caller pairs these
+  // with its own inputs positionally, so a service that returned two vectors for
+  // three texts would hand the third query's score to the second query's vector
+  // — numbers that look like similarities and are not. Better to fall to
+  // lexical-only, which the caller already handles.
+  if (!Array.isArray(rows) || rows.length !== inputs.length) {
+    throw new Error(`embed response has ${rows?.length ?? 0} vectors for ${inputs.length} inputs`)
+  }
+  return rows.map((vec) => {
+    if (!vec) throw new Error('embed response has no vector')
+    return scale(vec)
+  })
+}
+
+/**
+ * L2-normalise, then scale to the index's int8 domain so the runtime dot
+ * product is the cosine without any per-query rescaling.
+ */
+function scale(vec) {
   let sum = 0
   for (const v of vec) sum += v * v
   const norm = Math.sqrt(sum) || 1

@@ -404,6 +404,31 @@ describe('vercel /ai proxy', () => {
     })
 
     /**
+     * THE FUNCTION BLOCK, WHICH NOTHING PINNED AND ONE TURN DEPENDED ON.
+     *
+     * `maxDuration` is the platform's ceiling on a streaming answer, and the
+     * client's own step timeout is `DEFAULT_STEP_TIMEOUT_MS` in harness.js. With
+     * the platform's number the SMALLER of the two, a model that streams past it
+     * is killed mid-body: the status and headers were flushed long ago, so the
+     * client sees a clean end of stream rather than an error, reads a 200 with
+     * no tool call and no text, and rotates to the next model. Measured on the
+     * deployed site — one 60.3-second request that produced nothing and cost a
+     * request, with the client's own 120-second timer never reached.
+     *
+     * So the ceiling must be at least the client's, and `supportsCancellation`
+     * must stay on — it is what lets a reader pressing Stop cancel the upstream
+     * request instead of paying for an answer nobody will read.
+     */
+    it('gives a streamed answer at least as long as the client will wait for it', () => {
+      const fn = vercel.functions['api/ai/*.js']
+      expect(fn).toBeTruthy()
+      expect(fn.supportsCancellation).toBe(true)
+      const harness = fs.readFileSync(new URL('../src/theme/docpilot/harness.ts', import.meta.url), 'utf8')
+      const stepTimeoutMs = Number(harness.match(/DEFAULT_STEP_TIMEOUT_MS = (\d+)/)[1])
+      expect(fn.maxDuration * 1000).toBeGreaterThanOrEqual(stepTimeoutMs)
+    })
+
+    /**
      * THE ONE RED DEPLOY A GREEN SUITE CAN STILL PRODUCE.
      *
      * The build script above runs `doctor`, which exits 1 when the committed

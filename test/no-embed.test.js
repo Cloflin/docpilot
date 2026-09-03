@@ -939,7 +939,17 @@ describe('the turn — a declared mode is not an outage', () => {
    */
   it('runs the composed channel without a vector rather than skipping it', () => {
     expect(src).toContain("if (antecedent && mode === 'lexical-only') {\n      composedVec = null")
-    expect(src).toContain('} else if (antecedent && queryVec) {')
+    // `composedVec === undefined` is the third arm, not a fourth condition: the
+    // batched embed above settles both vectors in one request, and what is left
+    // here is the baked-opener turn, whose query vector came from the index
+    // build and so has no composed sibling. The invariant under test is
+    // unchanged — a lexical-only turn composes with `null`, never `undefined`.
+    expect(src).toContain('} else if (antecedent && queryVec && composedVec === undefined) {')
+    // The composition itself has ONE spelling, and it is the gate's. A
+    // hand-written `${antecedent}\n${q}` here agreed with `composeQuery` only by
+    // inspection, and the vector is embedded from this string while the gate
+    // scores against its own.
+    expect(src).toContain('composedQuery = composeQuery(q, antecedent)')
   })
 
   /**

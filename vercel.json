@@ -6,7 +6,7 @@
   "cleanUrls": true,
   "functions": {
     "api/ai/*.js": {
-      "maxDuration": 60,
+      "maxDuration": 120,
       "supportsCancellation": true
     }
   },

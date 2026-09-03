@@ -11769,6 +11769,64 @@ describe('normalise — FAQ islands, heading links and nested fences', () => {
     expect(text).toContain('body two')
     expect(text).toContain('body three')
   })
+
+  /**
+   * AND THE THIRD PARITY, which is the one that was actually costing this site
+   * its answers: a tag named in an INLINE code span, in ordinary prose.
+   *
+   * `eachLine` knows fences and nothing about backticks, so `` `<script>` `` in
+   * a sentence opened the island machine and every later unfenced line was
+   * dropped waiting for a `</script>` that a sentence never contains. Nine prose
+   * lines in `docs/` trip it, and they are on the pages that answer "how do I
+   * install this" — `/guide/appearance` reached the index at 9% of its source,
+   * `/install` at 57%. No retrieval tuning recovers text that was never indexed.
+   */
+  it('does not read a tag quoted in an inline code span as a real island', () => {
+    const src = [
+      '# P',
+      '',
+      'One `mountDocPilot()` call, or a `<script>` tag, or a bundler.',
+      '',
+      '## Two',
+      '',
+      'body two',
+      '',
+      '## Three',
+      '',
+      'body three',
+    ].join('\n')
+    const { text } = normaliseMarkdown(src)
+    // The sentence survives, and so does every section under it — which is the
+    // whole claim. (`stripHtml` later empties the span itself, so the indexed
+    // sentence reads "a  tag"; that is a separate, much smaller loss and is not
+    // what this test is about.)
+    expect(text).toContain('One `mountDocPilot()` call')
+    expect(text).toContain('body two')
+    expect(text).toContain('body three')
+  })
+
+  /** The same for the component this repo's own indexing page names. */
+  it('does not read a quoted <FaqAccordion /> as a real island', () => {
+    const src = ['# P', '', 'The `<FaqAccordion />` block is extracted first.', '', 'tail'].join(
+      '\n',
+    )
+    const { text } = normaliseMarkdown(src)
+    expect(text).toContain('tail')
+  })
+
+  /**
+   * AND A TAG ANYONE ACTUALLY WROTE IS STILL REMOVED. The fix must not turn
+   * "quoted in backticks" into "never strip anything", or a real `<script setup>`
+   * block would reach the corpus as page content.
+   */
+  it('still strips a real island and everything up to its close', () => {
+    const src = ['# P', '', '<script setup>', "const secret = 'RAWJS'", '</script>', '', 'tail'].join(
+      '\n',
+    )
+    const { text } = normaliseMarkdown(src)
+    expect(text).not.toContain('RAWJS')
+    expect(text).toContain('tail')
+  })
 })
 
 /**

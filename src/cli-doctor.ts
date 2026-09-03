@@ -47,12 +47,74 @@ import { embedChoices, indexCommandFor } from './embed-choices.js'
 import { probeEmbedEndpoint, probeLocalEmbedders } from './build/lib/embed-discovery.js'
 import { inspectChatTarget } from './build/lib/chat-preflight.js'
 import { providerFor } from './theme/docpilot/providers.js'
+import { toolSchemas } from './theme/docpilot/llm.js'
 import { flagErrors, flagGiven } from './cli-flags.js'
 
 /**
  * @param {{docPilot: any, settings: any, argv: string[], env: Record<string,string|undefined>, configPath: string|null}} opts
  * @returns {Promise<number>} an exit code
  */
+/**
+ * ONE REQUEST, ASKING ONLY WHETHER IT WOULD BE ROUTED.
+ *
+ * The body is built by the ADAPTER, from the same arguments the transport
+ * passes — `extraBody` carries OpenRouter's `provider.require_parameters`, and
+ * `tuning` carries whatever `chat.reasoning` resolved to — so what goes out here
+ * differs from a real turn's request only in its messages and its ceiling. That
+ * is the whole point: a probe that sends a simpler body proves nothing about the
+ * body the panel sends.
+ *
+ * Never throws. A doctor that dies on an unreachable host reports nothing about
+ * the twelve things it had already checked.
+ */
+async function probeBody(adapter, target, model, extra) {
+  const body = {
+    ...adapter.body({
+      model,
+      messages: [{ role: 'user', content: 'ping' }],
+      temperature: 0,
+      streaming: false,
+      maxTokens: 1,
+      tuning: target.tuning,
+      extraBody: target.extraBody,
+      tools: null,
+      schemaBody: null,
+      continuing: false,
+      ...extra,
+    }),
+    // Whatever the adapter's own ceiling field was, one token is all this needs
+    // — the answer is the STATUS, and a refusal arrives before generation.
+    stream: false,
+  }
+  try {
+    const res = await fetch(adapter.chatUrl(target.baseURL), {
+      method: 'POST',
+      headers: adapter.headers(target.apiKey),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20000),
+    })
+    if (res.ok) return { ok: true }
+    const text = await res.text().catch(() => '')
+    let payload = null
+    try {
+      payload = text ? JSON.parse(text) : null
+    } catch {
+      /* an HTML error page — the sentence is whatever text holds */
+    }
+    const said = String(payload?.error?.message || payload?.message || text || '').trim()
+    const step = payload?.error?.metadata?.failed_routing_step || ''
+    const kind =
+      step === 'Filter by Parameters' || /requested parameters|unsupported[_ ]parameter/i.test(said)
+        ? 'params'
+        : step === 'Filter by Guardrails' || /zdr|data policy|guardrail/i.test(said)
+          ? 'policy'
+          : null
+    return { ok: false, status: res.status, kind, reason: said.split('\n')[0].slice(0, 200) }
+  } catch (e) {
+    return { ok: false, status: 0, kind: null, reason: String(e?.message || e) }
+  }
+}
+
 export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} as Record<string, string | undefined>, configPath = null }) {
   /**
    * THE CHECK THIS COMMAND NEVER RAN.
@@ -232,7 +294,20 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
       const shown = chat.reasoning === false ? 'false' : (asked ?? 'auto')
       const field = {effort: 'reasoning_effort', unified: 'reasoning:{}', thinking: 'thinking', think: 'think'}[tuning.style]
       const moved = asked && tuning.effort && tuning.effort !== asked ? `  CLAMPED to '${tuning.effort}' — ${docPilot.chat.provider} has no '${asked}'` : ''
-      line(`${PAD}✓ ${'reasoning'.padEnd(12)}${String(shown).padEnd(9)}→ ${field}${moved}`)
+      /**
+       * `'auto'` WRITES NOTHING, and saying otherwise is what this line used to
+       * do. The adapter emits a reasoning field only when the record asks for
+       * something — an effort, a budget, or `off` — so an unset `chat.reasoning`
+       * puts no such key on the wire at all. Printing `→ reasoning:{}` for it
+       * described the one configuration that is guaranteed NOT to narrow
+       * OpenRouter's routing as though it were the one that does.
+       */
+      const writes = Boolean(tuning.effort || tuning.off || tuning.budgetTokens != null)
+      if (!writes) {
+        line(`${PAD}· ${'reasoning'.padEnd(12)}${String(shown).padEnd(9)}no reasoning field is sent`)
+      } else {
+        line(`${PAD}✓ ${'reasoning'.padEnd(12)}${String(shown).padEnd(9)}→ ${field}${moved}`)
+      }
     }
 
     wire('temperature', chat.temperature, caps.temperature === false ? null : adapter.supports?.temperature)
@@ -256,10 +331,24 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
     } else if (caps.modelDependent && tuning.style !== 'none') {
       line(`${PAD}! support varies by model here — a level is sent and the service decides`)
     }
-    // The interaction nobody would predict, and the one that turns an answerable
-    // question into "no provider available" on a thin free pool.
-    if (tuning.style === 'unified' && tuning.effort && docPilot.chat.extraBody?.provider?.require_parameters !== false) {
+    /**
+     * The interaction nobody would predict, and the one that turns an answerable
+     * question into "no provider available" on a thin free pool.
+     *
+     * `tuning.effort` WAS THE CONDITION and it was the wrong one. `off` is a
+     * reasoning parameter too — `chat.reasoning: false` puts `{enabled: false}`
+     * on the wire, which is a field an endpoint either publishes or does not,
+     * and `require_parameters` filters on its presence rather than its value. So
+     * the deployed configuration that spent every first request of every turn on
+     * a 404 was exactly the one this line stayed silent for. `budgetTokens` is
+     * the third spelling and was missed the same way.
+     */
+    const asksReasoning = tuning.style !== 'none' && (tuning.effort || tuning.off || tuning.budgetTokens != null)
+    if (asksReasoning && docPilot.chat.extraBody?.provider?.require_parameters !== false) {
       line(`${PAD}! reasoning + provider.require_parameters narrows routing a second time`)
+      if (tuning.off) {
+        line(`${PAD}  reasoning: false SENDS a parameter — leave it unset to send none`)
+      }
     }
 
     /**
@@ -492,6 +581,77 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
           say('model', `${target.model} — cannot reach ${target.id}`)
         } else {
           say('model', `${target.model} — ${target.id} returned no list`)
+        }
+      }
+    }
+
+    /**
+     * ── AND THE ONE QUESTION A CATALOGUE CANNOT ANSWER: WILL IT TAKE THIS BODY?
+     *
+     * Everything above compares NAMES against a list. `openai/gpt-4o-mini` is in
+     * OpenRouter's catalogue, so every check above it prints "served by
+     * openrouter" — and every request the panel actually makes to it answers
+     * 404, because the catalogue lists the model and routing decides on the
+     * endpoint. Two faults measured live on this package's own deployment, both
+     * invisible to a listing:
+     *
+     *   · the body named `reasoning` (from `chat.reasoning`) and no endpoint for
+     *     this model publishes that parameter — `Filter by Parameters`;
+     *   · the ACCOUNT's ZDR / data-policy settings excluded every endpoint the
+     *     model has — `Filter by Guardrails`, fixable only at
+     *     openrouter.ai/settings/privacy.
+     *
+     * So this posts the two bodies the panel really sends — a tool-calling loop
+     * step, and the forced final answer with its strict `response_format` — and
+     * reports what came back. THROUGH THE ADAPTER, so there is no second copy of
+     * the body shape here: the thing under test is precisely that this package's
+     * own request is acceptable, and a hand-written approximation would test a
+     * request nobody makes.
+     *
+     * `max_tokens: 1` and no streaming: this is asking whether the request is
+     * ROUTABLE, not what the model would say. A refusal arrives before any
+     * tokens are generated, so the probe costs a request and almost nothing else.
+     */
+    if (target.baseURL && (target.id === 'ollama' || target.apiKey)) {
+      const adapter = providerFor(target.provider)
+      const candidates = [target.model, ...(target.models || [])].filter(
+        (m, i, all) => m && all.indexOf(m) === i,
+      )
+      if (candidates.length && adapter.chatUrl) {
+        line('')
+        for (const model of candidates) {
+          for (const [shape, extra] of [
+            ['search step', { tools: toolSchemas(null), enableThink: false }],
+            [
+              'final answer',
+              {
+                schemaBody: {
+                  type: 'object',
+                  properties: {
+                    text: { type: 'string' },
+                    citations: { type: 'array', items: { type: 'string' } },
+                    confidence: { type: 'number' },
+                  },
+                  required: ['text', 'citations', 'confidence'],
+                  additionalProperties: false,
+                },
+                enableThink: true,
+              },
+            ],
+          ]) {
+            const outcome = await probeBody(adapter, target, model, extra)
+            const label = `${model} · ${shape}`
+            if (outcome.ok) say('body', `${label} — accepted`)
+            else {
+              say('body', `${label} — ${outcome.status} ${outcome.kind || 'refused'}`)
+              if (outcome.reason) line(`${PAD}${outcome.reason}`)
+              if (outcome.kind === 'params') {
+                line(`${PAD}the panel retries this smaller at runtime; unset chat.reasoning to avoid it`)
+              } else if (outcome.kind === 'policy') {
+                line(`${PAD}an ACCOUNT setting, not a config one — openrouter.ai/settings/privacy`)
+              }
+            }
+          }
         }
       }
     }
