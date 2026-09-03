@@ -241,6 +241,91 @@ export function matchOpener(question, { index, config, scope, quote, turns, loca
 }
 
 /**
+ * The margin a dense match has to win by — engine-specs/017.
+ *
+ * `matchTau`'s tie rule, in the unit cosine is written in. Two openers a
+ * paraphrase fits equally well is not a close call to be settled by array order,
+ * and in a dense space an exact tie never happens: the scores differ in the
+ * third decimal and one of them wins by nothing. So "equal" has to be a band
+ * rather than a value, and a question inside it is answered by the model, which
+ * is the outcome that existed before this pass did.
+ */
+const DENSE_MARGIN = 0.05
+
+/**
+ * The opener this question MEANS, from the vector the turn already bought.
+ *
+ * Runs after `matchOpener` has declined and after the query has been embedded,
+ * which is the only reason it can be free: `session.js` calls it on the vector
+ * the retrieval was going to be run with either way, so a hit costs one dot
+ * product per opener — three of them, over 1024 or 2048 int8 lanes — and a miss
+ * costs the same.
+ *
+ * IT ONLY EVER SERVES A BAKED ANSWER. There is no vector to hand back: the
+ * caller already has the one it passed in, and the entry's own vector is for
+ * comparison, not for retrieval. A dense match with nothing baked is a match
+ * with nothing to give, so it declines and the turn proceeds — which also means
+ * this pass cannot change which chunks a turn retrieves.
+ *
+ * @returns null | {entry, matched: 'dense', score, answer}
+ */
+export function matchOpenerDense(queryVec, { index, config, scope, quote, turns, locale, uiLocale }) {
+  const suggestions = config?.suggestions
+  if (!queryVec || suggestions?.precomputed === false) return null
+  if (suggestions?.answers === false) return null
+  const tau = suggestions?.matchCos ?? MATCH_NEVER
+  if (tau > 1) return null
+
+  const bundle = index?.openers
+  if (!bundle?.entries?.length) return null
+  if (bundle.hash !== index.manifest?.hash) return null
+  if (bundle.configHash !== openerFingerprint(suggestions)) return null
+
+  // The three antecedent rules `matchOpener` states at length, and they bind
+  // harder here: a dense match is already the looser of the two tests, so the
+  // conditions under which a baked answer is the WRONG answer are not relaxed
+  // for it as well.
+  if (scope?.kind !== 'all' || quote || turns?.length) return null
+
+  const dims = index.manifest?.dims
+  let best = null
+  let bestScore = -Infinity
+  let runnerUp = -Infinity
+  for (const e of bundle.entries) {
+    const vec = widen(e.vec, dims)
+    if (!vec) continue
+    const s = cosine(queryVec, vec)
+    if (s > bestScore) {
+      runnerUp = bestScore
+      bestScore = s
+      best = e
+    } else if (s > runnerUp) {
+      runnerUp = s
+    }
+  }
+  if (!best || bestScore < tau) return null
+  if (runnerUp > -Infinity && bestScore - runnerUp < DENSE_MARGIN) return null
+
+  const answer = answerFor(best, locale, uiLocale)
+  return answer ? { entry: best, matched: 'dense' as const, score: bestScore, answer } : null
+}
+
+/**
+ * Two vectors that are both already L2-normalised and scaled by 127.
+ *
+ * `/ 16129` is `retriever.js`'s own line, and it is the whole of the conversion:
+ * `embedQuery` normalises and multiplies by 127 so that an int8 dot product IS a
+ * cosine, and both sides of this one went through it. Duplicated rather than
+ * imported because the retriever's `dot` walks a packed corpus buffer by row
+ * offset and this walks two loose vectors — same arithmetic, different shape.
+ */
+function cosine(a, b) {
+  let sum = 0
+  for (let i = 0; i < b.length; i++) sum += a[i] * b[i]
+  return sum / 16129 // 127²
+}
+
+/**
  * The baked answer, if it is in the reader's language — and BOTH selectors have
  * to agree before it is.
  *

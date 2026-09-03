@@ -3270,10 +3270,21 @@ export const DEFAULTS = {
          * count as it. `false` retires the paraphrase test and leaves exact
          * matching. The number is PROVISIONAL until measured — see the `faq`
          * mode in the docs-rag skill.
+         *
+         * `matchCos` is the same question asked of the VECTOR — engine-specs/017.
+         * It runs after the query has been embedded, on the vector the turn
+         * bought anyway, and it exists because lexical coverage returns exactly
+         * zero on a paraphrase that shares no rare words. Also PROVISIONAL.
+         *
+         * `reveal` paints a baked answer progressively instead of placing it
+         * whole. It is a paint schedule and nothing else: no request, no model,
+         * and `prefers-reduced-motion` skips it.
          */
         precomputed: true,
         answers: true,
         matchTau: 0.65,
+        matchCos: 0.72,
+        reveal: true,
     },
     /**
      * Quoting a passage — ui-specs/007 for the mechanism, 009 for the switches.

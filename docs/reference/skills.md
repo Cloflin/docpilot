@@ -90,6 +90,8 @@ Two files travel with it. `answerer-protocol.md` and `judge-protocol.md` are giv
 
 `scripts/opener-collisions.js` measures the false-positive floor for [`suggestions.matchTau`](/reference/config#suggestions-matchtau) by scoring every calibration probe against every configured opener. A probe is not an opener, so every score it produces is a false positive waiting to happen.
 
+`scripts/opener-cosines.js` is its twin for [`suggestions.matchCos`](/reference/config#suggestions-matchcos), and the pair is the point: the lexical test returns exactly zero for a paraphrase built out of different words, which no threshold rescues, and the dense one returns 0.35 for a question about nothing in particular. It scores the same probes against the openers' own shipped vectors, refuses to run against an index it was not built for, and costs one request per probe — so it defaults to a subset and documents the free way to run it, against the second index.
+
 ## `docs-import`
 
 The contract for [imported pages](/guide/imported-pages). What lives here and not in `docs-rag`:

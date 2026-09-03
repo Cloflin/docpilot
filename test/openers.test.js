@@ -4,7 +4,14 @@ import { srcText } from './helpers/source.js'
 
 import { assembleIndex, __setIndex } from '../src/theme/docpilot/store.js'
 import * as session from '../src/theme/docpilot/session.js'
-import { matchOpener, similarity, answerFor, openerQuestions, openerFingerprint } from '../src/theme/docpilot/openers.js'
+import {
+  matchOpener,
+  matchOpenerDense,
+  similarity,
+  answerFor,
+  openerQuestions,
+  openerFingerprint,
+} from '../src/theme/docpilot/openers.js'
 import { normalise, questionsHash } from '../src/theme/docpilot/text.js'
 import { resolveSuggestions, DEFAULT_SUGGESTIONS, MATCH_NEVER } from '../src/theme/docpilot/switches.js'
 import { bakeOpeners } from '../src/build/lib/openers.js'
@@ -416,6 +423,27 @@ describe('openers — the list is one list', () => {
     expect(openerQuestions(resolveSuggestions({ suggestions: QUESTIONS }))).toEqual(QUESTIONS)
   })
 
+  /**
+   * THE THREE COPIES OF ONE OBJECT, pinned to the resolver that owns it.
+   *
+   * `SUGGESTIONS_DEFAULTS` is the resolver's own literal; `DEFAULTS.suggestions`
+   * in config.js is what rule 11 walks and what the reference is checked
+   * against; `DEFAULTS.suggestions` in session.js is what a panel runs on before
+   * `configure` lands. Nothing connected them, so a key added to the resolver
+   * reached the browser and was absent from both defaults and from the
+   * documentation — silently, because rule 11d compares the reference to
+   * config.js and the two agreed about a key neither had.
+   *
+   * One assertion, and it fails on the first of the three to drift.
+   */
+  it('every DEFAULTS.suggestions is the resolver called with nothing', async () => {
+    const resolved = resolveSuggestions({}, () => {})
+    const { DEFAULTS } = await import('../src/config.js')
+    const { DEFAULTS: RUNTIME } = await import('../src/theme/docpilot/session.js')
+    expect(DEFAULTS.suggestions, 'config.js').toEqual(resolved)
+    expect(RUNTIME.suggestions, 'session.js').toEqual(resolved)
+  })
+
   it('the fingerprint moves with an edit and with a reordering', () => {
     const a = questionsHash(['one?', 'two?'])
     expect(questionsHash(['one?', 'two?'])).toBe(a)
@@ -449,11 +477,25 @@ describe('openers — the match path never embeds', () => {
    * A dynamic `import()` rather than a static one, because these load out of
    * `dist/` at run time — hence the second pattern.
    */
+  /**
+   * THE ONE SCRIPT THAT MAY, and it is named here rather than exempted by a
+   * pattern.
+   *
+   * `opener-cosines.js` measures `suggestions.matchCos`, which is a threshold on
+   * a COSINE — there is no offline way to obtain a query vector, so a script that
+   * measures it either embeds or measures nothing. It is the only one, it says so
+   * in its own header, it prints the request count before spending it, and it
+   * defaults to a subset. An allowlist of one is a decision; a relaxed regex
+   * would be the invariant quietly ceasing to hold.
+   */
+  const MAY_EMBED = new Set(['opener-cosines.js'])
+
   it('the skill scripts import nothing that can reach the network', () => {
     const dir = 'skills/docs-rag/scripts'
     const scripts = fs.readdirSync(new URL(`../${dir}/`, import.meta.url)).filter((f) => f.endsWith('.js'))
     expect(scripts.length, 'skill scripts to check').toBeGreaterThan(0)
     for (const file of scripts) {
+      if (MAY_EMBED.has(file)) continue
       const src = srcText(`${dir}/${file}`)
       const specifiers = [
         ...(src.match(/^import .*$/gm) || []),
@@ -462,6 +504,19 @@ describe('openers — the match path never embeds', () => {
       ].join('\n')
       expect(specifiers, `${file} reaches the network`).not.toMatch(/embed\.js|llm\.js|providers\.js|harness\.js/)
     }
+  })
+
+  /**
+   * The allowlist, held to its own terms: the exception may embed and it may not
+   * reach a MODEL, and it has to declare the cost where the operator sees it
+   * before the requests are made.
+   */
+  it('the one script that may embed reaches no model, and says what it costs', () => {
+    const src = srcText('skills/docs-rag/scripts/opener-cosines.js')
+    expect(src).toMatch(/theme\/docpilot\/embed\.js/)
+    expect(src).not.toMatch(/llm\.js|providers\.js|harness\.js/)
+    expect(src, 'the cost, printed before it is spent').toMatch(/cost\s+\$\{probes\.length\} request/)
+    expect(src, 'a default that is not the whole probe set').toMatch(/arg\('limit', '100'\)/)
   })
 
   /**
@@ -1034,5 +1089,237 @@ describe('openers — an answer the author wrote', () => {
       entries: [entry(QUESTIONS[0])],
     })
     expect(matchOpener(QUESTIONS[0], { ...ARGS, config: { suggestions: after, embed: { lexicalOnly: true } }, index })).toBe(null)
+  })
+})
+
+/**
+ * THE OPENER A PARAPHRASE MEANT — engine-specs/017.
+ *
+ * `matchOpener` compares text and returns zero on wording it has never seen;
+ * this compares the vector the turn already bought. Everything below is either
+ * "it recognises the question" or "it refuses rather than answer the wrong one",
+ * and the second kind outnumbers the first on purpose: a wrong hit here is not a
+ * worse answer, it is a whole written answer about something else, carrying
+ * citations that are real and about something else.
+ */
+describe('openers — the paraphrase the vector caught', () => {
+  const DIMS = 4
+  const vecOf = (...n) => Buffer.from(Int8Array.from(n).buffer).toString('base64')
+  const query = (...n) => Float64Array.from(n)
+
+  // Two openers at right angles, so the arithmetic below is readable: cosine is
+  // the dot product over 127², and both sides are already scaled by 127.
+  const A = vecOf(127, 0, 0, 0)
+  const B = vecOf(0, 127, 0, 0)
+
+  const answered = (q, vec) =>
+    entry(q, {
+      vec,
+      answer: {
+        lang: 'en',
+        text: `The answer to ${q}`,
+        citations: ['gate#one'],
+        confidence: null,
+        promptHash: 'authored',
+        model: 'authored',
+      },
+    })
+
+  function setup(over = {}) {
+    const suggestions = resolveSuggestions({ suggestions: { questions: QUESTIONS, ...over } }, () => {})
+    const index = indexWith(
+      {
+        configHash: openerFingerprint(suggestions),
+        embedModel: 'fake-embed',
+        dims: DIMS,
+        matchTau: 0.75,
+        entries: [answered(QUESTIONS[0], A), answered(QUESTIONS[1], B)],
+      },
+      { lexicalOnly: false },
+    )
+    return { index, args: { ...ARGS, config: { suggestions, embed: {} }, index } }
+  }
+
+  it('serves the answer to the opener the vector points at', () => {
+    const { args } = setup()
+    const hit = matchOpenerDense(query(120, 40, 0, 0), args)
+    expect(hit.matched).toBe('dense')
+    expect(hit.score).toBeCloseTo(0.945, 2)
+    expect(hit.answer.text).toBe(`The answer to ${QUESTIONS[0]}`)
+  })
+
+  it('declines below the threshold rather than answering approximately', () => {
+    const { args } = setup()
+    // 0.47 against the nearer opener and 0.39 against the other: a clear
+    // winner, and still not close enough to be this question's answer.
+    expect(matchOpenerDense(query(60, 50, 0, 0), args)).toBe(null)
+  })
+
+  it('a near-tie refuses — two openers a paraphrase fits equally well', () => {
+    const { args } = setup({ matchCos: 0.5 })
+    // 0.708 against both: over the threshold, and the margin between them is nil.
+    expect(matchOpenerDense(query(90, 90, 0, 0), args)).toBe(null)
+  })
+
+  it('`matchCos: false` retires it and leaves the lexical pass alone', () => {
+    const { args } = setup({ matchCos: false })
+    expect(matchOpenerDense(query(127, 0, 0, 0), args)).toBe(null)
+    expect(matchOpener(QUESTIONS[0], args).answer.text).toBe(`The answer to ${QUESTIONS[0]}`)
+  })
+
+  it('returns nothing without a vector — a lexical-only turn never reaches it', () => {
+    const { args } = setup()
+    expect(matchOpenerDense(null, args)).toBe(null)
+  })
+
+  it('declines an opener with no baked answer — a match with nothing to give', () => {
+    const suggestions = resolveSuggestions({ suggestions: QUESTIONS }, () => {})
+    const index = indexWith(
+      {
+        configHash: openerFingerprint(suggestions),
+        embedModel: 'fake-embed',
+        dims: DIMS,
+        matchTau: 0.75,
+        entries: [entry(QUESTIONS[0], { vec: A }), entry(QUESTIONS[1], { vec: B })],
+      },
+      { lexicalOnly: false },
+    )
+    expect(
+      matchOpenerDense(query(127, 0, 0, 0), { ...ARGS, config: { suggestions, embed: {} }, index }),
+    ).toBe(null)
+  })
+
+  it('holds the three antecedent rules the text pass holds', () => {
+    const { args } = setup()
+    const v = query(127, 0, 0, 0)
+    expect(matchOpenerDense(v, { ...args, scope: { kind: 'page' } })).toBe(null)
+    expect(matchOpenerDense(v, { ...args, quote: 'a passage' })).toBe(null)
+    expect(matchOpenerDense(v, { ...args, turns: [{}] })).toBe(null)
+  })
+
+  it('ignores a bundle baked for another list, exactly as the text pass does', () => {
+    const { index } = setup()
+    const other = resolveSuggestions({ suggestions: ['Something else entirely?'] }, () => {})
+    expect(
+      matchOpenerDense(query(127, 0, 0, 0), { ...ARGS, config: { suggestions: other, embed: {} }, index }),
+    ).toBe(null)
+  })
+})
+
+/**
+ * THE REVEAL — engine-specs/017, `suggestions.reveal`.
+ *
+ * A paint schedule over a string that is already in memory. What is worth
+ * pinning is not the animation but its three exits: the switch, the reader's
+ * motion preference, and Stop — which completes the answer rather than
+ * truncating it, because there is no request in flight to cancel.
+ */
+describe('openers — a baked answer is revealed, not placed', () => {
+  const ENV = { OPENROUTER_API_KEY: 'k' }
+  const OPENER = 'How do I configure the refusal gate?'
+  const TEXT = 'The gate refuses below tau. [1]'
+
+  const index = () => {
+    const hash = 'openers-reveal'
+    return assembleIndex({
+      manifest: {
+        version: 3,
+        hash,
+        embedModel: null,
+        dims: 0,
+        vectors: null,
+        chunkCount: ROWS.length,
+        pages: ROWS.map((r) => ({ path: r.path, title: r.title, tail: 'Docs' })),
+        sections: [],
+        guard: GUARD,
+        tuning: null,
+        vocabulary: null,
+        vocabHash: null,
+        tokenizer: null,
+        openers: `openers.${hash}.json`,
+      },
+      shards: [ROWS],
+      vectorBuffer: null,
+      dfDoc: DF,
+      openersDoc: {
+        hash,
+        configHash: questionsHash([OPENER]),
+        embedModel: null,
+        dims: 0,
+        matchTau: 0.75,
+        entries: [entry(OPENER, { answer: { lang: 'en', text: TEXT, citations: ['gate#one'] } })],
+      },
+    })
+  }
+
+  const setup = async (over = {}) => {
+    const { resolveDocPilot, themeDocPilot } = await import('../src/config.js')
+    session.configure(
+      {
+        docPilot: themeDocPilot(
+          resolveDocPilot({ suggestions: { questions: [OPENER], ...over } }, ENV),
+          ENV,
+        ),
+      },
+      '/gate',
+      'en',
+    )
+    session.state.turns = []
+    session.state.busy = false
+    session.state.index = index()
+    __setIndex(Promise.resolve(session.state.index))
+  }
+
+  afterEach(() => {
+    __setIndex(null)
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('paints it in frames, and lands on the whole answer', async () => {
+    vi.useFakeTimers()
+    await setup()
+    const done = session.submit(OPENER)
+    // One frame in: something is on screen and it is not the whole thing.
+    await vi.advanceTimersByTimeAsync(100)
+    const turn = session.state.turns.at(-1)
+    expect(turn.streaming).toBe(true)
+    expect(turn.answerText.length).toBeGreaterThan(0)
+    expect(turn.answerText.length).toBeLessThan(TEXT.length)
+    await vi.runAllTimersAsync()
+    await done
+    expect(turn.streaming).toBe(false)
+    expect(turn.state).toBe('complete')
+    expect(turn.answerText).toBe(TEXT)
+  })
+
+  it('`reveal: false` places it whole, in one tick', async () => {
+    await setup({ reveal: false })
+    await session.submit(OPENER)
+    const turn = session.state.turns.at(-1)
+    expect(turn.state).toBe('complete')
+    expect(turn.answerText).toBe(TEXT)
+  })
+
+  it('Stop completes the answer rather than truncating it', async () => {
+    vi.useFakeTimers()
+    await setup()
+    const done = session.submit(OPENER)
+    await vi.advanceTimersByTimeAsync(100)
+    session.stop()
+    await vi.runAllTimersAsync()
+    await done
+    const turn = session.state.turns.at(-1)
+    expect(turn.state).toBe('complete')
+    expect(turn.answerText).toBe(TEXT)
+  })
+
+  it('`prefers-reduced-motion` skips it without needing the switch', async () => {
+    vi.stubGlobal('matchMedia', (q) => ({ matches: /reduced-motion/.test(q), media: q }))
+    await setup()
+    await session.submit(OPENER)
+    const turn = session.state.turns.at(-1)
+    expect(turn.state).toBe('complete')
+    expect(turn.answerText).toBe(TEXT)
   })
 })

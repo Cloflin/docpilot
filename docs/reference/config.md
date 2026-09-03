@@ -49,7 +49,7 @@ export const docPilot = {
   topK: null,
   maxIterations: 2,
   budget: { mode: 'auto', oneShotBelow: 15, rotateAbove: 6, maxContinuations: 1, showRemaining: false, probe: 'auto', dailyLimit: null },
-  suggestions: { questions: [], authored: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65 },
+  suggestions: { questions: [], authored: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65, matchCos: 0.72, reveal: true },
   quote: { fromAnswer: true, fromDocs: false },
   citations: { passage: false, inCopy: true, pagesRead: false },
   composer: { editLastOnArrowUp: true, deepLink: true, draft: true },
@@ -149,6 +149,8 @@ written by hand; only the values are mechanical.
 | [`suggestions.precomputed`](#suggestions-precomputed) | `boolean` | `true` | Has `npx docpilot index` resolve the openers ahead of time and the panel use what it resolved, so a reader clicking one spends no embedding request — *off, nothing is baked and nothing is read* |
 | [`suggestions.answers`](#suggestions-answers) | `boolean` | `true` | Also bakes the ANSWER to each opener, served instantly and free when the reader's language matches the language it was written in — *costs one model request per opener per index build* |
 | [`suggestions.matchTau`](#suggestions-matchtau) | `number \| false` | `0.65` | How much of a typed question's rare wording an opener has to cover, in both directions, to count as the same question — *`false` leaves exact matching only* |
+| [`suggestions.matchCos`](#suggestions-matchcos) | `number \| false` | `0.72` | The same test in the vector space, run after the query is embedded, so a paraphrase sharing no words with an opener still finds its answer — *costs nothing: the vector was bought for the turn either way* |
+| [`suggestions.reveal`](#suggestions-reveal) | `boolean` | `true` | A baked answer is painted progressively rather than appearing whole — *no request and no model; `prefers-reduced-motion` and Stop both skip it* |
 | [`quote.fromAnswer`](#quote-fromanswer) | `boolean` | `true` | Selecting text inside an answer raises one button that attaches the passage to the composer as a chip — *off together with `fromDocs` also suppresses `ui.firstRunHint`, which names that gesture* |
 | [`quote.fromDocs`](#quote-fromdocs) | `boolean` | `false` | Extends that selection popover to your own article, so a reader can ask about the paragraph that confused them without retyping it — *only inside `host.article` — nav, sidebar and footer are deliberately out of bounds* |
 | [`citations.passage`](#citations-passage) | `boolean` | `false` | Gives every source row a chevron that expands the exact retrieved chunk inline, costing no request since the text is already in the browser — *on a restored conversation the chunk is resolved by id, so a rebuilt index simply drops the control* |
@@ -1435,8 +1437,8 @@ this package does not know to be metered.
 
 ## suggestions
 
-- **Type:** `(string | AuthoredOpener)[] | { questions?: (string | AuthoredOpener)[], authored?: AuthoredOpener[], scoped?: boolean, followUps?: boolean, precomputed?: boolean, answers?: boolean, matchTau?: number | false }`, where `AuthoredOpener` is `{ q: string, answer: string, cite: string[] }`
-- **Default:** `{ questions: [], authored: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65 }` — the built-in three
+- **Type:** `(string | AuthoredOpener)[] | { questions?: (string | AuthoredOpener)[], authored?: AuthoredOpener[], scoped?: boolean, followUps?: boolean, precomputed?: boolean, answers?: boolean, matchTau?: number | false, matchCos?: number | false, reveal?: boolean }`, where `AuthoredOpener` is `{ q: string, answer: string, cite: string[] }`
+- **Default:** `{ questions: [], authored: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65, matchCos: 0.72, reveal: true }` — the built-in three
 - **Related:** [ui-specs/009]
 
 The three to five questions on the empty state, and what the panel offers when it
@@ -1665,6 +1667,70 @@ different openers. The number that is about *your* site is the build's `COLLIDES
 line, which scores your openers against each other with the same function; and
 the measurement above is reproducible on your corpus in seconds with no requests
 — see the `faq` mode in the `docs-rag` skill.
+
+### suggestions.matchCos
+
+The same question asked of the **vector**, and it is `matchTau`'s complement
+rather than its replacement — the two fail on opposite inputs.
+
+Lexical coverage is a fraction of the query's *rare terms* that the opener's text
+contains. That is exactly right for a restatement and returns exactly **zero** for
+a paraphrase built out of different words. Measured on this package's own docs:
+
+| typed | `matchTau` | `matchCos` |
+|---|---|---|
+| `how to get started` | 1.00 | 0.98 |
+| `getting started` | 0.50 | 0.85 |
+| `How do I set this up?` | **0.00** | 0.81 |
+| `How do I install it?` | **0.00** | 0.78 |
+| `как начать?` | **0.00** | 0.91 |
+
+No threshold rescues the lexical test on those rows, because there is nothing to
+lower it to. Recognising them is what a dense embedder is for, and by this point
+in the turn the query has already been embedded — for retrieval, on the reader's
+own request — so the test costs one dot product per opener and no request at all.
+In lexical-only it does not run, because there is no vector.
+
+**It refuses a near-tie.** The best opener has to beat the runner-up by 0.05,
+which is `matchTau`'s "a tie refuses" rule written in the unit cosine uses: in a
+dense space an exact tie never occurs, so *equal* has to be a band. A question
+inside it is answered by the model, which is what happened before this test
+existed.
+
+**The number is a floor, not a measurement of your corpus.** It was measured here
+on bge-m3: seventeen paraphrases of three openers, and eight questions that are
+about this corpus but about no opener. The off-target questions topped out at
+**0.60** and the clear paraphrases sat at **0.78** and up, so 0.72 splits a gap
+that is narrower than it looks — a dense embedder's cosines do not start at zero,
+and an unrelated question here still scores 0.35.
+
+Measure it on yours before trusting it — `opener-cosines.js` in the `docs-rag`
+skill is the sweep, and it runs free against a second index. What a wrong match
+costs is not a worse answer, it is **a whole written answer about something
+else**, with citations that are real and about something else. Set `false` to
+retire the test and leave the lexical pass exactly as it was.
+
+### suggestions.reveal
+
+A baked answer is painted progressively instead of appearing whole.
+
+Nothing is generated and no request is made — the string is in memory before the
+first frame, and this is a paint schedule over it: sixteen frames on the same
+90ms floor the live stream renders at, about 1.4 seconds whatever the answer's
+length. A fixed frame count rather than a fixed rate, because a rate that reads
+well on a two-kilobyte answer takes eight seconds on a four-kilobyte one.
+
+**Why it is on.** The honest argument is for off: nothing is happening, so an
+animation is the panel performing work it is not doing. What that misses is what
+the alternative tells the reader. An answer that lands whole and instantly does
+not read as *fast* — it reads as **canned**, as a help topic that was going to be
+shown whatever was asked, which is the one impression a grounded assistant cannot
+afford on its first turn. So it is a default, and this is the switch for a site
+that prefers the other reading.
+
+`prefers-reduced-motion: reduce` skips it, because it is motion. **Stop** skips it
+too and *completes* the answer rather than truncating it: there is no request in
+flight, so a reader pressing Stop is asking to see the rest now.
 
 ## quote
 
