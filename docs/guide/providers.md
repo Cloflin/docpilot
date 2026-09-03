@@ -451,6 +451,22 @@ OpenRouter is the one provider whose model moves between requests, so its own pe
 
 One caveat worth the paragraph. This package sends `provider: { require_parameters: true }` to OpenRouter by default, which is what makes it route only to upstreams that honour the strict answer schema. Reasoning counts as one of those parameters, so asking for it narrows the routing a second time — and on a thin free pool that can turn an answerable question into *no provider available*. `doctor` prints the caveat when both are in play; `chat.extraBody: null` is how you decline the flag if you would rather have the breadth.
 
+Note that `chat: {reasoning: false}` asks for a parameter rather than declining one — see [`chat.reasoning`](/reference/config#chat-reasoning). Leaving the key unset is what sends no reasoning field at all, and it is the difference between a request that routes and one that does not.
+
+### When the refusal is the account's, not the request's
+
+OpenRouter applies your account's own guardrails after every other routing step, and a request that survives them all and finds nothing left answers `404` like any other:
+
+```
+0 endpoints out of 1 requested are available matching your guardrail
+restrictions and data policy. We removed them for the following reasons …
+ZDR violation (account settings): 1 endpoint excluded
+```
+
+Two settings at [openrouter.ai/settings/privacy](https://openrouter.ai/settings/privacy) produce it — requiring zero data retention, and narrowing the allowed provider list — and both are account-wide. A per-request preference cannot relax either: the request-level `zdr` flag is ORed with the account's, so it can only ever tighten.
+
+**It applies to embeddings as well as to chat**, which is the part that surprises. A site whose readers see *the AI service didn't respond* on every question may also be unable to run `npx docpilot index`, and the two look like unrelated outages. Nothing in a config file fixes either. `npx docpilot doctor --models` posts the real request bodies and names the failing step, which is how you tell this apart from a retired model or a parameter your configuration is adding.
+
 ### A knob DocPilot does not name
 
 ```js

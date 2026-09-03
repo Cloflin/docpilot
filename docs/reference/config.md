@@ -813,6 +813,21 @@ choosing a tool is not composing anything — leaving reasoning on across four o
 them was measured at a p50 of 215 seconds. `false` never asks. `true` is the
 same as `'medium'`.
 
+::: warning `false` sends a parameter; unset sends none
+The two are not the same request. `'auto'` writes no reasoning field at all,
+while `false` writes the service's spelling of *do not think* — `{enabled:
+false}` on OpenRouter, `reasoning_effort: 'none'` elsewhere — which is still a
+parameter, and beside
+[`provider.require_parameters`](#chat-extrabody) a parameter narrows routing to
+endpoints that publish it. On a model that has none, every request answers `404
+No endpoints found that can handle the requested parameters`.
+
+So write `false` only where you mean *this model can think and should not*.
+Where you mean *do not send this at all*, leave the key out. `npx docpilot
+doctor` prints `no reasoning field is sent` for one and `→ reasoning:{}` for the
+other, and warns when the second is combined with `require_parameters`.
+:::
+
 **The level is clamped, not posted as written.** No two services publish the same
 vocabulary: OpenAI and OpenRouter have six words, xAI has four, DeepSeek has
 three and no `medium` at all, and Groq's Qwen models accept `none` and `default`

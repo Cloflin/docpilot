@@ -1234,7 +1234,9 @@ metric in any report.
 
   **And weigh it against what the embedder actually costs, which is almost
   nothing.** Corpus embedding is a BUILD cost paid once. The only runtime cost is
-  one query embedding per turn: measured against `text-embedding-3-small`,
+  one query embedding request per turn — a follow-up scores two queries, itself
+  and itself glued to its antecedent, and both texts ride that one request:
+  measured against `text-embedding-3-small`,
   **212 ms mean** (156–359 ms over four queries, the high one being connection
   setup) for a payload of about ten tokens — on the order of a dollar a year at
   ten thousand questions a day. Every alternative that replaces it with a chat

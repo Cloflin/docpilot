@@ -49,6 +49,11 @@ A turn is one embedding request plus one or more model calls:
 | One-shot turn | 1 embed + **1** model call |
 | Agentic turn | 1 embed + **2–3** model calls, plus any the pool rotates through |
 
+One embedding request covers a follow-up too. A question asked after another one
+is scored on two queries — itself, and itself glued to what it follows, which is
+what keeps *and for backend calls?* from retrieving nothing — and both texts ride
+a single request rather than buying a vector each.
+
 The embedding request is only counted when both halves are served off the same
 key — a local Ollama beside a hosted chat model draws on nothing this page is
 about. A site configured [`embed: false`](/reference/config#embed-false) makes no
@@ -112,7 +117,7 @@ carrying `retry-after: 1` — a second, on a model that is fine. Waiting one
 second is cheaper than spending another of the fifty, so exactly one candidate
 per call gets the full retry budget and the rest are walked past.
 
-### Four failures that do not rotate
+### Five failures that do not rotate
 
 Asking the next model would be worse than stopping:
 
@@ -122,6 +127,47 @@ Asking the next model would be worse than stopping:
   one clear message into ten pointless requests.
 - **The day's limit rather than the minute's.** That allowance belongs to the
   account and refuses every candidate identically.
+- **A parameter the endpoint does not publish.** Every model would be sent the
+  same body, so every model would refuse it the same way. See below.
+
+### When the body is the problem, not the model
+
+OpenRouter routes a request only to an upstream that accepts every parameter in
+it — that is [`provider.require_parameters`](/reference/config#chat-extrabody),
+on by default because without it a strict response format is dropped in silence
+and the answer comes back as unciteable prose. The cost of having it on is that
+naming a parameter the model has no endpoint for removes every endpoint:
+
+```
+404  No endpoints found that can handle the requested parameters
+```
+
+Rotating cannot fix that — the next model gets the identical body. So the same
+model is asked again with less in it: first without the reasoning field, then
+with the final answer's schema re-asked as a forced tool call instead of a
+response format. One extra request, once; the concession is remembered for the
+rest of the session, and a model that runs out of concessions is rotated past
+after all.
+
+The commonest way to walk into this is `chat: {reasoning: false}`. It reads like
+switching something off, and it is a request for `{enabled: false}` — a
+parameter, which is exactly what narrows the routing. **Leave
+[`chat.reasoning`](/reference/config#chat-reasoning) unset** and no reasoning
+field is sent at all. `npx docpilot doctor` prints which of the two you have.
+
+A second `404` wears the same clothes and no request can fix it:
+
+```
+404  0 endpoints out of 1 requested are available matching your guardrail
+     restrictions and data policy … ZDR violation (account settings)
+```
+
+That is the **account's** zero-data-retention or allowed-providers setting, not
+the site's configuration, and it applies to the embedding half as much as to
+chat. It is changed at
+[openrouter.ai/settings/privacy](https://openrouter.ai/settings/privacy).
+`npx docpilot doctor --models` posts the real request bodies and names whichever
+of the two you are looking at.
 
 Nor does the pool rotate once the turn has no requests left to spend —
 [`budget.rotateAbove`](/reference/config#budget-oneshotbelow-budget-rotateabove)
