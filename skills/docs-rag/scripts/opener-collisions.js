@@ -2,7 +2,7 @@
 /**
  * The empirical false-positive floor for `suggestions.matchTau` — engine-specs/009.
  *
- *   node .claude/skills/docs-rag/scripts/opener-collisions.js \
+ *   node {{SKILL_DIR}}/scripts/opener-collisions.js \
  *     [--rag=docs/public/rag] [--probes=docpilot/calibration.jsonl] [--top=10]
  *
  * `matchTau` decides when a TYPED question is treated as one of the openers the

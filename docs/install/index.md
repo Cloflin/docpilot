@@ -70,8 +70,11 @@ this package, which is why no line above reaches for a package by bare name —
 in `node_modules/.bin`.
 
 [`init`](/reference/cli#init) scaffolds the eval sets, the key names and the
-authoring skills, and never overwrites. It is safe to skip on a first look and
-safe to run twice.
+authoring skills, and never overwrites. It asks which agent tool the skills go
+into — Claude Code, Codex, Cursor, Copilot — and installs a `/docpilot-*` slash
+command per CLI command beside them. It is safe to skip on a first look and
+safe to run twice; [`update`](/reference/cli#update) is what refreshes the
+copied skills after an upgrade.
 
 ### Deno
 

@@ -3,7 +3,7 @@
  * The openers a corpus with no readers would ask for — the cold-start half of
  * the `faq` mode.
  *
- *   node .claude/skills/docs-rag/scripts/opener-candidates.js \
+ *   node {{SKILL_DIR}}/scripts/opener-candidates.js \
  *     [--rag=docs/public/rag] [--n=5] [--per-section=1] [--pool=20] \
  *     [--probes=docpilot/calibration.jsonl] [--tiers=faq,heading,template] \
  *     [--min-terms=40]
@@ -73,8 +73,8 @@ const MIN_TERMS = Number(arg('min-terms', '40'))
  *
  * `path.join(ROOT, 'dist')` is the package repository's own layout, and the
  * skill is COPIED into consumer projects — `npx docpilot init` writes it to
- * `.claude/skills/docs-rag/`, because a skill inside `node_modules` is
- * discovered by nobody. There it resolved `<their project>/dist`, which either
+ * whichever skills directory the reader picked, because a skill inside
+ * `node_modules` is discovered by nobody. There it resolved `<their project>/dist`, which either
  * does not exist or is their build, and the script died on an import before
  * printing a line.
  *

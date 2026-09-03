@@ -188,6 +188,7 @@ const DEFAULTS = {
   // so, which is what makes these safe to run on before `configure` lands.
   suggestions: {
     questions: [],
+    authored: [],
     scoped: true,
     followUps: false,
     precomputed: true,

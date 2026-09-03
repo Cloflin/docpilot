@@ -11,6 +11,7 @@ import { extendConfig } from '@voidzero-dev/vitepress-theme/config.js'
 // through. A subpath that stops resolving fails the docs build here, rather
 // than someone else's install.
 import { defineDocPilot } from '@cloflin/docpilot'
+import { openers } from './openers.mjs'
 
 const pkg = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
@@ -270,6 +271,18 @@ export const docPilot = {
           ],
         },
       }),
+  /**
+   * THE EMPTY STATE, ANSWERED IN ADVANCE — engine-specs/017.
+   *
+   * The built-in three were generic by necessity (`What is this documentation
+   * about?`), and this site has three questions it is actually opened for. Each
+   * carries its own answer, so the click that costs the most on any docs site —
+   * the first one, made by a reader who has not typed anything — costs no
+   * embedding request and no model call.
+   *
+   * `docs/.vitepress/openers.mjs` holds the prose and the ids it stands on.
+   */
+  suggestions: { questions: openers },
   ui: { trigger: 'fab' },
 }
 

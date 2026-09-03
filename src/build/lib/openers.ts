@@ -28,12 +28,22 @@ import { embedQuery } from '../../theme/docpilot/embed.js'
 import { assembleIndex } from '../../theme/docpilot/store.js'
 import { createRetrieval } from '../../theme/docpilot/retriever.js'
 import { runTurn } from '../../theme/docpilot/harness.js'
-import { normalise, questionsHash } from '../../theme/docpilot/text.js'
+import { normalise } from '../../theme/docpilot/text.js'
 import { detectLanguage, localeOf, promptHash } from '../../theme/docpilot/prompt.js'
-import { similarity } from '../../theme/docpilot/openers.js'
+import { openerFingerprint, similarity } from '../../theme/docpilot/openers.js'
 import { l2normalise, toInt8, quantisationError } from './quantize.js'
 
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
+
+/**
+ * The stamp on an answer no model wrote.
+ *
+ * It occupies both `promptHash` and `model` because those two fields are the
+ * cache key for "has this already been asked", and a written answer has not been
+ * asked and never will be. A sentinel in both is what makes the freshness test
+ * below fail closed for these entries without a branch of its own.
+ */
+const AUTHORED = 'authored'
 
 /**
  * The int8 vector, as the bundle carries it.
@@ -80,6 +90,15 @@ async function vectorFor(question, { model, provider, baseURL, apiKey, cache }, 
  */
 export async function bakeOpeners({
   questions,
+  /**
+   * The answers the author wrote — `{q, answer, cite}`, resolved by
+   * `resolveSuggestions` — engine-specs/017.
+   *
+   * Applied BEFORE the model loop and never re-derived: an authored answer is
+   * not a cheaper way to get the model's answer, it is a different answer, and
+   * the whole point of writing one is that the build must not paraphrase it.
+   */
+  authored = [],
   manifest,
   chunks,
   vectorBuffer,
@@ -103,7 +122,7 @@ export async function bakeOpeners({
   embedFn = embedQuery,
   turnFn = runTurn,
 }) {
-  const report = { embedded: 0, cached: 0, answered: 0, reused: 0, reusedRefusal: 0, refused: [], collisions: [], qErr: null }
+  const report = { embedded: 0, cached: 0, answered: 0, authored: 0, reused: 0, reusedRefusal: 0, refused: [], covered: [], uncitable: [], collisions: [], qErr: null }
   if (!questions.length) return { bundle: null, json: null, entries: [], report }
 
   const index = assembleIndex({ manifest, shards: [chunks], vectorBuffer, dfDoc })
@@ -207,8 +226,80 @@ export async function bakeOpeners({
    */
   if (raw.length) report.qErr = quantisationError(raw)
 
+  /**
+   * THE WRITTEN ANSWERS, before anything is asked of a model.
+   *
+   * Three things this does not do, and each of them is the reason a written
+   * answer is worth having at all:
+   *
+   *   · IT DOES NOT CONSULT THE GATE. The gate asks whether the corpus supports
+   *     a question; a written answer names the chunks it stands on, and those
+   *     ids ARE that support, checked one at a time below. An opener the gate
+   *     refuses is exactly the FAQ entry an author is most likely to write out
+   *     by hand — the answer is spread across four pages and no single one of
+   *     them scores — so refusing it here would retire the feature for its own
+   *     best case.
+   *   · IT DOES NOT ASK A MODEL, so it needs no key, no pool and no allowance,
+   *     and it works on a `searchOnly` site where nothing else in this block
+   *     runs.
+   *   · IT DOES NOT REUSE. `previous` is a cache of what a model wrote; the
+   *     config is the source for this, and it is already loaded.
+   *
+   * AN UNRESOLVABLE CITATION DROPS THE ANSWER, and the question survives it.
+   * `settleAnswer` looks each citation up in `index.byId` and silently discards
+   * the misses, so an id that has been renamed by a docs edit would ship as
+   * prose with no sources under it — the exact artefact the model path refuses
+   * to produce. Checked here instead, once, against the index this build just
+   * wrote.
+   */
+  if (answers && authored?.length) {
+    const byQuestion = new Map(authored.map((a) => [normalise(a.q), a]))
+    for (const e of entries) {
+      const a = byQuestion.get(e.qnorm)
+      if (!a) continue
+      const unknown = a.cite.filter((id) => !index.byId.has(id))
+      if (unknown.length) {
+        warn(
+          `[docpilot] the written answer to "${e.q}" cites ${unknown.map((id) => `"${id}"`).join(', ')}, ` +
+            `which this index does not contain — not baked; the model answers it instead`,
+        )
+        report.uncitable.push({ q: e.q, ids: unknown })
+        continue
+      }
+      e.answer = {
+        lang: localeOf(detectLanguage(e.q)),
+        text: a.answer,
+        citations: a.cite,
+        confidence: null,
+        // The stamp says WHO wrote it, and `AUTHORED` can never collide with a
+        // prompt hash or a model id — so the reuse test below, which asks
+        // whether the same model under the same prompt already answered, is
+        // structurally incapable of matching one of these.
+        promptHash: AUTHORED,
+        model: AUTHORED,
+      }
+      report.authored++
+      /**
+       * A refused opener with a written answer is not a refused opener.
+       *
+       * `report.refused` prints a four-line warning about a chip that fails on
+       * the reader's first click. That warning is the whole value of the check
+       * and it is FALSE here — the click lands on prose the author wrote — so
+       * the row moves rather than being suppressed: the gate score is still
+       * worth seeing, and what it means now is "the corpus does not answer this
+       * on its own, which is why you wrote one".
+       */
+      const refused = report.refused.findIndex((r) => r.q === e.q)
+      if (refused >= 0) report.covered.push(report.refused.splice(refused, 1)[0])
+    }
+  }
+
   if (answers && !chat?.searchOnly && chat?.model) {
     for (const e of entries) {
+      // Already written by hand. Asking a model to produce a second answer to a
+      // question that has one would spend a request to build a string nothing
+      // reads.
+      if (e.answer) continue
       if (!e.gate.pass) continue
       /**
        * The answer cache: same question, same corpus, same prompt, same model →
@@ -306,7 +397,7 @@ export async function bakeOpeners({
 
   const bundle = {
     hash,
-    configHash: questionsHash(questions),
+    configHash: openerFingerprint({ questions, authored }),
     embedModel: manifest.embedModel,
     dims: manifest.dims,
     matchTau,
@@ -323,15 +414,38 @@ export function renderOpenerReport({ entries, report, matchTau, configHash }) {
   lines.push(
     `  openers          ${entries.length} question(s) · configHash ${configHash}` +
       (bought ? ` · ${report.embedded} embedded, ${report.cached} cached` : '') +
+      (report.authored ? ` · ${report.authored} answered by you` : '') +
       (answers
         ? ` · answers ${report.answered} written, ${report.reused + report.reusedRefusal} reused`
         : ''),
   )
   for (const e of entries) {
     const mark = e.gate.pass ? '✓' : '✗'
-    const answer = e.answer ? `  answer ${Buffer.byteLength(e.answer.text)} B` : ''
+    // `authored` rather than a byte count: the size of a paragraph the author
+    // can read in their own config is not news, and which of the two wrote it
+    // is the only thing this line cannot otherwise say.
+    const answer = e.answer
+      ? e.answer.model === AUTHORED
+        ? `  authored, ${e.answer.citations.length} citation(s)`
+        : `  answer ${Buffer.byteLength(e.answer.text)} B`
+      : ''
     lines.push(
       `    ${mark} ${e.gate.G.toFixed(2)}  ${JSON.stringify(e.q)}  ${e.ids.length} chunk(s)${answer}`,
+    )
+  }
+  for (const c of report.uncitable) {
+    lines.push(
+      `    UNCITED  ${JSON.stringify(c.q)} was answered in your config, citing`,
+      `             ${c.ids.map((id) => JSON.stringify(id)).join(', ')} —`,
+      `             not in this index. The written answer is NOT baked and the`,
+      `             model answers instead. Fix the ids, or reindex.`,
+    )
+  }
+  for (const r of report.covered) {
+    lines.push(
+      `    covered  ${JSON.stringify(r.q)} scores ${r.G.toFixed(2)} against tau`,
+      `             ${r.threshold.toFixed(2)} — the corpus does not answer it, and your`,
+      `             written answer is what the click gets.`,
     )
   }
   if (report.qErr !== null) {

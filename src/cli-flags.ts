@@ -254,8 +254,47 @@ export const COMMANDS = {
     flags: [
       { name: 'trigger', kind: 'enum', values: [...UI_TRIGGER_WORD_LIST, 'nav,fab'], example: 'fab', help: 'where the button lives; takes a comma list too' },
       { name: 'panel', kind: 'enum', values: UI_PANELS, example: 'drawer', help: 'the shape of the panel' },
+      // `list`, not `enum`, for the same reason `--trigger` is: a project may
+      // want Claude Code AND Cursor, and an enum cannot say so. The typo check
+      // moves into `src/cli-skills.ts`, which owns the ids.
+      { name: 'target', kind: 'list', example: 'claude,cursor', help: 'which agent tools get the skills and the /docpilot-* commands' },
+      { name: 'scope', kind: 'enum', values: ['project', 'user'], example: 'user', help: 'into this repository, or into your home directory' },
+      { name: 'skills-dir', kind: 'value', example: '.agents/skills', help: 'a directory of your own, instead of a tool the table knows' },
+      { name: 'commands-dir', kind: 'value', example: '.cursor/commands', help: 'where the /docpilot-* slash commands go' },
+      { name: 'no-commands', kind: 'bool', help: 'install the skills and generate no slash commands' },
       { name: 'yes', kind: 'bool', alias: 'y', help: 'take the defaults and ask nothing' },
     ],
+  },
+
+  /**
+   * The command that did not exist, and the gap it fills is named in the
+   * reference it replaces: `init` writes a file only where nothing is, so a
+   * project that ran it once kept its skills across every upgrade that rewrote
+   * them. The documented workaround was `rm -rf` and re-run.
+   *
+   * `--check` is the CI form of `--dry` — same report, and an exit code instead
+   * of a reading. It is the only way a repository can hold itself to shipping
+   * the skills its installed DocPilot actually carries.
+   */
+  update: {
+    summary: 'refresh the installed skills and the /docpilot-* slash commands',
+    flags: [
+      { name: 'target', kind: 'list', example: 'claude,cursor', help: 'also install into these, rather than only refreshing what is here' },
+      { name: 'scope', kind: 'enum', values: ['project', 'user'], example: 'user', help: 'work on the project copies, or the ones in your home directory' },
+      { name: 'skills-dir', kind: 'value', example: '.agents/skills', help: 'refresh or install at a directory of your own' },
+      { name: 'commands-dir', kind: 'value', example: '.cursor/commands', help: 'where the /docpilot-* slash commands go' },
+      { name: 'no-commands', kind: 'bool', help: 'refresh the skills and leave the slash commands alone' },
+      { name: 'dry', kind: 'bool', help: 'print the whole report and write nothing' },
+      { name: 'check', kind: 'bool', help: 'write nothing; exit 1 when anything is out of date' },
+    ],
+    epilogue:
+      'It updates the files this package COPIED into your project — not the package\n' +
+      'itself; that is `npm install @cloflin/docpilot@latest`, and this is what you\n' +
+      'run after it. With no flags it finds every install on this machine and\n' +
+      'refreshes each one.\n' +
+      '\n' +
+      'A file you edited is replaced and your version is kept beside it as `.bak`,\n' +
+      'named in the report. A file you did not edit is replaced in silence.',
   },
 }
 
@@ -307,8 +346,15 @@ function longFormOf(spec, token) {
   return spec.flags.some((f) => namesOf(f).includes(name)) ? `--${bare}` : null
 }
 
-/** `--level=low`, as the message shows it. */
-const exampleOf = (flag) =>
+/**
+ * `--level=low`, as the message shows it.
+ *
+ * EXPORTED for `src/cli-slash.ts`, which renders the same spelling into the
+ * `argument-hint` of every generated slash command. A second copy of this one
+ * line would be a second place for `--flag=value` to be spelled, in a file
+ * whose entire argument is that there is only ever one.
+ */
+export const exampleOf = (flag) =>
   flag.kind === 'bool' ? `--${flag.name}` : `--${flag.name}=${flag.example ?? 'value'}`
 
 /**

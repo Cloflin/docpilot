@@ -653,17 +653,42 @@ It checks only a half that has a pool *and* a catalogue to check it against. On 
 npx docpilot init
 ```
 
-In a terminal, and only when nothing has already answered them, it asks two questions — where the button goes and what shape the panel is — and prints the config block for your answers. It never edits your config: the block is yours to paste.
+In a terminal, and only when nothing has already answered them, it asks up to four questions — which agent tool gets the skills, whether they go in this repository or in your home directory, where the button goes, and what shape the panel is. It prints the config block for the last two. It never edits your config: the block is yours to paste.
 
 | flag | effect |
 |---|---|
-| `--trigger=nav\|fab\|both\|none` | answers the first question. A comma list works too — `--trigger=nav,fab` |
-| `--panel=auto\|drawer\|popup` | answers the second |
+| `--target=claude\|codex\|cursor\|copilot\|agents` | which agent tools get the skills and the `/docpilot-*` commands. A comma list works — `--target=claude,cursor` |
+| `--scope=project\|user` | into this repository, or into your home directory. Default `project` |
+| `--skills-dir=DIR` | a directory of your own, instead of a tool the table knows |
+| `--commands-dir=DIR` | where the `/docpilot-*` slash commands go |
+| `--no-commands` | install the skills and generate no slash commands |
+| `--trigger=nav\|fab\|both\|none` | where the button goes. A comma list works too — `--trigger=nav,fab` |
+| `--panel=auto\|drawer\|popup` | the shape of the panel |
 | `--yes`, `-y` | take the defaults, ask nothing |
 
 The trigger question offers the four words; [`ui.trigger`](/reference/config#ui-trigger) also takes an array written out, which is something you put in your own config rather than answer at a prompt.
 
-Any flag, a missing TTY, or a directory with no VitePress config skips the questions entirely — which is what makes `npx --yes`, CI and a Dockerfile work. Both values are validated by the same resolver the build and the browser run, so an unusable value is reported once, in the same words, wherever it was typed. See [`ui`](/reference/config#ui) for what the two settings mean.
+Any flag, a missing TTY, or `--yes` skips the questions — which is what makes `npx --yes`, CI and a Dockerfile work. The placement questions are also skipped in a directory with no VitePress config, because they are about a file that does not exist yet; the install questions are not, because a bare directory is exactly where somebody wants to be asked which tool they use. The two placement values are validated by the same resolver the build and the browser run, so an unusable value is reported once, in the same words, wherever it was typed. See [`ui`](/reference/config#ui) for what the two settings mean.
+
+### Where the skills can go {#init-targets}
+
+Agent Skills is an open standard — a directory per skill, a `SKILL.md` inside it — and four tools read the same shape from four different places. `--target` names the tool; `--scope` names which of its two directories.
+
+| `--target=` | skills, `--scope=project` | skills, `--scope=user` | slash commands |
+|---|---|---|---|
+| `claude` | `.claude/skills/` | `~/.claude/skills/` | `.claude/commands/` — `~/.claude/commands/` |
+| `codex` | `.codex/skills/` | `~/.codex/skills/` | the same directory: in Codex a slash command **is** a skill |
+| `cursor` | `.cursor/skills/` | `~/.cursor/skills/` | `.cursor/commands/` — `~/.cursor/commands/` |
+| `copilot` | `.github/skills/` | `~/.copilot/skills/` | `.github/prompts/` — none for `user` |
+| `agents` | `.agents/skills/` | `~/.agents/skills/` | none — there is no vendor-neutral command format |
+
+`agents` is the vendor-neutral spelling; Cursor and Copilot both read it, Claude Code does not. `--skills-dir=` is the escape hatch for a tool this table has never heard of, and it writes no slash commands unless `--commands-dir=` says where they go — the whole point of the flag is that we do not know what is reading it.
+
+### A slash command per command {#slash-commands}
+
+Every command on this page is also generated as `/docpilot-<command>` — `/docpilot-index`, `/docpilot-eval`, `/docpilot-update`, all eleven. Each one carries that command's own flag list, rendered from the same table this reference is checked against, so a flag cannot exist in one and not the other.
+
+They are generated, never authored, which is why `npx docpilot update` rewrites them all: a command file left at the previous release describes flags the CLI has stopped taking, and an agent runs what it reads.
 
 Scaffolds the whole loop, and **never overwrites**:
 
@@ -674,33 +699,72 @@ Scaffolds the whole loop, and **never overwrites**:
 | `${evalDir}/calibration.jsonl` | six starter probes, half answerable |
 | `${evalDir}/.gitignore` | the raw cache and the bench scratch |
 | `.gitignore` | **appended, not created** — one entry for `docs/public/rag/`, the built index |
-| `.claude/skills/docs-rag/` | the tuning and measurement loop, as a skill |
-| `.claude/skills/docs-import/` | the imported-page contract, as a skill |
+| `<skills-dir>/docs-rag/` | the tuning and measurement loop, as a skill |
+| `<skills-dir>/docs-import/` | the imported-page contract, as a skill |
+| `<skills-dir>/<skill>/.docpilot.json` | which release wrote each of those files, and a hash per file — what [`update`](#update) reads |
+| `<commands-dir>/docpilot-*.md` | one slash command per command on this page |
 
 The two starter golden records that expect an answer enter at `low` and `medium`, and the negative — the one that must be refused — enters at `low`, so the smallest pool cannot be passed by answering everything. See [`--level=`](#level).
 
-The skills are copied rather than left in the package because `.claude/` inside `node_modules` is not discovered — copying is the only way they reach anyone. See [Skills](/reference/skills).
+`<skills-dir>` and `<commands-dir>` are whatever `--target` and `--scope` resolved to — `.claude/skills/` and `.claude/commands/` by default. The skills are copied rather than left in the package because no tool discovers a `.claude/`, `.codex/`, `.cursor/` or `.github/` directory inside `node_modules` — copying is the only way they reach anyone. See [Skills](/reference/skills).
 
 `.gitignore` is the one exception to *never overwrites*, and it is an append rather than a write: your project almost certainly has one, and skipping it is how the ignore rule ended up documented and never implemented. The index is megabytes of quantised vectors rewritten whole by every `npx docpilot index`, so a repository that commits it grows by that much per rebuild. Delete the line if you would rather commit it — a deploy that ships the index makes no API requests of its own, which is what this repository does. Running `init` twice adds the entry once.
 
 Every file is reported as written or kept, so running it twice is safe and running it in an existing project is honest.
 
-### Upgrading: never overwriting cuts both ways {#init-upgrade}
+### Upgrading, and what `init` will not do {#init-upgrade}
 
-The rule that makes `init` safe to re-run is the rule that makes it useless for an upgrade. It writes a file only when nothing is there, and that check never looks at what the existing file *says* — so a project that ran `init` once keeps its copy of the skills forever, across every package upgrade that rewrites them. Re-running `init` prints `kept … (already there)` for each one and moves on.
+The rule that makes `init` safe to re-run is the rule that makes it useless for an upgrade. It writes a file only where nothing is, and that check never looks at what the existing file *says* — so a project that ran `init` once keeps its copy of the skills across every package upgrade that rewrites them. Re-running `init` prints `kept … (already there)` for each one and moves on.
 
-The copying is file by file, which makes the result worse than simply stale: a file the upgrade **added** to a skill does arrive, because nothing is there to keep, while every file it **changed** stays at the old version. A skill directory can end up half of one release and half of another, with nothing on screen to say so.
+That is still true, and it is still right for `golden.jsonl` and `calibration.jsonl`: those are your work, and quietly replacing either would be far worse than a stale skill. The skills are not your work — they are documentation this package ships — so they got a command of their own. See [`update`](#update).
 
-Nothing warns you about any of this, because from `init`'s side there is nothing wrong: your `golden.jsonl` and your `calibration.jsonl` are yours too, and quietly replacing either of those would be far worse than a stale skill.
-
-So after upgrading the package, refresh the copied skills by hand:
+## `update`
 
 ```bash
-rm -rf .claude/skills/docs-rag/ .claude/skills/docs-import/
-npx docpilot init
+npx docpilot update
 ```
 
-Delete only the skill directories. Everything else `init` writes is yours to keep — the eval sets especially, which is the whole reason the helper refuses to overwrite in the first place. If you have edited a skill locally, diff it against the package's own copy under `node_modules/@cloflin/docpilot/skills/` rather than deleting it — that directory is what `init` copies from.
+Refreshes the skills and the `/docpilot-*` slash commands that `init` copied, from the package that is installed now. It is what you run **after** `npm install @cloflin/docpilot@latest`, not instead of it.
+
+| flag | effect |
+|---|---|
+| `--target=claude\|codex\|cursor\|copilot\|agents` | also install into these, rather than only refreshing what is already here. A comma list works |
+| `--scope=project\|user` | work on the project copies, or the ones in your home directory |
+| `--skills-dir=DIR` | refresh or install at a directory of your own |
+| `--commands-dir=DIR` | where the `/docpilot-*` slash commands go |
+| `--no-commands` | refresh the skills and leave the slash commands alone |
+| `--dry` | print the whole report and write nothing |
+| `--check` | write nothing; exit `1` when anything is out of date |
+
+With no flags it **finds** the installs rather than being told about them: it looks in every directory in the [target table](#init-targets), in both scopes, and refreshes each one that already holds a DocPilot skill. That is what makes `npx docpilot update` in one project refresh a skill you installed into `~/.claude/skills/` from another. Nothing is created by discovery — a machine with no Cursor does not grow a `.cursor/` because you ran this. Only an explicit `--target=` installs somewhere new.
+
+### What happens to a file you edited {#update-conflicts}
+
+Beside every installed skill sits `.docpilot.json`, holding the release that wrote it and a sha256 per file. That turns *"you edited this"* from a guess into a fact, and the two cases are treated differently:
+
+| the file | what happens |
+|---|---|
+| identical to the package's | `kept` |
+| different, and its hash matches the manifest | `updated` — we wrote it, nobody touched it, so nothing is lost |
+| different, and its hash does not match — or the manifest never knew what was in it | `REPLACED`, and your bytes are copied to `<file>.bak` first |
+
+```
+[docpilot] REPLACED .claude/skills/docs-rag/judge-protocol.md   (your copy kept as judge-protocol.md.bak)
+
+  1 file you had edited was replaced. Your version is beside it:
+
+    .claude/skills/docs-rag/judge-protocol.md.bak
+
+  Diff them before deleting them — a local edit is usually a local reason.
+```
+
+A second `update` writes `.bak.2` rather than overwriting the first backup. A file the package has stopped shipping is deleted when it is still exactly as we left it, and left alone with a `left` row when it is not.
+
+The manifest records `null` — *unknown provenance* — for every file `init` found already in place and kept. That is deliberate: recording the package's own hash for a file we did not write would let a later `update` decide your copy was ours and replace it with no backup.
+
+An install made before manifests existed is still found, by the skill directory alone, and every file in it is treated as unknown provenance. So the first `update` after upgrading past this release backs up everything it replaces, which is the conservative half of the trade.
+
+`--check` is the CI form: same report, no writes, exit `1` when anything would change. It is how a repository holds itself to shipping the skills its installed DocPilot actually carries.
 
 ## Help, and the version {#help}
 

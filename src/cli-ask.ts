@@ -35,5 +35,30 @@ export async function askOne(rl, q) {
   return q.default
 }
 
+/**
+ * One question whose answer is a PATH, and so cannot be a list of options.
+ *
+ * `askOne` returns a member of `q.options`, which is the right shape for every
+ * question this CLI had until the skills grew somewhere to be installed: "which
+ * directory?" has no option list, and pushing free text through a fixed-option
+ * prompt would have meant a prompt that rejects the only answer it can be
+ * given. A sibling here rather than a second module, because it is the same
+ * contract — empty takes the default, one retry, then the default — and the
+ * whole point of this file is that the two commands that ask share it.
+ */
+export async function askPath(rl, q) {
+  const suffix = q.default ? `  [${q.default}]` : ''
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = (await rl.question(`\n  ${q.label}${suffix}\n  > `)).trim()
+    if (!raw) return q.default ?? null
+    // A path is almost anything, so the only thing worth refusing is the answer
+    // that is not one: a bare flag, which means the reader is answering a
+    // different question than the one on screen.
+    if (!raw.startsWith('-')) return raw
+    console.log('  That looks like a flag rather than a directory.')
+  }
+  return q.default ?? null
+}
+
 /** Re-exported so a caller of `askOne` needs one import, not two. */
 export { CANCELLED } from './cli-exit.js'

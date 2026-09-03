@@ -43,6 +43,32 @@ export function openerQuestions(suggestions) {
 }
 
 /**
+ * The fingerprint the two sides compare — the questions AND the answers written
+ * for them.
+ *
+ * `questionsHash(openerQuestions(...))` was enough while every baked answer was
+ * derived: an author who edited what a model would write edited the corpus, the
+ * prompt or the model, and all three are already covered by `hash` and by the
+ * per-answer stamp. An AUTHORED answer is none of those. It lives in the config
+ * beside the question, so a rewritten paragraph under an unchanged question
+ * moved nothing at all — and a bundle carrying the previous paragraph would go
+ * on being served, correctly stamped, indefinitely.
+ *
+ * So the answer text and the ids it cites go into the same hash. It is still
+ * derived on both sides from the resolved config rather than carried in the
+ * bundle, which is what keeps there being one answer to "is this bake current".
+ */
+export function openerFingerprint(suggestions) {
+  const questions = openerQuestions(suggestions)
+  const authored = suggestions?.authored
+  if (!authored?.length) return questionsHash(questions)
+  return questionsHash([
+    ...questions,
+    ...authored.map((a) => `${a.q} ${a.answer} ${a.cite.join(' ')}`),
+  ])
+}
+
+/**
  * Base64 int8 → the float domain the retriever dots against.
  *
  * `embedQuery` L2-normalises and multiplies by 127 (embed.js), which is what
@@ -131,7 +157,7 @@ export function matchOpener(question, { index, config, scope, quote, turns, loca
    * entry.
    */
   if (bundle.hash !== index.manifest?.hash) return null
-  if (bundle.configHash !== questionsHash(openerQuestions(suggestions))) return null
+  if (bundle.configHash !== openerFingerprint(suggestions)) return null
 
   const key = normalise(question)
   if (!key) return null

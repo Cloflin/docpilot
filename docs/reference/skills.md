@@ -1,40 +1,53 @@
 # Skills
 
-`npx docpilot init` copies two skills into `.claude/skills/`. They are the written-down half of running this thing: what to measure, what has already been measured, and what an edit is allowed to break.
+`npx docpilot init` copies two skills into whichever agent tool you told it to. They are the written-down half of running this thing: what to measure, what has already been measured, and what an edit is allowed to break.
 
 ## Why they are copied
 
-A skill inside `node_modules` reaches nobody — `.claude/` is discovered in the project, not in a dependency. Copying is the only delivery mechanism there is, which is why it is part of `init` rather than a documented step someone might skip.
+A skill inside `node_modules` reaches nobody. Every tool that reads Agent Skills — Claude Code, Codex, Cursor, Copilot — discovers them in the project or in your home directory and never in a dependency. Copying is the only delivery mechanism there is, which is why it is part of `init` rather than a documented step someone might skip.
 
 They are yours once copied. Edit them: the numbers in them are about the corpus this package was developed against, not yours.
 
-## Copied once — including across upgrades
+## Where they go
 
-`init` writes a file only where nothing is at that path already, and reports every one as `wrote` or `kept … (already there)`. That is what makes running it twice safe, and running it in an existing project honest.
+`init` asks. `--target` and `--scope` answer it without asking, and the full table is in the [CLI reference](/reference/cli#init-targets):
 
-The half of the rule nobody expects is that it holds **across package upgrades too**. A project that ran `init` once keeps its original copies of these skills forever. Upgrade the package and the skill inside `node_modules` may gain a measurement that reverses a recommendation, while `.claude/skills/docs-rag/SKILL.md` still says the old thing — and nothing in the install, the build or `doctor` mentions the difference. The agent goes on following an outdated manual, and it does so confidently.
+| `--target=` | `--scope=project` | `--scope=user` |
+|---|---|---|
+| `claude` | `.claude/skills/` | `~/.claude/skills/` |
+| `codex` | `.codex/skills/` | `~/.codex/skills/` |
+| `cursor` | `.cursor/skills/` | `~/.cursor/skills/` |
+| `copilot` | `.github/skills/` | `~/.copilot/skills/` |
+| `agents` | `.agents/skills/` | `~/.agents/skills/` |
 
-The only signal is `init`'s own output:
+`--target=claude --scope=project` is the default, which is where every install before this feature existed put them. `--skills-dir=DIR` covers a tool the table has not heard of.
 
-```
-[docpilot] kept     .claude/skills/docs-rag/SKILL.md   (already there)
-```
+## Every command, as a slash command
 
-After an upgrade that line says exactly this: the file you have is not the one the package you just installed carries.
+`init` also generates one slash command per CLI command into the same tool — `/docpilot-index`, `/docpilot-eval`, `/docpilot-lint`, `/docpilot-update`, all eleven. Each carries that command's own flags, rendered from the table the CLI validates against, so they cannot describe a flag the CLI does not have.
 
-There is no merge, and there should not be: these files are edited in place by design, and an upgrade that overwrote a local edit would be the worse failure. So the refresh is deliberate:
+They are generated rather than authored, and `npx docpilot update` rewrites them from the installed package. `--no-commands` turns them off if a picker with eleven more entries in it is not what you want.
+
+## Refreshing them after an upgrade
 
 ```bash
-# what moved, before deciding anything
-diff -ru .claude/skills/docs-rag node_modules/@cloflin/docpilot/skills/docs-rag
-
-rm -rf .claude/skills/docs-rag
-npx docpilot init
+npx docpilot update --dry     # what would change, and to which files
+npx docpilot update           # do it
 ```
 
-Delete only the skill you mean to refresh — `init` re-copies whatever is missing and leaves the rest alone. If you have edited your copy, that `diff` is the whole decision: reapply your edits on top of the new one.
+`init` writes a file only where nothing is, which is what makes it safe to re-run — and useless for an upgrade. A project that ran it once kept its copy of the skills across every release that rewrote them, file by file, so a skill directory could end up half of one release and half of another with nothing on screen to say so. The agent went on quoting a superseded measurement, confidently.
 
-### What changed in `docs-rag` this release
+`update` is the answer to that, and it knows what it is allowed to replace. Beside every installed skill sits `.docpilot.json` with the release that wrote it and a hash per file, so a file we wrote and nobody touched is replaced in silence, and a file **you edited** is replaced with your version kept beside it:
+
+```
+[docpilot] REPLACED .claude/skills/docs-rag/judge-protocol.md   (your copy kept as judge-protocol.md.bak)
+```
+
+There is still no merge, and there should not be — these files are edited in place by design. What changed is that the edit no longer has to be found by hand before an upgrade can be applied: it survives the upgrade, on disk, named in the report. Diff the `.bak` and reapply what you meant.
+
+With no flags, `update` finds every install on the machine rather than being told where to look, so it refreshes a `~/.claude/skills/` copy from any project. It creates nothing new — only `--target=` installs somewhere it has not been. Full behaviour, including `--check` for CI, is under [`update`](/reference/cli#update).
+
+## What changed in `docs-rag` this release
 
 One new mode, and the rest is in **Things already measured**, which is the section an agent quotes at you when it declines to re-derive something.
 
@@ -87,6 +100,8 @@ The contract for [imported pages](/guide/imported-pages). What lives here and no
 - **the annotation pass** — vocabulary gap, structure, dilution, and which of the three has no fix;
 - **the gate order** an import has to pass, ending in a re-calibration because the corpus hash moved.
 
-## Using them without Claude Code
+## Using them without an agent tool at all
 
 They are markdown. The rules hold whoever is reading them, and the "things already measured" list is worth reading before touching a retrieval constant regardless of what is doing the touching.
+
+The three scripts under `docs-rag/scripts/` are plain Node and run from anywhere; the invocation lines in the skill are written with the directory it was installed into, so they are copy-pasteable wherever it landed.

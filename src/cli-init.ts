@@ -7,11 +7,14 @@
  * config is, what the flags said, what the snippet the reader pastes looks
  * like) and `runInit` at the foot of the file, which writes.
  */
-import { existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from 'node:fs'
+import { existsSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { resolveDocPilot, indexDirOf } from './config.js'
 import { askOne, CANCELLED } from './cli-ask.js'
+import { askInstall, installSite, parseTargets, report as installReport } from './cli-skills.js'
+import { DEFAULT_SCOPE, DEFAULT_TARGET, resolveSite, SCOPES } from './cli-targets.js'
 
 import {
   resolveUi,
@@ -70,10 +73,26 @@ export function findConfig(root = process.cwd()) {
  * mobile nav-screen row with it.
  */
 export function parseUiFlags(argv = []) {
-  const out = { ui: {}, yes: false, unknown: [] }
+  /**
+   * The annotation is not decoration: `install` is a SPARSE bag — "was this
+   * answered on the command line" is `Object.keys(...).length`, so a default
+   * object with five nulls in it would report every run as already answered and
+   * the questions would never be asked. Empty has to stay empty, which means
+   * the shape has to be declared rather than inferred from `{}`.
+   */
+  const out: {
+    ui: Record<string, string | string[]>
+    install: { target?: string; scope?: string; skillsDir?: string; commandsDir?: string; commands?: boolean }
+    yes: boolean
+    unknown: string[]
+  } = { ui: {}, install: {}, yes: false, unknown: [] }
   for (const arg of argv) {
     if (arg === '--yes' || arg === '-y') {
       out.yes = true
+      continue
+    }
+    if (arg === '--no-commands') {
+      out.install.commands = false
       continue
     }
     const m = /^--(trigger|panel)=(.*)$/.exec(arg)
@@ -82,6 +101,19 @@ export function parseUiFlags(argv = []) {
         m[1] === 'trigger' && m[2].includes(',')
           ? m[2].split(',').map((v) => v.trim()).filter(Boolean)
           : m[2]
+      continue
+    }
+    /**
+     * The four that say WHERE, kept in their own bag rather than in `ui`.
+     *
+     * `ui` is handed whole to `validateUi`, which resolves it through the same
+     * resolver the browser runs — a `--scope` in there would be a setting the
+     * panel has never heard of arriving at the panel's own validator.
+     */
+    const where = /^--(target|scope|skills-dir|commands-dir)=(.*)$/.exec(arg)
+    if (where) {
+      out.install[where[1] === 'skills-dir' ? 'skillsDir' : where[1] === 'commands-dir' ? 'commandsDir' : where[1]] =
+        where[2]
       continue
     }
     out.unknown.push(arg)
@@ -249,19 +281,65 @@ export async function runInit({ argv = [], configPath = null } = {}) {
      * distinction is the whole reason a script can tell a typo from an outage.
      */
     console.error(`[docpilot] unknown option${flags.unknown.length === 1 ? '' : 's'}: ${flags.unknown.join(' ')}`)
-    console.error('  init accepts --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup, --yes')
+    console.error('  init accepts --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup,')
+    console.error('  --target=claude|codex|cursor|copilot|agents (or a comma list), --scope=project|user,')
+    console.error('  --skills-dir=DIR, --commands-dir=DIR, --no-commands, --yes')
     return 2
   }
 
-  const answered = Object.keys(flags.ui).length > 0
-  const interactive =
-    !answered && !flags.yes && !!configPath && !!process.stdin.isTTY && !!process.stdout.isTTY
+  if (flags.install.scope && !SCOPES.includes(flags.install.scope)) {
+    console.error(`[docpilot] --scope=${flags.install.scope} is not one of: ${SCOPES.join(', ')}`)
+    return 2
+  }
+  if (flags.install.target) {
+    const parsed = parseTargets(flags.install.target)
+    if (parsed.error) {
+      console.error(`[docpilot] ${parsed.error}`)
+      return 2
+    }
+  }
+
+  /**
+   * TWO interactivity gates, because the two sets of questions need different
+   * things to be true.
+   *
+   * The placement questions produce a config block, so a directory with no
+   * config has nothing for them to be about — that is the `configPath` clause,
+   * and it is why `init` in a bare directory has always printed one line and
+   * skipped them.
+   *
+   * WHERE THE SKILLS GO IS NOT ABOUT THE CONFIG. A bare directory is precisely
+   * where somebody wants to be asked which agent tool they use, and gating that
+   * question on a VitePress config would have made the default — Claude Code,
+   * in the project — the only answer most people ever got.
+   */
+  const uiAnswered = Object.keys(flags.ui).length > 0
+  const installAnswered = Object.keys(flags.install).length > 0
+  const tty = !!process.stdin.isTTY && !!process.stdout.isTTY
+  const interactiveUi = !uiAnswered && !flags.yes && !!configPath && tty
+  const interactiveInstall = !installAnswered && !flags.yes && tty
 
   let ui = validateUi(flags.ui)
+  /**
+   * The DEFAULT is the pre-existing behaviour, spelled out.
+   *
+   * `init --yes`, a CI job and a Dockerfile all take this path, and before this
+   * release it wrote `.claude/skills/`. A default that moved would relocate
+   * somebody's skills as a side effect of upgrading the package.
+   */
+  let install = {
+    target: flags.install.target ?? (flags.install.skillsDir || flags.install.commandsDir ? null : DEFAULT_TARGET),
+    scope: flags.install.scope ?? DEFAULT_SCOPE,
+    skillsDir: flags.install.skillsDir ?? null,
+    commandsDir: flags.install.commandsDir ?? null,
+    commands: flags.install.commands !== false,
+  }
 
-  if (!configPath) {
+  if (!configPath && !interactiveInstall) {
     console.log('[docpilot] no config file here yet — skipping the placement questions.\n')
-  } else if (interactive) {
+  }
+
+  if (interactiveUi || interactiveInstall) {
     const { createInterface } = await import('node:readline/promises')
     const rl = createInterface({ input: process.stdin, output: process.stdout })
     // Ctrl-C during a question is an answer too: leave, with the files already
@@ -276,11 +354,23 @@ export async function runInit({ argv = [], configPath = null } = {}) {
       process.exit(CANCELLED)
     })
     try {
-      const picked = {}
-      for (const q of UI_QUESTIONS) {
-        picked[q.key] = await askOne(rl, q)
+      // WHERE first, then what it looks like. The install questions are the ones
+      // a reader in a bare directory can answer; the placement ones need a
+      // config to be about, and asking them first would open with the question
+      // that gets skipped.
+      if (interactiveInstall) {
+        const picked = await askInstall(rl, process.cwd())
+        install = { ...install, ...picked, commands: install.commands }
       }
-      ui = validateUi(picked)
+      if (interactiveUi) {
+        const picked = {}
+        for (const q of UI_QUESTIONS) {
+          picked[q.key] = await askOne(rl, q)
+        }
+        ui = validateUi(picked)
+      } else if (!configPath) {
+        console.log('\n[docpilot] no config file here yet — skipping the placement questions.')
+      }
     } catch {
       // Ctrl-D closes stdin mid-question and readline rejects. Same intent as
       // Ctrl-C, same outcome — and an unhandled rejection here would print a
@@ -441,21 +531,42 @@ export async function runInit({ argv = [], configPath = null } = {}) {
   ])
 
   /**
-   * The skills, copied into the project.
+   * The skills, and a slash command per CLI command, into whichever tool was
+   * chosen.
    *
-   * Not a convenience: `.claude/` inside `node_modules` is not discovered, so a
-   * skill that stays in the package reaches nobody. This is the only way they
-   * arrive, which is why it is part of `init` rather than a documented step.
+   * Not a convenience: a skill inside `node_modules` is discovered by nobody —
+   * `.claude/`, `.codex/`, `.cursor/` and `.github/` are all read from the
+   * project or the home directory and never from a dependency. Copying is the
+   * only delivery mechanism there is, which is why it is part of `init` rather
+   * than a documented step somebody might skip.
+   *
+   * `keepExisting: true` is `init`'s rule, unchanged: a file that is already
+   * there is kept and reported, so running `init` twice is safe and running it
+   * in an existing project is honest. What is new is that the manifest records
+   * `null` for every file kept that way — unknown provenance — so the `update`
+   * that eventually replaces it knows to back it up first.
    */
-  const skillsDir = new URL('skills/', PKG)
-  const copyTree = (from, to) => {
-    for (const entry of readdirSync(from, { withFileTypes: true })) {
-      const src = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, from)
-      if (entry.isDirectory()) copyTree(src, `${to}/${entry.name}`)
-      else put(`${to}/${entry.name}`, readFileSync(src, 'utf8'))
+  /**
+   * A LIST, because `--target` is one — a project may want Claude Code and
+   * Cursor, and the flag table declares `kind: 'list'` for exactly that. A
+   * single-target install is the one-element case of the same loop rather than
+   * a separate path, which is how `--target=claude,cursor` stopped meaning
+   * `--target=claude`.
+   */
+  const sites = []
+  if (install.skillsDir || install.commandsDir) {
+    sites.push(
+      resolveSite({ scope: install.scope, skillsDir: install.skillsDir, commandsDir: install.commandsDir }),
+    )
+  } else if (install.target) {
+    for (const id of parseTargets(install.target).ids) {
+      sites.push(resolveSite({ target: id, scope: install.scope }))
     }
   }
-  if (existsSync(skillsDir)) copyTree(skillsDir, '.claude/skills')
+
+  const installed = sites.map((site) =>
+    installSite({ site, pkgRoot: fileURLToPath(PKG), commands: install.commands, keepExisting: true }),
+  )
 
   /**
    * The feedback receiver, copied for the same reason and with more force.
@@ -477,6 +588,25 @@ export async function runInit({ argv = [], configPath = null } = {}) {
   for (const f of wrote) console.log(`[docpilot] wrote    ${f}`)
   for (const f of skipped) console.log(`[docpilot] kept     ${f}   (already there)`)
 
+  /**
+   * The install has its own report because it has its own vocabulary — a
+   * target, a scope, and two directories that are not both under this project.
+   * Folding it into `wrote`/`skipped` would have printed a home-directory path
+   * in a list every other line of which is relative to here.
+   */
+  if (installed.length) {
+    console.log(installReport(installed, process.cwd()))
+    for (const site of installed) {
+      if (site.commandsDir) {
+        console.log(`\n  Type /docpilot- in ${site.target === 'custom' ? 'your agent' : site.target} to run any of these commands.`)
+      } else if (install.commands) {
+        console.log(`\n  No slash commands: ${site.target} (${site.scope}) has nowhere to put them.`)
+      }
+    }
+  } else {
+    console.log('\n[docpilot] no skills installed — `npx docpilot update --target=claude` adds them later.')
+  }
+
   console.log(`\n${uiSnippet(ui, configPath)}\n`)
 
   console.log(`
@@ -494,6 +624,8 @@ export async function runInit({ argv = [], configPath = null } = {}) {
     5. edit docpilot/golden.jsonl for your corpus, then: npx docpilot lint && npx docpilot eval
 
   npx docpilot doctor  says which provider your environment selected.
+  npx docpilot update  refreshes the skills and the /docpilot-* commands after
+                       you upgrade the package.
 `)
   return 0
 }

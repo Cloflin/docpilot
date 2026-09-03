@@ -1699,6 +1699,7 @@ async function main() {
     const chatTarget = nodeChatTarget(docPilot, BUILD_ENV)
     const { bundle, json, entries, report } = await bakeOpeners({
       questions: openerList,
+      authored: suggestions.authored,
       manifest,
       chunks,
       vectorBuffer: vectorless ? null : flat.buffer,

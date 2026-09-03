@@ -55,7 +55,7 @@ DocPilot needs **Node 20 or newer**; the package declares `engines.node: ">=20"`
 
 `pnpm exec`, not `pnpm run docpilot`: `pnpm run` executes the scripts in `package.json`, `pnpm exec` runs a bin (a bare `pnpm docpilot` falls back to `exec` and works too). Every `init` line runs the bin the install line beside it just put in the project — none of them fetches the package a second time, and none of them runs the unscoped `docpilot`, which is a different name on the registry and not this package.
 
-`init` scaffolds the whole loop and never overwrites: `.env.example`, a starter golden set and calibration set under `docpilot/`, and the two authoring skills into `.claude/skills/`. Every file is reported as written or kept.
+`init` scaffolds the whole loop and never overwrites: `.env.example`, a starter golden set and calibration set under `docpilot/`, and the two authoring skills — plus a `/docpilot-*` slash command per CLI command — into whichever agent tool you tell it to. It asks; `.claude/skills/` is the default. Every file is reported as written or kept, and [`npx docpilot update`](/reference/cli#update) is what refreshes the copied skills after an upgrade.
 
 ## Wiring the config
 

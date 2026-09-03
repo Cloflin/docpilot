@@ -476,7 +476,12 @@ const READERS = {
   // leaving this pointing at it would have kept passing on the help text while
   // the reader was somewhere else entirely.
   doctor: ['src/cli-doctor.ts'],
-  init: ['src/cli-init.ts'],
+  // `init` reads its placement flags itself and hands the four install flags
+  // straight to the module that owns the target table — the same split `index`
+  // already makes with its embedder flags, and for the same reason: the thing
+  // that knows what `--target=cursor` MEANS is not the thing that scaffolds.
+  init: ['src/cli-init.ts', 'src/cli-skills.ts'],
+  update: ['src/cli-skills.ts'],
 }
 
 /** The `## \`command\`` section of the CLI reference, up to the next `## `. */

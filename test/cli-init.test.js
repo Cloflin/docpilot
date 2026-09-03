@@ -61,14 +61,26 @@ describe('init helpers', () => {
     fs.rmSync(dir, { recursive: true, force: true })
   })
 
-  it('parses the three flags and hands back anything else', () => {
+  it('parses the placement flags, the install flags, and hands back anything else', () => {
     expect(parseUiFlags(['--trigger=fab', '--panel=popup', '--yes'])).toEqual({
       ui: { trigger: 'fab', panel: 'popup' },
+      install: {},
       yes: true,
       unknown: [],
     })
-    expect(parseUiFlags(['-y'])).toEqual({ ui: {}, yes: true, unknown: [] })
-    expect(parseUiFlags([])).toEqual({ ui: {}, yes: false, unknown: [] })
+    expect(parseUiFlags(['-y'])).toEqual({ ui: {}, install: {}, yes: true, unknown: [] })
+    expect(parseUiFlags([])).toEqual({ ui: {}, install: {}, yes: false, unknown: [] })
+    /**
+     * WHERE the skills go is a separate bag from WHAT the panel looks like.
+     *
+     * `ui` is handed whole to `validateUi`, which is the resolver the browser
+     * itself runs; a `--scope` in that object would reach the panel's validator
+     * as a setting the panel has never heard of.
+     */
+    expect(
+      parseUiFlags(['--target=claude,cursor', '--scope=user', '--skills-dir=x', '--commands-dir=y', '--no-commands'])
+        .install,
+    ).toEqual({ target: 'claude,cursor', scope: 'user', skillsDir: 'x', commandsDir: 'y', commands: false })
     // Not silently ignored — the CLI stops on it, because a misspelled flag
     // that scaffolds anyway is a placement the author thinks they chose.
     expect(parseUiFlags(['--colour=red']).unknown).toEqual(['--colour=red'])

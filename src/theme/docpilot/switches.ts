@@ -52,6 +52,19 @@ export const CITATIONS_DEFAULTS = { passage: false, inCopy: true, pagesRead: fal
 export const COMPOSER_DEFAULTS = { editLastOnArrowUp: true, deepLink: true, draft: true }
 export const SUGGESTIONS_DEFAULTS = {
   questions: [],
+  /**
+   * The answers the AUTHOR wrote, for the openers that have one — engine-specs/017.
+   *
+   * A SECOND KEY RATHER THAN A SECOND SHAPE FOR `questions`, and the split is
+   * the whole of why nothing downstream had to change. `questions` is read by
+   * `DocPilot.vue` as the chip labels, by `openerQuestions` as the bake list and
+   * by `questionsHash` as the fingerprint; all three want strings, and a union
+   * there would have made every one of them ask which form it was handed.
+   * `authored` is derived from the same array in the same pass and carries the
+   * entries that wrote an answer down — `{q, answer, cite}`, always in
+   * `questions`' own order and always a subset of it.
+   */
+  authored: [],
   scoped: true,
   followUps: false,
   precomputed: true,
@@ -649,8 +662,26 @@ export function resolveSuggestions(docPilot, warn = console.warn) {
   }
 
   const list = object ? raw.questions : raw
+  const parsed = parseQuestions(list, warn)
   return {
-    questions: questionsOf(list, warn),
+    questions: parsed.questions,
+    /**
+     * IDEMPOTENT, and this line is the whole of it — rule 11a.
+     *
+     * `resolveSuggestions` runs TWICE on every build: once in `themeDocPilot`,
+     * where it meets the author's array and reads `{q, answer, cite}` out of it,
+     * and again in `session.js`, where it meets its own output — a plain
+     * `questions: string[]` with the answers already lifted onto `authored`.
+     * Without this the second pass would find no objects, resolve `authored` to
+     * `[]`, and every written answer would exist in the bake and in the config
+     * the panel never sees.
+     *
+     * Filtered against `questions` rather than trusted, because the second pass
+     * is also where a resolved block can arrive hand-written.
+     */
+    authored: parsed.authored.length
+      ? parsed.authored
+      : carriedAuthored(object ? raw.authored : null, parsed.questions, warn),
     scoped: flag(object ? raw.scoped : null, SUGGESTIONS_DEFAULTS.scoped, 'suggestions.scoped', warn),
     followUps: flag(
       object ? raw.followUps : null,
@@ -707,24 +738,46 @@ export function resolveSuggestions(docPilot, warn = console.warn) {
   }
 }
 
-/** The array half, unchanged from the day it shipped apart from where it lives. */
-function questionsOf(raw, warn) {
-  if (raw == null) return []
+/**
+ * The array half — now two arrays out of one, and every rejection keeps the
+ * question.
+ *
+ * An entry is a string, or an object `{q, answer, cite}`. The object form is the
+ * FAQ case: the author has already written the answer, in their own words,
+ * against pages they chose, and having a model rewrite it from the same corpus
+ * at build time is a worse copy of something that already exists.
+ *
+ * `cite` IS NOT OPTIONAL, and that is the one rule this form does not get to
+ * bend. `bakeOpeners` refuses to bake an answer the model produced without
+ * citations — a live uncited answer is a turn the reader can retry, a baked one
+ * is a turn every reader gets until the next build — and an authored answer is
+ * baked the hardest of the three. So the author names the chunk ids their prose
+ * stands on, the build checks every one of them against the index it just
+ * produced, and an answer that cites nothing is dropped while its question
+ * stays: the reader gets a live answer rather than nothing.
+ */
+function parseQuestions(raw, warn) {
+  if (raw == null) return { questions: [], authored: [] }
   if (!Array.isArray(raw)) {
     warn(
       `[docpilot] suggestions.questions must be an array of strings, got ${typeof raw} — ` +
         `using the built-in three`,
     )
-    return []
+    return { questions: [], authored: [] }
   }
 
   const clean = []
+  const authored = []
   for (const [i, entry] of raw.entries()) {
-    if (typeof entry !== 'string') {
-      warn(`[docpilot] suggestions[${i}] is ${typeof entry}, not a string — dropped`)
+    const written = entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+    const text = written ? entry.q : entry
+    if (typeof text !== 'string') {
+      warn(
+        `[docpilot] suggestions[${i}] is ${typeof entry}, not a string or {q, answer, cite} — dropped`,
+      )
       continue
     }
-    const q = entry.trim().replace(/\s+/g, ' ')
+    const q = text.trim().replace(/\s+/g, ' ')
     if (!q) {
       warn(`[docpilot] suggestions[${i}] is empty — dropped`)
       continue
@@ -734,6 +787,10 @@ function questionsOf(raw, warn) {
       continue
     }
     clean.push(q)
+    if (written && entry.answer != null) {
+      const answer = authoredAnswer(entry, `suggestions[${i}]`, q, warn)
+      if (answer) authored.push(answer)
+    }
   }
 
   // No silent cap. The component slices at the same constant now; saying so
@@ -745,5 +802,74 @@ function questionsOf(raw, warn) {
         `dropping: ${clean.slice(SUGGESTION_LIMIT).map((q) => `"${q}"`).join(', ')}`,
     )
   }
-  return clean.slice(0, SUGGESTION_LIMIT)
+  const questions = clean.slice(0, SUGGESTION_LIMIT)
+  // A written answer whose question fell off the end goes with it — otherwise
+  // the bake would carry prose for a chip nobody can see, and the fingerprint
+  // would move on an edit to it.
+  return { questions, authored: authored.filter((a) => questions.includes(a.q)) }
+}
+
+/**
+ * The `authored` of a block that has already been resolved once.
+ *
+ * Re-validated rather than copied: `session.js` also resolves a hand-written
+ * `themeConfig`, so this array is as much an input as `questions` is, and an
+ * entry that arrives malformed here would reach a reader as an answer with no
+ * text or an answer with no sources.
+ */
+function carriedAuthored(raw, questions, warn) {
+  if (raw == null) return []
+  if (!Array.isArray(raw)) {
+    warn(`[docpilot] suggestions.authored must be an array, got ${typeof raw} — ignored`)
+    return []
+  }
+  const out = []
+  for (const [i, entry] of raw.entries()) {
+    if (entry === null || typeof entry !== 'object') continue
+    const q = typeof entry.q === 'string' ? entry.q.trim().replace(/\s+/g, ' ') : ''
+    if (!questions.includes(q)) {
+      warn(`[docpilot] suggestions.authored[${i}] answers a question that is not configured — dropped`)
+      continue
+    }
+    const answer = authoredAnswer(entry, `suggestions.authored[${i}]`, q, warn)
+    if (answer) out.push(answer)
+  }
+  return out
+}
+
+/**
+ * One written answer, or nothing — and nothing still leaves the question.
+ *
+ * Both halves are rejected the same way and for the same reason: this is the one
+ * place in the config where an author can put PROSE in front of a reader
+ * directly, so a malformed entry has to degrade to the behaviour that existed
+ * before it was typed rather than to a blank chip or a half-answer.
+ */
+function authoredAnswer(entry, where, q, warn) {
+  const answer = typeof entry.answer === 'string' ? entry.answer.trim() : ''
+  if (!answer) {
+    warn(
+      `[docpilot] ${where}.answer is ${typeof entry.answer}, not a non-empty string — ` +
+        `the question stays and the model answers it`,
+    )
+    return null
+  }
+
+  const cite = []
+  for (const id of Array.isArray(entry.cite) ? entry.cite : []) {
+    if (typeof id !== 'string' || !id.trim()) {
+      warn(`[docpilot] ${where}.cite holds a ${typeof id}, not a chunk id — dropped`)
+      continue
+    }
+    const clean = id.trim()
+    if (!cite.includes(clean)) cite.push(clean)
+  }
+  if (!cite.length) {
+    warn(
+      `[docpilot] ${where} wrote an answer with no cite: [...] — prose with nothing in ` +
+        `the corpus behind it is not baked; the question stays and the model answers it`,
+    )
+    return null
+  }
+  return { q, answer, cite }
 }

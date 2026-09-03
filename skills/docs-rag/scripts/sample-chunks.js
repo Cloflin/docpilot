@@ -2,7 +2,7 @@
 /**
  * Stratified chunk sampling for `docs-rag generate` — RAG-SPEC 7.
  *
- *   node .claude/skills/docs-rag/scripts/sample-chunks.js [--per-section=3] [--seed=1] \
+ *   node {{SKILL_DIR}}/scripts/sample-chunks.js [--per-section=3] [--seed=1] \
  *     [--rag=docs/public/rag]
  *
  * Prints compact candidates — id, breadcrumb, title, a text head — so the

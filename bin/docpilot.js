@@ -31,6 +31,7 @@ const COMMANDS = [
   'feedback',
   'doctor',
   'init',
+  'update',
 ]
 
 let [, , cmd, ...rest] = process.argv
@@ -86,6 +87,12 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
                 every embedder this project could build with, and the command
                 that picks each one
     init        scaffold the environment, the eval sets and the authoring skills
+                asks which agent tool gets the skills — Claude Code, Codex,
+                Cursor, Copilot — and whether they go in this repository or in
+                your home directory
+    update      refresh those copied skills, and the /docpilot-* slash commands,
+                after upgrading the package. A file you edited is replaced and
+                kept beside it as .bak; --dry shows the whole report first
 
   The loop is  index → calibrate → lint → eval → bench,  with tune where it is
   retrieval that has to move — and then index again, because that is the step
@@ -316,6 +323,22 @@ const { CONFIG_CANDIDATES, findConfig } = await import('../dist/cli-init.js')
 if (cmd === 'init') {
   const { findConfig, runInit } = await import('../dist/cli-init.js')
   process.exit(await runInit({ argv: rest, configPath: findConfig() }))
+}
+
+/**
+ * `update` dispatches beside `init`, and for the same reason: it refreshes the
+ * files this package COPIED into a project, so it needs no config, no key and
+ * no network. An upgrade has to be refreshable in a checkout nobody has
+ * configured yet — which is exactly the checkout somebody has just cloned.
+ *
+ * It is handed the package root because that is the one thing it cannot work
+ * out for itself: `dist/cli-skills.js` knows where IT is, and the skills are
+ * two directories above that in a clone and somewhere else again under a
+ * package manager that flattens.
+ */
+if (cmd === 'update') {
+  const { runUpdate } = await import('../dist/cli-skills.js')
+  process.exit(await runUpdate({ argv: rest, pkgRoot: fileURLToPath(new URL('..', import.meta.url)) }))
 }
 
 

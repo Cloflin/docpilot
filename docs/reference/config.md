@@ -49,7 +49,7 @@ export const docPilot = {
   topK: null,
   maxIterations: 2,
   budget: { mode: 'auto', oneShotBelow: 15, rotateAbove: 6, maxContinuations: 1, showRemaining: false, probe: 'auto', dailyLimit: null },
-  suggestions: { questions: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65 },
+  suggestions: { questions: [], authored: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65 },
   quote: { fromAnswer: true, fromDocs: false },
   citations: { passage: false, inCopy: true, pagesRead: false },
   composer: { editLastOnArrowUp: true, deepLink: true, draft: true },
@@ -142,7 +142,8 @@ written by hand; only the values are mechanical.
 | [`budget.showRemaining`](#budget-showremaining) | `boolean` | `false` | Adds the muted line under the composer — answers left today, and where `embed: false` that this deployment has no embedder — *the count half needs a daily allowance: a declared `dailyLimit`, or the provider's own free pool* |
 | [`budget.probe`](#budget-probe) | `'auto' \| 'always' \| 'never'` | `'auto'` | Governs the tool-detection call made on page load: `'auto'` skips it for a pool, `'always'` keeps it, `'never'` drops it |
 | [`budget.dailyLimit`](#budget-dailylimit) | `number \| null` | `null` | Declares a ceiling to count against locally for a metered service that sends no rate-limit headers; header counts still win — *`0` is reported and ignored — everything downstream reads a falsy ceiling as no ceiling at all* |
-| [`suggestions.questions`](#suggestions-questions) | `string[]` | `[]` | Replaces the built-in three empty-state openers with your own — the first five are used, extras, empties and repeats dropped and named on stdout — *`suggestions: ['One?']` — a bare array — sets this same key* |
+| [`suggestions.questions`](#suggestions-questions) | `(string \| { q, answer, cite })[]` | `[]` | Replaces the built-in three empty-state openers with your own — the first five are used, extras, empties and repeats dropped and named on stdout — *`suggestions: ['One?']` — a bare array — sets this same key* |
+| [`suggestions.authored`](#suggestions-authored) | `{ q, answer, cite }[]` | `[]` | The openers you answered yourself: the prose ships verbatim and no model is called for it, at build time or in the browser — *resolved out of `questions`; writing it directly is what makes the resolver idempotent* |
 | [`suggestions.scoped`](#suggestions-scoped) | `boolean` | `true` | Under a narrowed scope, fills the empty panel with the pages in that scope as rows rather than leaving it blank — no text is generated — *`false` gives back the blank panel, not the questions: those never show under a narrow scope* |
 | [`suggestions.followUps`](#suggestions-followups) | `boolean` | `false` | Adds up to three next-question rows under the newest answer, built from headings on the pages it cited — no model call and nothing invented |
 | [`suggestions.precomputed`](#suggestions-precomputed) | `boolean` | `true` | Has `npx docpilot index` resolve the openers ahead of time and the panel use what it resolved, so a reader clicking one spends no embedding request — *off, nothing is baked and nothing is read* |
@@ -1434,8 +1435,8 @@ this package does not know to be metered.
 
 ## suggestions
 
-- **Type:** `string[] | { questions?: string[], scoped?: boolean, followUps?: boolean, precomputed?: boolean, answers?: boolean, matchTau?: number | false }`
-- **Default:** `{ questions: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65 }` — the built-in three
+- **Type:** `(string | AuthoredOpener)[] | { questions?: (string | AuthoredOpener)[], authored?: AuthoredOpener[], scoped?: boolean, followUps?: boolean, precomputed?: boolean, answers?: boolean, matchTau?: number | false }`, where `AuthoredOpener` is `{ q: string, answer: string, cite: string[] }`
+- **Default:** `{ questions: [], authored: [], scoped: true, followUps: false, precomputed: true, answers: true, matchTau: 0.65 }` — the built-in three
 - **Related:** [ui-specs/009]
 
 The three to five questions on the empty state, and what the panel offers when it
@@ -1455,7 +1456,9 @@ suggestions: [
 ```
 
 Strings, not `{label, question}` objects: the row submits what it shows, so a
-separate label would put a question the reader never read into the thread.
+separate label would put a question the reader never read into the thread. The one
+object form that **is** accepted carries no label either — it carries the answer,
+see [`suggestions.authored`](#suggestions-authored).
 
 **The first five are used, and three is the fallback rather than the maximum.**
 Extras, empties, repeats and non-strings are dropped and **named on stdout** — a
@@ -1480,6 +1483,75 @@ are worth replacing.
 
 The array, under its own name. `suggestions: ['One?']` and
 `suggestions: { questions: ['One?'] }` are the same setting.
+
+An entry may also be `{ q, answer, cite }` — a question you answered yourself. See
+[`suggestions.authored`](#suggestions-authored).
+
+### suggestions.authored
+
+The openers whose answer you wrote, rather than one a model writes for you.
+
+```js
+suggestions: {
+  questions: [
+    'How do I authenticate requests?',
+    {
+      q: 'How do I get started?',
+      answer: '**1) Install and initialise.**\n\n```bash\nnpm i @cloflin/docpilot\n```\n\n…',
+      cite: ['install#', 'install#installing-it'],
+    },
+  ],
+}
+```
+
+`answer` ships **verbatim**: `npx docpilot index` writes it into the openers bundle
+beside the index, and the click serves it. No model is asked for it at build time,
+and none is asked in the browser — so this is the one answer a search-only site
+can still give, and the one that costs nothing on a metered tier however often the
+corpus moves.
+
+**Why you would.** The empty state is the most-asked question on any docs site by
+construction, and the questions that belong there are usually the ones whose answer
+is spread over four pages. A model handed eight excerpts writes a competent
+paragraph about the two it liked; the whole path, in order, with the commands in
+it, is an editorial artefact. Write that one and let the model have the rest.
+
+**`cite` is required, and it is checked.** It is a list of chunk ids —
+`install#installing-it`, `guide/appearance#five-entry-points` — and the build looks
+every one of them up in the index it has just produced. If any is missing the whole
+answer is dropped, loudly, and the model answers that opener instead:
+
+```
+    UNCITED  "How do I get started?" was answered in your config, citing
+             "install#gone" — not in this index. The written answer is NOT baked
+             and the model answers instead. Fix the ids, or reindex.
+```
+
+That check is not bureaucracy. `settleAnswer` resolves each citation against the
+index and silently drops the misses, so an id left behind by a renamed heading
+would reach the reader as prose with no sources under it — which is precisely the
+artefact [`suggestions.answers`](#suggestions-answers) refuses to bake. An
+answer that is missing its text, or that cites nothing at all, is dropped the same
+way and **the question survives**: the reader gets a live answer, never a blank
+chip.
+
+**The gate does not apply to it.** An opener the gate refuses is exactly the one an
+author is most likely to write out by hand, so a written answer is baked regardless
+of the score. The build still prints the score, under `covered` rather than
+`REFUSED`.
+
+**Editing the prose invalidates the bundle**, the same way editing a question does:
+the fingerprint the panel compares covers the answers and the ids as well as the
+questions. Until the next `npx docpilot index` the whole bundle is ignored and
+every opener behaves as it did before any of this existed.
+
+**Plain markdown only.** Fences, tables and links render; VitePress containers
+(`::: warning`) do not — they reach the reader as three colons and a word.
+
+`authored` is **resolved out of `questions`** and is the key everything downstream
+reads, which is why it is documented as a key of its own: writing it directly is
+legal, is re-validated exactly as the inline form is, and is what makes the
+resolver idempotent.
 
 ### suggestions.scoped
 
@@ -1554,7 +1626,9 @@ cached against the index hash, the prompt and the model, so a rebuild that chang
 none of the three regenerates none of them.
 
 An answer with no citations is never baked. Turn this off and the evidence bake
-stays: the click still costs no embedding.
+stays: the click still costs no embedding. It reverts
+[`suggestions.authored`](#suggestions-authored) too — off means no answers at all,
+not "no answers except the ones I wrote".
 
 ### suggestions.matchTau
 

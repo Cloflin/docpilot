@@ -307,8 +307,34 @@ export type ChatConfig = ChatSettings | false | 'none'
  * missing optional key is structurally invisible to `typecheck:dist`, which is
  * why rule 11f walks `DEFAULTS` against this file instead.
  */
+/**
+ * One opener the author answered themselves — engine-specs/017.
+ *
+ * `cite` is required and is a list of chunk ids (`guide/appearance#the-tokens`).
+ * The build checks every one against the index it just wrote and drops the whole
+ * answer if any is unknown, because prose with nothing in the corpus behind it
+ * is the one artefact the bake refuses to ship.
+ */
+export interface AuthoredOpener {
+  q: string
+  answer: string
+  cite: string[]
+}
+
 export interface SuggestionsSettings {
-  questions?: string[]
+  /**
+   * A string is a question the model answers. `{q, answer, cite}` is a question
+   * the AUTHOR answered — the answer ships verbatim and no model is called for
+   * it, at build time or in the browser.
+   */
+  questions?: (string | AuthoredOpener)[]
+  /**
+   * RESOLVED, not authored. `resolveSuggestions` lifts the written answers out
+   * of `questions` onto this key so everything downstream keeps reading
+   * `questions` as `string[]`. Writing it by hand is supported and re-validated,
+   * which is what makes the resolver idempotent.
+   */
+  authored?: AuthoredOpener[]
   scoped?: boolean
   followUps?: boolean
   precomputed?: boolean
@@ -593,7 +619,7 @@ export interface DocPilotSettings {
   topK?: number | null
   maxIterations?: number
   budget?: BudgetSettings | false
-  suggestions?: string[] | SuggestionsSettings
+  suggestions?: (string | AuthoredOpener)[] | SuggestionsSettings
   quote?: QuoteSettings
   citations?: CitationsSettings
   composer?: ComposerSettings

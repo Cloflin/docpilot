@@ -4,7 +4,7 @@ import { srcText } from './helpers/source.js'
 
 import { assembleIndex, __setIndex } from '../src/theme/docpilot/store.js'
 import * as session from '../src/theme/docpilot/session.js'
-import { matchOpener, similarity, answerFor, openerQuestions } from '../src/theme/docpilot/openers.js'
+import { matchOpener, similarity, answerFor, openerQuestions, openerFingerprint } from '../src/theme/docpilot/openers.js'
 import { normalise, questionsHash } from '../src/theme/docpilot/text.js'
 import { resolveSuggestions, DEFAULT_SUGGESTIONS, MATCH_NEVER } from '../src/theme/docpilot/switches.js'
 import { bakeOpeners } from '../src/build/lib/openers.js'
@@ -838,5 +838,201 @@ describe('openers — a refusal is remembered', () => {
     expect(first.entries[0].answerAttempt).toBe(null)
     await bakeOpeners({ ...base, questions: [QUESTIONS[0]], chat, turnFn, previous: first.bundle })
     expect(calls).toBe(2)
+  })
+})
+
+/**
+ * THE ANSWER THE AUTHOR WROTE — engine-specs/017.
+ *
+ * The bake's other half inverted: the model is not asked, and the invariant it
+ * exists to protect — nothing ships as an answer without citations into this
+ * corpus — is enforced against the config instead. Every test below is either
+ * "the prose survives verbatim" or "a malformed entry costs the answer and
+ * never the question".
+ */
+describe('openers — an answer the author wrote', () => {
+  const MANIFEST = {
+    version: 3,
+    hash: 'authored-1',
+    embedModel: null,
+    dims: 0,
+    vectors: null,
+    chunkCount: ROWS.length,
+    pages: ROWS.map((r) => ({ path: r.path, title: r.title, tail: 'Docs' })),
+    sections: [],
+    guard: GUARD,
+    tuning: null,
+    vocabulary: null,
+    vocabHash: null,
+    tokenizer: null,
+  }
+  const base = {
+    manifest: MANIFEST,
+    chunks: ROWS,
+    vectorBuffer: null,
+    dfDoc: DF,
+    hash: 'authored-1',
+    embed: { model: null, provider: null, baseURL: null, apiKey: null, cache: null },
+    docPilot: { prompt: {}, product: 'Docs' },
+    warn: () => {},
+  }
+  const WRITTEN = {
+    q: QUESTIONS[0],
+    answer: 'It refuses below tau, and tau is measured on your corpus.',
+    cite: ['gate#one'],
+  }
+
+  it('lifts the written answer off the question and leaves questions a list of strings', () => {
+    const s = resolveSuggestions({ suggestions: [WRITTEN, QUESTIONS[1]] }, () => {})
+    expect(s.questions).toEqual(QUESTIONS)
+    expect(s.authored).toEqual([WRITTEN])
+  })
+
+  it('survives being resolved a second time — themeDocPilot, then session', () => {
+    const once = resolveSuggestions({ suggestions: [WRITTEN, QUESTIONS[1]] }, () => {})
+    const twice = resolveSuggestions({ suggestions: once }, () => {})
+    expect(twice.authored).toEqual([WRITTEN])
+    expect(twice.questions).toEqual(QUESTIONS)
+  })
+
+  it('drops an answer that cites nothing, and keeps its question', () => {
+    const warn = vi.fn()
+    const s = resolveSuggestions({ suggestions: [{ ...WRITTEN, cite: [] }] }, warn)
+    expect(s.questions).toEqual([QUESTIONS[0]])
+    expect(s.authored).toEqual([])
+    expect(warn.mock.calls[0][0]).toMatch(/no cite/)
+  })
+
+  it('drops an answer that is not a string, and keeps its question', () => {
+    const warn = vi.fn()
+    const s = resolveSuggestions({ suggestions: [{ ...WRITTEN, answer: 42 }] }, warn)
+    expect(s.questions).toEqual([QUESTIONS[0]])
+    expect(s.authored).toEqual([])
+    expect(warn.mock.calls[0][0]).toMatch(/not a non-empty string/)
+  })
+
+  it('an edited answer moves the fingerprint even though the question has not', () => {
+    const before = resolveSuggestions({ suggestions: [WRITTEN] }, () => {})
+    const after = resolveSuggestions(
+      { suggestions: [{ ...WRITTEN, answer: 'It refuses below tau. Run calibrate.' }] },
+      () => {},
+    )
+    expect(openerFingerprint(after)).not.toBe(openerFingerprint(before))
+    expect(questionsHash(after.questions)).toBe(questionsHash(before.questions))
+  })
+
+  it('bakes the prose verbatim and asks no model for it', async () => {
+    let calls = 0
+    const out = await bakeOpeners({
+      ...base,
+      questions: [QUESTIONS[0]],
+      authored: [WRITTEN],
+      chat: { searchOnly: false, model: 'm', promptHash: 'p', maxIterations: 0, llm: {} },
+      turnFn: async () => {
+        calls++
+        return { text: 'A model wrote this.', citations: ['gate#one'], confidence: 0.8 }
+      },
+    })
+    expect(calls).toBe(0)
+    expect(out.entries[0].answer.text).toBe(WRITTEN.answer)
+    expect(out.entries[0].answer.citations).toEqual(['gate#one'])
+    expect(out.report.authored).toBe(1)
+    expect(out.report.answered).toBe(0)
+  })
+
+  it('needs no model at all — a searchOnly site still gets its written answers', async () => {
+    const out = await bakeOpeners({
+      ...base, questions: [QUESTIONS[0]], authored: [WRITTEN], chat: { searchOnly: true },
+    })
+    expect(out.entries[0].answer.text).toBe(WRITTEN.answer)
+  })
+
+  it('refuses to bake prose that cites a chunk this index does not hold', async () => {
+    let calls = 0
+    const warn = vi.fn()
+    const out = await bakeOpeners({
+      ...base,
+      warn,
+      questions: [QUESTIONS[0]],
+      authored: [{ ...WRITTEN, cite: ['gate#one', 'gone#one'] }],
+      chat: { searchOnly: false, model: 'm', promptHash: 'p', maxIterations: 0, llm: {} },
+      turnFn: async () => {
+        calls++
+        return { text: 'A model wrote this.', citations: ['gate#one'], confidence: 0.8 }
+      },
+    })
+    expect(out.report.uncitable).toEqual([{ q: QUESTIONS[0], ids: ['gone#one'] }])
+    expect(warn.mock.calls[0][0]).toMatch(/does not contain/)
+    // The question is not lost — the model answers it, exactly as it did before
+    // anybody wrote one down.
+    expect(calls).toBe(1)
+    expect(out.entries[0].answer.text).toBe('A model wrote this.')
+  })
+
+  it('a gate that refuses does not withhold the answer the author wrote', async () => {
+    const q = 'How do I file my taxes in Portugal?'
+    const out = await bakeOpeners({
+      ...base,
+      questions: [q],
+      authored: [{ q, answer: 'You do not — this is a docs site.', cite: ['sidebar#one'] }],
+      chat: { searchOnly: true },
+    })
+    expect(out.entries[0].gate.pass).toBe(false)
+    expect(out.entries[0].answer.text).toBe('You do not — this is a docs site.')
+    // Moved out of `refused`, because the four-line warning there says the chip
+    // fails on the reader's first click and that is no longer true.
+    expect(out.report.refused).toEqual([])
+    expect(out.report.covered.map((r) => r.q)).toEqual([q])
+  })
+
+  it('`answers: false` reverts the written answers too', async () => {
+    const out = await bakeOpeners({
+      ...base, questions: [QUESTIONS[0]], authored: [WRITTEN], answers: false, chat: { searchOnly: true },
+    })
+    expect(out.entries[0].answer).toBe(null)
+  })
+
+  it('serves it to the reader, with its sources resolved against the index', () => {
+    const config = {
+      suggestions: resolveSuggestions({ suggestions: [WRITTEN, QUESTIONS[1]] }, () => {}),
+      embed: { lexicalOnly: true },
+    }
+    const index = indexWith({
+      configHash: openerFingerprint(config.suggestions),
+      embedModel: null,
+      dims: 0,
+      matchTau: 0.75,
+      entries: [
+        entry(QUESTIONS[0], {
+          answer: {
+            lang: 'en',
+            text: WRITTEN.answer,
+            citations: WRITTEN.cite,
+            confidence: null,
+            promptHash: 'authored',
+            model: 'authored',
+          },
+        }),
+      ],
+    })
+    const hit = matchOpener(QUESTIONS[0], { ...ARGS, config, index })
+    expect(hit.answer.text).toBe(WRITTEN.answer)
+    expect(hit.answer.citations.every((id) => index.byId.has(id))).toBe(true)
+  })
+
+  it('a bundle baked before the answer was rewritten is ignored whole', () => {
+    const before = resolveSuggestions({ suggestions: [WRITTEN, QUESTIONS[1]] }, () => {})
+    const after = resolveSuggestions(
+      { suggestions: [{ ...WRITTEN, answer: 'Something else entirely.' }, QUESTIONS[1]] },
+      () => {},
+    )
+    const index = indexWith({
+      configHash: openerFingerprint(before),
+      embedModel: null,
+      dims: 0,
+      matchTau: 0.75,
+      entries: [entry(QUESTIONS[0])],
+    })
+    expect(matchOpener(QUESTIONS[0], { ...ARGS, config: { suggestions: after, embed: { lexicalOnly: true } }, index })).toBe(null)
   })
 })

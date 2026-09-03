@@ -3243,6 +3243,12 @@ export const DEFAULTS = {
      */
     suggestions: {
         questions: [],
+        /**
+         * The openers the AUTHOR answered — engine-specs/017. Resolved out of
+         * `questions`, and stated here in the resolved shape for the same
+         * reason every other leaf on this object is: rule 11b walks it.
+         */
+        authored: [],
         scoped: true,
         followUps: false,
         /**

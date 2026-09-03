@@ -7,7 +7,7 @@ A grounded **AI assistant** for **any page of any site** — VitePress, Docusaur
 
 It is a chat, not a search box with better typography: scope a question to one section, ask about a passage you selected, follow up, edit what you asked, keep the thread. It mounts wherever a page can load a stylesheet and a script: a docs site, a landing page, a pricing page, a help centre, an app you already ship. What it answers **from** is the corpus you built — `npx docpilot index` walks your markdown and OpenAPI files, and `npx docpilot import <url>` pulls in an allowlisted page that lives in neither. A panel on your pricing page answers from that corpus, not from the pricing page.
 
-Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **signed int8, one byte per dimension** — 968 KB for this project's own 484-chunk index, where float32 would be 3.8 MB — and the build measures the round-trip error and refuses to ship above `0.01` mean |Δcos|. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
+Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **signed int8, one byte per dimension** — 986 KB for this project's own 493-chunk index, where float32 would be 3.9 MB — and the build measures the round-trip error and refuses to ship above `0.01` mean |Δcos|. A calibrated gate refuses **before the model is called**, so an off-topic question costs zero tokens and produces zero generated text. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
 ## Install
 
@@ -192,7 +192,7 @@ covers rebuilding the index. See
 |---|---|---|
 | Where retrieval runs | the reader's browser | the vendor's cloud |
 | Where the index lives | a static file on the host already serving your site | the vendor's platform |
-| Index the reader downloads | int8 vectors, one byte per dimension — 968 KB for this site's 484 chunks | n/a — the index is theirs |
+| Index the reader downloads | int8 vectors, one byte per dimension — 986 KB for this site's 493 chunks | n/a — the index is theirs |
 | An off-topic question costs | zero model calls, zero tokens | not documented by any of them |
 | Citations checked against what was retrieved | yes, by host code no message can reach | not documented by any of them |
 | Refusal threshold measured on **your** corpus | `npx docpilot calibrate` | not documented by any of them |
@@ -220,7 +220,8 @@ dashboard, and there is no support contract.
 | `npx docpilot tune` | sweep the retrieval levers (lambda, k) against the golden set into `docpilot/tuning.json`, with a report of the grid beside it |
 | `npx docpilot feedback` | turn readers' votes into candidates for the eval sets |
 | `npx docpilot doctor` | check the configuration without a full build; exits non-zero when not ready |
-| `npx docpilot init` | scaffold the environment, the eval sets and the authoring skills |
+| `npx docpilot init` | scaffold the environment, the eval sets and the authoring skills; asks which agent tool gets them |
+| `npx docpilot update` | refresh those copied skills and the `/docpilot-*` slash commands after an upgrade |
 
 `eval`, `bench` and `tune` each take a `--level=low|medium|high|xhigh|max|ultra`, and the six tiers are cumulative: `--level=medium` runs low + medium, no `--level` runs everything. Two reports are comparable only within one tier.
 
@@ -284,7 +285,9 @@ Panel chrome follows the page's locale; the credential and greeting replies foll
 
 ## Skills
 
-`npx docpilot init` copies two skills into `.claude/skills/`: `docs-rag`, the measurement and tuning loop with a list of experiments already run and what they cost, and `docs-import`, the contract for imported pages. A skill inside `node_modules` reaches nobody, so copying is the only delivery there is.
+`npx docpilot init` asks which agent tool you use — Claude Code, Codex, Cursor, Copilot — and copies two skills into it: `docs-rag`, the measurement and tuning loop with a list of experiments already run and what they cost, and `docs-import`, the contract for imported pages. It also generates a `/docpilot-<command>` slash command for every command of this CLI. A skill inside `node_modules` reaches nobody, so copying is the only delivery there is.
+
+`npx docpilot update` refreshes both after you upgrade the package. A file you edited is replaced and your version kept beside it as `.bak`.
 
 ## Documentation
 

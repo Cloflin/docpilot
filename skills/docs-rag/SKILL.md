@@ -505,7 +505,7 @@ panel yet.** Both end at the same place: you edit, then `index` decides.
 #### Path A — the cold start, with no reader data
 
 ```bash
-node .claude/skills/docs-rag/scripts/opener-candidates.js
+node {{SKILL_DIR}}/scripts/opener-candidates.js
 #   ...you EDIT, then paste into docPilot.suggestions.questions...
 npx docpilot index                                # resolve them, and report
 ```
@@ -605,7 +605,7 @@ constant — `calibrate` never touches it and `tuning.json` never carries it —
 the measurement behind it is a pure lexical sweep that costs nothing:
 
 ```bash
-node .claude/skills/docs-rag/scripts/opener-collisions.js
+node {{SKILL_DIR}}/scripts/opener-collisions.js
 ```
 
 It scores every probe in `calibration.jsonl` against every configured opener. A
