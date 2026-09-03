@@ -1,6 +1,6 @@
 # The refusal gate
 
-A retrieval-side floor that can refuse **before the model is called**. A question with no support costs zero model calls and produces zero generated text.
+A retrieval-side floor that **can** refuse before the model is called — a question with no support then costs zero model calls and produces zero generated text. Whether it *does* is [`guard.mode`](/reference/config#guard-mode-guard-supportminidentifiers), and the default, since 1.3, is `'off'`: the floor is always scored and recorded, but the model decides instead, because the threshold below needs a calibration per corpus **and per language**, and a reader's language is not something the floor can see. `guard.mode: 'calibrated'` turns this floor back into the thing ending the turn, for a single-language corpus with a probe set to calibrate it against.
 
 ## It is a relevance floor, not an entailment check
 
@@ -45,6 +45,8 @@ One state — `no-answer` — with five causes, and only three of them are the g
 | `not-answerable` | the model was called and returned nothing citable | the closest pages |
 
 `out-of-scope` is only claimed when it has been **computed**, never guessed.
+
+`no-evidence` and `out-of-scope` are reachable only when `guard.mode` enforces the verdict — `'calibrated'` always, `'dense-only'` where there is a dense channel. Under the shipped `'off'`, the gate's verdict is still scored and still decides the lead copy over the closest-pages list, but the turn itself only ever settles on `not-answerable`, `credential`, or `social`.
 
 The two pre-gate causes print no provenance line. "Searched the docs" would describe work that did not happen.
 

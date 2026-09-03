@@ -95,15 +95,17 @@ answers, and the project's own documentation opens its cost section with
 | **Paid to the vendor** | nothing — there is no vendor | your Algolia plan, metered on search requests and records indexed | platform fee plus answer volume, quoted | quoted; the self-hosted core is free | your Mintlify plan, plus AI credits per answer | your Orama plan; the OSS core is free |
 | **Paid to a model provider** | yours, directly | yours, directly — Ask AI is bring-your-own-LLM | included in the platform fee | yours, directly | included in the credits | yours, directly |
 | **Whose API key** | yours | yours | kapa's | yours | Mintlify's | yours, via Secure Proxy |
-| **An off-topic question costs** | zero model calls and zero tokens — the gate refuses first | not documented | not documented | not documented | not documented | not documented |
+| **An off-topic question costs** | one model call by default — its own citation contract refuses it, in any language; `guard.mode: 'calibrated'` moves that to zero model calls on a corpus you calibrated a threshold against | not documented | not documented | not documented | not documented | not documented |
 | **Free path to a running panel** | yes — the provider chain falls through to OpenRouter's free tier, one key, no card | Algolia has a free plan; DocSearch is free for qualifying public technical docs | 14-day trial | free if you self-host | no — Starter has no AI | free with the OSS library and your own key |
 
 **The row nobody else fills in is the off-topic one.** A support-deflection
 widget answers a great many questions that were never about your product, and on
 a per-answer contract you pay for each of them — at Mintlify's published rate,
-roughly 23 cents each. [The refusal gate](/concepts/the-gate) is where that
-decision is made, and `npx docpilot calibrate` is what measures it against your
-corpus rather than someone else's.
+roughly 23 cents each. [The refusal gate](/concepts/the-gate) is where a
+per-corpus, zero-cost version of that decision is *available*, and
+`npx docpilot calibrate` is what measures it against your corpus rather than
+someone else's — it ships off by default because the threshold it needs is per
+language too, and a reader's language is not something a threshold can see.
 
 ## Architecture
 
@@ -127,7 +129,7 @@ half that is hardest to compare, because most vendors describe the *feature*
 
 | | DocPilot | Algolia Ask AI | kapa.ai | Inkeep | Mintlify AI | Orama Cloud |
 |---|---|---|---|---|---|---|
-| **Refusal decided before the model is called** | yes — a calibrated relevance floor on the retrieval side | not documented | not documented | not documented | not documented | not documented |
+| **Refusal decided before the model is called** | opt-in — a calibrated relevance floor on the retrieval side, `guard.mode: 'calibrated'` | not documented | not documented | not documented | not documented | not documented |
 | **Refusal threshold measured against your corpus** | yes — `npx docpilot calibrate`, and until it runs every record says the values are provisional | not documented | not documented | not documented | not documented | not documented |
 | **Sources shown with the answer** | yes | yes | yes | yes | yes | yes |
 | **Every citation checked against what the host retrieved that turn** | yes, by host code no message can reach | not documented | not documented | not documented | not documented | not documented |

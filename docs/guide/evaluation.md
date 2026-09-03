@@ -8,7 +8,7 @@ The loop is `index` → `calibrate` → `lint` → `eval` → `bench`, with [`tu
 npx docpilot calibrate
 ```
 
-The gate decides whether to call the model at all. Its thresholds are **a statement about one corpus** — how well retrieval separates questions your docs answer from questions they do not — and that separation depends on your writing, your vocabulary and your embedding model. Copying thresholds between projects is the mistake this command exists to prevent.
+The gate's verdict is scored and recorded on every turn, whatever [`guard.mode`](/reference/config#guard-mode-guard-supportminidentifiers) says — it is what chooses the lead copy over a weak result list and, on `guard.mode: 'calibrated'` or `'dense-only'`, it decides whether to call the model at all. Its thresholds are **a statement about one corpus** — how well retrieval separates questions your docs answer from questions they do not — and that separation depends on your writing, your vocabulary and your embedding model. Copying thresholds between projects is the mistake this command exists to prevent.
 
 Until it has run, provisional values are used and every record reports `source: "provisional"`. Nothing hides it.
 
@@ -163,7 +163,7 @@ A `gold_chunks` entry has three legal shapes, and they are not interchangeable:
 
 Write questions the way readers ask them, not the way headings are worded. Include questions your docs **cannot** answer, marked to expect a refusal — a golden set of only answerable questions cannot detect a gate that has stopped refusing anything.
 
-Ask in every language your readers use. A gate tuned on one language can refuse another outright: an English corpus offers no lexical overlap to a question in Russian, so that question rests entirely on the dense channel and has no margin to spare.
+Ask in every language your readers use. A gate tuned on one language can refuse another outright: an English corpus offers no lexical overlap to a question in Russian, so that question rests entirely on the dense channel and has no margin to spare. This is exactly the gap `guard.mode: 'off'` ships with by default rather than pretending a threshold can be measured for every language a site's readers might type in — build a probe set per language before turning `'calibrated'` or `'dense-only'` on, or stay on the default and let the model decide instead.
 
 ### How much of the set to run
 

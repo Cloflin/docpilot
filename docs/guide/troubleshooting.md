@@ -206,6 +206,14 @@ around by moving the key into `themeConfig` — that publishes it. Run
 
 ### Every question is refused
 
+Check `guard.mode` first. Since 1.3 it defaults to `'off'`, and the gate never
+ends a turn on that setting — the four causes below are about the gate, so
+none of them can be why a default deployment refuses everything. On `'off'` a
+blanket refusal is almost always the fourth cause here, **a dropped prompt
+rule**, since that one is the model's own and fires whatever `guard.mode` says.
+The first three apply once `guard.mode` is `'calibrated'` or `'dense-only'` —
+set explicitly, or inherited from a config written before 1.3.
+
 Four causes, in the order worth checking.
 
 **This site declared `embed: false`.** Then every turn is lexical-only by design
@@ -257,15 +265,19 @@ See [The refusal gate](/concepts/the-gate#follow-ups).
 
 Open the panel with `?dpdebug=1` to see which of the two refusals this is: a
 `[docpilot] refusal` line means the gate ended the turn before the model was
-called and names the channel and the score, and `[docpilot] low-confidence or
-untraceable` means the model answered and the answer was withheld.
+called and names the channel and the score — reachable only when `guard.mode`
+enforces the verdict, so silent by default — and `[docpilot] low-confidence or
+untraceable` means the model answered and the answer was withheld, which is
+where a default deployment's refusals actually come from.
 
 ### A question refuses in one scope and answers in another
 
-That is `out-of-scope`, and it is only claimed when it has been computed: the
-panel offers a button that widens and resubmits. If you would rather every
-question searched the whole corpus, `scope: { enabled: false }` removes the
-picker.
+That is `out-of-scope`, reachable only when `guard.mode` enforces the verdict —
+under the shipped `'off'` the question reaches the model in the narrow scope
+instead, and the model's own answer or refusal is what the reader sees. Where
+`out-of-scope` is claimed it is only ever after being computed: the panel
+offers a button that widens and resubmits. If you would rather every question
+searched the whole corpus, `scope: { enabled: false }` removes the picker.
 
 ### Retrieval feels like keyword matching
 

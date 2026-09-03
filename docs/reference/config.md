@@ -55,7 +55,7 @@ export const docPilot = {
   composer: { editLastOnArrowUp: true, deepLink: true, draft: true },
   feedbackEndpoint: null,
   feedback: { send: 'both', comment: true, confirm: true },
-  guard: { mode: 'dense-only', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
+  guard: { mode: 'off', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
   vocabulary: null,
   scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
   history: { enabled: true, maxConversations: 20, exportThread: true, saveOnUnload: true },
@@ -163,7 +163,7 @@ written by hand; only the values are mechanical.
 | [`feedback.send`](#feedback-send) | `'both' \| 'down' \| 'up' \| 'none'` | `'both'` | Which verdicts leave the device — `'down'` for complaints only, `'none'` keeps the thumbs on screen but sends nothing — *inert without `feedbackEndpoint`; an unrecognised value logs and falls back to `'both'`* |
 | [`feedback.comment`](#feedback-comment) | `boolean` | `true` | Offers a free-text box beside the down-vote reason buttons; `false` keeps the buttons and drops the box — *the box is hidden anyway when there is no `feedbackEndpoint` or `send` is `'none'`* |
 | [`feedback.confirm`](#feedback-confirm) | `boolean` | `true` | Replaces the submitted form with a line naming where the report went; `false` leaves only the live-region announcement |
-| [`guard.mode`](#guard-mode-guard-supportminidentifiers) | `'dense-only' \| 'calibrated' \| 'off'` | `'dense-only'` | Whether a failing verdict ENDS the turn before the model is called — `'dense-only'` enforces it only where there is a dense channel that scored it, `'calibrated'` always, `'off'` never — *every value scores every turn and records the verdict; only the refusal moves* |
+| [`guard.mode`](#guard-mode-guard-supportminidentifiers) | `'off' \| 'dense-only' \| 'calibrated'` | `'off'` | Whether a failing verdict ENDS the turn before the model is called — `'off'` never, `'dense-only'` enforces it only where there is a dense channel that scored it, `'calibrated'` always — *every value scores every turn and records the verdict; only the refusal moves* |
 | [`guard.tau`](#guard-tau-guard-taulexical) | `number \| null` | `null` | Pass mark for the hybrid score `wDense·D + wLexical·L`; null takes the calibrated pair from the manifest, a number overrides it — *a value at or below `wLexical` (0.25 provisional) throws at retrieval init* |
 | [`guard.tauLexical`](#guard-tau-guard-taulexical) | `number \| null` | `null` | The pass mark on turns with no dense channel, where G is lexical coverage alone; null keeps the manifest's measured value — *setting either threshold stamps `gate.source: "config"` on every record of the session* |
 | [`guard.supportMinIdentifiers`](#guard-mode-guard-supportminidentifiers) | `number` | `3` | Minimum code identifiers an answer must carry before its identifier-support ratio is scored rather than assumed perfect — *support is recorded for calibration only and never enforced, so this blocks no answer* |
@@ -1854,10 +1854,15 @@ The names are prefixed because a documentation site may well own `ask` already.
 ## guard
 
 - **Type:** `object`
-- **Default:** `{ mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers: 3 }`
+- **Default:** `{ mode: 'off', tau: null, tauLexical: null, supportMinIdentifiers: 3 }`
 - **Related:** [The refusal gate](/concepts/the-gate)
 
-Overrides for the calibrated thresholds. Use `npx docpilot calibrate` instead.
+Whether a failing verdict ends the turn (`mode`), and overrides for the
+calibrated thresholds it is scored against. Use `npx docpilot calibrate` for the
+thresholds rather than writing them by hand.
+
+The example below restores the pre-1.3 refusal contract — every failing verdict
+ends the turn, on every deployment shape:
 
 ```js
 guard: { mode: 'calibrated', tau: null, tauLexical: null, supportMinIdentifiers: 3 }
@@ -1896,32 +1901,35 @@ a report reads the same whichever is set — what moves is only the refusal.
 
 | value | a failing verdict |
 | --- | --- |
-| `'dense-only'` | refuses only where a dense channel scored it. **The default.** |
+| `'off'` | never refuses — every question reaches the model. **The default.** |
+| `'dense-only'` | refuses only where a dense channel scored it |
 | `'calibrated'` | refuses always |
-| `'off'` | never refuses — every question reaches the model |
 
-**Why the default is not "always".** With no embedder the hybrid score collapses
-to `G = L`, and `L` is token overlap between the question and the corpus. A
-reader who asks in a language the documentation is not written in shares no
-token with it, and neither does one who calls the product by a name the docs do
-not use. `L` is 0 for a question that is squarely about the product, and the
-panel then answers *I couldn't find this in the docs* — which is false. It did
-not look. [`vocabulary`](#vocabulary) closes the second of those; nothing closes
-the first.
+**Why the default is not "always".** `L` is token overlap between the question
+and the corpus, so it is 0 *by construction* for a question asked in a language
+the documentation is not written in — no threshold on top of a zero can tell
+that question apart from one about nothing the site covers. Measured on this
+package's own English docs: a Russian install question scored a hybrid verdict
+of 0.21 against a 0.41 pass mark, while the refusal's own "closest pages" line
+named the three pages that actually answered it. The panel would have said *I
+couldn't find this in the docs* — which is false. It did not look, and no
+per-language threshold closes this: it would have to be measured for Russian,
+then Chinese, then whatever a site's next reader types in.
+[`vocabulary`](#vocabulary) closes a narrower, same-alphabet case — a reader who
+calls the product by a name the docs do not use — but not this one.
 
-So on a vectorless turn the verdict picks the copy above the rows and the
-**model** decides whether the question is answerable, which is the judgement it
-can actually make: it is shown the passages and holds a
-[refusal contract](/concepts/a-turn) of its own — an answer with no citation in
-it is withdrawn before the reader sees it.
+So the verdict is scored and kept for the record, and the **model** decides
+whether the question is answerable — the judgement it can actually make: it is
+shown the passages, it can search again in the corpus's own language, and it
+holds a [refusal contract](/concepts/a-turn) of its own — an answer with no
+citation in it is withdrawn before the reader sees it.
 
-**On a site with an embedder nothing changes.** `'dense-only'` and
-`'calibrated'` are the same gate there, request for request.
-
-**What it costs where it does change.** A question the corpus has nothing for
-now spends a model turn before that is known. On [a shared free
-tier](/guide/free-tier) that is one of fifty a day for the whole site, so a
-vectorless deployment on one is the case to write `'calibrated'` for.
+**What it costs.** A question the corpus has nothing for now spends a model
+turn before that is known, on every deployment. On [a shared free
+tier](/guide/free-tier) that is one of roughly fifty a day for the whole site.
+Write `guard: { mode: 'calibrated' }` to buy the pre-1.3 behaviour back on a
+single-language corpus with a probe set to calibrate against — `'dense-only'`
+is the same trade, narrowed to sites with no embedder at all.
 
 `supportMinIdentifiers` is the floor under the support check — an answer carrying
 fewer than this many code identifiers is not scored for support at all, because

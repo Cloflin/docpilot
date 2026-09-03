@@ -41,18 +41,27 @@ scale at which they stop working, are in
 A database would add an availability requirement to a static site. The failure
 mode of a missing file is one that every static host already handles.
 
-## Why the gate sits on the retrieval side
+## Why the gate sits on the retrieval side — and why it is opt-in
 
 A model asked to refuse is a model that has already been paid for, and its
-refusal is a sentence it chose to write. Put the same decision in front of the
-model and it becomes a number: how far the best in-scope chunk stands out, and
-what share of the question's rarest terms actually appear in the retrieved text.
+refusal is a sentence it chose to write. Put the same decision in front of
+retrieval instead and it becomes a number: how far the best in-scope chunk
+stands out, and what share of the question's rarest terms actually appear in
+the retrieved text. That number can be calibrated against your corpus, swept,
+reported, and moved deliberately. A prompt asking a model for caution can be
+none of those things, and when the number clears a calibrated bar it makes an
+off-topic question free — no call, no tokens, no generated text — and lets the
+panel offer the closest pages instead of an apology.
 
-That number can be calibrated against your corpus, swept, reported, and moved
-deliberately. A prompt asking for caution can be none of those things. It is also
-what makes an off-topic question free — no call, no tokens, no generated text —
-and what lets the panel offer the closest pages instead of an apology. See
-[The refusal gate](/concepts/the-gate).
+The number does not ship deciding, because the calibration underneath it is
+per corpus **and per language**: the rarest-terms half is 0 by construction for
+a question in a language the corpus is not written in, and no threshold above a
+constant zero separates a reader asking about the product from one asking about
+nothing the site covers. `guard.mode: 'calibrated'` turns the number back into
+a decision, for a single-language site with a probe set to calibrate it
+against. Off that number, it is the model's decision — the one thing here that
+can actually read a passage in any language and say whether it answers the
+question. See [The refusal gate](/concepts/the-gate).
 
 ## Why citations are checked by the host
 

@@ -5,10 +5,14 @@
  * so blocks 1-7 are simultaneously a model instruction and user-facing copy.
  *
  * Blocks 1, 2 and 7 are ADVISORY. They are not enforcement. Enforcement is
- * retriever.js (scope), gate.js (the refusal floor), the harness's emittedIds
- * set (provenance) and markdown.js's link filter — four host-side mechanisms,
- * none of which reads a message. Do not add a fourth scope sentence here in the
- * belief that it protects anything.
+ * retriever.js (scope), the harness's emittedIds set (provenance) and
+ * markdown.js's link filter — three host-side mechanisms, always on, none of
+ * which reads a message. gate.js (the refusal floor) is a fourth, opt-in since
+ * 1.3: `guard.mode: 'off'` ships by default because its threshold needs
+ * calibrating per corpus AND per language, so on the shipped default the
+ * refusal a weak verdict would have produced is the model's own citation
+ * contract instead — still enforcement, just not this one. Do not add a fourth
+ * scope sentence here in the belief that it protects anything.
  */
 
 import { fnv1a32, vocabularySignature, vocabularyTerms } from './text.js'

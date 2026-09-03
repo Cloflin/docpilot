@@ -14,18 +14,39 @@ model key, because a key in a client bundle is a key you have published.
 `npx docpilot doctor --proxy` prints its whole contract, and
 [Production](./production) explains each rule.
 
-## Refuse before the model is called
-
-The gate is a relevance floor on the **retrieval** side. A question with no
-support in the corpus costs zero model calls and produces zero generated text —
-there is nothing to be wrong. Of the four stages that can end a turn, three end
-it before any model is reached: the credential check, the social opener, and the
-gate itself. See [How a turn works](/concepts/a-turn) for the order and
-[The refusal gate](/concepts/the-gate) for the two channels it scores.
+## Refuse as early as the refusal can be trusted
 
 A refusal placed after generation is a refusal you have already paid for, in
 tokens and in text that existed for a moment. Placing it first is what makes it
-measurable.
+measurable — when it can be trusted, which turns out to be a narrower set of
+cases than "before the model" alone would suggest.
+
+Two stages end a turn for free on every deployment, before any model is
+reached: the credential check and the social opener. Both are pattern matches
+with no ambiguity to weigh — a key-shaped string is a key-shaped string in any
+language, and "hello" is not a question in any language either.
+
+The **gate** is a third, and it is a relevance floor on the **retrieval**
+side rather than a pattern match: how far the best in-scope chunk stands out,
+and what share of the question's rarest terms appear in the retrieved text. That
+number can be calibrated against your corpus, swept, reported, and moved
+deliberately — a prompt asking a model for caution can be none of those things.
+It does not ship enforcing a refusal, though, because the calibration it needs
+is per corpus **and per language**, and a site's readers are not one language.
+Measured on this package's own English docs: a Russian question about
+installing the panel scored well under the pass mark while the same verdict's
+own "closest pages" line named the pages that actually answered it — the
+corpus had the answer, the floor could not tell. `guard.mode: 'calibrated'`
+restores gate-first refusal for a single-language corpus with a probe set to
+calibrate the floor against; see [The refusal gate](/concepts/the-gate) for the
+two channels it scores and [How a turn works](/concepts/a-turn) for the order.
+
+Past that floor, refusal is the **model's** to make — it is shown the passages,
+it can search again in the corpus's own language, and it holds a citation
+contract of its own: an answer with no citation in it is withdrawn before the
+reader sees it. That refusal is not free, but it is the one instrument in this
+list that can actually tell a Russian question about the product from a
+question about nothing the site covers.
 
 ## The host checks, not the prompt
 

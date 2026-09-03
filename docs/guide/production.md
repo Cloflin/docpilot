@@ -12,7 +12,7 @@ Three surfaces, all of them same-origin:
 |---|---|---|
 | the site | HTML, CSS and JS — the panel is part of the bundle | no trigger, no panel |
 | `/rag/*` | the retrieval index: `manifest.json`, `chunks-NN.<hash>.json`, `vectors.<hash>.bin`, `df.<hash>.json` | the panel opens and says *AI answers are off in this environment* |
-| `/ai/…` | two POST endpoints, forwarded upstream with your key attached | every question fails after the gate has already passed it |
+| `/ai/…` | two POST endpoints, forwarded upstream with your key attached | every question fails after retrieval has already run for it |
 
 A site configured [`embed: false`](/reference/config#embed-false) ships one file fewer and one endpoint fewer: there is no `vectors.<hash>.bin`, and `/ai/` carries the chat route alone. `npx docpilot doctor --proxy` prints the contract for the configuration you actually have, so use its output rather than this table when the two disagree.
 

@@ -49,8 +49,11 @@ when the site declared `embed: false`). It then resolves
 In the
 browser, `retriever.js` fuses BM25 and dense retrieval — on the thresholds
 `calibrate` measured and the levers `tune` measured, both of which ride in the
-manifest — and its gate decides, before any model call, whether there is evidence
-to answer at all. `harness.js`
+manifest — and its gate is always scored. Whether that verdict decides, before
+any model call, whether there is evidence to answer at all is `guard.mode`:
+`'off'` by default since 1.3, because the threshold needs calibrating per
+corpus **and** per language; `'calibrated'`/`'dense-only'` opt back in.
+`harness.js`
 then runs a short tool loop over the retriever and nothing else. `docpilot eval`
 drives exactly those production modules; nothing is stubbed.
 

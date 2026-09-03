@@ -2,7 +2,7 @@
 
 ## What this is
 
-`@cloflin/docpilot` — a grounded Ask AI panel for any page of any site. Hybrid retrieval (BM25 over chunk text + cosine over int8-quantised vectors, merged by RRF) runs in the reader's browser against a static index built at deploy time. A calibrated gate refuses before the model is called.
+`@cloflin/docpilot` — a grounded Ask AI panel for any page of any site. Hybrid retrieval (BM25 over chunk text + cosine over int8-quantised vectors, merged by RRF) runs in the reader's browser against a static index built at deploy time. A relevance-floor gate is scored on every turn; whether it refuses before the model is called is `guard.mode` — `'off'` by default since 1.3 (engine-spec 019), because the threshold needs calibrating per corpus **and per language**, and `'calibrated'`/`'dense-only'` opt back in.
 
 ESM-only, Node >= 20. TypeScript in `src/`, Vue components for the panel, VitePress for the docs site, published public to npm.
 

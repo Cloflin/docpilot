@@ -28,7 +28,7 @@ It is a control against a weak, badly-behaved or injected **model** — a small 
 
 **"Answers are grounded in their cited sources."** Citation is provenance, not entailment. An answer can cite a genuinely retrieved chunk that does not support the claim, and that passes every mechanism above.
 
-**"It cannot be taken off-topic."** The gate is a relevance floor, not an entailment check.
+**"It cannot be taken off-topic."** The gate is a relevance floor, not an entailment check — and it does not act by default at all (`guard.mode: 'off'`, since 1.3), so an off-topic question by default reaches the model, on the model's own citation contract rather than a corpus-side floor. `guard.mode: 'calibrated'` puts the floor back in front of the model, for a single-language corpus with a probe set to calibrate it against.
 
 **"Scope limits what the assistant knows."** It limits what the assistant is **shown**. The model's parameters do not shrink.
 

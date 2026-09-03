@@ -44,9 +44,11 @@ The first thing a reader sees, and the state most assistants waste.
 - **Three to five suggested questions.**
   [`suggestions.questions`](/reference/config#suggestions-questions) — replace the
   built-in three with up to five of your own. They are gate inputs, not headings:
-  a suggestion your corpus cannot answer produces a refusal on the reader's very
-  first click. If nobody has used the panel yet and you have no idea what to put
-  there, the `docs-rag` skill proposes candidates from the corpus itself.
+  `docpilot index` scores each one against the corpus at build time and prints
+  which of them the gate would refuse — a hint worth heeding, since it is the
+  reader's very first click, whether or not `guard.mode` acts on it at runtime.
+  If nobody has used the panel yet and you have no idea what to put there, the
+  `docs-rag` skill proposes candidates from the corpus itself.
 - **Under a narrow scope, the pages instead.** When the reader has scoped to one
   page or one section, the openers would fall outside it and be refused, so the
   panel lists the pages in scope as rows —

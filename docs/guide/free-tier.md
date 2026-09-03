@@ -307,9 +307,10 @@ after the page loads the site fetches nothing but its own static index.
 What you give up is the answer — the paragraph that reads three pages and tells
 the reader which one they wanted — and, from `embed: false`, most of the recall
 that finds those pages. What you keep is the scope picker, the credential check,
-the calibrated gate deciding whether the panel leads with matches or with *nothing
-matches this closely*, and citations that were never going to be wrong because
-nothing wrote them.
+the gate's own verdict deciding whether the panel leads with matches or with
+*nothing matches this closely* — that choice is not gated on `guard.mode`,
+because there is no model here for the mode to hand a refusal to — and
+citations that were never going to be wrong because nothing wrote them.
 
 It is also the shape to reach for when the day IS spent and the site still has to
 answer something: search-only degrades to a better site search rather than to a

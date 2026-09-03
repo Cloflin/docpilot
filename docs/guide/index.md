@@ -20,9 +20,11 @@ It consists of three parts:
   a vector database, a search service, or any server beyond the one already
   serving your site.
 
-- **A calibrated gate** that refuses before the model is called, so an off-topic
-  question costs zero tokens — and a validator that checks every citation the
-  reader sees against what the host actually retrieved that turn.
+- **A calibrated gate**, opt-in, that refuses before the model is called so an
+  off-topic question costs zero tokens — off by default, because the threshold
+  it needs is per corpus **and per language**; the model's own citation
+  contract is what handles it otherwise — and a validator that checks every
+  citation the reader sees against what the host actually retrieved that turn.
 
 The rationale is in [Why DocPilot](./why), the rules the project holds itself to
 are in [Philosophy](./philosophy), the pages it can sit on are in

@@ -283,6 +283,10 @@ export const docPilot = {
    * `docs/.vitepress/openers.mjs` holds the prose and the ids it stands on.
    */
   suggestions: { questions: openers },
+  // No `guard` override: `'off'` is the shipped default since 1.3 — see
+  // engine-specs/019 for the measurement that moved it, and `enforces()` in
+  // gate.js for the argument. `{ mode: 'calibrated' }` restores the pre-1.3
+  // refusal contract for a project that has calibrated one.
   ui: { trigger: 'fab' },
 }
 
@@ -443,7 +447,7 @@ const config = defineConfig({
 
   title: 'DocPilot',
   description:
-    'A grounded AI assistant for any page of your site — docs, a landing page, a help centre, or an app you already ship. A real chat: scope it, quote a passage, follow up. Retrieval runs in the browser, the gate refuses before the model is called, and every citation is checked.',
+    'A grounded AI assistant for any page of your site — docs, a landing page, a help centre, or an app you already ship. A real chat: scope it, quote a passage, follow up. Retrieval runs in the browser, an opt-in gate can refuse before the model is called, and every citation is checked.',
   cleanUrls: true,
   lastUpdated: true,
 
@@ -468,7 +472,7 @@ const config = defineConfig({
       {
         property: 'og:description',
         content:
-          'An AI chat that mounts on any page of any site and answers from a static index you build. Retrieval runs in the browser; the gate refuses before the model is called; every citation is checked against what was retrieved.',
+          'An AI chat that mounts on any page of any site and answers from a static index you build. Retrieval runs in the browser; an opt-in gate can refuse before the model is called; every citation is checked against what was retrieved.',
       },
     ],
     ['meta', { property: 'og:site_name', content: 'DocPilot' }],
