@@ -7,6 +7,75 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 1.4.0 — 2026-09-04
+
+### Breaking
+
+**Silence no longer resolves to the free pool — engine-spec 021.**
+`chat: { provider: 'openrouter' }` with no model named used to hand the browser
+an ordered pool of ten free ids and let it walk them. It now takes the
+provider's own default like every other provider's, and that default is
+**`openrouter/free`** — OpenRouter's own router over the free tier, which picks a
+free model per request and skips the saturated ones. One id, one request, and the
+choosing happens a hop closer to the pool than a browser can see it.
+
+The reason is what the old default did on a bad afternoon. Every member of a pool
+is sent the identical body, so a refusal that is really about the REQUEST — the
+parameter 404 that 1.3.0's transport fix classifies — buys the identical refusal
+once per member. Measured on the deployed docs site: seven `:free` models on the
+wire for one question, on a site whose config file named one model. And the
+quieter cost is that none of those seven appear anywhere the author of that
+config can read.
+
+**Nothing to migrate.** No previous configuration stops building: the table
+default covers exactly the case the build-stop was written for. If you were
+relying on the walk, ask for it by name — the list is unchanged:
+
+```js
+chat: { provider: 'openrouter', model: 'free' }   // or 'auto', the same request
+```
+
+`chat.models` and `model` beside `models` — a paid primary with free understudies
+— are untouched.
+
+**`chat.chain` ships `false` instead of `'auto'`.** An environment holding
+several provider keys resolves to the first member and stops there; `'auto'`
+still walks them all, written down. An environment with one key resolves to one
+member either way, so most deployments see no difference. The argument for the
+walk is a good one — it is just an argument for a deployment to make in its own
+config file, rather than one a package makes on the strength of a variable that
+may have been set for something else.
+
+### Fixed
+
+**The 50-a-day ledger asked the wrong question.** `freeChatPool` read "is there a
+pool?" for "is this a free tier?" — a coincidence that held only while silence
+meant a list. With a table default it would have gone false, and a deployment
+that still has fifty requests a day would have stopped rationing them entirely.
+It now asks whether the provider publishes a free catalogue and whether the
+author declined it by naming a model, which is what the chain's own members have
+always asked.
+
+**`resolveChat` was not idempotent.** A resolved record is a legal input to the
+resolver — every other resolver here states that rule — but `modelAuto` was
+recomputed from a value the resolver itself had filled in, so re-resolving a
+zero-config record reported the author as having named a model, and `ladderTier`
+sorted a free-tier member onto the billed rung. The new `poolNamed` field is read
+back the same way.
+
+**A chain member behind the head no longer inherits a pool it was not given.**
+`chain: ['openrouter']` used to mean ten ids on a member written as one word.
+
+### Changed
+
+**`budget.probe: 'auto'` skips the capability probe on a provider's own free
+tier**, not only where a list is configured. The question it asks was always
+about the SERVICE — a hosted OpenAI-compatible one whose models are tool-capable
+by construction — and a free catalogue is that service whether the browser was
+handed ten of its ids or the one router in front of them. Without this, giving
+`openrouter` a table default would have bought a request per session straight
+back for every deployment that had named nothing.
+
 ## 1.3.0
 
 ### Breaking
