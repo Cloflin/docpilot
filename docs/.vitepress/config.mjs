@@ -28,18 +28,19 @@ export const docPilot = {
   quote: { fromAnswer: true, fromDocs: true },
   citations: { passage: true, inCopy: true, pagesRead: true },
   /**
-   * The model that answers, and ONE understudy behind it.
+   * ONE MODEL, AND NO POOL BEHIND IT.
    *
-   * `model` is the primary and `models` is the ordered pool the transport walks
-   * when it cannot be reached — a named model on its own yields no pool at all
-   * (`chatModels` in src/config.js returns null for one), so a single refusal
-   * would end the turn on a transport error with nothing to fall back to.
+   * This account's allowed-providers list permits `openai` and nothing else, so
+   * a free understudy from any other vendor is refused before it is reached —
+   * "Providers serving …: nvidia, but your account's allowed-providers setting
+   * permits only: openai". A pool whose every fallback is unreachable is not a
+   * pool; it is one extra refusal per turn.
    *
-   * The understudy is chosen for the ONE call that is fussy about its body: the
-   * forced final answer pins its shape with a strict `response_format`, and a
-   * model that does not publish `structured_outputs` refuses it. Free ids are
-   * ordered structured-outputs-first in `openrouter.js` and this is the head of
-   * that list.
+   * WHAT THAT COSTS is rotation: `chatModels` returns null for a lone named
+   * model, so a refusal ends the turn rather than trying somebody else. The
+   * transport still retries the same model with a smaller body when the refusal
+   * was about a PARAMETER (engine-specs/020), which is the failure a pool was
+   * least able to help with anyway.
    *
    * NO `reasoning` KEY. `gpt-4o-mini` publishes no reasoning parameter, and
    * beside OpenRouter's `provider.require_parameters` — on by default, because
@@ -48,15 +49,23 @@ export const docPilot = {
    * that can handle the requested parameters`. Writing `reasoning: false` did
    * that too: it is a request for `{enabled: false}`, which is a parameter, not
    * the absence of one. Left unset, no reasoning field is written at all.
-   *
-   * A pool also skips the capability probe (`budget.probe: 'auto'`), which is
-   * one model request per page load on a single named model.
    */
   chat: {
     provider: 'openrouter',
     model: 'openai/gpt-4o-mini',
-    models: ['openai/gpt-4o-mini', 'nvidia/nemotron-3-super-120b-a12b:free'],
   },
+  /**
+   * `probe: 'never'`, and it is the price of dropping the pool.
+   *
+   * The capability probe is a full model call made before the reader has read a
+   * word, and `'auto'` skips it only where a pool is configured — a pool's
+   * members are tool-capable by construction, so the question is already
+   * answered. With one named model `'auto'` asks it again on every page load:
+   * one request per reader per page, out of a daily allowance the whole site
+   * shares. `gpt-4o-mini` calls tools; nothing needs to spend a request finding
+   * that out.
+   */
+  budget: { probe: 'never' },
   embed: {
     provider: 'openrouter',
     model: 'openai/text-embedding-3-small',
