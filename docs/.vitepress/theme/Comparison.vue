@@ -103,7 +103,7 @@ const groups = [
       {
         label: 'Index the reader downloads',
         cells: [
-          'int8, one byte per dimension — 855 KB for 570 chunks',
+          'int8, one byte per dimension — 870 KB for 580 chunks',
           'n/a — the index is theirs',
           'n/a — the index is theirs',
           'n/a — the index is theirs',

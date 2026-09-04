@@ -48,6 +48,8 @@ The rule this directory exists to enforce:
 | [019](019-the-gate-cannot-read-the-readers-language.md) | `guard.mode` defaults to `'off'` — no threshold survives every language a site's readers use, so the model decides instead |
 | [020](020-a-turn-that-cost-twelve-requests.md) | a refusal's body is read and classified, so a parameter 404 retries the same model with less in it instead of buying the identical refusal once per pool member |
 | [021](021-a-model-nobody-wrote-down.md) | silence stops resolving to a ten-id pool — `openrouter` gets `openrouter/free` as its default, `chat.chain` ships `false`, and a list is something you write down |
+| [022](022-the-turn-that-forgot-what-it-was-following.md) | three defects between one turn and the next: the cited ids come back with a restored turn, a prior answer reaches the model as its skeleton rather than its first 300 characters, and `search_docs` searches the query the gate won on — both halves of it |
+| [023](023-an-antecedent-one-hop-short.md) | an ellipsis chains two questions back when the turn it follows was itself composed — and the eval sets learn to hold a conversation longer than one pair |
 
 ## Shape of a spec
 

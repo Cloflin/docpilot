@@ -65,7 +65,7 @@ import { pathToFileURL } from 'node:url'
 import { assembleIndex } from '../theme/docpilot/store.js'
 import { embedQuery } from '../theme/docpilot/embed.js'
 import { createRetrieval, resolveLevers, envPin, LEVER_NAMES } from '../theme/docpilot/retriever.js'
-import { composeQuery } from '../theme/docpilot/gate.js'
+import { chainTexts, resolveChain } from './conversation.js'
 import { retrievalF1Loose, recallAtK, mrr, underPath, mean } from './metrics.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { nodeEmbedTarget } from '../config.js'
@@ -433,20 +433,55 @@ async function embed(text, index) {
 // ── stage A: embed once per record ───────────────────────────────────────────
 
 /**
- * One embedding per record, plus one per follow-up for the composed channel —
- * the pattern `run.js probeRecords` uses, and the reason the grid below is free.
- * Nothing here depends on λ or GATE_K, so it happens once for the whole sweep.
+ * One embedding per record, plus the conversation behind it — the pattern
+ * `run.js probeRecords` uses, and the reason the grid below is free. Nothing
+ * here depends on λ or GATE_K, so it happens once for the whole sweep.
  *
  * `goldInScope` and `scoredAsNegative` are settled here too: RAG-SPEC 5.1 says a
  * scoped record whose gold set falls outside its own scope is CORRECT to refuse,
  * so scoring it as F1 0 would punish the retriever for obeying the scope. That
  * reclassification is a property of (record, scope), not of a cell, and computing
  * it once is what keeps the grid's numbers identical to `eval`'s.
+ *
+ * IDENTICAL TO `eval`'s IS NOW ENFORCED RATHER THAN ASSERTED, for the half of it
+ * that kept drifting. Both stage As call `resolveChain` (src/eval/conversation.js)
+ * — the same cascade, the same `composeQuery`, the same antecedent — so the
+ * composed query this file scores and the one `run.js` scores are one
+ * expression. They were two: `composeQuery(rec.question, rec.prev_question)`
+ * here and the same call there, agreeing by inspection, with `calibrate.js`
+ * spelling the join by hand a third time. Nothing asserted the three agreed and
+ * nothing would have said so when they stopped.
+ *
+ * THE CASCADE RUNS ONCE PER RECORD, NOT ONCE PER CELL, AND THAT IS A CLAIM
+ * ABOUT THE LEVERS. It is only sound because the gate verdict is invariant
+ * under this grid — the header's own reading of `evaluate()`: "`L` comes from
+ * `lexIds.slice(0, 3)` … `D` comes from `dense.scopedMax`, the best cosine over
+ * the WHOLE scope, not over the k that survive re-ranking … the raw/composed
+ * channel choice is `c.G > best.G` over those two", and λ and GATE_K reach only
+ * `mmr()` and `rank({k})`. `calibrate.js` states the same property in the same
+ * words for its own cache key — "`L` reads the top three LEXICAL ids and `D` the
+ * scoped max cosine, neither of which `GATE_K` or `MMR_LAMBDA` touches (only
+ * `CANDIDATES`, and only below 3, against a default of 30)" — and calls it an
+ * implementation detail of `evaluate()` rather than a guarantee. The cascade
+ * reads exactly one output of that gate, `channel === 'composed'`, so the day a
+ * swept lever can move a channel, every cell composes a different query and the
+ * `resolveChain` call has to move down into `measureCell`. The over-refusal
+ * sanity row the header already prints is the alarm for it: it is the same
+ * verdict, and it goes non-constant first.
+ *
+ * `index.manifest.tuning` for that one retrieval, not a cell's `{MMR_LAMBDA,
+ * GATE_K}`. Under the invariant above the two cannot disagree, and the
+ * manifest's levers are what `run.js` and `calibrate.js` resolve — so the
+ * choice that is indistinguishable here is the one that keeps all three files
+ * measuring the same antecedent if the invariant ever breaks.
  */
-async function probeRecords(index, records, lexical) {
+async function probeRecords(index, guard, records, lexical) {
   if (!lexical) {
     const { vectors, requests } = await prefetchEmbeddings(
-      records.flatMap((rec) => [rec.question, composeQuery(rec.question, rec.prev_question)]),
+      // `chainTexts` and not a hand-written pair: the enumeration has to be the
+      // one `resolveChain` will ask for, and a prior turn's own question is a
+      // text the cascade buys — missed here, it is bought one request at a time.
+      records.flatMap((rec) => chainTexts(rec)),
       {
         provider: EMBED_PROVIDER,
         baseURL: EMBED_BASE,
@@ -463,35 +498,49 @@ async function probeRecords(index, records, lexical) {
   let embedded = 0
   for (const rec of records) {
     const scope = rec.scope || ALL_SCOPE
+    // The retrieval the cascade's prior turns are gated by. Not memoised per
+    // scope the way `measureCell` memoises: that map exists because a cell
+    // rebuilds one retrieval per record ~99 times over, and this loop runs once
+    // — at the price `measureCell` already priced, "one `chunks.filter` for a
+    // scoped record and nothing at all for an unscoped one".
+    const retrieval = createRetrieval({ index, scope, guard, tuning: index.manifest.tuning })
+
     let vec
     let composedVec
-    const composedQuery = composeQuery(rec.question, rec.prev_question)
+    let antecedent
+    let composedQuery
 
-    if (!lexical) {
-      try {
-        vec = await embed(rec.question, index)
+    try {
+      // Counted where the vector is actually taken, which is now inside the
+      // cascade as well as after it. The progress line below has always meant
+      // "vectors the sweep NEEDS", and a prior turn's vector is one of them.
+      const buy = async (text) => {
+        const v = await embed(text, index)
         embedded++
-        if (composedQuery) {
-          composedVec = await embed(composedQuery, index)
-          embedded++
-        }
-      } catch (e) {
-        if (/fetch failed|ECONNREFUSED|embed \d+/i.test(String(e.message || e))) {
-          die(
-            `embed endpoint unreachable at ${EMBED_BASE} — ${e.message || e}` +
-              (EMBED_PROVIDER === 'ollama'
-                ? `\n        start it with:  ollama serve` +
-                  `\n        pull the model: ollama pull ${index.manifest.embedModel}`
-                : `\n        check DOCPILOT_EMBED_URL and the key in .env.local`),
-          )
-        }
-        throw e
+        return v
       }
-    } else if (composedQuery) {
-      // A composed follow-up still HAS a lexical channel: `undefined` means "no
-      // second query", `null` means "score it with no vector". Collapsing them
-      // would drop the composed channel from every follow-up in the set.
-      composedVec = null
+      ;({ antecedent, composedQuery } = await resolveChain({ rec, retrieval, embed: buy, lexical }))
+
+      if (!lexical) {
+        vec = await buy(rec.question)
+        if (composedQuery) composedVec = await buy(composedQuery)
+      } else if (composedQuery) {
+        // A composed follow-up still HAS a lexical channel: `undefined` means "no
+        // second query", `null` means "score it with no vector". Collapsing them
+        // would drop the composed channel from every follow-up in the set.
+        composedVec = null
+      }
+    } catch (e) {
+      if (/fetch failed|ECONNREFUSED|embed \d+/i.test(String(e.message || e))) {
+        die(
+          `embed endpoint unreachable at ${EMBED_BASE} — ${e.message || e}` +
+            (EMBED_PROVIDER === 'ollama'
+              ? `\n        start it with:  ollama serve` +
+                `\n        pull the model: ollama pull ${index.manifest.embedModel}`
+              : `\n        check DOCPILOT_EMBED_URL and the key in .env.local`),
+        )
+      }
+      throw e
     }
 
     const gold = rec.gold_chunks || []
@@ -507,6 +556,11 @@ async function probeRecords(index, records, lexical) {
       vec,
       composedVec,
       composedQuery,
+      // The resolved antecedent, carried rather than re-derived in `measureCell`:
+      // it is a measurement of the prior turns' gates, and a cell that read
+      // `rec.prev_question` instead would score a different composed query from
+      // the one whose vector is sitting in `composedVec` beside it.
+      antecedent,
       goldInScope,
       scoredAsNegative,
       positive: rec.expect === 'answer' && !scoredAsNegative,
@@ -548,7 +602,7 @@ function measureCell({ index, guard, probes, MMR_LAMBDA, GATE_K, lexical }) {
     const retrieval = retrievalFor(p.scope)
     const g = retrieval.evaluate({
       question: p.rec.question,
-      previousQuestion: p.rec.prev_question,
+      previousQuestion: p.antecedent,
       queryVec: p.vec,
       composedVec: p.composedVec,
       mode: lexical ? 'lexical-only' : 'hybrid',
@@ -799,7 +853,7 @@ async function main() {
       ? '  stage A — no embedder to call; the sweep runs on lexical semantics'
       : '  stage A — embedding once per record…',
   )
-  const probes = await probeRecords(index, records, LEXICAL)
+  const probes = await probeRecords(index, guard, records, LEXICAL)
   const positives = probes.filter((p) => p.positive)
   const withGold = positives.filter((p) => p.goldInScope.length)
   if (!withGold.length) {

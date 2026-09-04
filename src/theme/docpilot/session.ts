@@ -8,7 +8,7 @@
 import { reactive, computed } from 'vue'
 import { loadIndex } from './store.js'
 import { createRetrieval } from './retriever.js'
-import { composeQuery, enforces } from './gate.js'
+import { chainAntecedent, composeQuery, enforces } from './gate.js'
 import { resultRows } from './results.js'
 import { embedQuery } from './embed.js'
 import { runTurn } from './harness.js'
@@ -1078,6 +1078,55 @@ function rehydrate(row) {
     ...makeTurn(rest.question, rest.scope || { ...scopeApi.ALL }),
     ...rest,
     sources,
+    /**
+     * The evidence a follow-up inherits, DERIVED rather than read back —
+     * engine-spec 022.
+     *
+     * `seedFromHistory` primes the next turn from `history[].citations`, which
+     * `submit()` fills from `t.citationIds`, and nothing writes those ids to the
+     * archive. Before this, every restored turn came back with `citationIds`
+     * undefined, so the first follow-up after a reload — or after opening a
+     * thread from the history dock — inherited nothing at all, silently. It
+     * needs no new stored field: `sources[].id` IS the chunk id, `harness.finish`
+     * builds `sources` from the filtered citations in citation order, and
+     * `slimTurn` persists the rows with their ids. Placed after the `...rest`
+     * spread so a stored field can never shadow the derived one.
+     *
+     * `sources` is the deduped, reader-facing set, so this is NOT the live list
+     * and the difference points BOTH WAYS. Worth stating in both directions
+     * rather than glossing, because the appealing claim — same evidence or
+     * slightly more, never less — is false.
+     *
+     * MORE: `seedFromHistory` takes `citations.slice(0, SEED_FROM_HISTORY)`
+     * BEFORE its own `seen` set runs, so a live answer citing `[a, a, b, c]`
+     * spends two of its three slots on one section and seeds `a` and `b`, while
+     * the restored turn's `[a, b, c]` seeds all three.
+     *
+     * LESS: the rows are deduped by `href` and not by id (`settleAnswer`,
+     * session.js:1544), and `href` is `page?.external ? origin : route`
+     * (`sourceRow`, session.js:1190) — so every chunk of one IMPORTED page
+     * collapses into the single row that page's origin owns. An answer citing
+     * `ext/api#auth`, `ext/api#rate-limits` and `guide/x#y` restores with two
+     * ids where it had three, and the follow-up is seeded one section of that
+     * page rather than two.
+     *
+     * The archive still holds ONE copy. A second stored list would buy the live
+     * ids back exactly and is not worth the bytes: the seed is a head start on
+     * the next turn rather than that turn's evidence, and both directions stay
+     * inside the same bound — SEED_FROM_HISTORY caps what reaches the model at
+     * three sections whichever way the count went, and the resolution below
+     * drops anything that no longer exists. Over or under, this beats the
+     * `undefined` it replaces, which seeded nothing at all.
+     *
+     * A rebuilt index needs no check here. `seedFromHistory` resolves every id
+     * through `retrieval.fetch`, and an id that has left the corpus is dropped
+     * there rather than trusted, which is what keeps `conversationStale` a
+     * warning rather than a gate.
+     *
+     * A restored refusal has no sources and so inherits nothing, which is
+     * correct: a refused turn was never a source.
+     */
+    citationIds: sources.map((s) => s.id).filter(Boolean),
     reasons: rest.reasons || [],
     verdict: rest.verdict || null,
     // v-model wants a string, never undefined.
@@ -1525,10 +1574,14 @@ function settleAnswer(turn, result, started, signal = null) {
    *
    * `sources` is the deduped, reader-facing set and carries hrefs; a follow-up
    * needs the ids the retriever answers to, which is what `result.citations`
-   * already is. Not persisted: `slimTurn` drops `gate.chunks` on purpose, and a
-   * restored conversation faces an index that may have been rebuilt since — the
-   * seam resolves through `retrieval.fetch`, so a stale id is dropped rather
-   * than trusted, but there is no reason to write one down.
+   * already is.
+   *
+   * NOT WRITTEN DOWN, AND NOT GONE ON RESTORE. `slimTurn` stores no field for
+   * this list, because the `sources` rows it does store already carry the same
+   * ids: `rehydrate` recomputes it from them — engine-spec 022. The archive
+   * holds one copy rather than two, and a reopened thread primes its first
+   * follow-up with the same evidence a live one does, deduped by row instead of
+   * by citation.
    */
   turn.citationIds = result.citations
   const settle = () => {
@@ -1648,12 +1701,31 @@ function makeTurn(question, frozen, quote = ''): Turn {
  * live one did. Falling back to the immediately previous question keeps the
  * shipped behaviour for a thread where nothing has answered yet — including
  * search-only, which never sets `answerText` at all.
+ *
+ * THE WHOLE ANSWERED SEQUENCE, NOT THE LAST MEMBER OF IT — engine-spec 023. A
+ * follow-up to a follow-up loses its subject at the third turn, so the
+ * antecedent may be two questions rather than one and `chainAntecedent` decides
+ * which. That decision reads the turn BEFORE the one it would chain from, which
+ * is why the list is built here rather than a single winner returned: the loop
+ * this replaces could not have supplied it. Nothing else moves: the last
+ * question that was answered is still in the text and still the part of it
+ * nearest the reader's tail, and a second hop is only ever prepended.
+ *
+ * `gate.channel` and `gate.antecedent` are what the chain is conditional on and
+ * both are persisted (history.js), so a restored thread chains exactly where the
+ * live one did. A turn carrying no `gate` — a search-only turn, or one written
+ * before the field existed — yields `composed: false` and therefore the single
+ * hop, which is what makes a thread of plain turns behave as it always has.
  */
 export function priorAntecedent(turns) {
   const prior = turns.slice(0, -1)
-  for (let i = prior.length - 1; i >= 0; i--) {
-    if (prior[i].answerText && prior[i].answerText.trim()) return prior[i].question
-  }
+  const answered = prior
+    .filter((t) => t.answerText && t.answerText.trim())
+    .map((t) => ({
+      question: t.question,
+      composed: t.gate?.channel === 'composed' && t.gate?.antecedent === 'question',
+    }))
+  if (answered.length) return chainAntecedent(answered).text
   return prior.length ? prior[prior.length - 1].question : null
 }
 
@@ -2503,7 +2575,9 @@ export async function submit(question, { quote = '' } = {}) {
         answer: t.answerText,
         quote: t.quote || '',
         // What that turn cited, so a follow-up can be primed with the evidence
-        // rather than with 300 characters of the answer that used it.
+        // rather than with the SHAPE of the answer that used it — `condenseAnswer`
+        // (prompt.js, engine-spec 022) names a prior answer's blocks and carries
+        // none of their evidence.
         citations: t.citationIds || [],
       })),
       // The matched-opener evidence from a dense hit this turn could not serve
@@ -2512,7 +2586,44 @@ export async function submit(question, { quote = '' } = {}) {
       addendum: state.instruction,
       config: { ...cfg, guard: guard.value },
       fallback: state.fallback,
-      queryVec,
+      /**
+       * BOTH HALVES FOLLOW THE CHANNEL THE GATE WON ON — engine-spec 022, and
+       * 022c for the half that was missing.
+       *
+       * `retrieval.evaluate` scores two channels and returns the winner's
+       * chunks, and this pair has exactly one reader inside the harness: a
+       * `search_docs` the MODEL issues, which falls back to both whenever the
+       * model writes no query of its own. Passed bare, a follow-up the gate
+       * rescued through its composed channel re-searched the corpus against the
+       * vector of «а я могу его стилизировать?» alone — the tail on its own, a
+       * query no turn ever issued and the exact ranking the composed channel
+       * exists to avoid.
+       *
+       * SENDING THE VECTOR ALONE FIXED HALF OF THAT AND BROKE THE OTHER HALF.
+       * `search_docs` defaulted its lexical query to `question`, so the swap
+       * fused BM25 over the raw tail with cosine over the composed text: one
+       * RRF merging two different queries, which is not a search anybody
+       * specified. `composedQuery` is what lets the harness swap the pair that
+       * `fillResults` above has always swapped together.
+       *
+       * A QUOTED TURN THEREFORE RE-SEARCHES ON THE PASSAGE, and that is the
+       * intent rather than a side effect: when the reader attached a selection
+       * the antecedent IS that passage (clamped at QUOTE_MAX), so
+       * `composedQuery` reads `${quote}\n${question}` and `composedVec` is its
+       * vector — and `fillResults` already ranks the reader-facing rows on
+       * exactly that text, so the model's list and the reader's list cannot
+       * disagree about what was searched.
+       *
+       * The truthiness guard on the vector is load-bearing rather than
+       * defensive. `null` and `undefined` do not mean the same thing downstream
+       * — `null` is "score it with no vector", `undefined` is "there is no
+       * second query" — and a lexical-only turn settles `composedVec` at `null`
+       * by design. Both arms then resolve to the raw value, which is what that
+       * mode wants; the query still travels on that mode, because the lexical
+       * half is the only half it has.
+       */
+      queryVec: g?.channel === 'composed' && composedVec ? composedVec : queryVec,
+      composedQuery: g?.channel === 'composed' ? composedQuery : null,
       // The harness decides what this turn may spend, learns the answer from
       // every response header it sees, and hands the count back through the same
       // instance — so a turn that ends one-shot is a turn the previous turns paid

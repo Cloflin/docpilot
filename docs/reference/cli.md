@@ -456,18 +456,18 @@ Artefacts go to `${evalDir}/bench/`, which `docpilot init` gitignores: the filen
 | `--config=<name>` | `emit` | required; names the configuration and the default output file |
 | `--level=<tier>` | `emit` | which pool to emit; default `ultra` — see [`--level=`](#level) |
 | `--out=<file>` | `emit`, `judge-emit` | where to write; default `${evalDir}/bench/<config>[.<level>].tasks.jsonl`, and `${evalDir}/bench/judge.jsonl` for the judge |
-| `--history=<file>` | `emit` | answers from an earlier pass, so a follow-up record can carry the turn it follows |
+| `--history=<file>` | `emit` | one file holding every earlier pass's answers, so a follow-up record can carry the turns it follows; append to it between passes |
 | `--tasks=<file[,file]>` | `shard`, `score`, `runs`, `judge-emit` | one file for `shard`; two for `runs` and `judge-emit`; `score` takes as many as `--answers` |
 | `--answers=<file,file>` | `score`, `judge-emit` | the answering runs, one per task file and in the same order |
 | `--shards=<n>` | `shard` | how many files to split into; default `10`, capped at the task count |
 | `--dir=<path>` | `shard` | where the shards go; default the task file's own directory |
-| `--stage=<n>` | `shard` | emit only tasks of that stage; default all. `--stage=2` is the answering turn; stage 1 exists only to seed a follow-up |
+| `--stage=<n>` | `shard` | emit only tasks of that stage; default all. `--stage=2` is the answering turn at every depth; stage 1 is the priming turns that seed it, one per prior question |
 | `--runs-a=<a,b,c>` | `runs` | config A's answer files, one per run |
 | `--runs-b=<a,b,c>` | `runs` | config B's, and the same count |
 | `--key=<file>` | `judge-emit`, `judge-score` | the side key; `judge-emit` defaults it to the `--out` path with `.jsonl` replaced by `.key.jsonl`, `judge-score` requires it |
 | `--verdicts=<file>` | `judge-score` | required; the judge's verdicts, one JSON object per line |
 
-`--history=` is not optional in practice for a set with follow-ups. Without it a follow-up record's prompt is missing the turn it follows, and the record measures a different question than the one it names.
+`--history=` is not optional in practice for a set with follow-ups. Without it a follow-up record's prompt is missing the turn it follows, and the record measures a different question than the one it names. It names **one** file and that file accumulates: each pass emits the priming turns the last one made answerable — `<id>#prev1`, `<id>#prev2`, oldest first — and their answers are appended to it before the next `emit`. A record with N prior questions therefore takes N + 1 passes, and how far it has got is read off the answers rather than off the flag, so a partly answered set advances the records it can and re-emits the turns it cannot.
 
 **A bare flag is refused.** Every flag in that table is checked at start-up for the `--name value` form, and named with the shape it wants, because a parser matching `--name=` alone reads a bare one as absent: `--level` falls through to `ultra`, `--out` and `--history` fall through to a default path, and `--tasks`/`--answers` fall through to an empty list. On `emit` that combination writes sixty tasks over the file the last comparison was scored on.
 

@@ -182,6 +182,11 @@ export interface RunTurnOptions {
   config?: any
   fallback?: boolean
   queryVec?: any
+  /**
+   * The text `queryVec` was embedded from, when that is not `question` —
+   * engine-spec 022c. Absent buys the shipped behaviour.
+   */
+  composedQuery?: string | null
   onPhase?: ((...args: any[]) => void) | null
   onModel?: ((...args: any[]) => void) | null
   onMember?: ((...args: any[]) => void) | null
@@ -204,6 +209,24 @@ export async function runTurn(options: RunTurnOptions) {
   config,
   fallback,
   queryVec,
+  /**
+   * The text `queryVec` belongs to, when the caller swapped it — engine-spec
+   * 022c.
+   *
+   * `session.js` hands over the COMPOSED vector whenever the gate won on its
+   * composed channel, and the vector travelled alone: `search_docs` defaulted
+   * its lexical query to `question`, so a model that re-searched without a
+   * query of its own fused BM25 over the raw tail with cosine over the composed
+   * text. Two different queries in one RRF, on exactly the follow-up the
+   * composed channel exists to rescue. `fillResults` (session.js) swaps `query`
+   * and `queryVec` together and always did; this is the argument that lets the
+   * harness swap the same pair.
+   *
+   * Absent on every caller that composes nothing — a first turn, a thread with
+   * no antecedent, a turn whose composed channel lost — and absent means the
+   * default search text is the reader's question, to the byte.
+   */
+  composedQuery = null,
   onPhase,
   // Which model answered, when that was not decided in the config file. A
   // pooled provider picks per call, so the name the panel shows beside a turn —
@@ -444,10 +467,12 @@ export async function runTurn(options: RunTurnOptions) {
    * `gateResult` belongs to THIS turn. The composed channel (`gate.js`) makes it
    * better than it looks by changing what is SEARCHED, but it carries no memory:
    * not one chunk the previous answer stood on arrives here. What the model has
-   * of that turn is its own text, cut to 300 characters (`prompt.js`), and it
-   * cannot reach for more — `fetch_section` refuses every id outside
-   * `emittedIds`, which this turn fills from its own retrieval alone. So "and
-   * how do I turn it off?" was being asked to answer from an excerpt of itself.
+   * of that turn is a SKELETON of its own text — the opening sentence and then
+   * the leading line of every block below it, inside HISTORY_ANSWER_MAX
+   * (`condenseAnswer`, prompt.js, engine-spec 022) — and it cannot reach for
+   * more: `fetch_section` refuses every id outside `emittedIds`, which this
+   * turn fills from its own retrieval alone. So "and how do I turn it off?" was
+   * being asked to answer from an excerpt of itself.
    *
    * The citations rather than the whole of the last `primed`: a citation is the
    * subset the model actually used, and re-sending the eight chunks it was given
@@ -494,23 +519,30 @@ export async function runTurn(options: RunTurnOptions) {
       onPhase?.({ phase: 'searching' })
       // The query the MODEL chose, recorded rather than inferred. It is the one
       // thing about a re-search that is not visible afterwards: the vector this
-      // search scores against belongs to the reader's question, so a model that
-      // rephrases — into another language above all — moves the lexical half and
-      // leaves the dense half pointing at the sentence it replaced.
-      const searchQuery = args.query || question
+      // search falls back to belongs to whichever text the gate scored — the
+      // composed query where the composed channel won, the reader's question
+      // otherwise — so a model that rephrases on a host that bought no
+      // `embedQuery` moves the lexical half and leaves the dense half pointing
+      // at the sentence it replaced. The default is that same text for both
+      // halves, which is the whole of engine-spec 022c.
+      const searchQuery = args.query || composedQuery || question
       debug('search', { query: searchQuery, k: args.k ?? null, kind: args.kind || null })
       /**
        * The vector follows the query it belongs to, or falls back — never fails.
        *
        * `normalise` is the same comparison `searchCache` keys on, so a query
        * that differs from the question only in case or punctuation buys
-       * nothing. Every failure — a provider that refused, a reader who pressed
-       * stop, a target that returned nothing — leaves the search running on the
-       * turn's own vector, because an embedder having a bad minute must not
-       * cost the model its step.
+       * nothing. Compared against the COMPOSED query where there is one, for the
+       * reason the fallback above uses it: `queryVec` is that string's vector,
+       * so the model repeating it verbatim already has the right one and
+       * re-embedding it would spend a metered request on a value it holds.
+       * Every failure — a provider that refused, a reader who pressed stop, a
+       * target that returned nothing — leaves the search running on the turn's
+       * own vector, because an embedder having a bad minute must not cost the
+       * model its step.
        */
       let searchVec = queryVec
-      if (embedQuery && searchQuery && normalise(searchQuery) !== normalise(question)) {
+      if (embedQuery && searchQuery && normalise(searchQuery) !== normalise(composedQuery || question)) {
         try {
           const v = await embedQuery(searchQuery)
           if (v) {

@@ -126,6 +126,9 @@ The status line says which of six things is happening rather than spinning:
   question decides for itself again. It is never written to history — it is a
   scratchpad, not an answer.
 - **Stop** ends the turn and keeps what arrived.
+- **The composer stays open.** The next question can be written down as it
+  occurs to the reader, while the answer is still arriving. Enter does nothing
+  until the answer settles, and Stop is still the only thing that ends a turn.
 - **Scrolling up stops the chase.** The thread follows a streaming answer only
   while the reader is at its foot; scroll up to re-read something — with a
   wheel, a finger, the scrollbar or `PageUp` — and it stands still until you

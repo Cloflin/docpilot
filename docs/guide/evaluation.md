@@ -144,7 +144,8 @@ npx docpilot eval --level=low    # a declared pool, not the head of the file
 | `gold_answer` | on `answer` records | 90–160 words. Outside that band is a warning, because token-F1 divides by the length of the *predicted* answer: a 25-word gold against the ~150 words the panel writes caps the metric near 0.29 whatever the model says, and you would be measuring length. On a negative record it is never scored, and lint says to drop it |
 | `identifiers` | no | each one must appear in that record's own `gold_answer` — an error if not |
 | `scope` | no | `{"kind":"section","paths":["/guide/scope"]}`; scope paths carry a leading slash, chunk ids do not. On a `refuse:out-of-scope` record, a gold chunk **inside** the scope is an error — that record would be expecting a refusal it should never get |
-| `prev_question` | no | makes the record a follow-up: the eval runs that turn first and answers the real question with it in history |
+| `prev_questions` | no | the conversation before this one, oldest first: the eval asks each of those turns in order and answers the real question with all of them in history. Two or more let the composed channel reach past the immediately previous turn. A blank entry is an error, and so is carrying `prev_question` beside it — only `prev_questions` is read |
+| `prev_question` | no | the one-turn legacy spelling of the same field, legal forever: makes the record a follow-up, and the eval runs that turn first and answers the real question with it in history |
 | `kind` | no | a free label. `lint` prints the histogram; nothing validates it |
 
 Anything else in a record is ignored by the linter and by the eval.
@@ -180,9 +181,9 @@ npx docpilot bench emit --config=base --level=low
 | `low` | the smoke pool. A handful of lookups **and at least one negative** — a pool that can only pass is not a smoke test, it measures how often the model answers rather than how often it is right to |
 | `medium` | the common how-tos, plus the first scoped record and the first follow-up |
 | `high` | full breadth: roughly the set this package was developed against |
-| `xhigh` | paraphrases, and the harder chains |
-| `max` | the long tail, and multi-hop questions |
-| `ultra` | paraphrase sweeps, adversarial negatives, follow-ups at scale |
+| `xhigh` | paraphrases, and the first chains deep enough to lose their subject: two prior questions, where the antecedent may be both of them rather than the last one |
+| `max` | the long tail, and the longest chains a prompt still carries whole — three prior questions, which is the deepest history that goes out as verbatim pairs |
+| `ultra` | paraphrase sweeps, adversarial negatives, follow-ups at scale, and any chain past three priors, where the oldest turns are condensed into one line instead of sent as pairs |
 
 Two defaults, and they are what let tiers arrive on a golden file that already exists without moving a single number:
 
@@ -212,13 +213,16 @@ This release renames them all at once. Continuation parts moved from `-N` to `~N
     ! q-14: gold_chunks entry "api/users#parameters-2" matches nothing in index 9f2c… — repoint it, or rebuild with npx docpilot index
 ```
 
-Its summary carries a `by level` line:
+Its summary carries a `by depth` and a `by level` line:
 
 ```
+  by depth         {"0":52,"1":6,"2":2}
   by level         low 10 (+10) · medium 25 (+15) · high 60 (+35) · ultra 60
 ```
 
 The bare number is the **pool** — what `--level=medium` actually scores, and the only number two reports may be compared on. `(+n)` is what that tier contributed by itself, which is what you need when deciding where the next twenty questions belong.
+
+`by depth` is how many prior questions each record carries, and it prints on every run — a set with no follow-ups reads `{"0":60}`. The `follow-up` count above it cannot tell one hop from two, and only a record with two priors reaches the second antecedent: a set believed to hold chains and holding none reports the old behaviour under the new records' names, and the run that would show it costs an eval.
 
 ### Reading a report
 

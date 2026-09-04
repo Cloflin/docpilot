@@ -17,8 +17,10 @@ import {
   verdict,
   assertWeights,
   composeQuery,
+  chainAntecedent,
   admissible,
   foreignTail,
+  ANTECEDENT_MAX_CHARS,
 } from '../src/theme/docpilot/gate.js'
 import { chat, detectTools, parseFallback, splitOpenThink, splitThink, streamingAnswerText } from '../src/theme/docpilot/llm.js'
 import { providerFor } from '../src/theme/docpilot/providers.js'
@@ -27,9 +29,11 @@ import {
   buildMessages,
   clampAddendum,
   clampQuote,
+  condenseAnswer,
   QUOTE_WRAPPER,
   QUOTE_MAX,
   HISTORY_QUOTE_MAX,
+  HISTORY_ANSWER_MAX,
   detectLanguage,
   languageDirective,
   promptDocument,
@@ -99,8 +103,10 @@ import {
   parseLevelArg,
   levelHistogram,
 } from '../src/eval/levels.js'
-import { previousReport, writeReport } from '../src/eval/report.js'
+import { previousReport, writeReport, diffSummaries } from '../src/eval/report.js'
 import { lintRecords, levelSummary } from '../src/eval/lint-golden.js'
+import { priorQuestions, chainDepth, isFollowUp } from '../src/eval/record.js'
+import { chainTexts } from '../src/eval/conversation.js'
 import { mmr, pageCap, resolveLevers, LEVER_NAMES } from '../src/theme/docpilot/retriever.js'
 import { parseRange, chooseCell, buildTuningDoc } from '../src/eval/tune.js'
 import { TUNING_OUT, CALIBRATION_OUT } from '../src/cli-context.js'
@@ -675,6 +681,130 @@ describe('gate', () => {
     expect(foreignTail('а я могу его стилизировать?', withSamples('configuration'))).toBe(true)
     expect(foreignTail('а я могу его стилизировать?', withSamples('конфигурация'))).toBe(false)
   })
+
+  /**
+   * ── the chain of ellipses — engine-spec 023 ────────────────────────────────
+   *
+   * `chainAntecedent` chooses BETWEEN one hop and two, and it does so on the
+   * previous turn's own gate record rather than on any measurement of the
+   * question. These cases fix the choice; the ones under 'the antecedent of a
+   * follow-up' fix what session.js feeds it.
+   */
+  const answered = (question, composed = false) => ({ question, composed })
+
+  it('carries one antecedent for a turn that did not need one itself', () => {
+    expect(chainAntecedent([answered('how do I style the panel?')])).toEqual({
+      text: 'how do I style the panel?',
+      hops: 1,
+    })
+    // A turn that was itself composed, with nothing older behind it, is still
+    // one hop: there is no second question to prepend.
+    expect(chainAntecedent([answered('and on React?', true)]).hops).toBe(1)
+    expect(chainAntecedent([])).toEqual({ text: null, hops: 0 })
+    expect(chainAntecedent(null)).toEqual({ text: null, hops: 0 })
+  })
+
+  it('reaches back a second time only for a turn that was itself an ellipsis', () => {
+    const chain = [answered('how do I style the panel?'), answered('and on React?', true)]
+    expect(chainAntecedent(chain)).toEqual({
+      text: 'how do I style the panel?\nand on React?',
+      hops: 2,
+    })
+    // The composition has one spelling and it is the gate's own — the same
+    // `${antecedent}\n${question}` the single hop is composed with.
+    expect(chainAntecedent(chain).text).toBe(
+      composeQuery('and on React?', 'how do I style the panel?'),
+    )
+    // The same pair where the last turn stood on its own: the older question is
+    // not the subject of anything and does not travel.
+    const plain = [answered('how do I style the panel?'), answered('what does the gate do?')]
+    expect(chainAntecedent(plain)).toEqual({ text: 'what does the gate do?', hops: 1 })
+  })
+
+  /**
+   * A question cut at the ceiling is a query nobody asked: it embeds as a
+   * fragment and its severed terms still enter Q. The single hop is the
+   * behaviour that shipped, so the ceiling costs a turn nothing it had.
+   */
+  it('drops the older question whole rather than truncating the pair', () => {
+    const long = `how do I configure ${'the alpha widget and its manifest '.repeat(12)}?`
+    const tail = 'and on React?'
+    expect(long.length + 1 + tail.length).toBeGreaterThan(ANTECEDENT_MAX_CHARS)
+    expect(chainAntecedent([answered(long), answered(tail, true)])).toEqual({
+      text: tail,
+      hops: 1,
+    })
+  })
+
+  /**
+   * `ANTECEDENT_MAX_CHARS` is the CHAIN's ceiling and nothing else, which the
+   * name does not say. Putting a cap on the single antecedent here would be a
+   * new refusal smuggled in under a rescue: a 340-character antecedent is the
+   * one-hop composition that shipped, and it travels whole.
+   */
+  it('bounds the chained pair and not the single antecedent it falls back to', () => {
+    const long = `how do I style ${'the panel and every component under it '.repeat(9)}?`
+    expect(Array.from(long).length).toBeGreaterThan(ANTECEDENT_MAX_CHARS)
+    expect(chainAntecedent([answered(long)])).toEqual({ text: long, hops: 1 })
+    // Behind an ellipsis the pair is over the ceiling, so the older question
+    // goes — and what is left is that same uncut question, not a piece of it.
+    expect(chainAntecedent([answered('how do I style the panel?'), answered(long, true)])).toEqual({
+      text: long,
+      hops: 1,
+    })
+  })
+
+  /**
+   * `.length` counts UTF-16 code units, so a chain carrying emoji or astral
+   * characters reached the ceiling at half its nominal length and lost a hop the
+   * budget had room for — the reason `clampTo` and `clampLine` count the same
+   * way one file over.
+   */
+  it('measures that ceiling in code points and not in code units', () => {
+    const older = '😀'.repeat(160)
+    const tail = 'and on React?'
+    const pair = `${older}\n${tail}`
+    expect(pair.length).toBeGreaterThan(ANTECEDENT_MAX_CHARS)
+    expect(Array.from(pair).length).toBeLessThanOrEqual(ANTECEDENT_MAX_CHARS)
+    expect(chainAntecedent([answered(older), answered(tail, true)])).toEqual({
+      text: pair,
+      hops: 2,
+    })
+  })
+
+  /**
+   * A MEASUREMENT SWITCH, for the A/B that decides whether the second hop pays,
+   * and read once at module scope through `globalThis.process` — so a value
+   * written into `process.env` after the import moves nothing and the graph has
+   * to be built again around it.
+   */
+  const withHops = async (value, fn) => {
+    const before = process.env.DOCPILOT_ANTECEDENT_HOPS
+    if (value === undefined) delete process.env.DOCPILOT_ANTECEDENT_HOPS
+    else process.env.DOCPILOT_ANTECEDENT_HOPS = value
+    vi.resetModules()
+    try {
+      return await fn(await import('../src/theme/docpilot/gate.js'))
+    } finally {
+      if (before === undefined) delete process.env.DOCPILOT_ANTECEDENT_HOPS
+      else process.env.DOCPILOT_ANTECEDENT_HOPS = before
+      // So the next dynamic importer folds the real environment rather than
+      // whatever this case pinned.
+      vi.resetModules()
+    }
+  }
+
+  it('collapses a two-turn chain to the single hop under the measurement switch', async () => {
+    const chain = [answered('how do I style the panel?'), answered('and on React?', true)]
+    await withHops('1', ({ chainAntecedent: one }) => {
+      expect(one(chain)).toEqual({ text: 'and on React?', hops: 1 })
+    })
+    // Two values are meaningful and every other finite number is clamped into
+    // that range rather than read out: `=0` named the single hop `1` already
+    // names, `=3` named the two-hop arm `2` names, and neither had a branch.
+    await withHops('0', ({ chainAntecedent: c }) => expect(c(chain).hops).toBe(1))
+    await withHops('3', ({ chainAntecedent: c }) => expect(c(chain).hops).toBe(2))
+  })
 })
 
 describe('the antecedent of a follow-up', () => {
@@ -697,6 +827,283 @@ describe('the antecedent of a follow-up', () => {
   it('falls back to the previous question when nothing has answered', () => {
     expect(session.priorAntecedent([turn('q1'), turn('q2'), turn('q3')])).toBe('q2')
     expect(session.priorAntecedent([turn('q1')])).toBe(null)
+  })
+
+  /**
+   * A turn that won on the composed channel with a borrowed question is a turn
+   * that has SAID its own question was too weak an anchor to score with. That
+   * record — persisted, so a reopened thread chains where the live one did — is
+   * the whole condition for the second hop.
+   */
+  const ellipsis = (question, answerText = 'an answer') => ({
+    question,
+    answerText,
+    gate: { channel: 'composed', antecedent: 'question' },
+  })
+
+  /**
+   * THE THIRD TURN. "how do I style the panel?", then "and on React?", then "and
+   * on Docusaurus?" composed as `and on React?\nand on Docusaurus?`, in which
+   * nothing names styling and nothing names the panel: the subject is two turns
+   * back and one hop cannot see it.
+   */
+  it('reaches past a follow-up that was itself a follow-up', () => {
+    expect(
+      session.priorAntecedent([
+        turn('how do I style the panel?', 'With the theme tokens.'),
+        ellipsis('and on React?'),
+        turn('and on Docusaurus?'),
+      ]),
+    ).toBe('how do I style the panel?\nand on React?')
+  })
+
+  it('stops at two questions however long the thread of ellipses is', () => {
+    const text = session.priorAntecedent([
+      ellipsis('how do I style the panel?'),
+      ellipsis('and on React?'),
+      ellipsis('and on Docusaurus?'),
+      turn('and the fab?'),
+    ])
+    expect(text).toBe('and on React?\nand on Docusaurus?')
+    expect(text).not.toContain('style the panel')
+  })
+
+  /**
+   * A quoted antecedent is a passage the reader selected, not a question the
+   * gate had to borrow — the turn before it answered whatever it was asked, so
+   * there is no ellipsis to carry forward.
+   */
+  it('does not chain through a turn that borrowed a quote instead of a question', () => {
+    expect(
+      session.priorAntecedent([
+        turn('how do I style the panel?', 'With the theme tokens.'),
+        {
+          question: 'what does this mean?',
+          answerText: 'It means the token is read once.',
+          gate: { channel: 'composed', antecedent: 'quote' },
+        },
+        turn('and on React?'),
+      ]),
+    ).toBe('what does this mean?')
+  })
+
+  // The refused turn is dropped before the chain is built, not after: dropping
+  // it afterwards would spend one of the two hops on the reader's dead end.
+  it('chains over a refusal standing between the two questions', () => {
+    expect(
+      session.priorAntecedent([
+        turn('how do I style the panel?', 'With the theme tokens.'),
+        turn('what is the weather in paris?'),
+        ellipsis('and on React?'),
+        turn('and on Docusaurus?'),
+      ]),
+    ).toBe('how do I style the panel?\nand on React?')
+  })
+
+  it('gives up the older question rather than sending half of it', () => {
+    const long = `how do I style ${'the panel and every component under it '.repeat(10)}?`
+    expect(long.length + 1 + 'and on React?'.length).toBeGreaterThan(ANTECEDENT_MAX_CHARS)
+    expect(
+      session.priorAntecedent([
+        turn(long, 'With the theme tokens.'),
+        ellipsis('and on React?'),
+        turn('and on Docusaurus?'),
+      ]),
+    ).toBe('and on React?')
+  })
+})
+
+/**
+ * ── BOTH HALVES FOLLOW THE CHANNEL THE GATE WON ON — engine-spec 022c ────────
+ *
+ * Sending the vector alone fixed half the defect and broke the other half:
+ * `search_docs` defaults its lexical query to `question`, so a follow-up the
+ * gate rescued through its composed channel fused BM25 over the raw tail with
+ * cosine over the composed text — one RRF merging two different queries, which
+ * is not a search anybody specified.
+ *
+ * A GRAPH OF ITS OWN, because the seam is the import: `session.js` binds
+ * `runTurn` when it loads, so a stub for it is only visible to a graph built
+ * afterwards. Everything under the gate is real — the retriever, the composition
+ * and the embedder's answer — and which channel wins is the gate's decision
+ * rather than the fixture's.
+ */
+describe('what a follow-up hands the harness', () => {
+  const ENV = { OPENROUTER_API_KEY: 'k' }
+  const DIMS = 4
+  const GUARD = {
+    tau: 0.3,
+    tauLexical: 0.3,
+    wDense: 0.75,
+    wLexical: 0.25,
+    denseMode: 'cosine',
+    cosFloor: 0.44,
+    cosCeil: 0.64,
+    zexp: null,
+  }
+
+  let n = 0
+  /** One chunk, on the first axis — so a vector picks its own cosine. */
+  const oneChunkIndex = () => {
+    const vectors = new Int8Array(DIMS)
+    vectors[0] = 127
+    return assembleIndex({
+      manifest: {
+        version: 3,
+        hash: `composed-${++n}`,
+        embedModel: 'test-embed',
+        dims: DIMS,
+        chunkCount: 1,
+        vectors: 'vectors.composed.bin',
+        pages: [{ path: '/a', title: 'Alpha', tail: 'Docs' }],
+        guard: GUARD,
+      },
+      shards: [
+        [
+          {
+            id: 'a#one',
+            path: '/a',
+            anchor: 'one',
+            title: 'Alpha',
+            breadcrumb: 'Docs',
+            kind: 'guide',
+            text: 'The alpha widget is configured with a manifest and a token.',
+            prev: null,
+            next: null,
+          },
+        ],
+      ],
+      vectorBuffer: vectors.buffer,
+      dfDoc: { df: {} },
+    })
+  }
+
+  const ASKED = 'how is the alpha widget configured?'
+  const FOLLOW = 'and what does the token do?'
+  const COMPOSED = `${ASKED}\n${FOLLOW}`
+
+  /**
+   * A text's vector as it reaches the harness: `embed()` l2-normalises and then
+   * quantises to int8, so a unit axis arrives as 127 in its own slot. The point
+   * of naming it is that the two channels are told apart by WHICH axis, not by
+   * the numbers on it.
+   */
+  const axis = (i) => Array.from({ length: DIMS }, (_, j) => (j === i ? 127 : 0))
+
+  const answeredTurn = {
+    id: 'm_0',
+    question: ASKED,
+    state: 'complete',
+    answerText: 'With a manifest and a token.',
+    sources: [],
+    cited: null,
+    quote: '',
+    citationIds: [],
+    scope: { kind: 'all', label: 'All docs', paths: [] },
+  }
+
+  /**
+   * The embedder answers one row per input, in order, on whichever axis the
+   * case wants that text scored against — so the composed channel wins or loses
+   * on a cosine and not on a flag.
+   */
+  const transport = (axisFor) =>
+    vi.stubGlobal('fetch', async (url, init) => {
+      const address = String(url)
+      if (!address.includes('/embeddings')) throw new Error(`unexpected request: ${address}`)
+      const body = JSON.parse(init.body)
+      const inputs = Array.isArray(body.input) ? body.input : [body.input]
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          data: inputs.map((text, index) => ({ embedding: axisFor(text), index })),
+        }),
+      }
+    })
+
+  const ask = async ({ question, prior = null, axisFor }) => {
+    const seen = []
+    vi.resetModules()
+    vi.doMock('../src/theme/docpilot/harness.js', () => ({
+      runTurn: async (args) => {
+        seen.push(args)
+        // No text and no citations, so the turn settles on the untraceable
+        // branch: everything under test happened before this returned.
+        return {
+          text: '',
+          citations: [],
+          emitted: [],
+          phantom: [],
+          confidence: 0,
+          iterations: 1,
+          rejectedFetches: 0,
+          support: null,
+          think: '',
+        }
+      },
+    }))
+    const s = await import('../src/theme/docpilot/session.js')
+    s.configure({
+      docPilot: themeDocPilot(
+        resolveDocPilot(
+          { chat: { provider: 'openrouter' }, guard: { mode: 'off' }, budget: { probe: 'never' } },
+          ENV,
+        ),
+        ENV,
+      ),
+    })
+    s.state.index = oneChunkIndex()
+    s.state.degraded = false
+    s.state.busy = false
+    s.state.turns = prior ? [{ ...prior }] : []
+    transport(axisFor)
+    await s.submit(question)
+    return { seen, turn: s.state.turns[s.state.turns.length - 1] }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.doUnmock('../src/theme/docpilot/harness.js')
+    vi.resetModules()
+  })
+
+  it('sends the composed query beside the composed vector when that channel won', async () => {
+    const { seen, turn } = await ask({
+      question: FOLLOW,
+      prior: answeredTurn,
+      // The composed text is the one that finds the chunk; the tail alone finds
+      // nothing, which is the situation the composed channel exists for.
+      axisFor: (text) => (text === COMPOSED ? [1, 0, 0, 0] : [0, 1, 0, 0]),
+    })
+    expect(turn.gate.channel).toBe('composed')
+    expect(seen).toHaveLength(1)
+    expect(seen[0].composedQuery).toBe(COMPOSED)
+    expect(Array.from(seen[0].queryVec)).toEqual(axis(0))
+    // The question itself is untouched: the pair is what the model's own
+    // `search_docs` falls back to, not what it was asked.
+    expect(seen[0].question).toBe(FOLLOW)
+  })
+
+  it('sends the raw pair when the gate stayed on the raw channel, antecedent or not', async () => {
+    const { seen, turn } = await ask({
+      question: FOLLOW,
+      prior: answeredTurn,
+      axisFor: (text) => (text === FOLLOW ? [1, 0, 0, 0] : [0, 1, 0, 0]),
+    })
+    // There WAS a composition — it was scored and beaten, which is the case a
+    // truthiness check on the string alone would have got wrong.
+    expect(turn.gate.channel).toBe('raw')
+    expect(seen[0].composedQuery).toBe(null)
+    expect(Array.from(seen[0].queryVec)).toEqual(axis(0))
+    expect(Array.from(seen[0].queryVec)).not.toEqual(axis(1))
+  })
+
+  it('composes nothing at all on a first turn', async () => {
+    const { seen } = await ask({ question: ASKED, axisFor: () => [1, 0, 0, 0] })
+    expect(seen[0].composedQuery).toBe(null)
+    expect(Array.from(seen[0].queryVec)).toEqual(axis(0))
   })
 })
 
@@ -1404,6 +1811,303 @@ describe('prompt', () => {
     const m = buildMessages({ ...base, question: 'как включить' })
     expect(m[0].content).not.toContain('Russian')
     expect(m[m.length - 1].content).toContain('Russian')
+  })
+
+  /**
+   * ── a prior answer, reduced to its shape — engine-spec 022 ─────────────────
+   *
+   * `slice(0, 300)` cut wherever 300 characters landed. Captured from the live
+   * site, one follow-up carried an assistant message that ended inside an
+   * unterminated js fence, part-way through a file path, with the numbered
+   * steps, the second file and the settings all past the cut — so "tell me more
+   * about the second point" arrived with no second point anywhere in the window.
+   * The same budget buys the SKELETON instead: the opening sentence, then the
+   * leading line of every block after it.
+   */
+  describe('the shape of a prior answer', () => {
+    const cp = (s) => Array.from(s).length
+
+    /**
+     * The shape everything here is measured against — a lead paragraph that
+     * wraps, a heading, a tight three-item list, a trailing paragraph — sized so
+     * the skeleton lands inside the budget rather than under the floor that
+     * sends it back to the prefix.
+     */
+    const shaped = [
+      'The token is read once, at build time. The loader caches it for the life of',
+      'the page, which is why a rebuild follows every edit to the manifest.',
+      '',
+      '## Where the manifest names it',
+      '',
+      '- The manifest names the token and the model that built the index beside it.',
+      '- The build inlines both of them into the bundle the browser downloads.',
+      '- The panel reads them back and refuses to score one against the other.',
+      '',
+      'Everything else is transport detail and is not repeated here.',
+    ].join('\n')
+
+    /** A four-backtick block with a three-backtick block inside it. */
+    const nested = [
+      'A fence inside a fence is the case that broke it, and this sentence runs on so the answer clears the ceiling and a skeleton gets built at all.',
+      '',
+      '````markdown',
+      'Write a code block like this:',
+      '',
+      '```js',
+      'const a = 1',
+      '```',
+      '````',
+      '',
+      '## After the block',
+      '',
+      'The heading above survives, and so does the closer of the outer fence.',
+      '',
+      '## And one more heading, so the skeleton clears three hundred code points',
+    ].join('\n')
+
+    /**
+     * CommonMark's close rule, spelled here rather than imported: an opener is
+     * closed by a run of the SAME character, at least as long. Borrowing the
+     * function under test would make the assertion agree with the defect.
+     */
+    const unclosedFence = (s) => {
+      let open = null
+      for (const line of s.split('\n')) {
+        const m = /^\s*(`{3,}|~{3,})/.exec(line)
+        if (open) {
+          if (m && m[1][0] === open[0] && m[1].length >= open.length) open = null
+          continue
+        }
+        if (m) open = m[1]
+      }
+      return open
+    }
+
+    it('gives a short answer back byte for byte, fences and all', () => {
+      const short = 'One line.\n\n```js\nconst a = 1\n```\n'
+      expect(condenseAnswer(short)).toBe(short)
+      // The boundary itself, and it is a boundary in CODE POINTS: an answer of
+      // 360 astral characters is 720 code units and is still short.
+      const exact = 'x'.repeat(HISTORY_ANSWER_MAX)
+      expect(condenseAnswer(exact)).toBe(exact)
+      const astral = '😀'.repeat(HISTORY_ANSWER_MAX)
+      expect(astral.length).toBe(2 * HISTORY_ANSWER_MAX)
+      expect(condenseAnswer(astral)).toBe(astral)
+    })
+
+    it('keeps the opening sentence and the leading line of every block under it', () => {
+      expect(cp(shaped)).toBeGreaterThan(HISTORY_ANSWER_MAX)
+      expect(condenseAnswer(shaped).split('\n')).toEqual([
+        // The opening SENTENCE, not the opening line: the rest of it is past the
+        // full stop and does not travel.
+        'The token is read once, at build time.',
+        '## Where the manifest names it',
+        // Every item of the tight list, which is the whole reason a list item
+        // opens a block without a blank line in front of it.
+        '- The manifest names the token and the model that built the index beside it.',
+        '- The build inlines both of them into the bundle the browser downloads.',
+        '- The panel reads them back and refuses to score one against the other.',
+        'Everything else is transport detail and is not repeated here.',
+      ])
+      // The wrapped continuation of the lead paragraph is dropped while there is
+      // still room for it — it is the blank-line rule doing that, not the budget.
+      expect(condenseAnswer(shaped)).not.toContain('The loader caches it')
+      expect(condenseAnswer(shaped)).not.toContain('the page, which is why')
+    })
+
+    it('skips a block that does not fit rather than ending the scan there', () => {
+      const middle = [
+        'The gate is scored on every turn.',
+        '',
+        '## What each channel costs to score',
+        '',
+        '- The dense channel needs a vector, and the manifest names the model that made it.',
+        '- The lexical channel needs nothing beyond the index the browser already downloaded.',
+        "- The composed channel needs a previous question of the reader's to borrow from.",
+        '',
+        'This paragraph is the one that does not fit: it runs on past the room the three items above it left behind, and it is here to be skipped rather than to end the scan.',
+        '',
+        '## Still here',
+      ].join('\n')
+      const out = condenseAnswer(middle)
+      expect(out).not.toContain('This paragraph is the one that does not fit')
+      // One long paragraph in the middle would otherwise cost every block below
+      // it, which on this answer is the second heading.
+      expect(out.endsWith('## Still here')).toBe(true)
+    })
+
+    it('closes a four-backtick block with four backticks and not with three', () => {
+      const out = condenseAnswer(nested)
+      expect(unclosedFence(out)).toBe(null)
+      expect(out).toContain('````markdown')
+      // The inner run is body. A message that ended at it would have ended
+      // inside the block, which is what the captured defect looked like.
+      expect(out).toContain('```js')
+      expect(out).toContain('## After the block')
+    })
+
+    it('does not let a backtick line close a tilde block it is inside', () => {
+      const tilde = [
+        'A tilde fence is not closed by a backtick line, and this sentence is long enough to carry the answer past the ceiling on its own.',
+        '',
+        '~~~text',
+        'This is inside the tilde block:',
+        '```',
+        'and this line is body, not a closer',
+        '```',
+        '~~~',
+        '',
+        '## After the tilde block',
+        '',
+        'The body above stays inside its own fence rather than spilling into the transcript.',
+      ].join('\n')
+      const out = condenseAnswer(tilde)
+      expect(unclosedFence(out)).toBe(null)
+      expect(out).toContain('~~~text')
+      // The block's own text, still inside it — read as a closer, this line and
+      // everything under it spilled into the transcript as prose.
+      expect(out).toContain('and this line is body, not a closer')
+      expect(out).toContain('## After the tilde block')
+    })
+
+    /**
+     * `midBlock` suppresses every continuation line, so an answer of one
+     * paragraph contributes one clamped line however long it runs — measured
+     * against the shipped function, a 563-code-point paragraph came back as 26
+     * code points where the prefix returned 300. The skeleton is the better 360
+     * characters only when there are blocks to name.
+     */
+    it('carries at least what the prefix carried when there is only one block to name', () => {
+      const para =
+        'The gate is scored on every turn and the mode decides whether it refuses before the model is called, which since 1.3 it does not, because the relevance floor has to be calibrated per corpus and per language and a token overlap is zero by construction for a question asked in a language the documentation is not written in, so the model is left to decide whether the question is answerable at all.'
+      expect(cp(para)).toBeGreaterThan(HISTORY_ANSWER_MAX)
+      const out = condenseAnswer(para)
+      expect(out).toContain(Array.from(para).slice(0, 300).join(''))
+      expect(cp(out)).toBeGreaterThanOrEqual(300)
+    })
+
+    /**
+     * THE ONE OVERRUN IS THE FENCE THE BALANCING HAD TO CLOSE, and it is spent
+     * after the budget rather than inside it: a transcript that opens a fence
+     * nothing closes is the defect this function exists to remove, and a
+     * fence-only answer is where the prefix fallback cuts mid-block.
+     */
+    it('holds the budget on every shape, and overruns it only by a closer', () => {
+      const shapes = {
+        listOnly: Array.from(
+          { length: 12 },
+          (_, i) => `- The ${i}th item of a list that is nothing but items, each one naming a thing.`,
+        ).join('\n'),
+        emoji: '😀'.repeat(400),
+        unbroken: 'x'.repeat(900),
+      }
+      shapes.crlf = shapes.listOnly.replace(/\n/g, '\r\n')
+      for (const [shape, text] of Object.entries(shapes)) {
+        const out = condenseAnswer(text)
+        expect([shape, cp(out) <= HISTORY_ANSWER_MAX]).toEqual([shape, true])
+        expect(unclosedFence(out)).toBe(null)
+      }
+
+      const fenceOnly = [
+        '```js',
+        ...Array.from({ length: 30 }, (_, i) => `const value${i} = ${i}`),
+        '```',
+      ].join('\n')
+      const closed = condenseAnswer(fenceOnly)
+      expect(unclosedFence(closed)).toBe(null)
+      // 364 for a 360 budget: the prefix cut inside the block and the marker
+      // run plus its newline is what puts it back.
+      expect(cp(closed)).toBe(HISTORY_ANSWER_MAX + 4)
+      expect(closed.endsWith('\n```')).toBe(true)
+    })
+
+    it('keeps config.js whole rather than reading it as the end of a sentence', () => {
+      const dotted = [
+        'Set the embedder in config.js and rebuild the index. Nothing else reads that field, and the panel only ever compares it against the name the manifest carries.',
+        '',
+        '## What the rebuild costs',
+        '',
+        '- One embedding request per batch of thirty-two chunks, and no more than that.',
+        '- One manifest write, which is what the browser downloads on the next visit.',
+        '- One figure refresh, because the printed numbers are held by a test.',
+        '',
+        '## And where it is read back',
+      ].join('\n')
+      expect(condenseAnswer(dotted).split('\n')[0]).toBe(
+        'Set the embedder in config.js and rebuild the index.',
+      )
+    })
+
+    // `clampLine` and the fence opener trim their own trailing \r; a kept
+    // block's body lines do not, so a fenced answer written with CRLF came back
+    // with line endings the rest of the result does not use.
+    it('condenses a CRLF answer into the blocks its LF twin condenses to', () => {
+      expect(condenseAnswer(shaped.replace(/\n/g, '\r\n'))).toBe(condenseAnswer(shaped))
+      expect(condenseAnswer(nested.replace(/\n/g, '\r\n'))).toBe(condenseAnswer(nested))
+      expect(condenseAnswer(nested)).not.toContain('\r')
+    })
+
+    /**
+     * The transcript seam. Three recent pairs are re-sent on every step of the
+     * loop, so this is the string the budget is actually spent on.
+     */
+    it('sends the skeleton in the transcript, not the first 300 characters', () => {
+      const answer = [
+        'Rate limits are counted per request, not per token. The daily allowance is fifty of them for the whole site, which is why the panel counts what it spends and says so.',
+        '',
+        '## What one turn spends',
+        '',
+        '- One embedding request, and a follow-up composes both texts into that same one.',
+        '- One chat request per step of the loop, up to the ceiling the budget sets.',
+        '',
+        '## The second heading, past character three hundred',
+        '',
+        'Everything under it is what a follow-up used to lose.',
+      ].join('\n')
+      expect(answer.indexOf('## The second heading')).toBeGreaterThan(300)
+
+      const m = buildMessages({
+        ...base,
+        question: 'and what does that cost?',
+        history: [{ question: 'what does a turn spend?', answer }],
+      })
+      const assistant = m.find((x) => x.role === 'assistant')
+      expect(assistant.content).toContain('## The second heading, past character three hundred')
+      expect(assistant.content).not.toBe(answer.slice(0, 300))
+      expect(assistant.content).toBe(condenseAnswer(answer))
+    })
+
+    /**
+     * The A/B switch, and it is read at MODULE SCOPE — `const HISTORY_CONDENSE =
+     * globalThis.process?.env?.DOCPILOT_HISTORY_CONDENSE !== '0'`. Writing the
+     * variable into `process.env` moves nothing; the build has to be made again,
+     * which is why this is a graph of its own and why the reset runs on the way
+     * out as well as on the way in.
+     */
+    describe('with the condensation switched off for the measurement', () => {
+      afterEach(() => {
+        delete process.env.DOCPILOT_HISTORY_CONDENSE
+        vi.resetModules()
+      })
+
+      it('restores the 300-character prefix', async () => {
+        process.env.DOCPILOT_HISTORY_CONDENSE = '0'
+        vi.resetModules()
+        const off = await import('../src/theme/docpilot/prompt.js')
+
+        const m = off.buildMessages({
+          ...base,
+          question: 'and then?',
+          history: [{ question: 'what is it?', answer: shaped }],
+        })
+        const assistant = m.find((x) => x.role === 'assistant')
+        expect(assistant.content).toBe(shaped.slice(0, 300))
+        // The switch moves the TRANSCRIPT and nothing else — the function is
+        // still there and still condenses, so both arms run on one build.
+        expect(off.condenseAnswer(shaped)).not.toBe(shaped.slice(0, 300))
+        expect(off.condenseAnswer(shaped)).toBe(condenseAnswer(shaped))
+      })
+    })
   })
 })
 
@@ -5704,9 +6408,10 @@ describe('history — a stored conversation, restored into the panel', () => {
     scope: { kind: 'all', label: 'All docs', paths: [] },
   })
 
-  const seed = (store, hash = 'h1') => {
-    const t = storedTurn()
-    t.cited = [t.sources[0]]
+  // A caller with a turn of its own brings its own citation positions; the
+  // default turn cites its single row once, and a turn with no rows cites none.
+  const seed = (store, hash = 'h1', t = storedTurn()) => {
+    t.cited = t.cited || (t.sources[0] ? [t.sources[0]] : null)
     return store.save({ id: null, hash, turns: [t] })
   }
 
@@ -5797,6 +6502,97 @@ describe('history — a stored conversation, restored into the panel', () => {
     expect(sessionState.turns).toEqual([])
     expect(sessionState.history).toEqual([])
     expect(store.list()).toEqual([])
+
+    __setHistoryForTests(null)
+    sessionState.index = null
+  })
+
+  /**
+   * ── the evidence a follow-up inherits, DERIVED — engine-spec 022b ──────────
+   *
+   * `seedFromHistory` primes the next turn from `history[].citations`, which
+   * `submit()` fills from `t.citationIds`, and nothing writes those ids to the
+   * archive. So every restored turn came back with `citationIds` undefined and
+   * the first follow-up after a reload — or after opening a thread from the dock
+   * — inherited nothing at all, silently. `sources[].id` IS the chunk id, so no
+   * new stored field was needed.
+   */
+  const restore = (t) => {
+    const store = createHistory({ local: fake(), session: fake(), now: () => 1 })
+    const id = seed(store, 'h1', t)
+    __setHistoryForTests(store)
+    configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
+    sessionState.index = INDEX
+    session.openConversation(id)
+    return sessionState.turns[0]
+  }
+
+  it('gives a restored turn the chunk ids its next question inherits, in stored order', () => {
+    const t = storedTurn()
+    t.sources = [
+      t.sources[0],
+      { n: 2, id: 'limits#burst', href: '/guide/limits#burst', origin: null, title: 'Burst', tail: 'Rate limits' },
+    ]
+    t.cited = t.sources
+    expect(restore(t).citationIds).toEqual(['auth#t', 'limits#burst'])
+    __setHistoryForTests(null)
+    sessionState.index = null
+  })
+
+  // A refused turn was never a source, so there is nothing for the question
+  // after it to inherit — and the empty list is the value `seedFromHistory`
+  // already reads as "nothing", not a missing field it cannot tell from one.
+  it('leaves a restored refusal with nothing to inherit', () => {
+    const t = {
+      ...storedTurn(),
+      answerText: '',
+      sources: [],
+      state: 'no-answer',
+      refusal: {
+        cause: 'no-evidence',
+        scopeLabel: 'All docs',
+        scopeKind: 'all',
+        pagesRead: 0,
+        closest: [],
+        closestAreOutside: false,
+      },
+    }
+    expect(restore(t).citationIds).toEqual([])
+    __setHistoryForTests(null)
+    sessionState.index = null
+  })
+
+  /**
+   * THE LIMIT, and it points the way the appealing claim does not.
+   *
+   * `sources` is the deduped, reader-facing set: `settleAnswer` dedupes rows by
+   * `href` (session.js:1544) and `sourceRow` gives every chunk of an IMPORTED
+   * page the same href — its origin (session.js:1190). So two sections of one
+   * external page were two citations and are one row, and the follow-up is
+   * seeded one section of that page where the live turn seeded two. Both stay
+   * inside `SEED_FROM_HISTORY`, which caps what reaches the model at three
+   * sections whichever way the count went, and both beat the `undefined` this
+   * replaces — but "the same evidence or slightly more, never less" is false.
+   */
+  it('restores one id for the two sections of an imported page that share an href', () => {
+    const t = storedTurn()
+    t.answerText = 'Use a bearer token [1], and mind the burst ceiling [2].'
+    t.sources = [
+      {
+        n: 1,
+        id: 'ext/api#auth',
+        href: 'https://api.example.test/reference',
+        origin: 'https://api.example.test/reference',
+        title: 'Auth',
+        tail: 'API · api.example.test',
+      },
+    ]
+    t.cited = [t.sources[0], t.sources[0]]
+
+    const turn = restore(t)
+    // Two citations, one row, and therefore one id.
+    expect(turn.cited).toHaveLength(2)
+    expect(turn.citationIds).toEqual(['ext/api#auth'])
 
     __setHistoryForTests(null)
     sessionState.index = null
@@ -9001,6 +9797,59 @@ describe('golden-set levels — report comparability and lint (W3 consumers)', (
       expect(warnings).toEqual([])
     })
 
+    /**
+     * THE CONVERSATION, which `priorQuestions` deliberately hands over
+     * unrepaired. A record carrying both fields states two different
+     * conversations, one of them is scored and the other is not, and nothing
+     * downstream reports the discrepancy — so it is an error rather than a
+     * warning: the set still produces numbers and the numbers are for a question
+     * nobody asked.
+     */
+    it('errors on a record that authors both spellings of its conversation', () => {
+      const { errors, warnings } = lint(
+        negative({ level: 'low', prev_questions: ['and on React?'], prev_question: 'how do I style the panel?' }),
+      )
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toContain('prev_questions')
+      expect(errors[0]).toContain('prev_question')
+      expect(warnings).toEqual([])
+    })
+
+    // `composeQuery(question, '')` returns null, so a record with a blank prior
+    // runs with no composed channel at all while every row it produces still
+    // reads as a follow-up of that depth — a first turn wearing a follow-up's
+    // label. The position is in the message because a chain of four reports
+    // nothing an author can act on otherwise.
+    it('errors on a blank prior, and names it by position inside a chain', () => {
+      const legacy = lint(negative({ level: 'low', prev_question: '' }))
+      expect(legacy.errors).toHaveLength(1)
+      expect(legacy.errors[0]).toContain('prev_question is not a question')
+
+      const chained = lint(negative({ level: 'low', prev_questions: ['how do I style it?', ''] }))
+      expect(chained.errors).toHaveLength(1)
+      expect(chained.errors[0]).toContain('prev_questions[1]')
+    })
+
+    it('errors on a chain that is not an array, and says what it is instead', () => {
+      const { errors } = lint(negative({ level: 'low', prev_questions: 'how do I style it?' }))
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toContain('prev_questions is string, not an array')
+    })
+
+    /**
+     * THE LOAD-BEARING ONE. Every golden file and probe file in the wild carries
+     * `prev_question`, and a later tightening of the three rules above that made
+     * the legacy spelling anything but silent would fail lint for every consumer
+     * at once, before it fixed anything.
+     */
+    it('says nothing at all about the legacy spelling on its own', () => {
+      const { errors, warnings } = lint(
+        negative({ level: 'low', prev_question: 'how do I style the panel?' }),
+      )
+      expect(errors).toEqual([])
+      expect(warnings).toEqual([])
+    })
+
     it('summarises the tiers as pool sizes, not as counts', () => {
       const at = (level, n) => Array.from({ length: n }, () => ({ level }))
       expect(levelSummary([...at('low', 10), ...at('medium', 15), ...at('high', 35)]))
@@ -9016,6 +9865,143 @@ describe('golden-set levels — report comparability and lint (W3 consumers)', (
   })
 })
 
+
+/**
+ * ── the conversation a record carries, and what a run buys for it — 023 ──────
+ *
+ * A chain is the questions asked before the one being scored, oldest first.
+ * Until `record.js` the evaluation sets could express exactly one of them, so
+ * nothing measured whether an elliptical question keeps its subject past the
+ * first hop: no runner could build a history deeper than one pair.
+ */
+describe('golden-set chains — the record, the prefetch and the split', () => {
+  /**
+   * Every default here exists so that a file authored before chains scores
+   * identically after them. `prev_question` is the legacy one-element spelling
+   * and stays legal forever; an absent field is a first turn rather than an
+   * error — the rule `recordLevel` follows for an absent `level`, one field
+   * over — and a record that is not there at all is still not a crash, because
+   * five runners read a conversation through this.
+   */
+  it('reads both spellings of the questions that came before, unrepaired', () => {
+    expect(priorQuestions({ prev_question: 'how do I style the panel?' })).toEqual([
+      'how do I style the panel?',
+    ])
+    expect(priorQuestions({})).toEqual([])
+    expect(priorQuestions({ prev_questions: ['a', 'b', 'c'] })).toEqual(['a', 'b', 'c'])
+    // Both authored is a lint error. The accessor's job is to be predictable,
+    // not to arbitrate silently which of the two the author meant.
+    expect(priorQuestions({ prev_questions: ['and on React?'], prev_question: 'a' })).toEqual([
+      'and on React?',
+    ])
+    // VERBATIM, blanks included: a blank prior is a lint error and has to reach
+    // `lintRecords` intact to be named there. A presence test rather than a
+    // truthiness one, or this record reads as depth 0 and nothing can name it.
+    expect(priorQuestions({ prev_question: '' })).toEqual([''])
+    expect(chainDepth({ prev_question: '' })).toBe(1)
+    expect(isFollowUp({ prev_question: '' })).toBe(true)
+
+    expect(priorQuestions(null)).toEqual([])
+    expect(chainDepth(null)).toBe(0)
+    expect(isFollowUp(null)).toBe(false)
+  })
+
+  /**
+   * The prefetch has to name its texts BEFORE the cascade runs, and the
+   * cascade's antecedents are not known until it has: turn i's antecedent
+   * depends on how turn i-1 won. Enumerating the one flag `chainAntecedent`
+   * reads is what breaks that circularity — and what is enumerated is the
+   * PANEL's composition, not a second one spelled here.
+   */
+  it('buys what a one-hop record always bought, and one text more for the second hop', () => {
+    const one = { question: 'and on React?', prev_question: 'how do I style the panel?' }
+    // Exactly the three run.js buys today, deduped: with a single prior turn
+    // there is no older question, so both values of the flag return the same
+    // antecedent and the composition coincides with itself.
+    expect(new Set(chainTexts(one))).toEqual(
+      new Set([
+        'how do I style the panel?',
+        'and on React?',
+        'how do I style the panel?\nand on React?',
+      ]),
+    )
+
+    const two = {
+      question: 'and on Docusaurus?',
+      prev_questions: ['how do I style the panel?', 'and on React?'],
+    }
+    const prior = (composed) => [
+      { question: 'how do I style the panel?', composed: false },
+      { question: 'and on React?', composed },
+    ]
+    const texts = chainTexts(two)
+    // BOTH candidates, and each asserted against the functions that produce it
+    // rather than against a string written out a second time in this file — the
+    // day a hand-written join stopped agreeing, a report would have named a
+    // query the panel never sends and nothing would have caught it.
+    expect(chainAntecedent(prior(false)).hops).toBe(1)
+    expect(chainAntecedent(prior(true)).hops).toBe(2)
+    expect(texts).toContain(composeQuery(two.question, chainAntecedent(prior(false)).text))
+    expect(texts).toContain(composeQuery(two.question, chainAntecedent(prior(true)).text))
+    // The depth-1 record above added nothing over the literal; only this one does.
+    expect(new Set(texts).size).toBeGreaterThan(new Set(chainTexts(one)).size)
+  })
+
+  /**
+   * `byLanguage` one axis over. A question asked cold and a question three turns
+   * into a chain are not answered by the same machinery, and depth 0 is most of
+   * any golden set — so the mean holds the headline still while the one
+   * population a chaining change was written for moves underneath it.
+   *
+   * The function is module-local, so this reads it where its consumers do: off
+   * `summarise`, and then through `diffSummaries`, which is what shows the keys
+   * are the ones report.js mints a tracked diff for and reads in the right
+   * direction. A metric it did not know as higher-is-better would print a real
+   * improvement as a regression with nothing on the page to say so.
+   */
+  it('splits the summary by chain depth, and only where there is more than one', async () => {
+    const { summarise } = await import('../src/eval/run.js')
+    const row = (over) => ({
+      id: 'r',
+      expect: 'answer',
+      observed: 'answer',
+      recall8: 1,
+      mrr: 1,
+      answerF1: 0.5,
+      identifierRecall: 1,
+      citationRecall: 1,
+      language: 1,
+      depth: 0,
+      ...over,
+    })
+
+    // One bucket is the headline with an extra heading over it.
+    expect(summarise([row({ id: 'a' }), row({ id: 'b' })]).byDepth).toBe(null)
+
+    const s = summarise([
+      row({ id: 'a', depth: 0 }),
+      row({ id: 'b', depth: 1, recall8: 0.5 }),
+      row({ id: 'c', depth: 1, expect: 'refuse:no-evidence', observed: 'refuse:no-evidence' }),
+    ])
+    expect(Object.keys(s.byDepth)).toEqual(['0', '1'])
+    expect(Object.keys(s.byDepth[1])).toEqual([
+      'positives',
+      'negatives',
+      'recall8',
+      'mrr',
+      'answerF1',
+      'identifierRecall',
+      'citationRecall',
+      'negativesCaughtRate',
+    ])
+    expect(s.byDepth[1]).toMatchObject({ positives: 1, negatives: 1, recall8: 0.5, negativesCaughtRate: 1 })
+
+    const previous = { summary: { byDepth: { 0: { recall8: 1 }, 1: { recall8: 0.25 } } } }
+    expect(diffSummaries(previous, s).filter((d) => d.key.includes('depth='))).toEqual([
+      { key: 'recall8[depth=1]', from: 0.25, to: 0.5, delta: 0.25, better: true },
+    ])
+  })
+})
 
 // ─── merged from tests-tuning-channel.js ───
 /**
@@ -9267,19 +10253,99 @@ describe('eval run.js — --level and the lever fingerprint', () => {
    * byte-identical prompt tokens across a change that should have grown them.
    */
   describe('the priming turn runs under its own gate', () => {
-    it('swaps in prevGate when there is one, and leaves the probe alone otherwise', async () => {
+    it('swaps in the gate of the hop it is priming, and leaves the probe alone otherwise', async () => {
       await withRun({}, async ({ primingProbe }) => {
-        const g = { G: 1, chunks: [{ id: 'second#q' }] }
-        const prevGate = { G: 0.8, chunks: [{ id: 'first#q' }] }
+        const g = { G: 1, chunks: [{ id: 'third#q' }] }
+        // One gate per prior turn, oldest first — engine-spec 023, where the
+        // chain made the single `prevGate` a list.
+        const priorGates = [
+          { G: 0.8, chunks: [{ id: 'first#q' }] },
+          { G: 0.6, chunks: [{ id: 'second#q' }] },
+        ]
 
-        expect(primingProbe({ g, prevGate }).g).toBe(prevGate)
+        expect(primingProbe({ g, priorGates }, 0).g).toBe(priorGates[0])
+        expect(primingProbe({ g, priorGates }, 1).g).toBe(priorGates[1])
         // Everything else about the probe travels unchanged: the retrieval, the
         // scope and the scored-turn fields are the same object's.
-        expect(primingProbe({ g, prevGate, retrievedIds: ['x'] }).retrievedIds).toEqual(['x'])
-        // A record with no previous question never reaches this, and a probe
-        // without a prevGate must not be rewritten on the way past.
+        expect(primingProbe({ g, priorGates, retrievedIds: ['x'] }, 0).retrievedIds).toEqual(['x'])
+        // A hop past the end of the list falls back rather than handing the
+        // harness `undefined` in the middle of a matrix.
+        expect(primingProbe({ g, priorGates }, 2).g).toBe(g)
+        // A record with no chain never reaches this, and a probe carrying no
+        // gates must not be rewritten on the way past.
         const plain = { g }
-        expect(primingProbe(plain)).toBe(plain)
+        expect(primingProbe(plain, 0)).toBe(plain)
+      })
+    })
+  })
+
+  /**
+   * THE PAIR A RE-SEARCH RUNS ON, AND THE ARM THAT REPRODUCES THE OLD ONE.
+   *
+   * `harness.js` resolves a `search_docs` with no query of its own to
+   * `args.query || composedQuery || question`, so the text half chooses the BM25
+   * query while the vector half chooses the cosine one. The two therefore have
+   * to move together or the fusion runs over two different questions — which is
+   * the defect engine-spec 022c is written against, and it is reachable from
+   * both directions. `researchPair` returns them as one object so that state has
+   * no expression, and `DOCPILOT_RESEARCH_VEC=raw` is the A/B arm, on one build.
+   */
+  describe('what a re-search is scored on', () => {
+    const composed = { g: { channel: 'composed' }, vec: 'RAW', composedVec: 'COMPOSED' }
+    const raw = { g: { channel: 'raw' }, vec: 'RAW', composedVec: 'COMPOSED' }
+
+    it('sends the composed pair when that channel won', async () => {
+      await withRun({}, async ({ researchPair }) => {
+        expect(researchPair(composed, 'prev\nq', 'COMPOSED')).toEqual({
+          queryVec: 'COMPOSED',
+          composedQuery: 'prev\nq',
+        })
+      })
+    })
+
+    /**
+     * `resolveChain` builds a composed query for every record that HAS a chain,
+     * whatever channel then wins, so the raw arm has to drop the text as well as
+     * keep the vector. Passing it bare left the harness a composed lexical
+     * default beside a raw cosine.
+     */
+    it('drops the composed text too when the raw channel won', async () => {
+      await withRun({}, async ({ researchPair }) => {
+        expect(researchPair(raw, 'prev\nq', 'COMPOSED')).toEqual({
+          queryVec: 'RAW',
+          composedQuery: null,
+        })
+      })
+    })
+
+    /**
+     * A lexical-only turn settles `composedVec` at `null` by design — `null` is
+     * "score it with no vector", `undefined` is "there is no second query" — so
+     * the truthiness guard is what keeps that mode on its own raw value.
+     */
+    it('falls back to the raw vector when there is no composed one to send', async () => {
+      await withRun({}, async ({ researchPair }) => {
+        expect(researchPair(composed, 'prev\nq', null).queryVec).toBe('RAW')
+        expect(researchPair({ vec: 'RAW' }, null, null)).toEqual({
+          queryVec: 'RAW',
+          composedQuery: null,
+        })
+      })
+    })
+
+    it('reproduces the pre-022c pair, both halves of it, under the measurement switch', async () => {
+      await withRun({ DOCPILOT_RESEARCH_VEC: 'raw' }, async ({ researchPair }) => {
+        expect(researchPair(composed, 'prev\nq', 'COMPOSED')).toEqual({
+          queryVec: 'RAW',
+          composedQuery: null,
+        })
+      })
+    })
+
+    /** Any other value is the shipped behaviour: the arm is opt-in by name. */
+    it('takes only the word it documents', async () => {
+      await withRun({ DOCPILOT_RESEARCH_VEC: '1' }, async ({ researchPair }) => {
+        expect(researchPair(composed, 'prev\nq', 'COMPOSED').queryVec).toBe('COMPOSED')
       })
     })
   })

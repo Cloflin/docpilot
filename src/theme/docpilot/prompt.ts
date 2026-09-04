@@ -444,9 +444,10 @@ export const ADDENDUM_WRAPPER =
  * The quote a reader attached by selecting text in a previous answer.
  *
  * It is NOT the answer coming back as the model's own words — the recent-history
- * pairs below already carry that, truncated to 300 characters, which is exactly
- * why this block exists: a fragment from the middle of a long answer is not in
- * context at all, and "explain this" then has no antecedent to resolve.
+ * pairs below already carry that, condensed to the answer's skeleton, which is
+ * exactly why this block exists: the skeleton keeps what the answer was ABOUT,
+ * so a fragment from the middle of a long one is still not in context verbatim,
+ * and "explain this" then has no antecedent to resolve.
  *
  * The wrapper says three things, and each one is load-bearing: whose text it is,
  * that it is the SUBJECT of the question rather than a new instruction, and that
@@ -496,6 +497,274 @@ export const clampQuote = (s) => clampTo(String(s || '').replace(/\s+/g, ' ').tr
  * mean?" legible one turn later, and no more.
  */
 export const HISTORY_QUOTE_MAX = 160
+
+/**
+ * What a PRIOR turn's ANSWER is worth in the transcript.
+ *
+ * Paid three times on every step of the loop, because the three recent pairs are
+ * re-sent with each one: 360 costs 1080 prompt characters a step against the 900
+ * the old 300-character prefix cost, on the order of forty-five tokens a step.
+ * What the difference buys is the trade — those characters carry the answer's
+ * skeleton, its opening sentence and the leading line of every block after it,
+ * rather than whatever its first paragraph happened to be.
+ */
+export const HISTORY_ANSWER_MAX = 360
+
+/** How much of one skeleton line survives — enough to name what its block is about. */
+const HISTORY_LINE_MAX = 120
+
+/**
+ * The floor a skeleton has to clear to be worth returning: the length of the
+ * prefix it replaced, `(h.answer || '').slice(0, 300)` in buildMessages below.
+ * Under it, the prefix was carrying more of the answer than the shape is.
+ */
+const HISTORY_PREFIX_MIN = 300
+
+/**
+ * EVAL-ONLY. `DOCPILOT_HISTORY_CONDENSE=0` restores the 300-character prefix, so
+ * both arms of the A/B run on one build instead of on two checkouts.
+ *
+ * It is NOT a configuration key: no `docPilot` setting reaches it, types/ does
+ * not name it, and the measurement loop is its only caller.
+ *
+ * READ AT CALL TIME, for the reason `resolveLevers` gives in retriever.js. Every
+ * CLI entry point loads `.env.local` into `process.env` AFTER the module graph is
+ * imported, and `.env.local` is where the docs tell a consumer to put their
+ * `DOCPILOT_*` keys — so a module-scope fold answered from a read taken before
+ * the file was loaded, and the off arm of the A/B silently ran the on arm under
+ * `node dist/eval/run.js` while working under `npx docpilot eval`, where
+ * bin/docpilot.js happens to call `applyFileEnv()` ahead of the entry import.
+ * Through `globalThis.process?.env`, so a browser bundle with no `process` reads
+ * the default rather than throwing — at call time exactly as at import time.
+ */
+const historyCondense = () => globalThis.process?.env?.DOCPILOT_HISTORY_CONDENSE !== '0'
+
+/**
+ * A line that opens or closes a fenced block, and its WHOLE marker run.
+ *
+ * Three characters was the defect. `/^\s*(```|~~~)/` matched either marker and
+ * captured exactly three of it, so a ````markdown opener came back closed by
+ * ``` — which does not close it in CommonMark, and the message ends inside the
+ * fence — and a ``` line inside a ~~~ block ended that block, spilling its code
+ * into the transcript as prose and taking the closer's text with it. Both halves
+ * of the run are load-bearing downstream: a fence closes only on the same
+ * character, at least as long.
+ */
+const FENCE_LINE = /^\s*(`{3,}|~{3,})/
+
+/** CommonMark's close rule. The only place the open/close asymmetry is spelled. */
+const closesFence = (marker, line) => {
+  const m = FENCE_LINE.exec(line)
+  return !!m && m[1][0] === marker[0] && m[1].length >= marker.length
+}
+
+/**
+ * The marker of the fence a finished result ends inside, or null.
+ *
+ * The loop's own state machine, run a second time over its output: a fence line
+ * that does not close the open one is body here exactly as it was on the way in.
+ * Counting marker LINES and closing on odd parity was the first version of this,
+ * and 200k fuzzed answers through it produced not one odd count — closeFence
+ * contributes its markers in pairs, a body that survives holds no line the regex
+ * matches (one that did would have closed the block instead), and the
+ * `skeleton || slice` fallback it also guarded cannot fire while the first
+ * non-blank line has room. Parity was the wrong question besides: ````js closed
+ * by three ``` lines counts even and is still open.
+ */
+function unclosedFence(result) {
+  let open = null
+  for (const line of result.split(/\r?\n/)) {
+    if (open) {
+      if (closesFence(open, line)) open = null
+      continue
+    }
+    const m = FENCE_LINE.exec(line)
+    if (m) open = m[1]
+  }
+  return open
+}
+
+/** A line that begins a block of its own: a list item at any depth, or a heading. */
+const BLOCK_LEAD = /^\s*(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+)/
+
+/**
+ * The opening sentence of a line. The lookahead is what keeps `config.js` whole.
+ *
+ * IT IS FOR A PROSE OPENER, and the caller applies it nowhere else. The job is
+ * to stop a first paragraph from spending the budget on its wrapped remainder
+ * before any block below it is named: one sentence says what the answer is
+ * about, and that is all the opener is asked for. A BLOCK_LEAD is exempt because
+ * a list item or a heading is ALREADY the shortest form of itself — there is no
+ * following prose in it to leave behind — and because on a numbered step the
+ * regex terminates on the marker. Measured against the shipped function, this
+ * 473-code-point answer:
+ *
+ *   1. Open `docs/.vitepress/config.mjs` and add the plugin to themeConfig.
+ *   2. Run `npm run docs:index` to rebuild both indexes.
+ *   3. Run `node scripts/refresh-figures.mjs` and index again.
+ *   … two headed blocks and a closing paragraph …
+ *
+ * condensed to a first line of `1.` — `.*?[.!?…](?=\s|$)` matches at the marker
+ * itself — and the whole first step was gone. The result was 335 code points, so
+ * it cleared HISTORY_PREFIX_MIN and shipped: a regression against the
+ * `slice(0, 300)` this replaced, in exactly the enumerated-steps case
+ * engine-spec 022 names as the motive.
+ */
+const firstSentence = (line) => {
+  const m = /^.*?[.!?…](?=\s|$)/.exec(line)
+  return m ? m[0] : line
+}
+
+/**
+ * One skeleton line, cut at a word boundary when there is one within reach and
+ * hard otherwise — a script that does not space its words still has to be cut
+ * somewhere. By code points, for the reason `clampTo` gives.
+ */
+function clampLine(line, max = HISTORY_LINE_MAX) {
+  const cps = Array.from(line.trimEnd())
+  if (cps.length <= max) return cps.join('')
+  const cut = cps.slice(0, max)
+  let end = cut.length
+  while (end > max / 2 && cut[end - 1] !== ' ') end--
+  // The ellipsis is spent from the budget, not added to it: appending it to a
+  // full-width hard cut returned max + 1 code points, and the ceiling here is
+  // the one the caller's own arithmetic is written against.
+  const kept = end > max / 2 ? cut.slice(0, end - 1) : cut.slice(0, max - 1)
+  return `${kept.join('').trimEnd()}…`
+}
+
+/**
+ * A prior answer, reduced to its shape — engine-spec 022.
+ *
+ * `slice(0, 300)` cut wherever 300 characters landed. Captured from the live
+ * site, one follow-up carried an assistant message that ended inside an
+ * unterminated js fence, part-way through a file path, and everything the answer
+ * went on to say — the numbered steps, the second file, the settings — was past
+ * the cut. "Tell me more about the second point" then arrives with no second
+ * point anywhere in the window, and the reader's only workaround is to select
+ * the passage by hand (ui-specs/007).
+ *
+ * The same budget buys the SKELETON instead of the prefix: the opening sentence,
+ * then the leading line of every block after it — list item, heading, paragraph
+ * — each clamped at a word boundary, in document order, while the budget holds.
+ * A block that does not fit is skipped rather than ending the scan, because one
+ * long paragraph in the middle would otherwise cost every block below it.
+ *
+ * A SHORT ANSWER IS RETURNED UNCHANGED, byte for byte, fences and all. That is
+ * the common case, and it is why this does not go through `clampTo`: NFKC
+ * normalisation and the format-character strip are right for reader-supplied
+ * text on its way to an endpoint and wrong here, where the short path returns
+ * the model's own bytes and the long path must not disagree with it about what
+ * they are.
+ *
+ * Line-based and dependency-free on purpose. markdown.js's `toPlainText` is the
+ * obvious reuse and the wrong one twice over: it flattens fences and drops list
+ * structure, which is exactly what is being preserved here, and importing it
+ * would pull markdown-it into a module the eval harness loads to build prompts.
+ *
+ * FENCES ARE BALANCED BY CONSTRUCTION AND THEN VERIFIED. A fenced block is kept
+ * whole or replaced by a stub that keeps its language tag, never truncated, and
+ * the result is then walked by `unclosedFence` under the same open/close rule
+ * the loop ran under; an opener nothing closed gets its OWN marker run appended,
+ * after the budget rather than inside it, because a transcript that opens a
+ * fence it never closes is what the captured defect looked like from the model's
+ * side and three characters of overrun is not a price worth haggling over.
+ *
+ * A SKELETON SHORTER THAN THE PREFIX IT REPLACED IS DISCARDED FOR THAT PREFIX.
+ * The skeleton is the better 360 characters only when there are blocks to name,
+ * and a single block is precisely the case where there are none: `midBlock`
+ * suppresses every continuation line, so a one-paragraph answer contributes one
+ * clamped line however long it runs — 120 code points, `clampLine`'s ceiling,
+ * whatever the input length.
+ *
+ * THE SKELETON AND THE RETURN VALUE ARE TWO NUMBERS. Re-measured against the
+ * shipped function: the 396-code-point paragraph the test uses, `'a'.repeat(1200)`
+ * and `'x'.repeat(361)` all SKELETONISE to 120 code points, the floor fires on
+ * all three, and all three RETURN 360 — `max` code points of the prefix, against
+ * the 300 the `slice(0, 300)` this replaced returned. That gap is what falsifies,
+ * for this shape, the cost argument HISTORY_ANSWER_MAX makes on the function's
+ * behalf: the extra characters buy prefix here, not shape. The triple this block
+ * used to name — 26 / 121 / 121, for a 563-code-point paragraph that is not the
+ * one the test uses — was skeletons reported as return values, and read off a
+ * `clampLine` that still APPENDED the ellipsis rather than spending it from the
+ * budget, which is where 120 + 1 came from. The fallback goes through the same
+ * balancing, since a prefix can cut mid-fence in a way the loop never can.
+ *
+ * THE CALLER is what keeps an empty assistant message out of the transcript, not
+ * this function: buildMessages below filters history to answers with text before
+ * it slices `recent`, so `condenseAnswer('')` is not reachable from it. The trap
+ * that filter documents is measured — two empty assistant messages ahead of an
+ * answerable question turned it into a refusal — and an empty argument here
+ * still returns an empty string.
+ */
+export function condenseAnswer(text, max = HISTORY_ANSWER_MAX) {
+  const s = String(text || '')
+  if (Array.from(s).length <= max) return s
+
+  const out = []
+  let used = 0
+  const room = (piece) => used + (out.length ? 1 : 0) + Array.from(piece).length <= max
+  const keep = (piece) => {
+    used += (out.length ? 1 : 0) + Array.from(piece).length
+    out.push(piece)
+  }
+
+  let fence = null
+  let midBlock = false
+  let opened = false
+
+  // Whole when it fits, otherwise a stub carrying the language tag: the model is
+  // told a block was here and in what language. Both forms close with
+  // `fence.marker`, the opener's run verbatim — a stub that closed a ```` block
+  // with ``` would reintroduce the defect it exists to avoid.
+  const closeFence = () => {
+    const whole = [fence.open, ...fence.body, fence.marker].join('\n')
+    const stub = [fence.open, '…', fence.marker].join('\n')
+    if (room(whole)) keep(whole)
+    else if (room(stub)) keep(stub)
+    fence = null
+  }
+
+  // Split on \r?\n, not on \n: `clampLine` and `fence.open` trim their own
+  // trailing \r, `fence.body` lines do not, and a kept block from a CRLF answer
+  // came back with line endings the rest of the result does not use.
+  for (const line of s.split(/\r?\n/)) {
+    if (fence) {
+      if (closesFence(fence.marker, line)) closeFence()
+      else fence.body.push(line)
+      continue
+    }
+    const f = FENCE_LINE.exec(line)
+    if (f) {
+      fence = { open: line.trimEnd(), marker: f[1], body: [] }
+      midBlock = false
+      continue
+    }
+    // A blank line ends a block, and a list item or a heading opens one without
+    // needing a blank line in front of it. That pair is what keeps every item of
+    // a tight list while dropping a paragraph's wrapped continuation lines.
+    if (!line.trim()) {
+      midBlock = false
+      continue
+    }
+    if (midBlock && !BLOCK_LEAD.test(line)) continue
+    const piece = clampLine(opened || BLOCK_LEAD.test(line) ? line : firstSentence(line))
+    opened = true
+    midBlock = true
+    if (room(piece)) keep(piece)
+  }
+  // An answer whose last fence was never closed is malformed, not a reason to
+  // emit half of one.
+  if (fence) closeFence()
+
+  const skeleton = out.join('\n')
+  const result =
+    Array.from(skeleton).length >= HISTORY_PREFIX_MIN
+      ? skeleton
+      : Array.from(s).slice(0, max).join('')
+  const open = unclosedFence(result)
+  return open ? `${result}\n${open}` : result
+}
 
 /** Block 7. Absent entirely when the scope is all docs, so the default prompt is unchanged. */
 export function scopeDoc(scope, promptListLimit = 12) {
@@ -636,15 +905,23 @@ export function buildMessages({
     })
   }
   // A quoted question is unreadable without its passage — the same defect the
-  // 300-character answer truncation causes, one turn earlier. It rides inside
-  // the question message, clamped harder than the live quote is.
+  // answer condensation leaves behind, one turn earlier: a skeleton names the
+  // blocks, it does not carry their wording. It rides inside the question
+  // message, clamped harder than the live quote is.
   for (const h of recent) {
     const passage = clampTo(h.quote || '', HISTORY_QUOTE_MAX)
     messages.push({
       role: 'user',
       content: passage ? `${QUOTE_WRAPPER}${passage}\n\n${h.question}` : h.question,
     })
-    messages.push({ role: 'assistant', content: (h.answer || '').slice(0, 300) })
+    messages.push({
+      role: 'assistant',
+      // The off arm is the CONTROL and has to be the shipped prefix byte for
+      // byte, so it stays a code-UNIT `slice` — `condenseAnswer` counts code
+      // points, and an A/B whose control drifted from what shipped measures two
+      // changes at once. Only the number is named.
+      content: historyCondense() ? condenseAnswer(h.answer || '') : (h.answer || '').slice(0, HISTORY_PREFIX_MIN),
+    })
   }
 
   const instruction = clampAddendum(addendum)

@@ -357,9 +357,13 @@ Two rules the modes enforce rather than request:
   `gold_answer`, `identifiers` and `gold_chunks` in the task file. An answerer
   that can see the gold rewrites it, and every metric downstream then measures
   the copy.
-- **A follow-up needs two passes.** Pass 1 emits its previous question as
-  `<id>#prev`; pass 2 takes `--history=<those answers>` and emits the real record.
-  Without it the prompt is missing the turn that makes it a follow-up.
+- **A chain takes one pass per prior question, plus one.** Pass k emits each
+  record's k-th prior question as `<id>#prev<k>`; the next pass takes
+  `--history=<one file holding every answer so far>` and advances every record by
+  a turn, until the pass that emits the record itself. A record with N priors
+  needs N + 1 passes and N + 1 answering runs, and how far it has got is read off
+  the answers rather than off the flag. Without the history the prompt is missing
+  the turns that make it a follow-up.
 
 The judge is **advisory and never gates** — see the binding rules below.
 
@@ -1040,6 +1044,60 @@ metric in any report.
   refusal is still the gate's decision about THIS turn. An inherited chunk enters
   `emittedIds` — visible but uncitable is worse than absent, because an answer
   resting on it is withdrawn for having no citations.
+- **A RESTORED turn's inherited ids are derived, not persisted.** `rehydrate`
+  (session.js) rebuilds `citationIds` from the stored `sources[].id`, placed after
+  the `...rest` spread so a stored field can never shadow it; nothing writes the
+  live list to the archive, and the archive holds one copy rather than two. The
+  door is unchanged — the derived ids resolve through `retrieval.fetch` and never
+  enter the gate — but the LIST is not identical, in both directions.
+  `seedFromHistory` slices `SEED_FROM_HISTORY` off the citations BEFORE its own
+  `seen` set runs, so an answer that cited one section twice seeds one more
+  section on restore than it did live; and the stored rows are deduped by `href`,
+  so two chunks of one imported page come back as one id and seed one fewer. Both
+  ways stay under the same ceiling — `SEED_FROM_HISTORY` caps what reaches the
+  model whichever way the count went — which is what makes a second stored list
+  not worth the bytes.
+- **A model-issued search scores the channel the gate WON on, and the text
+  travels with the vector.** `fillResults` (session.js) has always swapped `query`
+  and `queryVec` as a pair; the `runTurn` call now hands the harness the same pair
+  — `queryVec` is `composedVec` and `composedQuery` is the string it was embedded
+  from, whenever `gate.channel` is `composed` — and `search_docs` falls back to
+  `args.query || composedQuery || question`. Passing the vector alone is the
+  defect this closes: BM25 over the raw tail fused with cosine over the composed
+  text, one RRF merging two different queries, on exactly the follow-up the
+  composed channel exists to rescue. A change that moves one half without the
+  other reopens it.
+- **The composed antecedent has one spelling and at most two hops.**
+  `chainAntecedent` (gate.js) decides how far back — the previous answered
+  question, and the one before it only where that turn ITSELF won on `channel:
+  'composed'` with `antecedent: 'question'` — and `composeQuery` still writes the
+  composition, there and nowhere else. `gate.channel` gains no value for it: the
+  composed arm stays one arm, so `tau` still means what `calibrate` measured and
+  `feedback/stratum.js` still routes. Over `ANTECEDENT_MAX_CHARS` the older hop is
+  dropped WHOLE and the turn falls back to the single hop that shipped; a question
+  cut at the ceiling is a query nobody asked, and its severed terms would still
+  enter `Q`.
+- **A prior answer reaches the model condensed, never simply cut.**
+  `condenseAnswer` (prompt.js) keeps the opening sentence and then the leading
+  line of every block below it, inside `HISTORY_ANSWER_MAX`, and what it returns
+  is balanced by construction and then verified: a fenced block is kept whole or
+  replaced by a stub carrying its language tag, an opener nothing closed gets its
+  own marker run appended, and a skeleton shorter than the prefix it replaced
+  falls back to that prefix — so never an unbalanced fence, and never empty for a
+  non-empty answer. It carries the SHAPE of the previous answer and none of its
+  evidence, so it opens no self-authored memory channel: what a follow-up may cite
+  is still `emittedIds`, filled from this turn's own retrieval and the inherited
+  chunks above.
+- **The eval walks a conversation in ONE place.** `src/eval/conversation.ts`:
+  `resolveChain` asks every prior question, gates it, reads that turn's own
+  channel and returns the antecedent the shipped turn would have inherited, while
+  `chainTexts` enumerates the texts such a walk can need so one prefetch buys
+  them. `run.js`, `calibrate.js`, `tune.js` and `answer-bench.js` go through it,
+  and all five runners read the record's shape through `src/eval/record.ts`. No
+  runner may re-derive an antecedent from a position in the array or re-spell the
+  composition as `${prev}\n${question}` — five private copies of that walk is five
+  places for a report to name a query the panel never sends, and nothing asserts
+  they agree.
 - **`gate.channel` never gains a value for this path.** `feedback/stratum.js`
   routes on it, and an unfamiliar value enters the calibration proposal as a
   stratum nobody measured. The marker is `turn.opener`.
@@ -1235,7 +1293,8 @@ metric in any report.
   **And weigh it against what the embedder actually costs, which is almost
   nothing.** Corpus embedding is a BUILD cost paid once. The only runtime cost is
   one query embedding request per turn — a follow-up scores two queries, itself
-  and itself glued to its antecedent, and both texts ride that one request:
+  and itself glued to its antecedent, which is one prior question or two where
+  that turn was itself an ellipsis, and both texts ride that one request:
   measured against `text-embedding-3-small`,
   **212 ms mean** (156–359 ms over four queries, the high one being connection
   setup) for a payload of about ten tokens — on the order of a dollar a year at

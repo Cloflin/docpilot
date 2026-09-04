@@ -181,7 +181,7 @@ export const COMMANDS = {
       { name: 'config', kind: 'value', example: 'base', help: 'names the configuration and the default output file' },
       { name: 'level', kind: 'value', example: 'low', help: 'which pool to emit; default `ultra`' },
       { name: 'out', kind: 'value', example: 'docpilot/bench/base.tasks.jsonl', help: 'where to write' },
-      { name: 'history', kind: 'value', example: 'docpilot/bench/base.answers.jsonl', help: 'answers from an earlier pass, so a follow-up can carry the turn it follows' },
+      { name: 'history', kind: 'value', example: 'docpilot/bench/base.answers.jsonl', help: 'ONE file holding EVERY earlier pass\'s answers — append to it between passes; a chain of depth D takes D+1 of them' },
       { name: 'tasks', kind: 'list', example: 'a.tasks.jsonl,b.tasks.jsonl', help: 'one file for `shard`; two for `runs` and `judge-emit`' },
       { name: 'answers', kind: 'list', example: 'a.answers.jsonl,b.answers.jsonl', help: 'the answering runs, one per task file and in the same order' },
       { name: 'shards', kind: 'int', min: 1, example: '10', help: 'how many files to split into; capped at the task count' },

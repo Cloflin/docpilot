@@ -38,6 +38,8 @@ import { embedQuery } from '../theme/docpilot/embed.js'
 import { prefetchEmbeddings, BATCH } from './prefetch.js'
 import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { wilsonUpper95 } from './metrics.js'
+import { chainDepth, isFollowUp, priorQuestions } from './record.js'
+import { chainTexts, resolveChain } from './conversation.js'
 import { nodeEmbedTarget } from '../config.js'
 import { applyFileEnv } from '../cli-env.js'
 import { entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
@@ -462,6 +464,50 @@ function levers(manifest) {
 const RAW_SCHEMA = 3 // 3: `admissible` abstains on a foreign tail; 2: per-channel z/L for the window sweep
 
 /**
+ * The prior conversation, in the shape this key has hashed it since it existed.
+ *
+ * `rec.prev_question || null` WAS the whole chain, and a probe carrying
+ * `prev_questions` therefore hashed as though it had no prior turn at all:
+ * measured, it collides with the depth-0 probe of the same question, and the
+ * cache hands back a row measured under a different composition with nothing on
+ * disk able to tell the two apart. That is the defect the docblock below
+ * describes for the embed model, one field over: a key that stays still exactly
+ * where the measurement moved.
+ *
+ * SHAPE-PRESERVING BELOW DEPTH 2, and that is not a deferred RAW_SCHEMA bump.
+ * A depth-1 record's antecedent under the cascade is the same single question
+ * `rec.prev_question` always was: `chainAntecedent` has no `older` to chain with
+ * one prior turn, so both values of its flag return `last.question`, and
+ * `composeQuery` then builds the very `${prev}\n${question}` the hand-written
+ * join built here. Every field of the row is byte-identical, so the cached row
+ * is still a correct row and there is nothing to invalidate — where a bump would
+ * discard every line of `calibration.raw.jsonl` and buy an identical file back
+ * one metered batch at a time. Depth >= 2 is a measurement no cache line can
+ * have been written under, no probe set could express before now, and it alone
+ * takes the array.
+ *
+ * VERIFIED, AND THE FIGURE NAMES THE SET IT WAS TAKEN ON — spec 011's rule at
+ * the scale of one sentence. Over the 597-probe `calibration.jsonl` this was
+ * written against: all 597 keys unchanged. Over the 639-probe set the tree
+ * holds now — the same 507 first turns and 90 depth-1 probes, plus 42 at depth
+ * 2 — those 597 keys are unchanged again and the 42 are the only ones that
+ * move, which is this docblock's claim rather than an exception to it: they are
+ * precisely the records `calibration.raw.jsonl` has no line for, and it still
+ * holds exactly those 597. A bare "all 597 keys" is a claim about whatever the
+ * file holds next, and the file is being authored.
+ *
+ * The one string that moves is a blank prior, which `||` read as no chain and
+ * `priorQuestions` reads as a chain of one. `record.js` keeps that record intact
+ * on purpose so `lintRecords` can name it; no probe in the set carries one, so
+ * no row on disk was written under either reading.
+ */
+const chainKey = (rec) => {
+  const chain = priorQuestions(rec)
+  if (!chain.length) return null
+  return chain.length === 1 ? chain[0] : chain
+}
+
+/**
  * The cache key for one probe's raw measurement.
  *
  * `indexHash` alone is not the identity of the vector space. It is computed from
@@ -482,7 +528,7 @@ const sigOf = (rec, indexHash, lev, embedIdentity) =>
         indexHash,
         embedIdentity,
         rec.question,
-        rec.prev_question || null,
+        chainKey(rec),
         rec.scope || null,
         rec.stratum,
         lev,
@@ -525,10 +571,11 @@ const PREFETCHED = new Map<string, Float64Array>()
 /**
  * What this run COST, counted where it is spent.
  *
- * The number was already computed and already printed — "embedded 597 probe
- * texts in 19 request(s)" — and then thrown away. It is the one figure that
- * says what a rerun will cost against a fifty-a-day free tier, and the document
- * that records every threshold this run measured did not record it.
+ * The number was already computed and already printed — "embedded 936 probe
+ * texts in 30 request(s), 32 at a time" for a full re-embed of the 639-probe
+ * set in this tree — and then thrown away. It is the one figure that says what
+ * a rerun will cost against a fifty-a-day free tier, and the document that
+ * records every threshold this run measured did not record it.
  *
  * Counted per ATTEMPT rather than per batch: a retried 429 is a request the
  * provider counted, and a number that pretended otherwise would be the wrong
@@ -647,18 +694,38 @@ async function probeOne({ rec, index, guard, ladderPages }) {
   if (index.manifest.vectors === null) return probeLexicalOnly({ rec, retrieval, scope })
 
   const vec = await embed(rec.question, index)
-  const composedText = rec.prev_question ? `${rec.prev_question}\n${rec.question}` : null
+
+  /**
+   * THE PRIOR TURNS, ASKED — and the composition imported rather than written.
+   *
+   * `rec.prev_question ? ${rec.prev_question}\n${rec.question} : null` stood
+   * here, one of the three sites in this file and of the five in `src/eval` that
+   * agreed with `composeQuery` by inspection and by nothing else. Its second
+   * defect is the one that would have published a number: a probe carrying
+   * `prev_questions` has no `prev_question` at all, so the composed channel
+   * vanished and the record scored as a first turn — the chain strata measured
+   * as though nobody had authored them, under a `tau` that says they were.
+   *
+   * The requests are enumerated by `chainTexts` and bought in batches by the
+   * loop at the bottom of this file, so a cascade costs the free tier the
+   * priming turns' vectors and nothing per-probe.
+   */
+  const { antecedent, composedQuery: composedText } = await resolveChain({
+    rec,
+    retrieval,
+    embed: (t) => embed(t, index),
+  })
   const composedVec = composedText ? await embed(composedText, index) : undefined
 
   const hybrid = retrieval.evaluate({
     question: rec.question,
-    previousQuestion: rec.prev_question,
+    previousQuestion: antecedent,
     queryVec: vec,
     composedVec,
   })
   // The two channels, separately, through the public contract: a raw-channel
   // evaluate on the composed TEXT is exactly what the composed channel computes.
-  const rawOnly = rec.prev_question
+  const rawOnly = composedText
     ? retrieval.evaluate({ question: rec.question, queryVec: vec })
     : hybrid
   const composedOnly = composedText
@@ -670,7 +737,7 @@ async function probeOne({ rec, index, guard, ladderPages }) {
   // fusion behaves differently when there is no vector to fuse.
   const lexical = retrieval.evaluate({
     question: rec.question,
-    previousQuestion: rec.prev_question,
+    previousQuestion: antecedent,
     queryVec: null,
     composedVec: composedText ? null : undefined,
     mode: 'lexical-only',
@@ -693,7 +760,7 @@ async function probeOne({ rec, index, guard, ladderPages }) {
   // `zscore` mode regardless of what the index ships, because the ladder IS the
   // z statistic; on a cosine-mode index it is inert until an embed-model swap.
   const ladder = []
-  if (rec.stratum === 'U' && !rec.prev_question) {
+  if (rec.stratum === 'U' && !isFollowUp(rec)) {
     const zGuard = { ...guard, denseMode: 'zscore' }
     const start = Math.floor(rng(hashSeed(rec.id))() * ladderPages.length)
     for (const target of LADDER_N) {
@@ -712,7 +779,14 @@ async function probeOne({ rec, index, guard, ladderPages }) {
     id: rec.id,
     stratum: rec.stratum,
     scoped: scope.kind !== 'all',
-    followUp: Boolean(rec.prev_question),
+    followUp: isFollowUp(rec),
+    // Beside the boolean, not instead of it. `followUp` is what the strata are
+    // named for and what every earlier row on disk carries; `depth` is the
+    // three-way split — first turn, the single hop that shipped, a chain that
+    // can reach the second antecedent — that a boolean cannot express. Neither
+    // is READ by the sweep, which is why a cached row predating this field is
+    // still a whole row and why RAW_SCHEMA does not move for it.
+    depth: chainDepth(rec),
     russian: CYRILLIC.test(rec.question),
     G: hybrid.G,
     G_raw: rawOnly.G,
@@ -763,10 +837,20 @@ async function probeOne({ rec, index, guard, ladderPages }) {
  * vectorless index can never be in.
  */
 async function probeLexicalOnly({ rec, retrieval, scope }) {
-  const composedText = rec.prev_question ? `${rec.prev_question}\n${rec.question}` : null
+  // The same cascade, and the same reason it is imported rather than rewritten:
+  // the second hand-written `${prev}\n${question}` in this file stood here, and
+  // a vectorless index is exactly where a private copy would rot unnoticed —
+  // nothing on the hybrid path exercises this branch. `lexical` buys no vector
+  // at all, so `embed` is unreachable and is passed as the assertion of that.
+  const { antecedent, composedQuery: composedText } = await resolveChain({
+    rec,
+    retrieval,
+    embed: () => die('lexical-only calibration asked for a vector — RAG-SPEC 5.6 step 7'),
+    lexical: true,
+  })
   const lexical = retrieval.evaluate({
     question: rec.question,
-    previousQuestion: rec.prev_question,
+    previousQuestion: antecedent,
     queryVec: null,
     // undefined means "no second query to score", null means "score it
     // lexically" — the same distinction the hybrid path keeps, for the same
@@ -790,7 +874,8 @@ async function probeLexicalOnly({ rec, retrieval, scope }) {
     id: rec.id,
     stratum: rec.stratum,
     scoped: scope.kind !== 'all',
-    followUp: Boolean(rec.prev_question),
+    followUp: isFollowUp(rec),
+    depth: chainDepth(rec),
     russian: CYRILLIC.test(rec.question),
     G: null,
     G_raw: null,
@@ -1030,10 +1115,10 @@ function fitWindowAtTau(scored, guard, tau, sourceRate) {
     // `feasible` is `sweepRow`'s own predicate — every bounded positive stratum
     // inside its UB95 ceiling — and it is what `chooseTau` applies before
     // `gatePrecision` is ever consulted. Reusing it here is what stops the
-    // pinned fit degenerating: measured on this corpus's 597 rows, the
-    // unfiltered argmax is [0.44, 0.84] at gatePrecision 100% and 77.5%
-    // over-refusal on U. With this line, one window of the grid survives and it is
-    // the one the joint search chose.
+    // pinned fit degenerating: measured on the 597 rows this corpus's
+    // `calibration.raw.jsonl` then held, the unfiltered argmax is [0.44, 0.84]
+    // at gatePrecision 100% and 77.5% over-refusal on U. With this line, one
+    // window of the grid survives and it is the one the joint search chose.
     if (!row.feasible) continue
     if (row.blatantRefusalRate === null || row.blatantRefusalRate < 0.8) continue
     // Second, tighter: never worse than the source measured. At the anchor
@@ -1243,15 +1328,33 @@ async function main() {
    * Cache hits are left out because they cost nothing; `--sweep-only` is left
    * out because it embeds nothing at all and dies on its first miss instead; and
    * a `--no-embed` index is left out because it has no dense channel to measure.
-   * The composed follow-up text is built here by the same expression
-   * `probeOne` uses, so the two ask for the same string or the map simply misses.
+   * The list is `chainTexts` rather than a second spelling of what `probeOne`
+   * asks for, so the two cannot ask for different strings — the map does not
+   * error on a miss, it just falls through to one request per text against a
+   * tier that meters requests.
+   *
+   * IT IS LONGER THAN THE PAIR THIS LOOP USED TO PUSH, by the priming turns'
+   * own questions. That is not slack in the enumeration: `resolveChain` runs
+   * every prior question as a real turn, so its vector is bought either here in
+   * a batch of 32 or one at a time inside `probeOne`. Measured on the 639-probe
+   * `calibration.jsonl` in this tree — 132 follow-ups, 90 of them at depth 1
+   * and 42 at depth 2 — the distinct texts of a full re-embed go 726 → 936 and
+   * the requests 23 → 30: of the 145 distinct priming questions, 127 are
+   * strings the pair never bought, and `prefetchEmbeddings` Sets away the other
+   * 18 along with the duplicate composition `chainTexts` emits at depth 1.
+   *
+   * THE SAME MEASUREMENT ONE AUTHORING PASS EARLIER, kept because the figure
+   * moves with the set and is worth nothing unless it says which set: on the
+   * 597-probe set — 90 follow-ups, every one at depth 1 — the same enumeration
+   * went 642 → 694 and 21 → 22, with 52 of the 90 priming questions new. A
+   * cached run is untouched under either: `sigOf` does not move for a depth-0
+   * or depth-1 record, and a depth-2 probe has no cache line to miss.
    */
   if (!SWEEP_ONLY && index.manifest.vectors !== null) {
     const pending = []
     for (const rec of probes) {
       if (cache.has(sigOf(rec, hash, lev, embedIdentity))) continue
-      pending.push(rec.question)
-      if (rec.prev_question) pending.push(`${rec.prev_question}\n${rec.question}`)
+      pending.push(...chainTexts(rec))
     }
     if (pending.length) await prefetch(pending, index)
   }
@@ -1673,8 +1776,11 @@ function report(ctx) {
     withGold
       ? `${misses.length}/${withGold}  ${pct(retrievalMissRate)}  (bound 5%)`
       : // `0/0  0%  (bound 5%)` read exactly like a bound that had passed. It is
-        // measured over probes carrying `gold_page`, and this repository's 597
-        // carry none.
+        // measured over probes carrying `gold_page`, and not one of the 597
+        // probes this branch was written against carried the key. The 639-probe
+        // set in the tree carries it on 31, all of them stratum F, so this is no
+        // longer the branch this repository takes — it is the one a set authored
+        // without gold pages takes, and it has to keep saying so.
         'bound not armed: no probe carries `gold_page`',
   )
 
@@ -1850,11 +1956,17 @@ function buildDoc(ctx) {
      * `armed` — whether this bound was measured on anything at all.
      *
      * `retrievalMiss` is null on a probe with no `gold_page`, and NOT ONE of the
-     * 597 probes in this repository's `calibration.jsonl` carries that key. So
-     * `withGold` is 0, the rate is 0, the 5 % floor cannot fire, and the report
-     * printed `0/0  0%  (bound 5%)` — which reads exactly like a bound that
-     * passed. Marking the set empty says the difference out loud; annotating the
-     * 597 probes is the author's debt, not this file's.
+     * 597 probes `calibration.jsonl` held when this was written carried that
+     * key. So `withGold` was 0, the rate 0, the 5 % floor could not fire, and
+     * the report printed `0/0  0%  (bound 5%)` — which reads exactly like a
+     * bound that passed. Marking the set empty says the difference out loud.
+     *
+     * The debt named there was the author's and it is being paid on the set,
+     * not here: 31 of the 639 probes in the tree now carry `gold_page`, every
+     * one of them stratum F. So the bound arms on 31 and `armed` is what tells
+     * a reader which of the two numbers `rate` is — a measurement, or an empty
+     * set's zero. Both figures name their set size for the same reason the
+     * field exists.
      */
     retrievalMisses: {
       rate: retrievalMissRate,

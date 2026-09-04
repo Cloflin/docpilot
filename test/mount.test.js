@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { mountDocPilot } from '../src/mount.js'
 import { hostConfig, hostEnv, __resetHostForTests } from '../src/theme/docpilot/host.js'
@@ -632,6 +632,112 @@ describe('the composer — ui-specs/012', () => {
     await type(field(), 'a question nobody wants kept')
     window.dispatchEvent(new Event('pagehide'))
     expect(sessionStorage.getItem('docpilot:draft')).toBe(null)
+  })
+
+  /**
+   * ── the composer while a turn is running — ui-specs/014 ────────────────────
+   *
+   * THE DEFECT. Enter reached `send()`, which opens `if (s.busy) return
+   * session.stop()` — so the send key was also the stop key, and a reader who
+   * typed the next question while the current answer streamed threw that answer
+   * away with the keystroke they meant to queue.
+   *
+   * The turn is pushed by hand for the reason the archive suite below pushes
+   * one: this file makes no requests, so `busy` cannot be reached by asking
+   * anything. Every field here is one the thread template reads.
+   */
+  const running = () => {
+    session.state.busy = true
+    session.state.turns.push({
+      id: 'busy-1',
+      question: 'how do I authenticate?',
+      answerText: 'the first half of an answer',
+      state: 'streaming',
+      startedAt: 0,
+      sources: [],
+    })
+  }
+
+  afterEach(() => {
+    session.state.busy = false
+    session.state.turns.length = 0
+  })
+
+  /**
+   * `defaultPrevented` cannot answer this one. It is true either way — the guard
+   * sits AFTER `preventDefault()`, deliberately, because that ordering is what
+   * keeps the dead key from leaving a newline in a draft the reader is still
+   * writing. So the spy is the assertion, and the untouched field is the other
+   * half of the spec: nothing was sent, nothing was stopped, nothing was typed
+   * for the reader.
+   */
+  it('does nothing at all on Enter while a turn is running', async () => {
+    await openPanel()
+    await type(field(), 'and what about refresh tokens?')
+    const stop = vi.spyOn(session, 'stop')
+    running()
+    await nextTick()
+    const before = session.state.turns.length
+    expect(enter(field(), false).defaultPrevented).toBe(true)
+    await nextTick()
+    expect(session.state.turns.length).toBe(before)
+    expect(stop).not.toHaveBeenCalled()
+    expect(field().value).toBe('and what about refresh tokens?')
+    stop.mockRestore()
+  })
+
+  /**
+   * The other half of 014, and the half with no keystroke in it: the field is
+   * not `readonly` on `busy`. One turn at a time is `session.submit`'s
+   * invariant — it returns on `state.busy` before it does anything — and a
+   * composer that locks itself is a second copy of that rule which only ever
+   * costs the reader the sentence they were composing.
+   *
+   * The attribute is checked AND the sentence is: `readonly` does not stop a
+   * programmatic `value` in happy-dom, so the attribute alone would still pass
+   * against a field nothing could be typed into. The draft is the model-level
+   * proof — `keepDraft` writes `input.value`, not what is in the node.
+   */
+  it('is still writable while a turn is running', async () => {
+    await openPanel()
+    running()
+    await nextTick()
+    expect(field().hasAttribute('readonly')).toBe(false)
+    await type(field(), 'and what about refresh tokens?')
+    window.dispatchEvent(new Event('pagehide'))
+    expect(sessionStorage.getItem('docpilot:draft')).toContain('refresh tokens')
+  })
+
+  /** Inert for the length of the turn, and no longer — the guard reads `busy` live. */
+  it('takes Enter again the moment the turn settles', async () => {
+    await openPanel()
+    running()
+    await nextTick()
+    await type(field(), 'and what about refresh tokens?')
+    enter(field(), false)
+    await nextTick()
+    expect(field().value).toBe('and what about refresh tokens?')
+
+    session.state.busy = false
+    await nextTick()
+    enter(field(), false)
+    await nextTick()
+    // `send()` empties the composer, which is the one thing the busy Enter did not.
+    expect(field().value).toBe('')
+  })
+
+  /**
+   * The affordance that DOES end a turn, untouched — and it is now the only one.
+   * `aria-disabled` is the load-bearing half: the composer is empty here, so
+   * `canSend` is false and the button is live purely because a turn is running.
+   */
+  it('still resolves the send button to Stop while a turn is running', async () => {
+    await openPanel()
+    running()
+    await nextTick()
+    const btn = document.querySelector('.docpilot__send')
+    expect(btn.getAttribute('aria-label')).toBe('Stop generating')
+    expect(btn.getAttribute('aria-disabled')).toBe('false')
   })
 })
 

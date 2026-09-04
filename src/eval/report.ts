@@ -164,6 +164,32 @@ function languageKeys(summary) {
   return keys
 }
 
+/**
+ * The per-depth keys, spelled `mrr[depth=2]`, appended to the tracked list.
+ *
+ * `languageKeys` one axis over, and for the same reason. A question asked cold
+ * and a question three turns into a chain are answered by different machinery:
+ * the elliptical one is scored on a composition, and which antecedent went into
+ * it is decided by `chainAntecedent` (src/theme/docpilot/gate.js). A change to
+ * that rule moves the deep buckets and leaves depth 0 exactly where it was — a
+ * shape the headline mean is built to hide, and which nothing else in this
+ * report would name.
+ *
+ * Derived from the run being written, like the language keys: how deep a golden
+ * set's chains run is the author's business, not this module's.
+ */
+function depthKeys(summary) {
+  const depths = Object.keys(summary?.byDepth || {})
+  const keys = []
+  for (const depth of depths) {
+    for (const metric of Object.keys(summary.byDepth[depth] || {})) {
+      if (metric === 'positives' || metric === 'negatives') continue
+      keys.push({ key: `${metric}[depth=${depth}]`, metric, depth })
+    }
+  }
+  return keys
+}
+
 export function diffSummaries(prev, next) {
   const out = []
   for (const key of TRACKED) {
@@ -181,6 +207,19 @@ export function diffSummaries(prev, next) {
   for (const { key, metric, lang } of languageKeys(next)) {
     const a = prev?.summary?.byLanguage?.[lang]?.[metric]
     const b = next.byLanguage[lang][metric]
+    if (typeof a !== 'number' || typeof b !== 'number') continue
+    const delta = b - a
+    if (!delta) continue
+    const better = HIGHER_IS_BETTER.has(metric) ? delta > 0 : delta < 0
+    out.push({ key, from: a, to: b, delta, better })
+  }
+  // The same rule one axis over: a depth only one of the two runs scored is two
+  // different populations. It is also what makes a report written before
+  // `byDepth` existed pair silently — no bucket on the previous side, no delta,
+  // and no marker announcing a change nobody made.
+  for (const { key, metric, depth } of depthKeys(next)) {
+    const a = prev?.summary?.byDepth?.[depth]?.[metric]
+    const b = next.byDepth[depth][metric]
     if (typeof a !== 'number' || typeof b !== 'number') continue
     const delta = b - a
     if (!delta) continue
@@ -278,6 +317,25 @@ function markdown({ meta, summary, diff, incomparable, rows }) {
       const b = summary.byLanguage[lang]
       L.push(
         `| ${lang} | ${b.positives} | ${b.negatives} | ${fmt(b.recall8)} | ${fmt(b.mrr)} | ` +
+          `${fmt(b.answerF1)} | ${fmt(b.identifierRecall)} | ${fmt(b.negativesCaughtRate)} |`,
+      )
+    }
+    L.push('')
+  }
+
+  if (summary.byDepth) {
+    const depths = Object.keys(summary.byDepth)
+    L.push('## By chain depth')
+    L.push('')
+    L.push('> A question asked cold and a follow-up three turns into a chain are not')
+    L.push('> the same question, and a mean over both describes neither.')
+    L.push('')
+    L.push('| depth | pos | neg | recall8 | mrr | answerF1 | identifierRecall | negCaught |')
+    L.push('|---|---|---|---|---|---|---|---|')
+    for (const depth of depths) {
+      const b = summary.byDepth[depth]
+      L.push(
+        `| ${depth} | ${b.positives} | ${b.negatives} | ${fmt(b.recall8)} | ${fmt(b.mrr)} | ` +
           `${fmt(b.answerF1)} | ${fmt(b.identifierRecall)} | ${fmt(b.negativesCaughtRate)} |`,
       )
     }
@@ -471,6 +529,44 @@ export function writeReport({ dir, name, meta, summary, rows }) {
     }
     if (prev.meta.numCtx !== meta.numCtx) {
       incomparable.push(`num_ctx changed: ${prev.meta.numCtx} → ${meta.numCtx}`)
+    }
+    /**
+     * THE TWO ARMS OF AN A/B, which is the one pair of runs this file was
+     * otherwise guaranteed to mislabel.
+     *
+     * `DOCPILOT_HISTORY_CONDENSE` and `DOCPILOT_ANTECEDENT_HOPS` exist so both
+     * arms run on one build — same index, same prompt, same golden set, same
+     * level, same levers. Every marker above therefore passes, `reportName` is
+     * the same string, the second arm overwrites the first, and the deltas land
+     * under "Change since the previous run" as though something had been fixed.
+     * They are two systems, and the header has to say so.
+     *
+     * ABSENT READS AS UNKNOWN — `goldenSha`'s rule four checks up, for its
+     * reason: a report written before these fields existed carries neither, and
+     * announcing a changed arm at every reader who upgrades is a marker that
+     * cries wolf once per install. `!= null` rather than `goldenSha`'s
+     * truthiness test, because `false` is a legal value of `historyCondense`
+     * and truthiness would silently drop the off arm — the half of the A/B the
+     * knob was added to make runnable.
+     */
+    if (
+      prev.meta.historyCondense != null &&
+      meta.historyCondense != null &&
+      prev.meta.historyCondense !== meta.historyCondense
+    ) {
+      const arm = (v) => (v ? 'on' : 'off')
+      incomparable.push(
+        `History condense: ${arm(prev.meta.historyCondense)} → ${arm(meta.historyCondense)}`,
+      )
+    }
+    if (
+      prev.meta.antecedentHops != null &&
+      meta.antecedentHops != null &&
+      prev.meta.antecedentHops !== meta.antecedentHops
+    ) {
+      incomparable.push(
+        `Antecedent hops: ${prev.meta.antecedentHops} → ${meta.antecedentHops}`,
+      )
     }
   }
   incomparable.push(...siblingMismatches(dir, meta))

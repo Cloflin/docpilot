@@ -38,7 +38,7 @@ import { pathToFileURL } from 'node:url'
 import { assembleIndex } from '../theme/docpilot/store.js'
 import { embedQuery } from '../theme/docpilot/embed.js'
 import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
-import { composeQuery, enforces } from '../theme/docpilot/gate.js'
+import { ANTECEDENT_HOPS, enforces } from '../theme/docpilot/gate.js'
 import { detectTools, detectCapabilities } from '../theme/docpilot/llm.js'
 import { runTurn } from '../theme/docpilot/harness.js'
 import { promptHash } from '../theme/docpilot/prompt.js'
@@ -66,6 +66,8 @@ import {
 } from './metrics.js'
 import { writeReport } from './report.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
+import { chainDepth, isFollowUp, priorQuestions } from './record.js'
+import { chainTexts, resolveChain } from './conversation.js'
 import { nodeEmbedTarget } from '../config.js'
 
 import { ROOT, RAG, REPORTS, GOLDEN, DOCS, settings as docPilot } from '../cli-context.js'
@@ -340,6 +342,45 @@ export function provenance() {
 }
 
 /**
+ * THE ARM THIS RUN IS — the other half of the witnesses, one axis over.
+ *
+ * `DOCPILOT_HISTORY_CONDENSE` and `DOCPILOT_ANTECEDENT_HOPS` exist so both arms
+ * of a measurement run on ONE build rather than on two checkouts. Neither
+ * reached `meta`, so both arms got the same `reportName`, the second overwrote
+ * the first, and `diffSummaries` presented the pair as "Change since the
+ * previous run" with nothing on the page saying an arm had moved — which is the
+ * failure `meta.lexical`, `meta.level`, `meta.goldenSha` and `levers` were each
+ * added to prevent, arrived at through the one input none of them covers.
+ *
+ * RE-DERIVED RATHER THAN IMPORTED, and that is an assumption, not a preference:
+ * gate.js reads the hops through a module-private `hops()` and prompt.js reads
+ * the condense flag through a module-private `historyCondense()`, and neither
+ * is exported. The two expressions below are those verbatim — including the
+ * clamp, whose ceiling is IMPORTED rather than written `2`, so a third hop moves
+ * the report with the behaviour instead of reporting the old range. Export
+ * either reader and this becomes a call to it.
+ *
+ * READ AT CALL TIME, for the reason those two readers were moved to call time:
+ * `applyFileEnv()` runs after every import in this file, so a knob set in
+ * `.env.local` is not yet in `process.env` while any module body is evaluating.
+ * A constant here would name the default while the run took the other arm —
+ * the same divergence one level down.
+ *
+ * EXPORTED for the same reason `provenance` is: the module-scope guard below
+ * ends the process, so calling it is the only way to assert the shape.
+ */
+export function abKnobs() {
+  const raw = process.env.DOCPILOT_ANTECEDENT_HOPS
+  const n = raw === undefined || raw === '' ? NaN : Number(raw)
+  return {
+    historyCondense: process.env.DOCPILOT_HISTORY_CONDENSE !== '0',
+    antecedentHops: Number.isFinite(n)
+      ? Math.min(Math.max(Math.trunc(n), 1), ANTECEDENT_HOPS)
+      : ANTECEDENT_HOPS,
+  }
+}
+
+/**
  * An address, without the path and without anything that could be a credential.
  *
  * A report taken against a metered provider and one taken against
@@ -487,17 +528,28 @@ async function probeRecords(index, guard, records) {
   /**
    * Every text this pass will ask for, bought before the loop asks for the
    * first. Both channels: a follow-up record embeds its composed query too, and
-   * missing it here would leave a quarter of the run buying one at a time.
+   * missing it here would leave a quarter of the run buying one at a time. The
+   * priming turns' own questions are in it too, for the gates they now run
+   * under: bought here or bought one at a time later, and the batcher exists
+   * because a free tier meters requests.
+   *
+   * THE LIST IS ENUMERATED, NOT GUESSED — `chainTexts` (src/eval/conversation.js).
+   * A chain's antecedents are not knowable at this point and cannot be made so:
+   * turn i composes against whichever question turn i-1 won its gate on, and no
+   * gate has been run yet. The enumeration walks `chainAntecedent` itself over
+   * both values of the single flag that function reads, so the batcher cannot
+   * ask for a string the probe will not and the probe cannot ask for one the
+   * batcher did not — the second of those is the expensive direction, because a
+   * miss falls through `embed()` to one request per text.
+   *
+   * NO EXISTING RUN CHANGES ITS REQUEST COUNT. A depth-0 record still buys one
+   * text and a depth-1 record still buys the same three the literal here spelled
+   * out; `prefetchEmbeddings` dedupes through a Set and drops falsy entries, so
+   * the composition of a first turn costs nothing. Only a depth >= 2 record —
+   * which no golden set could express before engine-spec 023 — adds one.
    */
   if (!LEXICAL) {
-    const wanted = records.flatMap((rec) => [
-      rec.question,
-      composeQuery(rec.question, rec.prev_question),
-      // The priming turn's own question, for the gate it now runs under. Bought
-      // here or bought one at a time later — the batcher exists because a free
-      // tier meters requests, and a follow-up would otherwise cost one each.
-      rec.prev_question || null,
-    ])
+    const wanted = records.flatMap((rec) => chainTexts(rec))
     const { vectors, requests } = await prefetchEmbeddings(
       wanted,
       {
@@ -531,11 +583,55 @@ async function probeRecords(index, guard, records) {
       }
     }
 
+    /**
+     * THE PRIMING TURNS NEED THEIR OWN GATES, and running them without one is a
+     * measurement error rather than an economy.
+     *
+     * Every question before the scored one is a real turn: in production it runs
+     * its own retrieval and is primed with what ITS question found. Here they
+     * were handed `probe.g` — the gate of the SCORED question — so a priming
+     * turn answered its own question from evidence retrieved for another.
+     *
+     * Two consequences, and the second is what made this worth an embedding.
+     * The answer that becomes history was written from the wrong excerpts, so
+     * the window §4.5 exercises is not the window production builds. And
+     * anything the scored turn INHERITS from a priming one — spec 013 primes it
+     * with the chunks that answer cited — is inherited out of the scored turn's
+     * own gate result, lands in `primed` already, and dedupes away to nothing.
+     * The feature was structurally unmeasurable: byte-identical prompt tokens on
+     * all eight follow-ups, which is what sent us looking.
+     *
+     * ONLY THE ARITY MOVED. `resolveChain` runs that same argument once per hop
+     * — every prior question in order, each gated against the antecedent the
+     * turn before it left — because the antecedent the SCORED question inherits
+     * is a function of which channel each of those gates won on and not of where
+     * a question sits in the array. A `map` over the chain would have to invent
+     * each hop's antecedent from its index, which is the position test
+     * `chainAntecedent` refuses.
+     */
+    const { priorGates, priorVecs, antecedent, composedQuery } = await resolveChain({
+      rec,
+      retrieval,
+      // The closure carries THIS file's endpoint diagnosis across a boundary
+      // `conversation.js` keeps pure by contract. Wrapping the `resolveChain`
+      // call itself instead would file a `retrieval.evaluate` throw under
+      // "embed endpoint unreachable" and send a reader to restart Ollama over a
+      // corrupt index.
+      embed: async (text) => {
+        try {
+          return await embed(text, index.manifest.embedModel)
+        } catch (e) {
+          die(endpointHelp('embed', EMBED_BASE, EMBED_PROVIDER, e))
+        }
+      },
+      lexical: LEXICAL,
+    })
+
     // A follow-up record's first turn is a real turn: the composed channel only
-    // exists when there is a previous question to compose with. The string is
-    // built by `composeQuery` rather than inlined, so the vector embedded here
-    // and the query `evaluate()` composes internally can never drift apart.
-    const composedQuery = composeQuery(rec.question, rec.prev_question)
+    // exists when there is an antecedent to compose with. The string arrives
+    // from `resolveChain`, which builds it with `composeQuery`, so the vector
+    // embedded here and the query `evaluate()` composes internally can never
+    // drift apart.
     let composedVec
     if (composedQuery && !LEXICAL) {
       composedVec = await embed(composedQuery, index.manifest.embedModel)
@@ -546,46 +642,9 @@ async function probeRecords(index, guard, records) {
     // charge the difference to the missing embedder.
     if (LEXICAL && composedQuery) composedVec = null
 
-    /**
-     * THE PRIMING TURN NEEDS ITS OWN GATE, and running it without one is a
-     * measurement error rather than an economy.
-     *
-     * A follow-up record is two turns, and the first one is a real turn: in
-     * production it runs its own retrieval and is primed with what ITS question
-     * found. Here it was handed `probe.g` — the gate of the SECOND question —
-     * so the priming turn answered `rec.prev_question` from evidence retrieved
-     * for `rec.question`.
-     *
-     * Two consequences, and the second is what made this worth an embedding.
-     * The answer that becomes history was written from the wrong excerpts, so
-     * the window §4.5 exercises is not the window production builds. And
-     * anything the second turn INHERITS from the first — spec 013 primes it with
-     * the chunks that answer cited — is inherited out of the second turn's own
-     * gate result, lands in `primed` already, and dedupes away to nothing. The
-     * feature was structurally unmeasurable: byte-identical prompt tokens on all
-     * eight follow-ups, which is what sent us looking.
-     */
-    let prevGate = null
-    if (rec.prev_question) {
-      let prevVec
-      if (!LEXICAL) {
-        try {
-          prevVec = await embed(rec.prev_question, index.manifest.embedModel)
-        } catch (e) {
-          die(endpointHelp('embed', EMBED_BASE, EMBED_PROVIDER, e))
-        }
-      }
-      prevGate = retrieval.evaluate({
-        question: rec.prev_question,
-        previousQuestion: null,
-        queryVec: prevVec,
-        mode: LEXICAL ? 'lexical-only' : 'hybrid',
-      })
-    }
-
     const g = retrieval.evaluate({
       question: rec.question,
-      previousQuestion: rec.prev_question,
+      previousQuestion: antecedent,
       queryVec: vec,
       composedVec,
       mode: LEXICAL ? 'lexical-only' : 'hybrid',
@@ -615,11 +674,23 @@ async function probeRecords(index, guard, records) {
     // RAG-SPEC 5.1: for a scoped record whose gold set does not intersect the
     // scope, the correct outcome is a refusal — scoring it as F1 0 would punish
     // the gate for doing exactly what the scope asked of it.
+    //
+    // `?? []` because the LINTER, which docs/guide/evaluation.md names as the
+    // authority on this schema, does not require the field on a negative record:
+    // it errors only on a `refuse:no-evidence` record whose gold list is
+    // NON-empty. Every negative in this repository's own set happens to carry
+    // `gold_chunks: []`, so the bare read worked by convention rather than by
+    // contract — and the first authored record that left the key out took the
+    // whole run down with `Cannot read properties of undefined`, after the
+    // embedder had already been paid for all 279 queries. A runner that crashes
+    // on a record the linter passes is the two of them disagreeing about the
+    // schema, and the runner is the one that must yield.
+    const gold = rec.gold_chunks ?? []
     const goldInScope =
       scope.kind === 'all' || !scope.paths.length
-        ? rec.gold_chunks
-        : rec.gold_chunks.filter((gc) => scope.paths.some((p) => underPath(`/${gc}`, p)))
-    const scoredAsNegative = rec.gold_chunks.length > 0 && goldInScope.length === 0
+        ? gold
+        : gold.filter((gc) => scope.paths.some((p) => underPath(`/${gc}`, p)))
+    const scoredAsNegative = gold.length > 0 && goldInScope.length === 0
 
     probes.push({
       rec,
@@ -627,10 +698,22 @@ async function probeRecords(index, guard, records) {
       retrieval,
       vec,
       composedVec,
+      // The composed query `composedVec` belongs to, carried rather than rebuilt
+      // at the two places that read it — `ranked` below and the scored turn's
+      // own call. A second `composeQuery` here would be a second place for the
+      // antecedent to be chosen, and the cascade is the only one entitled to.
+      composedQuery,
       g,
-      // The gate the priming turn of a follow-up runs under; null for every
-      // other record, and never consulted for the scored turn.
-      prevGate,
+      // The gate each PRIOR turn ran under, oldest first — empty for a record
+      // with no chain, and never consulted for the scored turn.
+      priorGates,
+      // And that turn's own query vector, same length and same order. It rides
+      // beside the gate because `primingProbe` has to swap the two TOGETHER: the
+      // vector `vec` two fields up is `embed(rec.question)`, the question the
+      // priming hop has not been asked yet. Bought inside `resolveChain` for the
+      // hop's own gate and prefetched by `chainTexts`, so carrying it here costs
+      // no request.
+      priorVecs,
       // What the index was built with, so a turn can buy a vector for a query
       // the model writes without reaching back for the manifest — spec 015.
       embedModel: index.manifest.embedModel,
@@ -652,15 +735,33 @@ async function probeRecords(index, guard, records) {
 }
 
 /**
- * The probe a PRIMING turn runs under — its own gate, or the record's if it has
- * none to run under (a record with no `prev_question` never reaches this).
+ * The probe the PRIMING turn at `hop` runs under — that hop's own gate AND that
+ * hop's own query vector, or the record's if it has none to run under (a record
+ * with no chain has no hop, so nothing reaches this; a hop past the end of
+ * `priorGates` falls back rather than handing the harness `undefined` in the
+ * middle of a matrix).
+ *
+ * THE VECTOR MOVES WITH THE GATE, and swapping only the gate was half a fix.
+ * `probe.vec` is `embed(rec.question)` — the SCORED question, which at this
+ * point has not been asked — so a hop left with it ran `search_docs` fusing
+ * BM25 over its own question with cosine over a later one. That is not a
+ * harmless mis-ranking of a throwaway turn: the priming answer becomes the
+ * scored turn's history and its spec-013 priming, so the wrong vector arrives
+ * in the measured row by the same route the right one would have. The defect
+ * predates the chain records at one hop; a depth-2 record runs it twice.
+ *
+ * ONE INDEX READS BOTH LISTS. `resolveChain` returns them same-length and
+ * same-order by contract, so `hop` addresses a matched pair; `?.` on the vector
+ * list is for the probe that carries no vectors at all — `--lexical`, where
+ * `probe.vec` is `undefined` too and both arms therefore agree.
  *
  * Exported because it is the whole of the fix and a one-line ternary inside an
  * await is a line nothing can pin: the defect it repairs was invisible in every
  * metric and surfaced only as eight byte-identical follow-up prompts.
  */
-export function primingProbe(probe) {
-  return probe?.prevGate ? { ...probe, g: probe.prevGate } : probe
+export function primingProbe(probe, hop) {
+  if (!probe?.priorGates?.[hop]) return probe
+  return { ...probe, g: probe.priorGates[hop], vec: probe.priorVecs?.[hop] }
 }
 
 // ── stage B: one model over the probed records ───────────────────────────────
@@ -678,7 +779,12 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       kind: rec.kind || null,
       expect: rec.expect,
       scoped: probe.scope.kind !== 'all',
-      followUp: Boolean(rec.prev_question),
+      followUp: isFollowUp(rec),
+      // Not the boolean one field up. `0`, `1` and `>= 2` are three populations
+      // — a cold question, the single hop that shipped, and a chain that can
+      // reach the second antecedent — and `followUp` folds the last two into one
+      // bucket, which is the fold `byDepth` exists to undo.
+      depth: chainDepth(rec),
       G: g.G,
       D: g.D,
       L: g.L,
@@ -732,45 +838,63 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       continue
     }
 
-    // A follow-up record is two turns. The first turn's answer becomes history,
-    // which is the only way §4.5's three-pair window is exercised at all.
+    // A follow-up record is its chain plus one. Every priming answer becomes
+    // history, which is the only way §4.5's three-pair window is exercised at
+    // all — and the window is what a chain deeper than one hop is FOR, since
+    // `buildMessages` keeps three pairs verbatim and condenses what is older.
+    const chain = priorQuestions(rec)
     const history = []
-    if (rec.prev_question) {
-      // Guarded like the scored turn below. Unguarded, one transport hiccup on a
-      // priming turn threw out of the loop and into `main().catch → die`, taking
-      // every row already run with it — the report is only written after the
-      // whole model finishes, so a matrix that had been running for an hour left
-      // nothing behind.
+    /**
+     * THE FAILURE IS RECORDED, NOT `continue`d — the loop is nested now.
+     *
+     * Guarded like the scored turn below, for the reason that guard was added:
+     * unguarded, one transport hiccup on a priming turn threw out into
+     * `main().catch → die`, taking every row already run with it, because the
+     * report is only written after the whole model finishes. But `continue`
+     * inside this loop abandons a HOP and runs the scored turn anyway, against a
+     * history with a gap in it and a row that says nothing happened. The flag is
+     * what keeps the old meaning: the record is abandoned, once, after the
+     * break.
+     */
+    let primingError = null
+    for (const [hop, question] of chain.entries()) {
       let first
       try {
         first = await turn({
-          // Its own gate, so the priming turn answers from what its own question
-          // retrieved — see `prevGate` where it is built.
-          probe: primingProbe(probe),
+          // This hop's own gate, so the priming turn answers from what its own
+          // question retrieved — see `priorGates` where they are built.
+          probe: primingProbe(probe, hop),
           model,
           fallback,
           thinkSupported,
           guard,
-          question: rec.prev_question,
-          history: [],
+          question,
+          // ACCUMULATING, not `[]`: hop 2 is answered with hop 1 already in its
+          // window, which is the whole difference between a chain and two
+          // unrelated first turns. Handing every hop an empty history would
+          // measure a conversation the reader never had.
+          history,
         })
       } catch (e) {
-        row.observed = 'error'
-        row.error = `priming turn: ${String(e.message || e)}`
-        row.latencyMs = 0
-        rows.push(row)
-        report(row)
-        continue
+        // Which hop, and of how many. "priming turn: fetch failed" on a
+        // three-question record names neither the turn that broke nor whether
+        // the ones before it had already landed.
+        primingError = `priming turn ${hop + 1}/${chain.length}: ${String(e.message || e)}`
+        break
       }
       // The citations travel with the answer: spec 013 primes a follow-up with the
       // evidence its antecedent stood on, and a history entry without them would
       // measure the turn the panel does not run.
       if (first?.text?.trim())
-        history.push({
-          question: rec.prev_question,
-          answer: first.text,
-          citations: first.citations || [],
-        })
+        history.push({ question, answer: first.text, citations: first.citations || [] })
+    }
+    if (primingError) {
+      row.observed = 'error'
+      row.error = primingError
+      row.latencyMs = 0
+      rows.push(row)
+      report(row)
+      continue
     }
 
     const t0 = Date.now()
@@ -784,6 +908,8 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
         guard,
         question: rec.question,
         history,
+        composedQuery: probe.composedQuery,
+        composedVec: probe.composedVec,
       })
     } catch (e) {
       row.observed = 'error'
@@ -814,9 +940,28 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       .filter((t) => t.kind === 'search')
       .map((t) => String(t.data?.query || ''))
       .filter(Boolean)
-    row.reSearch = searched.filter(
-      (q) => normaliseAnswer(q) !== normaliseAnswer(rec.question),
+    /**
+     * MEASURED AGAINST THE TEXT THE TURN WAS SCORED ON, both halves of it.
+     *
+     * `harness.js` resolves a `search_docs` carrying no `query` of its own to
+     * `args.query || composedQuery || question` and traces the RESOLVED string.
+     * On a composed-channel follow-up that default is the composition, which is
+     * not `rec.question` — so comparing against the raw question alone filed
+     * every such call as a query the model chose. Nobody chose it: it is this
+     * turn's own query, arriving through a default, and it inflates `reSearch`
+     * on precisely the follow-ups the composed channel exists for.
+     *
+     * Built from `researchPair`'s own output rather than from a predicate that
+     * matches it, so the set cannot name a composition the harness was not
+     * given — including under `DOCPILOT_RESEARCH_VEC=raw`, where the harness is
+     * given none and every composed default the arm removes would otherwise be
+     * filed as a query the model chose.
+     */
+    const sentPair = researchPair(probe, probe.composedQuery, probe.composedVec)
+    const ownQuery = new Set(
+      [rec.question, sentPair.composedQuery].filter(Boolean).map((q) => normaliseAnswer(q)),
     )
+    row.reSearch = searched.filter((q) => !ownQuery.has(normaliseAnswer(q)))
     row.reSearchLang = [...new Set(row.reSearch.map((q) => langOf({ question: q })))]
     row.hallucinated = hallucinatedCitationRate(res.citations, res.emitted)
     row.emittedContainment = scopeContainment(res.emitted, probe.scope)
@@ -828,10 +973,10 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       row.answerF1 = tokenF1(res.text, rec.gold_answer)
       row.identifierRecall = identifierRecall(res.text, rec.identifiers)
       row.language = languageMatch(rec.question, res.text)
-      row.citationPrecision = citationPrecision(res.citations, rec.gold_chunks)
+      row.citationPrecision = citationPrecision(res.citations, rec.gold_chunks ?? [])
       // Precision divides by what the answerer chose and recall by what the
       // record pinned; at |gold| = 1 the first moves with terseness alone.
-      row.citationRecall = citationRecall(res.citations, rec.gold_chunks)
+      row.citationRecall = citationRecall(res.citations, rec.gold_chunks ?? [])
     }
     row.text = res.text
     rows.push(row)
@@ -855,7 +1000,68 @@ const EMBED_MODEL_QUERY = /^(1|true|yes)$/i.test(
   String(process.env.DOCPILOT_EMBED_MODEL_QUERY || ''),
 )
 
-function turn({ probe, model, fallback, thinkSupported, guard, question, history }) {
+/**
+ * `DOCPILOT_RESEARCH_VEC=raw` — the other arm of engine-spec 022c, on ONE build.
+ *
+ * The A/B this exists for is not a comparison of two checkouts. `SEED_FROM_HISTORY`
+ * established the rule for spec 013 and the reason has not changed: the priming
+ * fixes, the golden set and the prompt all move between two builds, so a delta
+ * measured across them is a delta of everything that was edited in between. A
+ * switch keeps the corpus, the records, the vectors and the prompt hash fixed
+ * and moves the one thing under test.
+ *
+ * It is EVAL-ONLY and it is not a configuration key. No resolver reads it, no
+ * site can set it, `types/` does not name it, and the panel has no equivalent —
+ * `session.js` follows the winning channel unconditionally, which is what 022c
+ * decided. This reproduces the behaviour that decision replaced, for as long as
+ * it takes to measure whether replacing it paid.
+ */
+const RESEARCH_VEC_RAW = /^raw$/i.test(String(process.env.DOCPILOT_RESEARCH_VEC || ''))
+
+/**
+ * The pair a model-issued `search_docs` re-searches on — the vector, and the
+ * text that vector was embedded from.
+ *
+ * ONE FUNCTION FOR BOTH SLOTS, and that is the whole point of it existing rather
+ * than two ternaries at the call site. `harness.js` resolves a `search_docs`
+ * carrying no query of its own to `args.query || composedQuery || question`, so
+ * the text half decides the BM25 query while the vector half decides the cosine
+ * one. Send a composed vector beside a raw text — or a raw vector beside a
+ * composed text — and the fusion runs over two different questions, which is the
+ * defect 022c names. Returning them together makes that state unreachable, and
+ * it is why the switch below flips both rather than the vector it is named for.
+ *
+ * Exported for the same reason `primingProbe` is: a predicate spelled inline
+ * inside an argument list is a line no test can pin, and this one has three
+ * callers' worth of consequences.
+ */
+export function researchPair(probe, composedQuery, composedVec) {
+  const won = probe?.g?.channel === 'composed' && composedVec
+  if (RESEARCH_VEC_RAW || !won) return { queryVec: probe?.vec ?? null, composedQuery: null }
+  return { queryVec: composedVec, composedQuery: composedQuery ?? null }
+}
+
+/**
+ * @param composedQuery  the composed query this turn's gate was scored on, with
+ *   `composedVec` beside it. PER-TURN and deliberately not read off the probe,
+ *   which is the same distinction `primingProbe` draws: a priming hop is handed
+ *   the probe with its OWN gate swapped in, while the probe's composed pair
+ *   belongs to the SCORED question. Read from the probe, a hop whose gate won on
+ *   `composed` would re-search against a composition of questions that had not
+ *   been asked yet. The two callers below say which they are by passing the pair
+ *   or omitting it.
+ */
+function turn({
+  probe,
+  model,
+  fallback,
+  thinkSupported,
+  guard,
+  question,
+  history,
+  composedQuery = null,
+  composedVec = null,
+}) {
   return runTurn({
     embedQuery: EMBED_MODEL_QUERY ? (text) => embed(text, probe.embedModel) : null,
     retrieval: probe.retrieval,
@@ -889,7 +1095,37 @@ function turn({ probe, model, fallback, thinkSupported, guard, question, history
       product: docPilot.product,
     },
     fallback,
-    queryVec: probe.vec,
+    /**
+     * BOTH HALVES FOLLOW THE CHANNEL THE GATE WON ON — engine-spec 022c, and the
+     * predicate is `session.js:2625`'s verbatim, on both lines.
+     *
+     * The panel hands the harness the composed vector whenever the gate won on
+     * the composed channel; this handed `probe.vec` unconditionally, so a
+     * follow-up the composed channel rescued was measured with the model
+     * re-searching against the bare tail — «а я могу его стилизировать?» on its
+     * own, a query no turn in production issues. The truthiness guard is
+     * load-bearing rather than defensive: `null` means "score it with no vector"
+     * and `undefined` means "there is no second query", and a lexical-only turn
+     * settles `composedVec` at `null` by design, so both arms resolve to the raw
+     * value there.
+     *
+     * ONE PREDICATE, TWO SLOTS, and gating only the vector reintroduced exactly
+     * what 022c removed from the panel. `resolveChain` builds `composedQuery`
+     * for every record that has a chain, whatever channel then wins, so passing
+     * it bare handed the harness a composed lexical default beside a raw cosine
+     * — one RRF over two different queries, which is the shape 022c was written
+     * against, arrived at from the other side. It lands only on rows that have
+     * an antecedent, which is precisely the population `byDepth` was added to
+     * report; before that section existed such a divergence had nowhere to show
+     * up at all.
+     *
+     * Both slots come out of `researchPair` in one object rather than out of two
+     * ternaries that happened to share a predicate: the sharing was the
+     * invariant, and a shared predicate is only an invariant while nobody edits
+     * one line of it. `DOCPILOT_RESEARCH_VEC=raw` reproduces the pre-022c pair
+     * there, for the A/B, and reproduces it on BOTH halves.
+     */
+    ...researchPair(probe, composedQuery, composedVec),
   })
 }
 
@@ -999,6 +1235,7 @@ export function summarise(rows) {
       .map((r) => `${r.id}(${r.observed})`),
     languageFailures: positives.filter((r) => r.language === 0).map((r) => r.id),
     byLanguage: byLanguage(positives, negatives),
+    byDepth: byDepth(positives, negatives),
     taxonomy: taxonomyOf(rows),
     reSearch: reSearchSummary(rows),
     missPages: missPages(rows),
@@ -1121,6 +1358,54 @@ function byLanguage(positives, negatives) {
 }
 
 /**
+ * The same metrics, split by how many questions preceded the one being scored.
+ *
+ * `byLanguage` one axis over, and the mean hides the same shape for a different
+ * reason. A question asked cold and a question three turns into a chain are not
+ * answered by the same machinery: the cold one is scored on its own text, the
+ * elliptical one on a composition, and which antecedent went into that
+ * composition is `chainAntecedent`'s decision (src/theme/docpilot/gate.js) taken
+ * from how the turn before it won its gate. So a change to the chaining rule
+ * moves the deep buckets and leaves depth 0 exactly where it was — and depth 0
+ * is most of any golden set, so it holds the headline still while the one
+ * population the change was written for moves underneath it.
+ *
+ * EVERY METRIC EMITTED HERE IS IN `HIGHER_IS_BETTER` — read in report.js and
+ * checked name by name, not assumed. `depthKeys` there mints a tracked diff key
+ * for every member of a bucket except `positives`/`negatives`, and
+ * `diffSummaries` reads a metric that is in neither direction set as
+ * lower-is-better; a key added here that is not in that set would print a real
+ * improvement as a regression with nothing on the page to say so.
+ *
+ * Below two buckets it returns null, so a chain-free set renders exactly as it
+ * does today — the rule `byLanguage` uses for a single-language set, and for the
+ * same reason: one bucket is the headline with an extra heading over it.
+ */
+function byDepth(positives, negatives) {
+  const depths = [...new Set([...positives, ...negatives].map((r) => r.depth || 0))].sort(
+    (a, b) => a - b,
+  )
+  if (depths.length < 2) return null
+  const out = {}
+  for (const depth of depths) {
+    const pos = positives.filter((r) => (r.depth || 0) === depth)
+    const neg = negatives.filter((r) => (r.depth || 0) === depth)
+    const caught = neg.filter((r) => r.observed.startsWith('refuse')).length
+    out[depth] = {
+      positives: pos.length,
+      negatives: neg.length,
+      recall8: mean(pos.map((r) => r.recall8)),
+      mrr: mean(pos.map((r) => r.mrr)),
+      answerF1: mean(pos.map((r) => r.answerF1)),
+      identifierRecall: mean(pos.map((r) => r.identifierRecall)),
+      citationRecall: mean(pos.map((r) => r.citationRecall)),
+      negativesCaughtRate: neg.length ? caught / neg.length : null,
+    }
+  }
+  return out
+}
+
+/**
  * Every row filed under the failure it actually is — `metrics.js` decides, this
  * only groups. Ids rather than counts: the point of the section is that a reader
  * can go and look at the records, and a count of four is not a lead.
@@ -1178,6 +1463,15 @@ function printSummary(s) {
     for (const [lang, b] of Object.entries<any>(s.byLanguage)) {
       line(
         `${lang}  (${b.positives}+ / ${b.negatives}-)`,
+        `recall8 ${num(b.recall8)}  mrr ${num(b.mrr)}  answerF1 ${num(b.answerF1)}`,
+      )
+    }
+  }
+  if (s.byDepth) {
+    console.log('  ── by chain depth ──')
+    for (const [depth, b] of Object.entries<any>(s.byDepth)) {
+      line(
+        `depth ${depth}  (${b.positives}+ / ${b.negatives}-)`,
         `recall8 ${num(b.recall8)}  mrr ${num(b.mrr)}  answerF1 ${num(b.answerF1)}`,
       )
     }
@@ -1449,6 +1743,9 @@ async function main() {
       maxIterations: MAX_ITERATIONS ?? 4,
       numCtx: PROVIDER === 'ollama' ? NUM_CTX : null,
       levers: leverFingerprint(index.manifest.tuning),
+      // `historyCondense` and `antecedentHops`: WHICH ARM, so report.js can
+      // label a pair of them instead of diffing them. See `abKnobs` above.
+      ...abKnobs(),
       ...provenance(),
     }
     writeReport({ dir: REPORTS, name: reportName(meta), meta, summary: s, rows })

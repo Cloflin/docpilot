@@ -1115,7 +1115,6 @@
                 rows="1"
                 maxlength="1000"
                 :placeholder="placeholder"
-                :readonly="s.busy"
                 aria-describedby="dp-quote dp-hint dp-counter dp-budget dp-footnote"
                 @input="grow"
                 @keydown="onKeydown"
@@ -2098,11 +2097,22 @@ function submitText(q, quoted = '') {
  *
  * The guard is FIRST, before the branch as well as before the send, because a
  * reader mid-composition is not asking to edit their previous question either.
+ *
+ * While a turn is running Enter does nothing at all — ui-specs/014. The field is
+ * no longer `readonly` on `busy`, because the composer is a place to write, not
+ * the thing that enforces one turn at a time; that invariant is untouched and
+ * still lives where it always did, in `session.submit`, which returns
+ * immediately when `state.busy` is set, with Stop the only gesture that ends a
+ * turn. Enter is left inert rather than routed into `send()`, which opens with
+ * `session.stop()`: a reader who thinks of the next question mid-answer has not
+ * asked for the answer they are waiting for to be thrown away. `preventDefault`
+ * runs ahead of the guard, so the dead key leaves no newline in the draft.
  */
 function onKeydown(e: KeyboardEvent) {
   if (e.isComposing || e.nativeEvent?.isComposing) return
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
+    if (s.busy) return
     send()
     return
   }

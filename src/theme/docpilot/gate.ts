@@ -217,6 +217,112 @@ export function admissible(question, composedEvidenceText) {
 }
 
 /**
+ * A CHAIN OF ELLIPSES, AND THE ONE HOP THAT LOSES IT — engine-spec 023.
+ *
+ * `composeQuery` prepends the last ANSWERED question, which is what rescues
+ * "and for backend calls?". One hop carries one ellipsis and no more: "how do I
+ * style the panel?", then "and on React?", then "and on Docusaurus?" composes as
+ * `and on React?\nand on Docusaurus?`, in which nothing names styling and
+ * nothing names the panel. The subject is two turns back and the composed
+ * channel cannot see it.
+ *
+ * THE SECOND HOP IS CONDITIONAL ON THE GATE, not on a length test and not on a
+ * classifier — the same objection that killed `terms(q).length < 6` one docblock
+ * up applies to any measurement taken of the question alone. `turn.gate` keeps
+ * `channel` and `antecedent` (GATE_KEYS, history.js), so the previous turn has
+ * already SAID whether it was itself an ellipsis: it won on `channel:
+ * 'composed'` with `antecedent: 'question'`, which is a measurement that its own
+ * question was too weak an anchor to score with. Chaining is restricted to
+ * exactly those turns, so the lexical dilution a longer composed query costs is
+ * confined to the turns where one hop has already failed. Every ordinary chain
+ * composes the single hop it always did.
+ *
+ * ONE CHANNEL STILL, and no new value of `gate.channel`. `src/feedback/stratum.js`
+ * routes on `channel`/`antecedent` and DEFINES the F and N5 strata as
+ * prev_question plus a tail, and `regate` in `src/eval/calibrate.js` mirrors
+ * `evaluate()`'s two-arm maximum exactly; a third arm would change what `tau`
+ * means and file records under a stratum nobody has measured. So this returns a
+ * longer string for the slot `composeQuery` already has — the composed query
+ * becomes `${T0}\n${T1}\n${q}` — and the composition keeps one spelling.
+ *
+ * A LONGER ANTECEDENT IS NOT A FREE PASS. The three properties that bound the
+ * single hop bound this one unchanged: `admissible` tests the RAW tail against
+ * the composed evidence, so a topic switch wearing two antecedents is vetoed
+ * exactly as one wearing one is; `G` is a maximum over the channels, so the
+ * composed arm can only ever REDUCE refusals; and `assertWeights` guarantees
+ * `wLexical < tau`, so no amount of borrowed lexical coverage clears the gate on
+ * its own. What gets a chained follow-up through is dense evidence, which is
+ * what got the one-hop follow-up through as well.
+ *
+ * OVER THE CEILING THE OLDER HOP IS DROPPED WHOLE. A question cut at
+ * ANTECEDENT_MAX_CHARS is a query nobody asked: it embeds as a fragment and its
+ * severed terms still enter `Q`. Falling back to the single hop is the behaviour
+ * that shipped, so the ceiling costs a turn nothing it had.
+ *
+ * IT IS THE CHAIN'S CEILING AND NOTHING ELSE, which the constant's name does not
+ * say. A single antecedent of 340 characters still travels whole and is meant
+ * to: that is the one-hop composition that shipped, and putting a cap on it here
+ * would be a new refusal smuggled into a docblock about a new rescue. So the
+ * only thing this number can ever veto is the SECOND hop, and vetoing it lands
+ * on that same shipped behaviour.
+ *
+ * Counted in CODE POINTS — `Array.from` before `.length` — for the reason
+ * `clampTo` and `clampLine` give in prompt.js: `.length` counts UTF-16 code
+ * units, so a chain of questions carrying emoji or astral characters reached the
+ * ceiling at half its nominal length and lost a hop the budget had room for.
+ *
+ * `DOCPILOT_ANTECEDENT_HOPS=1` collapses this to that single hop. It is a
+ * MEASUREMENT SWITCH, for the A/B that decides whether the second hop pays, and
+ * not a configuration key: no resolver reads it and no site can set it.
+ *
+ * IT IS READ AT CALL TIME, out of `process.env`, for the reason `resolveLevers`
+ * gives in retriever.js — the timing is the whole of it. Every CLI entry point
+ * loads `.env.local` into `process.env` AFTER the module graph is imported, and
+ * `.env.local` is exactly where every DocPilot doc tells a consumer to put their
+ * `DOCPILOT_*` keys, so a module-scope fold answered from a read taken before the
+ * file was loaded: importing this module and THEN setting
+ * `DOCPILOT_ANTECEDENT_HOPS=1` chained two hops, setting it first gave one. The
+ * switch therefore worked under `npx docpilot eval` — bin/docpilot.js happens to
+ * call `applyFileEnv()` ahead of the entry import — and was silently ignored
+ * under `node dist/eval/run.js`, the invocation run.js's own docblock says its
+ * redundant `applyFileEnv()` exists to make behave identically. Still through
+ * `globalThis.process?.env`, so a browser bundle with no `process` takes the
+ * default rather than throwing, at call time exactly as at import time.
+ *
+ * IT HAS EXACTLY TWO MEANINGFUL VALUES, 1 and 2, and any other finite number is
+ * clamped into that range rather than read out. `=0` and `=3` were taken whole
+ * before, and each named something no branch implements: 0 fell to the single
+ * hop that 1 names, 3 took the two-hop arm that 2 names. The clamp moves no
+ * turn — it stops the variable from claiming a setting it does not have. A third
+ * hop is not a number away; it is `chainAntecedent` reading further back.
+ */
+export const ANTECEDENT_HOPS = 2
+export const ANTECEDENT_MAX_CHARS = 320
+
+const hops = () => {
+  const raw = globalThis.process?.env?.['DOCPILOT_ANTECEDENT_HOPS']
+  const n = raw === undefined || raw === '' ? NaN : Number(raw)
+  if (!Number.isFinite(n)) return ANTECEDENT_HOPS
+  return Math.min(Math.max(Math.trunc(n), 1), ANTECEDENT_HOPS)
+}
+
+/**
+ * @param {{question: string, composed: boolean}[]} prior the ANSWERED turns,
+ *   oldest first. `composed` is the caller's reading of that turn's own gate
+ *   record; a turn that has none is `false`, which is the single hop.
+ */
+export function chainAntecedent(prior) {
+  if (!prior?.length) return { text: null, hops: 0 }
+  const last = prior[prior.length - 1]
+  const older = prior.length > 1 ? prior[prior.length - 2] : null
+  if (hops() >= 2 && last.composed && older) {
+    const chained = `${older.question}\n${last.question}`
+    if (Array.from(chained).length <= ANTECEDENT_MAX_CHARS) return { text: chained, hops: 2 }
+  }
+  return { text: last.question, hops: 1 }
+}
+
+/**
  * WHEN ADMISSIBILITY HAS NOTHING TO MEASURE — a tail written in a script the
  * corpus is not written in.
  *

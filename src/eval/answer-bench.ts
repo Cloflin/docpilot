@@ -6,6 +6,8 @@
  *   npx docpilot bench emit  --config=swept --out=docpilot/bench/swept.tasks.jsonl \
  *     DOCPILOT_RRF_K=5 …                                   (levers via the environment)
  *   npx docpilot bench emit  --config=base  --level=low    (one tier of the golden set)
+ *   npx docpilot bench emit  --config=base  --history=docpilot/bench/base.ans.jsonl
+ *                                     (the next pass of a chain; the file ACCUMULATES)
  *   npx docpilot bench score --tasks=a.jsonl,b.jsonl --answers=a.ans.jsonl,b.ans.jsonl
  *
  * WHAT THIS MEASURES, AND WHAT IT DOES NOT.
@@ -51,6 +53,8 @@ import {
 } from './metrics.js'
 
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
+import { priorQuestions } from './record.js'
+import { chainTexts, resolveChain } from './conversation.js'
 
 import { ROOT, RAG, GOLDEN, DOCPILOT_DIR, settings as docPilot } from '../cli-context.js'
 import { entryFlagError, flagValue } from '../cli-flags.js'
@@ -207,6 +211,26 @@ const golden = () =>
   fs.readFileSync(GOLDEN, 'utf8')
     .trim().split('\n').map((l) => JSON.parse(l))
 
+/**
+ * A PRIMING TURN'S ID — `<id>#prev1` … `<id>#prevN`, oldest first.
+ *
+ * The scored turn keeps the record's own id and its own `stage: 2`. Numbering it
+ * by position in the chain instead would have been tidier and is not available:
+ * `--stage` is a public flag whose value 2 means "the tasks with gold answers"
+ * in every script anybody has written, `shard()` filters on it, and `cell()` and
+ * `judgeEmit()` both read `stage === 2` off task files already on disk. So depth
+ * is expressed in the priming ids, where nothing depends on the number.
+ *
+ * `<id>#prev` — what a one-hop emit wrote before chains existed — is read as
+ * `#prev1`. Same rule `record.js` follows for `prev_question`: a bench file
+ * answered under the old spelling has to keep priming its follow-up after the
+ * upgrade, or the second pass silently re-emits every stage-1 turn that was
+ * already paid for.
+ */
+const primingId = (id, n) => `${id}#prev${n}`
+const primingAnswer = (prior, id, n) =>
+  prior.get(primingId(id, n)) ?? (n === 1 ? prior.get(`${id}#prev`) : undefined)
+
 /** The scope object the retriever wants, from the record's authored scope. */
 const scopeOf = (rec) =>
   rec.scope ? { kind: rec.scope.kind, paths: rec.scope.paths || [], label: rec.scope.label }
@@ -247,9 +271,35 @@ async function emit() {
   const out = arg('out') || path.join(BENCH, `${config}${suffix}.tasks.jsonl`)
   const historyFile = arg('history', '')
 
-  // Answers from an earlier pass, so a follow-up record can carry the turn it
-  // follows. Without this its prompt is missing the thing that makes it a
-  // follow-up, and the record measures a different question than it names.
+  /**
+   * EVERY EARLIER PASS'S ANSWERS, IN ONE FILE THAT IS APPENDED TO.
+   *
+   * A chain of depth D takes D + 1 passes, and pass k needs the answers of
+   * passes 1..k-1, not merely of pass k-1: `#prev2`'s prompt carries the
+   * `#prev1` pair, and the scored record's carries both. So `--history` had to
+   * grow from "the previous pass" to "everything answered so far", and there
+   * were two ways to spell that.
+   *
+   * REPEATING THE FLAG IS NOT AVAILABLE, and not for a reason local to this
+   * command. `flagErrors` (src/cli-flags.js) rejects any flag given twice with
+   * "every reader in this package takes the first and ignores the rest, so name
+   * it once" — that sentence is true of `flagValue`, which is the reader here,
+   * and making `--history` the one exception would mean either a second reader
+   * or a rule the checker states and one flag breaks. Comma-separating the
+   * paths, the other repeat-free spelling, puts a delimiter inside a filesystem
+   * path for a flag that has never taken a list.
+   *
+   * So: one path, and the caller appends to it — `>> base.ans.jsonl` after each
+   * answering pass. Later lines win, which is what an append log means and what
+   * makes a re-answered turn a re-answer rather than a duplicate. At depth 1,
+   * which is every record in every set that exists today, "every earlier pass"
+   * and "the previous pass" are the same one file and nothing about the flag's
+   * old use changes.
+   *
+   * The COMMANDS entry for `--history` (src/cli-flags.js) still describes it as
+   * "answers from an earlier pass"; that is no longer the whole of it, and the
+   * help string is owed the word "every".
+   */
   const prior = new Map()
   if (historyFile) {
     for (const line of fs.readFileSync(historyFile, 'utf8').trim().split('\n').filter(Boolean)) {
@@ -290,26 +340,29 @@ async function emit() {
   const records = filterByLevel(golden(), level).filter((r) => r.expect === 'answer')
   const tasks = []
   let skippedGate = 0
+  let priming = 0
+  let unprimed = 0
 
   /**
    * ONE PURCHASE FOR THE WHOLE EMIT — see `src/eval/prefetch.ts`.
    *
    * `task()` below embedded one text per request, and a follow-up costs two, so
    * this pass was one request per question against a tier that allows fifty a
-   * day. Both channels are bought here, including the `#prev` question a
-   * follow-up's stage-1 pass asks for and the `prev\nquestion` string its
-   * stage-2 pass composes — the same three spellings `task()` reaches for, built
-   * the same way so a text bought here and a text asked for there cannot drift.
+   * day.
+   *
+   * The list used to be spelled here — `[prev, question, `${prev}\n${question}`]`
+   * — which is the hand-written composition `conversation.js` was written to
+   * delete, and it enumerated one hop because that is all a record could hold.
+   * `chainTexts` enumerates the whole cascade instead, and it is the SAME module
+   * `resolveChain` composes with, so a text bought here and a text asked for in
+   * `task()` cannot drift. At depth 0 and depth 1 it returns exactly the set
+   * this expression returned, so no existing emit changes its request count.
    *
    * A CACHE, never a second path: a short map falls through to `embedQuery`.
    */
   const vectorlessIndex = index.manifest.vectors === null
   if (!vectorlessIndex) {
-    const wanted = records.flatMap((rec) =>
-      rec.prev_question
-        ? [rec.prev_question, rec.question, `${rec.prev_question}\n${rec.question}`]
-        : [rec.question],
-    )
+    const wanted = records.flatMap(chainTexts)
     const { vectors, requests } = await prefetchEmbeddings(wanted, {
       provider: EMBED_PROVIDER,
       baseURL: EMBED_BASE,
@@ -338,28 +391,82 @@ async function emit() {
       tuning: index.manifest.tuning,
     })
 
-    // A follow-up needs its previous turn answered first. Pass 1 emits that
-    // question under `<id>#prev`; pass 2 (with --history) emits the real record.
-    const isFollowUp = Boolean(rec.prev_question)
-    const priorAnswer = isFollowUp ? prior.get(`${rec.id}#prev`) : null
-    if (isFollowUp && !historyFile) {
+    /**
+     * ONE PASS PER HOP, AND THE PASS THIS RECORD IS ON READ OFF ITS ANSWERS.
+     *
+     * A turn cannot be primed until the turn before it has been answered, so a
+     * chain of depth D takes D + 1 passes per config and D + 1 answerer calls
+     * per record — the emit is re-run after each answering pass with the
+     * accumulated `--history`, and each run advances every record by one turn.
+     * The two-pass shape this replaces was not a simplification, it was the
+     * depth ceiling: `rec.prev_question` held one question, so `!historyFile`
+     * could stand in for "pass 1" and there was nothing for a third pass to do.
+     *
+     * `historyFile` is no longer consulted for the branch. How far a record has
+     * got is a property of the ANSWERS — the longest answered prefix of its
+     * chain — and reading it that way is what makes the emit idempotent and
+     * makes a partly-answered set advance the records it can while re-emitting
+     * the turns it cannot. With no `--history` at all the prefix is empty and
+     * every follow-up primes its first turn, which is what pass 1 always did.
+     *
+     * WHAT THAT COSTS HERE IS FOUR PASSES, AND IT USED TO BE TWO. The sentence
+     * this replaces read "on the current golden set nothing moves": it was
+     * written when the set held 46 answer tasks with 8 follow-ups, every one
+     * of them depth 1, so D + 1 was 2 and both passes emitted what they had
+     * emitted before chains existed. Measured on the 96-record `golden.jsonl`
+     * in this tree, `expect: 'answer'` selects 66 tasks, 28 of them follow-ups
+     * — 8 at depth 1, 10 at depth 2, 10 at depth 3 — so a full emit of it is
+     * four passes: three priming rounds, each answered and appended to the
+     * `--history` file, then the scored turn. The four is stated against a set
+     * size because the set is being authored; what it is a function of is the
+     * deepest chain the `--level` filter leaves standing, and those eight
+     * depth-1 records still cost exactly the two passes they always did.
+     */
+    const chain = priorQuestions(rec)
+    const history = []
+    while (history.length < chain.length) {
+      const answer = primingAnswer(prior, rec.id, history.length + 1)
+      if (answer == null) break
+      history.push({ question: chain[history.length], answer })
+    }
+
+    if (history.length < chain.length) {
+      const n = history.length + 1
       // Null-checked exactly like the stage-2 push below. `task` returns null
       // when the gate refuses — a legitimate outcome — and pushing that wrote
       // the literal string "null" into tasks.jsonl, which `shard()` then read
       // back and dereferenced.
-      const t1 = await task({ index, retrieval, scope, id: `${rec.id}#prev`, question: rec.prev_question, rec, history: [], stage: 1 })
-      if (t1) tasks.push(t1)
-      else skippedGate++
-      continue
-    }
-    const history = isFollowUp && priorAnswer
-      ? [{ question: rec.prev_question, answer: priorAnswer }]
-      : []
-    if (isFollowUp && !priorAnswer) {
-      console.error(`  ~ ${rec.id}: no stage-1 answer for its previous turn; emitted without history`)
+      const t1 = await task({
+        index, retrieval, scope,
+        id: primingId(rec.id, n),
+        question: chain[n - 1],
+        priors: chain.slice(0, n - 1),
+        rec, history, stage: 1, scored: false,
+      })
+      if (t1) {
+        tasks.push(t1)
+        priming++
+        continue
+      }
+      /**
+       * A PRIMING TURN THE GATE REFUSES IS NEVER ANSWERED, so waiting for it is
+       * waiting forever: `evaluate()` is deterministic over this index and these
+       * levers, and the next pass would refuse it again and stall the record for
+       * good. Falling through emits the scored record on the pairs that did
+       * answer — which is exactly what the two-pass emit did with the same
+       * refusal, one pass later, and the warning it printed said so. Counted
+       * apart from `skippedGate` because the record IS an answer task; what it
+       * is missing is part of its prompt.
+       */
+      console.error(`  ~ ${rec.id}: turn ${n} of ${chain.length} is refused by the gate; emitted on the ${history.length} answered pair(s)`)
+      unprimed++
     }
 
-    const t = await task({ index, retrieval, scope, id: rec.id, question: rec.question, rec, history, stage: 2 })
+    const t = await task({
+      index, retrieval, scope,
+      id: rec.id, question: rec.question, priors: chain,
+      rec, history, stage: 2, scored: true,
+    })
     if (!t) {
       skippedGate++
       continue
@@ -382,9 +489,18 @@ async function emit() {
   }
   console.log(`  ${tasks.length} task(s) → ${path.relative(ROOT, out)}`)
   if (skippedGate) console.log(`  ${skippedGate} record(s) refused by the gate — not an answer task`)
+  // The line that says another pass is owed. Without it a chain set looks like a
+  // finished emit holding fewer scored tasks than the pool has records, and the
+  // difference reads as gate refusals rather than as turns nobody has answered.
+  if (priming) {
+    console.log(
+      `  ${priming} priming turn(s) — answer them, append to ${historyFile || '<file>'} and re-run with --history=`,
+    )
+  }
+  if (unprimed) console.log(`  ${unprimed} record(s) emitted without part of their chain — a priming turn the gate refuses`)
   console.log('')
 
-  async function task({ index, retrieval, scope, id, question, rec, history, stage }) {
+  async function task({ index, retrieval, scope, id, question, priors, rec, history, stage, scored }) {
     // A vectorless index names no model and no host to embed against, and
     // `evaluate()` drops the vector at the top in any case. The composed run
     // still HAPPENS — `null` runs it with no vector, `undefined` skips it —
@@ -392,18 +508,54 @@ async function emit() {
     // lexical channel too, and skipping it scores the follow-up on the raw
     // question alone.
     const vectorless = index.manifest.vectors === null
-    const vec = vectorless ? null : await embedOne(question, index.manifest.embedModel)
+    const embed = (text) => embedOne(text, index.manifest.embedModel)
+
+    /**
+     * THE ANTECEDENT, MEASURED RATHER THAN GUESSED FROM THE HISTORY ARRAY.
+     *
+     * This read `history[0].question` — the OLDEST turn — and composed against
+     * it. That was right by coincidence and only ever by coincidence: while a
+     * record could hold one prior question, `history` never had more than one
+     * entry, so `[0]` and `[length - 1]` were the same object and no test could
+     * separate them. The moment a second pair exists it composes the scored
+     * question against the turn furthest from it, which is the one turn the
+     * panel would never use — `chainAntecedent` reads the LAST prior turn, and
+     * reaches past it only when that turn itself won on the composed channel.
+     *
+     * `resolveChain` is that rule, run: every prior question is asked, gated and
+     * read for its own channel, and the antecedent it returns is the one the
+     * shipped turn would have inherited.
+     *
+     * TWO ARRAYS, AND THEY ARE NOT THE SAME ARRAY. `priors` is the record's
+     * CHAIN and it is what the gate is resolved from; `history` is the ANSWERED
+     * PAIRS and it is what `buildMessages` renders. Every emit that reaches the
+     * scored turn by the normal route has them equal, and they part only on the
+     * fall-through above, where a priming turn the gate refused leaves `history`
+     * short. `priorAntecedent` (session.js:1720) is production's rule for that
+     * case: it filters the thread to answered turns, and with none it returns
+     * `prior[prior.length - 1].question` — the immediately previous question,
+     * which at depth 1 is exactly what `chainAntecedent` over the whole chain
+     * returns here. So the record's chain is both `resolveChain`'s contract and
+     * the closer of the two readings; `history[0]` was neither.
+     *
+     * No new requests: `chainTexts` bought every one of these above, and
+     * `embedOne` is a cache over that purchase.
+     */
+    const { antecedent, composedQuery } = await resolveChain({
+      rec: { question, prev_questions: priors },
+      retrieval,
+      embed,
+      lexical: vectorless,
+    })
+
+    const vec = vectorless ? null : await embed(question)
 
     let composedVec
-    if (history.length) {
-      composedVec = vectorless
-        ? null
-        : await embedOne(`${history[0].question}\n${question}`, index.manifest.embedModel)
-    }
+    if (composedQuery) composedVec = vectorless ? null : await embed(composedQuery)
 
     const g = retrieval.evaluate({
       question,
-      previousQuestion: history.length ? history[0].question : undefined,
+      previousQuestion: antecedent,
       queryVec: vec,
       composedVec,
     })
@@ -445,6 +597,7 @@ async function emit() {
     return {
       id,
       stage,
+      scored,
       config,
       // On every task rather than once per file: a `.tasks.jsonl` has no header
       // line, and `cell()` and `shard()` both read it strictly one task per line.
@@ -456,9 +609,14 @@ async function emit() {
       prompt: render(messages),
       citable: g.chunks.map((c) => c.id),
       sources: g.chunks.map((c) => ({ id: c.id, title: c.title, path: c.path, text: c.text })),
-      gold_answer: stage === 2 ? rec.gold_answer : '',
-      identifiers: stage === 2 ? rec.identifiers || [] : [],
-      gold_chunks: stage === 2 ? rec.gold_chunks || [] : [],
+      // `scored` and not `stage === 2`: the stage numbering is frozen for
+      // `--stage`'s sake (see `primingId`), so it is no longer the field that
+      // says which task carries the gold. Written on every task, true and false
+      // alike, so a reader never has to tell "not scored" from "a file that
+      // predates the flag" — that distinction is `??`'s job, at the two readers.
+      gold_answer: scored ? rec.gold_answer : '',
+      identifiers: scored ? rec.identifiers || [] : [],
+      gold_chunks: scored ? rec.gold_chunks || [] : [],
     }
   }
 }
@@ -517,7 +675,13 @@ function cell(tasksFile, answersFile) {
   for (const a of answers) {
     const t = tasks.get(a.id)
     if (!t) die(`answer ${a.id} in ${answersFile} has no matching task`)
-    if (t.stage !== 2) continue // stage-1 turns exist only to seed a follow-up
+    // `t.scored ?? t.stage === 2` and not one or the other. `scored` is the field
+    // that means it now — priming turns of every depth are stage 1 and the
+    // scored turn is stage 2, but that is a frozen numbering, not the test — and
+    // the `??` is what keeps a `tasks.jsonl` emitted before the field existed
+    // readable: absent reads as the stage test it was written under. Same
+    // back-compatibility rule `record.js` keeps for `prev_question`.
+    if (!(t.scored ?? t.stage === 2)) continue // priming turns exist only to seed a follow-up
 
     // `harness.js:371` drops any citation outside the emitted set before the
     // answer leaves the turn. So the QUALITY metrics below score the filtered
@@ -741,7 +905,9 @@ function judgeEmit() {
   const load = (tf, af) => {
     const tasks = new Map(
       fs.readFileSync(tf, 'utf8').trim().split('\n').filter(Boolean)
-        .map((l) => JSON.parse(l)).filter((t) => t.stage === 2).map((t) => [t.id, t]),
+        // The same test `cell()` makes, and for the same reason — a priming turn
+        // has no gold answer, so it is not a packet either.
+        .map((l) => JSON.parse(l)).filter((t) => t.scored ?? t.stage === 2).map((t) => [t.id, t]),
     )
     const answers = new Map(
       fs.readFileSync(af, 'utf8').trim().split('\n').filter(Boolean)
@@ -851,7 +1017,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       // A missing mode is a USAGE error — nothing was attempted.
       printError(
         'usage: docpilot bench emit|shard|score|runs|judge-emit|judge-score …\n' +
-          '        emit --config=<name> [--out=<file>] [--history=<file>] [--level=low|medium|high|xhigh|max|ultra]',
+          '        emit --config=<name> [--out=<file>] [--history=<file>] [--level=low|medium|high|xhigh|max|ultra]\n' +
+          '        --history is ONE file holding EVERY earlier pass\'s answers — append to it\n' +
+          '        between passes; a chain of depth D takes D+1 of them.',
       )
       process.exit(USAGE)
     }

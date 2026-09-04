@@ -30,6 +30,7 @@ import { pathToFileURL } from 'node:url'
 import { ROOT, RAG, GOLDEN } from '../cli-context.js'
 import { underPath } from './metrics.js'
 import { LEVELS, DEFAULT_RECORD_LEVEL, levelRank, levelHistogram } from './levels.js'
+import { priorQuestions, chainDepth, isFollowUp } from './record.js'
 import { entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
 import { applyFileEnv } from '../cli-env.js'
 import { printError, FAILED, USAGE } from '../cli-exit.js'
@@ -142,6 +143,58 @@ export function lintRecords(records, { ids, pages, indexHash }) {
       warn(id, `no level — runs as "${DEFAULT_RECORD_LEVEL}"`)
     } else if (levelRank(r.level) < 0) {
       err(id, `level "${r.level}" is not one of ${LEVELS.join(' | ')}`)
+    }
+
+    /**
+     * THE CONVERSATION, which `priorQuestions` deliberately hands over unrepaired.
+     *
+     * Two spellings, and the accessor arbitrates by returning `prev_questions`
+     * whenever it is present. That is the right thing for a pure accessor and the
+     * wrong thing to leave unsaid: a record carrying both fields states two
+     * different conversations, one of them is scored and the other is not, and
+     * nothing downstream reports the discrepancy — the run's rows say `depth: 2`
+     * and the author reads them as the chain they wrote in the field that lost.
+     * Hence an error and not a warning: the set still produces numbers, and the
+     * numbers are for a question nobody asked. `prev_question` ALONE stays legal
+     * forever — every golden file and probe file in the wild carries it and must
+     * score identically after chains existed. This rule is about AUTHORING BOTH,
+     * never about the legacy spelling.
+     */
+    if (r.prev_questions != null && r.prev_question != null) {
+      err(id, 'both prev_questions and prev_question are authored — priorQuestions returns prev_questions, so the conversation in prev_question is never asked; drop one')
+    }
+    if (r.prev_questions != null && !Array.isArray(r.prev_questions)) {
+      err(id, `prev_questions is ${typeof r.prev_questions}, not an array — a chain is the prior questions in order, oldest first`)
+    }
+    /**
+     * A BLANK PRIOR IS NOT A SHORTER CHAIN, which is the whole reason
+     * `priorQuestions` passes one through: `composeQuery(question, '')` returns
+     * null (gate.js:209 — `previousQuestion ?` on a falsy string), so the record
+     * runs with no composed channel at all while every row it produces still
+     * reads as a follow-up of this depth. Repaired silently by the accessor it
+     * would be a first turn wearing a follow-up's label; named here it is one
+     * edit. The position is in the message because a chain of four reports
+     * nothing an author can act on otherwise.
+     */
+    priorQuestions(r).forEach((q, i) => {
+      if (typeof q === 'string' && q.trim()) return
+      const field = Array.isArray(r.prev_questions) ? `prev_questions[${i}]` : 'prev_question'
+      err(id, `${field} is not a question: ${String(JSON.stringify(q))} — every prior is asked verbatim, and a blank one composes to no query while the record still reports as a follow-up`)
+    })
+    /**
+     * FOUR IS WHERE THE PROMPT CHANGES SHAPE, and it is a warning because that is
+     * a reason to author one rather than a defect. `buildMessages`
+     * (src/theme/docpilot/prompt.js:784) filters history to the pairs that
+     * actually answered, then splits it `answered.slice(-3)` / `answered.slice(0,
+     * -3)`: the last three go out as verbatim user/assistant pairs and anything
+     * older is collapsed into a single user line, "Earlier in this session the
+     * reader asked about: <q>; <q>". With three priors `older` is empty and that
+     * line does not exist. The fourth pair is the first to render it, and no eval
+     * has ever reached it.
+     */
+    const depth = chainDepth(r)
+    if (depth >= 4) {
+      warn(id, `chain of ${depth} — from the 4th pair buildMessages keeps only the last three verbatim and condenses the rest into one "Earlier in this session the reader asked about:" line`)
     }
 
     const positive = r.expect === 'answer'
@@ -261,9 +314,23 @@ function main() {
   const positives = records.filter((r) => r.expect === 'answer').length
   const negatives = records.length - positives
   const scoped = records.filter((r) => r.scope).length
-  const followUps = records.filter((r) => r.prev_question).length
+  // `records.filter((r) => r.prev_question)` counted the legacy field and nothing
+  // else, so a set authored entirely with `prev_questions` reported zero
+  // follow-ups here and in `--json` while every one of its records is one.
+  const followUps = records.filter(isFollowUp).length
   const byKind = {}
   for (const r of records) byKind[r.kind || '?'] = (byKind[r.kind || '?'] || 0) + 1
+  /**
+   * The histogram, because the count above cannot distinguish the two things an
+   * author most wants distinguished. Eight follow-ups is eight one-hop records
+   * and eight two-hop chains alike, and the second antecedent is only exercised
+   * by the latter — a set believed to hold chains and holding none reports the
+   * pre-023 behaviour under the new records' names, and the eval that would have
+   * shown it costs a run. This is the one place that is readable before spending
+   * one.
+   */
+  const byDepth = {}
+  for (const r of records) byDepth[chainDepth(r)] = (byDepth[chainDepth(r)] || 0) + 1
 
   if (JSON_OUT) {
     console.log(
@@ -276,6 +343,7 @@ function main() {
           negatives,
           scoped,
           followUps,
+          byDepth,
           byKind,
           byLevel: levelSummary(records),
           warnings,
@@ -299,6 +367,7 @@ function main() {
   say(`  positives / neg  ${positives} / ${negatives}`)
   say(`  scoped           ${scoped}`)
   say(`  follow-up        ${followUps}`)
+  say(`  by depth         ${JSON.stringify(byDepth)}`)
   say(`  by kind          ${JSON.stringify(byKind)}`)
   say(`  by level         ${levelSummary(records)}`)
 

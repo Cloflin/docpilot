@@ -37,6 +37,8 @@ What is **not** stored:
 - **the rendered HTML.** It is recomputed on restore, which is not only smaller but more correct: a link to a page that has since been deleted comes back as plain text rather than as a link into a 404;
 - **the reader's own instruction.** That stays in `sessionStorage` and still dies with the tab.
 
+Losing the excerpts does not cost a reopened conversation its evidence. A follow-up asked in one is primed with the sections the previous answer cited — up to three of them — because those addresses are recovered from the source rows that *are* stored and fetched again from the current index, and a section that has left the corpus since is dropped rather than trusted.
+
 ## Where
 
 Two keys, in two different storages:

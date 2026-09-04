@@ -104,6 +104,21 @@ const claims = [
     `${kb} for this site's ${n} chunks`,
     new RegExp(`${SIZE} for this site(?:'|’)s ${NUM} chunks`, 'g'),
   ],
+  // The cost page states the same blob from the site owner's side. Registered
+  // here rather than left as prose because it is the one figure on that page a
+  // reader is invited to multiply by their own corpus size, and a stale one
+  // would understate the only cost that scales with the corpus rather than with
+  // the traffic.
+  [
+    'docs/guide/what-it-costs.md',
+    `${kb} for this site's ${n} chunks at ${dims} dimensions`,
+    new RegExp(`${SIZE} for this site(?:'|’)s ${NUM} chunks at ${NUM} dimensions`, 'g'),
+  ],
+  [
+    'docs/guide/what-it-costs.md',
+    `at \`float32\` the same blob would be ${mb}`,
+    new RegExp(String.raw`at \`float32\` the same blob would be ${SIZE}`, 'g'),
+  ],
 ]
 
 const byFile = new Map()
