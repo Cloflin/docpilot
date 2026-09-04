@@ -27,44 +27,10 @@ export const docPilot = {
   product: 'DocPilot',
   quote: { fromAnswer: true, fromDocs: true },
   citations: { passage: true, inCopy: true, pagesRead: true },
-  /**
-   * ONE MODEL, AND NO POOL BEHIND IT.
-   *
-   * This account's allowed-providers list permits `openai` and nothing else, so
-   * a free understudy from any other vendor is refused before it is reached —
-   * "Providers serving …: nvidia, but your account's allowed-providers setting
-   * permits only: openai". A pool whose every fallback is unreachable is not a
-   * pool; it is one extra refusal per turn.
-   *
-   * WHAT THAT COSTS is rotation: `chatModels` returns null for a lone named
-   * model, so a refusal ends the turn rather than trying somebody else. The
-   * transport still retries the same model with a smaller body when the refusal
-   * was about a PARAMETER (engine-specs/020), which is the failure a pool was
-   * least able to help with anyway.
-   *
-   * NO `reasoning` KEY. `gpt-4o-mini` publishes no reasoning parameter, and
-   * beside OpenRouter's `provider.require_parameters` — on by default, because
-   * it is what stops a strict schema being silently dropped — naming one narrows
-   * routing to endpoints that publish it and answers `404 No endpoints found
-   * that can handle the requested parameters`. Writing `reasoning: false` did
-   * that too: it is a request for `{enabled: false}`, which is a parameter, not
-   * the absence of one. Left unset, no reasoning field is written at all.
-   */
   chat: {
     provider: 'openrouter',
     model: 'openai/gpt-4o-mini',
   },
-  /**
-   * `probe: 'never'`, and it is the price of dropping the pool.
-   *
-   * The capability probe is a full model call made before the reader has read a
-   * word, and `'auto'` skips it only where a pool is configured — a pool's
-   * members are tool-capable by construction, so the question is already
-   * answered. With one named model `'auto'` asks it again on every page load:
-   * one request per reader per page, out of a daily allowance the whole site
-   * shares. `gpt-4o-mini` calls tools; nothing needs to spend a request finding
-   * that out.
-   */
   budget: { probe: 'never' },
   embed: {
     provider: 'openrouter',
