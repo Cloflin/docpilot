@@ -29,7 +29,7 @@ import {norm} from './theme/docpilot/text.js'
 // module fetches nothing unless `fetchFreePool` is called, which nothing here
 // does: a config file is read synchronously, and a build that reached for the
 // network to decide what a default means would be a build that fails offline.
-import {isAutoModel, FREE_CHAT, FREE_EMBED} from './theme/docpilot/openrouter.js'
+import {isAutoModel, namesPool, FREE_CHAT, FREE_EMBED, FREE_ROUTER} from './theme/docpilot/openrouter.js'
 
 /**
  * DocPilot plumbing. NO SETTINGS LIVE HERE — the `docPilot` object in ./config.mjs is
@@ -191,10 +191,12 @@ const PROVIDERS = {
      * silently wrong afterwards, which cost every OpenRouter user a second
      * provider they did not need.
      *
-     * `freePool` is the part that is new. Both halves may be left unnamed, and
-     * an unnamed half resolves to an ordered list of free ids rather than to one
-     * default — see openrouter.js for why a shared free tier is a pool rather
-     * than a model, and why only the chat half may rotate at runtime.
+     * `freePool` is the list an author may ASK for, on either half, and the list
+     * the EMBED half still resolves from silence — see openrouter.js for why a
+     * shared free tier is a pool rather than a model, and why only the chat half
+     * may rotate at runtime. The chat half no longer reads it from silence:
+     * `chatModel` below is a real default now, and `chat.model: 'free'` is what
+     * reaches for the ten ids.
      *
      * `extraBody` is the brand-specific fragment the CLIENT merges into the
      * request body, and it lives here because this file is where brands are
@@ -213,9 +215,24 @@ const PROVIDERS = {
      * other provider here bills per token, where a request count means nothing.
      */
     openrouter: openaiCompatible('https://openrouter.ai/api', ['OPENROUTER_API_KEY'], {
-        // Null on BOTH halves, and that is the pool speaking rather than an
-        // omission — see `freePool` below and `chatModels`.
-        chatModel: null,
+        /**
+         * ONE ID, AND IT IS THE ROUTER — `openrouter/free`.
+         *
+         * This was null, on the grounds that a shared free tier is a list rather
+         * than a model, and the null was read by `chatModels` as "walk all ten".
+         * What that produced on a live site is written up in engine-specs/021:
+         * seven `:free` ids on the wire, each buying the identical refusal,
+         * under a config file that named one model.
+         *
+         * `openrouter/free` is the same argument answered a hop closer to the
+         * pool. It is OpenRouter's own router over the free tier — it picks a
+         * free model per request and skips the saturated ones — so silence still
+         * resolves to something that works on one key, and it resolves to ONE
+         * request rather than ten candidates the browser walks.
+         *
+         * The list is still reachable, by name: `chat: {model: 'free'}`.
+         */
+        chatModel: FREE_ROUTER,
         embedModel: FREE_EMBED[0],
         freePool: {chat: FREE_CHAT, embed: FREE_EMBED},
         extraBody: {provider: {require_parameters: true}},
@@ -842,7 +859,17 @@ const chatModelOf = (docPilot) =>
 const freePoolFor = (id, half) => hostedOf(id)?.freePool?.[half] || null
 
 /**
- * The chat pool for this configuration, or null when a model was named.
+ * The chat pool for this configuration, or null — which is now the usual answer.
+ *
+ * A LIST IS SOMETHING AN AUTHOR ASKS FOR. It used to be something silence
+ * produced: `isAutoModel` read an omitted `chat.model` as "you choose" and this
+ * function handed back ten free ids, which the transport then walked. A site
+ * whose config file named one model posted seven — engine-specs/021.
+ *
+ * Two spellings reach the list now, both of them written down: `chat.models`,
+ * the author's own order, and `chat.model: 'free'`, which is the shipped one
+ * asked for by name and is what `poolNamed` records. Everything else resolves
+ * to a single id, the provider's table default included.
  *
  * Exported because three callers need the same answer and a second copy of the
  * rule would drift: the browser gets it through `themeDocPilot`, the indexer
@@ -853,7 +880,12 @@ export function chatModels(docPilot) {
     // pair reads as "this one, and these if it is busy", which is the shape a
     // paid primary with free understudies wants.
     if (ownChatModels(docPilot)) return [...docPilot.chat.models]
-    return isAutoModel(docPilot.chat.model) ? freePoolFor(docPilot.chat.provider, 'chat') : null
+    // `poolNamed` rather than `isAutoModel`, and on a RAW config — one
+    // `themeDocPilot` accepts, and a hand-written themeConfig is — the flag is
+    // absent, so the spelling is read directly. `resolveChat` computes the same
+    // thing before it normalises `'free'` away.
+    const asked = docPilot.chat.poolNamed ?? namesPool(docPilot.chat.model)
+    return asked ? freePoolFor(docPilot.chat.provider, 'chat') : null
 }
 
 /** An author's own ordered list, written down in `chat.models`. */
@@ -877,10 +909,22 @@ const ownChatModels = (docPilot) =>
  * happen to be in it. The list is theirs, it may be paid, and the request ceiling
  * this flag stands for belongs to the provider's free catalogue rather than to
  * the fact that a list exists.
+ *
+ * IT ASKS ABOUT THE TIER, NOT ABOUT THE LIST, and the distinction became
+ * load-bearing the moment `chatModels` stopped answering silence with ten ids.
+ * Reading "is there a pool?" for "is this the free tier?" was already a
+ * coincidence; with a table default it becomes false, and the failure is silent
+ * in the expensive direction — `llm.freePool` goes false, `session.js` seeds no
+ * ceiling, `budget.js` stops rationing, and a deployment that still has fifty
+ * requests a day runs fully agentic against them. That is engine-spec 020's
+ * overspend arriving from the other side, which is why the question below is now
+ * the one the chain's own members have always asked: does this PROVIDER publish
+ * a free catalogue, and did the author decline it by naming a model?
  */
 function freeChatPool(docPilot) {
     if (ownChatModels(docPilot)) return false
-    return Boolean(chatModels(docPilot))
+    const named = authorNamedModel(docPilot.chat)
+    return Boolean(!named && freePoolFor(docPilot.chat.provider, 'chat'))
 }
 
 /** The members selected by an ADDRESS rather than a credential. */
@@ -1086,8 +1130,8 @@ export function resolveChatChain(docPilot, env = {}) {
  *
  * `chat.model` and `chat.models` reach the HEAD and no other member, because a
  * model name never crosses providers — `gpt-4o-mini` posted to Groq is a 404 for
- * a model nobody typed. Every later member falls to its own table default, or to
- * its own free pool where it has one.
+ * a model nobody typed. Every later member falls to its own table default, and
+ * to nothing else: a list on a tail member is one the author wrote there.
  */
 function member(spec, docPilot, env, isHead, own) {
     const id = spec.provider
@@ -1104,14 +1148,18 @@ function member(spec, docPilot, env, isHead, own) {
         spec.model !== undefined
             ? spec.model
             : chatModelOf({chat: {provider: id, model: isHead ? docPilot.chat.model : null}})
-    const models =
-        spec.models !== undefined
-            ? spec.models
-            : isHead
-              ? chatModels(docPilot)
-              : isAutoModel(model)
-                ? freePoolFor(id, 'chat')
-                : null
+    /**
+     * A TAIL MEMBER GETS NO LIST IT WAS NOT GIVEN.
+     *
+     * It used to fall to `freePoolFor(id, 'chat')` whenever its model resolved
+     * to nothing — which, for the one provider that has a pool, was every time
+     * the author wrote `chain: ['openrouter']`. That is a chain entry naming a
+     * service and a browser walking ten ids nobody typed, which is the shape
+     * engine-specs/021 is about; and it is now unreachable anyway, since every
+     * provider in the table carries a default. Only `spec.models` — the author's
+     * own `{provider, models: […]}` — puts a list on a member behind the head.
+     */
+    const models = spec.models !== undefined ? spec.models : isHead ? chatModels(docPilot) : null
     const baseURL =
         spec.baseURL !== undefined && spec.baseURL !== null
             ? spec.baseURL
@@ -1249,6 +1297,7 @@ const SEARCH_ONLY_CHAT = {
     chain: false as const,
     model: null,
     modelAuto: false,
+    poolNamed: false,
     models: null,
     baseURL: null,
     temperature: null,
@@ -3028,14 +3077,19 @@ export const DEFAULTS = {
          * where an entry is a provider id or an object carrying what to send
          * that member.
          *
-         * IT SHIPS ON because an environment holding two keys and spending a
-         * reader's question on the one having a bad afternoon is a failure the
-         * deployment already paid to avoid, and because the shape it resolves to
-         * is unchanged for almost everyone: an environment with ONE key selects
-         * one member, and a one-member chain is the scalar configuration this
-         * file has always emitted, to the byte. What changes is the environment
-         * that selects several — which now walks them in `ladderTier` order
-         * rather than stopping at the first.
+         * IT SHIPS OFF, and it shipped on for one release. The argument for
+         * `'auto'` was real — an environment holding two keys should not spend a
+         * reader's question on the one having a bad afternoon — but it is an
+         * argument for a deployment to make, not for a package to make on its
+         * behalf. What ships instead is the rule this whole release is written
+         * under: a request goes to the service the config names, and a second
+         * service answering is something somebody wrote down.
+         *
+         * The environment that selected several used to walk them without ever
+         * saying so in the config file, which is the same failure `chat.models`
+         * had one level down — a deployment posting to a provider that appears
+         * nowhere in the file its author is reading. `chain: 'auto'` still spells
+         * exactly what it always did; it is now a sentence rather than a silence.
          *
          * IT FIRES ONLY WHERE `provider` IS ALSO `'auto'`. A provider written
          * down is never overridden — that promise predates this key — so naming
@@ -3048,7 +3102,7 @@ export const DEFAULTS = {
          *
          * `resolveChatChain` is the resolver.
          */
-        chain: 'auto',
+        chain: false,
         /**
          * PREFER A SERVER OF YOUR OWN — the opt-in half of the decision 0.3.2 made.
          *
@@ -3618,12 +3672,24 @@ export const THEME_ONLY = [
  * that is right for every provider. Naming it here is what lets this function
  * resolve one.
  *
+ * `modelAuto` and `poolNamed` are in the parameter type for the OTHER direction:
+ * they are outputs of this function, and a resolved record is a legal input to
+ * it — switches.js states that rule for every resolver here. Both record a
+ * question the resolved value can no longer answer, so on a second pass they
+ * have to be read back rather than recomputed from a value this function itself
+ * filled in.
+ *
  * @param {{provider?: string, model?: string|null, models?: string[]|null,
  *   temperature?: number, maxTokens?: number, numCtx?: number,
- *   baseURL?: string|null, extraBody?: object|null}} [chat]
+ *   baseURL?: string|null, extraBody?: object|null,
+ *   modelAuto?: boolean, poolNamed?: boolean}} [chat]
  * @param {Record<string, string|undefined>} [env]
  */
 function resolveChat(chat = {}, env = {}) {
+    // The two fields a RESOLVED record carries back in, read off the argument
+    // rather than off `named`: neither is in `DEFAULTS.chat` — they are outputs
+    // of this function, and `DEFAULTS` is the shape an author writes.
+    const carried = chat as {modelAuto?: boolean; poolNamed?: boolean}
     const named = {...DEFAULTS.chat, ...chat}
     /**
      * WHETHER THE ENVIRONMENT CHOSE, recorded because the resolved value cannot
@@ -3660,6 +3726,21 @@ function resolveChat(chat = {}, env = {}) {
             named.baseURL ||
             (provider === 'ollama' ? env[OLLAMA_BASE_URL_ENV] || LOCAL_BASE_URL : named.baseURL),
     }
+    /**
+     * WHETHER THE POOL WAS ASKED FOR, and it has to be read BEFORE the line
+     * below erases the spelling that asked.
+     *
+     * `'free'` and `'auto'` are the two words that reach the ten-id list; every
+     * other value, silence included, resolves to one model. Both are normalised
+     * to `null` a line down — that normalisation is what stops `auto` being
+     * posted as a model id — so this is the only moment the question can be
+     * answered at all.
+     *
+     * The `??` is the idempotence rule switches.js states: a resolved record is a
+     * legal input, and re-resolving one must not quietly turn a pool back into a
+     * single model because the word that asked for it is gone.
+     */
+    const poolNamed = carried.poolNamed ?? namesPool(merged.model)
     // `model: 'auto'` is a spelling openrouter.js advertises, and a spelling that
     // is recognised but never STRIPPED is worse than one that is not recognised
     // at all: `chatModels` read it as "you choose" and the transport read it as a
@@ -3667,19 +3748,6 @@ function resolveChat(chat = {}, env = {}) {
     // the head of it. Normalise once, here, and every reader downstream sees the
     // same null the omitted case produces.
     if (isAutoModel(merged.model)) merged.model = null
-    /**
-     * WHOSE NAME THE MODEL IS, recorded here because the line below is about to
-     * make the two cases indistinguishable — exactly the reason `providerAuto`
-     * exists three fields up, and computed for the same reason at the same
-     * moment: after normalisation, before the fill.
-     *
-     * `doctor` is the caller. "You named a model this server does not have" and
-     * "our default is stale for your machine" want different sentences and
-     * different advice, and after `merged.model` is filled nothing can tell them
-     * apart. Deliberately NOT in `DEFAULTS`: nothing can set it, it is an output
-     * of this function, and `themeDocPilot` names the keys it emits one by one,
-     * so it never reaches the browser.
-     */
     /**
      * WHOSE NAME THE MODEL IS, recorded before the line below makes the two
      * cases indistinguishable — exactly the reason `providerAuto` exists, and
@@ -3691,15 +3759,23 @@ function resolveChat(chat = {}, env = {}) {
      * different advice. Deliberately NOT in `DEFAULTS`: nothing can set it, it
      * is an output of this function, and `themeDocPilot` names the keys it emits
      * one by one, so it never reaches the browser.
+     *
+     * THE `??` IS NOT DECORATION. Without it this function was not idempotent:
+     * a resolved record carries the table default in `model`, so re-resolving one
+     * read `modelAuto: false` for a config whose author had named nothing, and
+     * `ladderTier` then sorted a free-tier member onto the billed rung. The
+     * defect predates the openrouter default and is enlarged by it — every
+     * provider in the table has a default now, so every one of them was exposed.
      */
-    const modelAuto = merged.model == null
+    const modelAuto = carried.modelAuto ?? merged.model == null
     return {
         ...merged,
         modelAuto,
+        poolNamed,
         // The provider's own default, and only where the author named nothing.
-        // A pooled provider keeps the null it just normalised to — `chatModels`
-        // reads that as "you choose" and walks the free pool, which is the
-        // answer there.
+        // EVERY provider in the table has one now, openrouter included, so this
+        // no longer leaves a null behind for `chatModels` to read as "walk the
+        // pool" — a list is asked for by name and `poolNamed` above is the ask.
         model: modelAuto ? chatModelOf({chat: merged}) : merged.model,
         // The author's five spellings collapsed to three shapes, once, here — so
         // that `resolveTuning`, `assertChatKnobs` and `doctor` all read the same

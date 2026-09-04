@@ -513,7 +513,7 @@ describe('the configuration a free pool resolves from', () => {
    * provider's name reaching another provider's endpoint.
    */
   it('gives each provider its own model and carries none across', () => {
-    expect(cfg({ chat: { provider: 'openrouter' } }).chat.model).toBe(null) // the pool answers
+    expect(cfg({ chat: { provider: 'openrouter' } }).chat.model).toBe(FREE_ROUTER) // the router answers
     expect(cfg({ chat: { provider: 'openai' } }).chat.model).toBe('gpt-4o-mini')
     expect(cfg({ chat: { provider: 'anthropic' } }).chat.model).toBe('claude-sonnet-4-6')
     expect(cfg({ chat: { provider: 'ollama' } }).chat.model).toBe('qwen3:8b')
@@ -525,21 +525,65 @@ describe('the configuration a free pool resolves from', () => {
   /**
    * And with NOTHING named, the environment answers both questions at once.
    * `ENV` here carries `OPENROUTER_API_KEY` and nothing else, so the chain stops
-   * on `openrouter` — whose model is the pool, hence null.
+   * on `openrouter` — whose model is the router over the free tier.
    */
   it('resolves provider and model together from the environment', () => {
     expect(cfg({}).chat.provider).toBe('openrouter')
-    expect(cfg({}).chat.model).toBe(null)
+    expect(cfg({}).chat.model).toBe(FREE_ROUTER)
+    expect(cfg({}).chat.modelAuto).toBe(true)
     expect(cfg({}).chat.providerAuto).toBe(true)
     expect(cfg({ chat: { provider: 'ollama' } }).chat.providerAuto).toBe(false)
   })
 
-  it('gives an unnamed OpenRouter both pools and no single name', () => {
+  /**
+   * THE ASYMMETRY, PINNED — it is the whole of 1.4.0 in four lines.
+   *
+   * The embed half still resolves its pool from silence and cannot do otherwise:
+   * `docpilot index` walks it to find an embedder that answers, and there is no
+   * author to ask at build time. The chat half does not: silence takes the
+   * table default like every other provider's, one id, one request.
+   */
+  it('gives an unnamed OpenRouter the router, and the embed pool from silence', () => {
     const c = cfg({ chat: { provider: 'openrouter' } })
-    expect(chatModels(c)[0]).toBe(FREE_ROUTER)
+    expect(c.chat.model).toBe(FREE_ROUTER)
+    expect(chatModels(c)).toBe(null)
     expect(embedModels(c)).toEqual(FREE_EMBED)
     // The embedder is named by the INDEX, not by the config — see the manifest.
     expect(resolveEmbed(c).model).toBe(null)
+  })
+
+  /** And the list is still there, for an author who asks for it by name. */
+  it('walks the shipped pool when the model is the word `free`', () => {
+    for (const spelling of ['free', 'auto', 'FREE', ' Auto ']) {
+      const c = cfg({ chat: { provider: 'openrouter', model: spelling } })
+      expect(chatModels(c), spelling).toEqual(FREE_CHAT)
+      expect(c.chat.poolNamed, spelling).toBe(true)
+      // Still normalised away, so nothing posts the word as a model id.
+      expect(c.chat.model, spelling).toBe(FREE_ROUTER)
+    }
+    // An empty string is a key somebody meant to fill, not a pool somebody asked
+    // for — and it resolves like silence.
+    expect(chatModels(cfg({ chat: { provider: 'openrouter', model: '  ' } }))).toBe(null)
+  })
+
+  /**
+   * IDEMPOTENCE, and it is the reason `poolNamed` is a field rather than a
+   * derivation. `switches.js` states the rule: every member of a resolved object
+   * is a legal input value. Re-resolving one must not turn a pool back into a
+   * single model because the word that asked for it was normalised away.
+   */
+  it('survives being resolved twice', () => {
+    for (const chat of [
+      { provider: 'openrouter' },
+      { provider: 'openrouter', model: 'free' },
+      { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6' },
+      { provider: 'openai' },
+    ]) {
+      const once = cfg({ chat })
+      const twice = resolveDocPilot(once, ENV)
+      const shape = (c) => [c.chat.model, c.chat.modelAuto, c.chat.poolNamed, chatModels(c)]
+      expect(shape(twice), JSON.stringify(chat)).toEqual(shape(once))
+    }
   })
 
   it('leaves every other provider unpooled', () => {
@@ -560,15 +604,24 @@ describe('the configuration a free pool resolves from', () => {
     expect(nodeChatTarget(c, ENV).models).toEqual(['free/two'])
   })
 
-  it('ships the chat pool to the browser and keeps the embed pool out of it', () => {
+  it('ships one id to the browser and keeps the embed pool out of it', () => {
     const client = themeDocPilot(cfg({ chat: { provider: 'openrouter' } }), ENV)
-    expect(client.llm.models).toEqual(FREE_CHAT)
-    expect(client.llm.model).toBe(null)
+    expect(client.llm.model).toBe(FREE_ROUTER)
+    expect(client.llm.models).toBe(null)
+    // The tier is still the free one, whatever the length of the list — this is
+    // what seeds the 50-a-day ledger, and dropping the pool must not drop it.
+    expect(client.llm.freePool).toBe(true)
     // Nothing about rotating an embedder reaches the page: the manifest names it.
     expect(client.embed.model).toBe(null)
     expect(client.embed.models).toBeUndefined()
     // And no key, as ever.
     expect(JSON.stringify(client)).not.toContain(ENV.OPENROUTER_API_KEY)
+  })
+
+  it('ships the whole pool to the browser when it was asked for by name', () => {
+    const client = themeDocPilot(cfg({ chat: { provider: 'openrouter', model: 'free' } }), ENV)
+    expect(client.llm.models).toEqual(FREE_CHAT)
+    expect(client.llm.freePool).toBe(true)
   })
 
   it('hands the indexer the pool to walk and the real host to walk it at', () => {
@@ -1413,8 +1466,10 @@ describe('an unnamed model resolves to null, and null is what crosses the wire',
   const cfg = (settings) => resolveDocPilot(settings, ENV)
 
   it('normalises the spellings the docs advertise', () => {
+    // Stripped, then filled from the table — the word never survives as an id,
+    // and what replaces it is the provider's own default rather than a hole.
     for (const spelling of ['auto', 'free', 'AUTO', '  ']) {
-      expect(cfg({ chat: { provider: 'openrouter', model: spelling } }).chat.model, spelling).toBe(null)
+      expect(cfg({ chat: { provider: 'openrouter', model: spelling } }).chat.model, spelling).toBe(FREE_ROUTER)
     }
     expect(cfg({ chat: { provider: 'openrouter', model: 'openai/gpt-oss-20b:free' } }).chat.model).toBe(
       'openai/gpt-oss-20b:free',
@@ -1423,7 +1478,7 @@ describe('an unnamed model resolves to null, and null is what crosses the wire',
 
   it('does not post the spelling as a model id', () => {
     const client = themeDocPilot(cfg({ chat: { provider: 'openrouter', model: 'auto' } }), ENV)
-    expect(client.llm.model).toBe(null)
+    expect(client.llm.model).toBe(FREE_ROUTER)
     expect(client.llm.models).not.toContain('auto')
     expect(client.llm.models[0]).toBe(FREE_ROUTER)
   })

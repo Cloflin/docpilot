@@ -116,10 +116,15 @@ export interface ChatSettings {
   chain?: 'auto' | false | Array<ProviderId | ChainMember>
   /**
    * Omit it and the PROVIDER's own default is used — every branded provider
-   * carries one. Two do not: `openrouter`, where an unnamed model resolves to
-   * the shipped free pool, and `custom`, which names a host rather than a
-   * service and therefore stops the build, because the alternative is a 400 in
-   * a reader's browser naming a model that appears nowhere in your config.
+   * carries one, `openrouter` included: its default is `openrouter/free`, the
+   * service's own router over the free tier. One provider still has none:
+   * `custom`, which names a host rather than a service and therefore stops the
+   * build, because the alternative is a 400 in a reader's browser naming a model
+   * that appears nowhere in your config.
+   *
+   * `'free'` and `'auto'` are the two values that mean MORE than omitting it:
+   * they ask for the shipped ten-id pool, which the browser then walks. Silence
+   * does not — a request goes to the model your config names.
    */
   model?: string | null
   /**
@@ -1032,17 +1037,22 @@ export declare function assertVocabulary(settings: DocPilotSettings): void
  * The chat half, resolved — the shape `resolveDocPilot` hands back, which is a
  * SUPERSET of what an author writes.
  *
- * Three fields exist only on the way out. `providerAuto` and `modelAuto` record
+ * Four fields exist only on the way out. `providerAuto` and `modelAuto` record
  * WHOSE name a value is, because the resolver is allowed to walk past its own
- * default and not past somebody's sentence; `searchOnly` is what `chat: false`
- * becomes, and every layer downstream reads that rather than inferring the mode
- * from `provider: null`. `chain` changes meaning too: an author writes
- * `'auto' | false | member[]` and reads back the resolved selection.
+ * default and not past somebody's sentence; `poolNamed` records whether the free
+ * pool was ASKED for, which the resolved record cannot otherwise say because
+ * `'free'` is normalised to `null` on the way through; `searchOnly` is what
+ * `chat: false` becomes, and every layer downstream reads that rather than
+ * inferring the mode from `provider: null`. `chain` changes meaning too: an
+ * author writes `'auto' | false | member[]` and reads back the resolved
+ * selection.
  */
 export interface ResolvedChat extends Omit<ChatSettings, 'chain'> {
   chain: string | false | Array<ChainMember | ProviderId>
   providerAuto: boolean
   modelAuto: boolean
+  /** Whether `chat.model` was the word `'free'` or `'auto'` — see `chatModels`. */
+  poolNamed: boolean
   searchOnly?: boolean
 }
 

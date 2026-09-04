@@ -1163,16 +1163,21 @@ describe('a turn on a metered service', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   /**
-   * `detectTools` is a full model call made before the reader has read a word,
-   * and on a pool it asks up to three candidates. A reader who opens two pages
-   * has spent two of their fifty answers finding out something the config
-   * already implies: a pool is only ever configured for a hosted service whose
-   * members are tool-capable by construction.
+   * `detectTools` is a full model call made before the first answer of a
+   * session, and on a pool it asks up to three candidates. A reader who opens
+   * two pages has spent two of their fifty answers finding out something the
+   * config already implies: a free tier is a hosted OpenAI-compatible service
+   * whose models are tool-capable by construction.
+   *
+   * IT ASKS ABOUT THE TIER, not the length of the list — `freePool` is the
+   * question, and it is true whether the browser was handed ten free ids or the
+   * one router in front of them. Reading `models.length` alone meant that giving
+   * openrouter a table default bought a request per session straight back.
    */
-  it('asks no capability probe when a pool is configured', async () => {
+  it('asks no capability probe on a provider’s own free tier', async () => {
     const s = await start()
     expect(s.state.config.budget.probe).toBe('auto')
-    expect(s.state.config.llm.models.length).toBeGreaterThan(1)
+    expect(s.state.config.llm.freePool).toBe(true)
 
     const chats = transport(() => tooManyRequests('daily'))
     await s.submit('how is the alpha widget configured?')

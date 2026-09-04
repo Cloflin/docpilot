@@ -2429,17 +2429,27 @@ export async function submit(question, { quote = '' } = {}) {
     /**
      * The capability probe, and when it is worth a request.
      *
-     * `detectTools` is a full model call made before the reader has read a
-     * word — on a pool it asks up to three candidates — and on a 50-request day
-     * it is the single most expensive habit in this package: a reader who opens
-     * two pages has spent two answers finding out something the config already
-     * implies. A POOL is only ever configured for a hosted OpenAI-compatible
-     * service whose members are tool-capable by construction, and the case where
-     * one is not is precisely the case the fallback parser recovers, so `'auto'`
-     * skips it there. `'always'` keeps the behaviour that shipped, for a local
-     * model zoo where the question is genuinely open; `'never'` skips it outright.
+     * `detectTools` is a full model call made before the first answer of a
+     * session — on a pool it asks up to three candidates — and on a 50-request
+     * day it is the single most expensive habit in this package: a reader who
+     * opens two pages has spent two answers finding out something the config
+     * already implies. A POOL is only ever configured for a hosted
+     * OpenAI-compatible service whose members are tool-capable by construction,
+     * and the case where one is not is precisely the case the fallback parser
+     * recovers, so `'auto'` skips it there. `'always'` keeps the behaviour that
+     * shipped, for a local model zoo where the question is genuinely open;
+     * `'never'` skips it outright.
+     *
+     * `freePool` WIDENS THE SAME RULE, and it has to, because the rule was never
+     * about the length of a list. It is about the SERVICE: a provider's own free
+     * catalogue is that same hosted OpenAI-compatible service, and it answers the
+     * question identically whether the browser was handed ten of its ids or the
+     * one router in front of them. Reading `models.length` alone meant that
+     * giving openrouter a table default — one id instead of ten — silently
+     * bought back a request per session for every deployment that had named
+     * nothing, which is the opposite of what that change was for.
      */
-    const pooled = !!cfg.llm.models?.length
+    const pooled = !!cfg.llm.models?.length || cfg.llm.freePool === true
     const probe = cfg.budget.probe === 'always' || (cfg.budget.probe === 'auto' && !pooled)
     if (probe && state.fallbackUnknown !== false) {
       const native = await detectTools({

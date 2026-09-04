@@ -30,7 +30,7 @@ and `embed: 'auto'` follows it into the retrieval half.
 | 4 | `together` | `TOGETHER_API_KEY` | yes | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
 | 5 | `fireworks` | `FIREWORKS_API_KEY` | yes | `accounts/fireworks/models/llama-v3p3-70b-instruct` |
 | 6 | `nebius` | `NEBIUS_API_KEY` | yes | `meta-llama/Llama-3.3-70B-Instruct` |
-| 7 | `openrouter` | `OPENROUTER_API_KEY` | yes | *[the free pool](#openrouter-with-nothing-named)* |
+| 7 | `openrouter` | `OPENROUTER_API_KEY` | yes | *[`openrouter/free`](#openrouter-with-nothing-named)* |
 | 8 | `anthropic` | `ANTHROPIC_API_KEY` | no | `claude-sonnet-4-6` |
 | 9 | `groq` | `GROQ_API_KEY` | no | `llama-3.3-70b-versatile` |
 | 10 | `deepseek` | `DEEPSEEK_API_KEY` | no | `deepseek-v4-flash` |
@@ -39,7 +39,7 @@ and `embed: 'auto'` follows it into the retrieval half.
 | 13 | `custom` | `CUSTOM_BASE_URL` *(`CUSTOM_API_KEY` authorises, and does not select)* | yes | — *you name it* |
 | 14 | `llamacpp` | `LLAMACPP_BASE_URL` | yes | `local` |
 | 15 | `ollama` | `OLLAMA_BASE_URL` | yes | `qwen3:8b` |
-| — | **nothing matched** | → `openrouter`, free tier | yes | *the free pool* |
+| — | **nothing matched** | → `openrouter`, free tier | yes | *`openrouter/free`* |
 
 **Providers that embed come first**, and that is the ordering argument — not a
 ranking of answer quality. One key covering both halves is the difference
@@ -97,14 +97,24 @@ for something else cannot move a site that said `provider: 'ollama'`.
 
 ## Two keys, and which answers first
 
-[`chat.chain`](/reference/config#chat-chain) ships as `'auto'`, so an environment
-holding several keys walks **all** of them rather than spending the reader's
-question on the first one's bad afternoon. One key still resolves to one member
-and one route, unchanged.
+[`chat.chain`](/reference/config#chat-chain) ships as `false`: an environment
+holding several keys resolves to the **first** member and stops there. Write
+`'auto'` and it walks all of them instead, rather than spending the reader's
+question on one service's bad afternoon.
+
+```js
+chat: { chain: 'auto' }   // every key the environment carries, in ladder order
+```
+
+It ships off because of who decides, not because walking two services is a bad
+idea — it often is not. But a request going to a provider that appears nowhere in
+the config file you are reading is a request you cannot account for from that
+file, and a variable set for a sibling service should not be able to move where a
+reader's question goes.
 
 The table above is ordered by *what one key covers*, which is the wrong order to
 walk a set in: it would send every question to a 50-a-day allowance shared by the
-whole site while a funded key sat two rows below. So the selected set sorts into
+whole site while a funded key sat two rows below. So a selected set sorts into
 three tiers first, keeping the table's order inside each — billed accounts, then
 a provider's own free catalogue, then a server of your own. `openrouter` answers
 after `groq`; `ollama` answers last.
@@ -112,8 +122,8 @@ after `groq`; `ollama` answers last.
 **A model you name keeps its provider billed.** `chat: {model:
 'anthropic/claude-sonnet-4'}` beside an `OPENROUTER_API_KEY` is a paid
 deployment, so naming a model — or writing your own `chat.models` — flattens the
-tiers back to the table's order. The sort fires on the zero-config path, where
-the whole question is *which of these keys, in what order*.
+tiers back to the table's order. The sort fires where the whole question is
+*which of these keys, in what order* — that is, wherever you asked for the walk.
 
 Priority is written with the settings that already exist, and there is no new
 knob for it:
@@ -189,10 +199,10 @@ export const docPilot = {
 
 One key, no model names, both halves covered — and every request on the **free tier**.
 
-Naming no model is not laziness here; it is the shape the service actually has. A free id is a shared pool, so its `429` reports how many other people are asking rather than anything about the model. Pinning one buys a panel that works until somebody else's traffic arrives. So DocPilot keeps an ordered pool instead:
+The two halves answer silence differently, and the difference is worth a minute because it is the one asymmetry in this file:
 
-- **Chat** rotates at runtime. The pool is headed by `openrouter/free`, OpenRouter's own router over the free tier, with explicit free ids behind it. A model that is rate limited, retired, moderated, 5xx-ing, or that answers with nothing at all loses its turn to the next one. The one that answers is tried first next time. See [`chat.models`](/reference/config#chat-models).
-- **Embeddings** rotate at **build time only**. `npx docpilot index` walks the free embedders, takes the first that answers, and records it in the manifest; the browser is bound to that name for the life of the index. Two embedding models are two vector spaces, and a query embedded by the wrong one scores noise that every guardrail downstream reads as a real number. A busy embedder at query time is retried, then retrieval drops to lexical-only rather than to a foreign space.
+- **Chat** takes the provider's own default, `openrouter/free`. That is OpenRouter's own router over the free tier: it picks a free model per request and skips the saturated ones, so the argument for a pool — a free id is shared, and its `429` reports how many other people are asking rather than anything about the model — is answered on the service's side, in **one request**. Your deployment posts one id, and it is the id your config resolves to.
+- **Embeddings** rotate at **build time only**, and they still resolve a pool from silence, because there is nobody to ask: `npx docpilot index` walks the free embedders, takes the first that answers, and records it in the manifest; the browser is bound to that name for the life of the index. Two embedding models are two vector spaces, and a query embedded by the wrong one scores noise that every guardrail downstream reads as a real number. A busy embedder at query time is retried, then retrieval drops to lexical-only rather than to a foreign space.
 
   Lexical-only is a **quieter** failure than it sounds. The console carries the reason and a refusal says the search was degraded, but an answer that still passes the gate says nothing — and on a question asked in a language your corpus is not written in there is no lexical overlap to score at all. Treat a run of them as an outage, not as a bad corpus.
 
@@ -200,7 +210,17 @@ Naming no model is not laziness here; it is the shape the service actually has. 
 
 Both free embedders are 2048-dimensional, so the vector blob alone is **2 KB per chunk** — and the builder's ceiling is on the whole directory, chunk text and document frequencies included, which on a typical corpus is another kilobyte or so per chunk. Past roughly 900 chunks the size warning fires at 3 MB; past roughly 1500 the build refuses at 5 MB. `npx docpilot index` prints the running total either way, so measure rather than estimate.
 
-`model: 'auto'` and `model: 'free'` are accepted spellings of "you choose", if you would rather say it out loud than leave the key out.
+### Asking for the pool
+
+`model: 'free'` — or `'auto'`, the same request — is how you get the **ten-id list** instead of the router: an ordered pool the browser walks itself, where a model that is rate limited, retired, moderated, 5xx-ing, or that answers with nothing at all loses its turn to the next one, and the one that answered is tried first next time. See [`chat.models`](/reference/config#chat-models).
+
+```js
+chat: { provider: 'openrouter', model: 'free' },
+```
+
+::: warning Changed in 1.4.0
+Leaving the key out used to mean this. It does not any more — silence takes the default like every other provider's, and the list is asked for by name. The reason is what the old default did on a bad afternoon: a refusal rotated through ten ids nobody had written down, so a site whose config file named one model could put seven on the wire and spend seven of its fifty daily requests buying the identical refusal.
+:::
 
 To pin your own, name them:
 

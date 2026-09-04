@@ -35,15 +35,41 @@ export const CATALOGUE = {
 }
 
 /**
- * "No model named" and "name the pool" are the same request, so both spellings
- * resolve here. `null` is what `resolveDocPilot` leaves behind when an author
- * writes `chat: {provider: 'openrouter'}` and nothing else; `'auto'` and
- * `'free'` are what an author writes when they want to say it out loud.
+ * "No model named" — every spelling of it, for the half that still resolves a
+ * pool from silence. `null` is what `resolveDocPilot` leaves behind when an
+ * author writes `embed: {provider: 'openrouter'}` and nothing else; `'auto'`
+ * and `'free'` are the same request said out loud.
+ *
+ * IT NO LONGER DECIDES THE CHAT POOL. Saying nothing and asking for the pool
+ * used to be one question, and answering both with ten ids is what put seven
+ * `:free` models on the wire of a site whose config named one — `namesPool`
+ * below is the half of this predicate the chat side reads now. The embed half
+ * keeps the old rule and cannot do otherwise: `docpilot index` walks the pool to
+ * find an embedder that answers, and it has no author to ask at build time.
  */
 export function isAutoModel(model) {
   if (model == null) return true
   const s = String(model).trim().toLowerCase()
   return s === '' || s === 'auto' || s === 'free'
+}
+
+/**
+ * THE POOL, ASKED FOR BY NAME — the narrow half of `isAutoModel`.
+ *
+ * Silence is not a request. An omitted `chat.model` now takes the provider's own
+ * default like every other provider's does, and only these two words reach for
+ * the ten-id list. The difference is one a reader of a config file can see: a
+ * deployment posting a model nobody wrote down is a deployment nobody can debug
+ * from the file they are looking at.
+ *
+ * `''` is deliberately NOT one of them. An empty string is a key someone meant
+ * to fill, not a pool someone asked for.
+ */
+export function namesPool(model) {
+  const s = String(model ?? '')
+    .trim()
+    .toLowerCase()
+  return s === 'auto' || s === 'free'
 }
 
 /**

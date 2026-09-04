@@ -13,6 +13,7 @@ import {
   nodeChatTarget,
   readiness,
 } from '../src/config.js'
+import { FREE_ROUTER } from '../src/theme/docpilot/openrouter.js'
 
 /**
  * THE PROVIDER CHAIN — `chat.provider: 'auto'`, which is the whole of "install
@@ -45,7 +46,7 @@ describe('the provider chain', () => {
   it('falls through to the free tier when the environment selects nothing', () => {
     const c = cfg({}, {})
     expect(c.chat.provider).toBe('openrouter')
-    expect(c.chat.model).toBe(null) // the free pool answers
+    expect(c.chat.model).toBe(FREE_ROUTER) // the router over the free tier answers
     expect(resolveChain({}).id).toBe('openrouter')
     expect(resolveChain({}).tried.some((t) => t.found), 'nothing selected').toBe(false)
   })
@@ -84,8 +85,9 @@ describe('the provider chain', () => {
       [{ ANTHROPIC_API_KEY: 'k' }, 'anthropic', 'claude-sonnet-4-6'],
       [{ GROQ_API_KEY: 'k' }, 'groq', 'llama-3.3-70b-versatile'],
       [{ DEEPSEEK_API_KEY: 'k' }, 'deepseek', 'deepseek-v4-flash'],
-      // The pooled one names nothing on purpose: the free pool is the answer.
-      [{ OPENROUTER_API_KEY: 'k' }, 'openrouter', null],
+      // The pooled one names the ROUTER: one id, and the service picks the free
+      // model behind it. The ten-id list is reached by `model: 'free'`.
+      [{ OPENROUTER_API_KEY: 'k' }, 'openrouter', FREE_ROUTER],
     ]
     for (const [env, provider, model] of cases) {
       const c = cfg({}, env)
@@ -566,13 +568,24 @@ describe('the rotation set', () => {
   })
 
   /**
-   * The shipped default rotates. An environment with ONE key still resolves to
-   * one member, which is the scalar configuration every deployment already had.
+   * THE SHIPPED DEFAULT DOES NOT ROTATE — 1.4.0, and the same sentence
+   * `chat.models` now answers one level down.
+   *
+   * An environment holding two keys and walking both is a reasonable thing for a
+   * DEPLOYMENT to ask for and not a reasonable thing for a package to do
+   * unasked: a request going to a provider that appears nowhere in the config
+   * file its author is reading is a request nobody can account for. `'auto'`
+   * still spells exactly what it always did.
    */
-  it('ships on, and one key still resolves exactly one member', () => {
-    expect(DEFAULTS.chat.chain).toBe('auto')
+  it('ships off, and a second key changes nothing until it is written', () => {
+    expect(DEFAULTS.chat.chain).toBe(false)
     expect(ids({}, { OPENAI_API_KEY: 'k' })).toEqual(['openai'])
-    expect(ids({}, { OPENAI_API_KEY: 'k', GROQ_API_KEY: 'k' })).toEqual(['openai', 'groq'])
+    expect(ids({}, { OPENAI_API_KEY: 'k', GROQ_API_KEY: 'k' })).toEqual(['openai'])
+    // And the word is what asks for the walk.
+    expect(ids({ chat: { chain: 'auto' } }, { OPENAI_API_KEY: 'k', GROQ_API_KEY: 'k' })).toEqual([
+      'openai',
+      'groq',
+    ])
   })
 
   /**
@@ -605,14 +618,18 @@ describe('the rotation set', () => {
    */
   it('does not sink a free-pool provider the author gave a model', () => {
     const env = { OPENROUTER_API_KEY: 'k', GROQ_API_KEY: 'k' }
-    expect(ids({ chat: { model: 'anthropic/claude-sonnet-4' } }, env)).toEqual(['openrouter', 'groq'])
+    const named = { chain: 'auto', model: 'anthropic/claude-sonnet-4' }
+    expect(ids({ chat: named }, env)).toEqual(['openrouter', 'groq'])
     // The head is the one that receives it, and it is the one that was named for.
-    const chain = resolveChatChain(cfg({ chat: { model: 'anthropic/claude-sonnet-4' } }, env), env)
+    const chain = resolveChatChain(cfg({ chat: named }, env), env)
     expect(chain[0]).toMatchObject({ id: 'openrouter', model: 'anthropic/claude-sonnet-4' })
     // An author's own ordered list says the same thing.
-    expect(ids({ chat: { models: ['anthropic/claude-sonnet-4'] } }, env)).toEqual(['openrouter', 'groq'])
+    expect(ids({ chat: { chain: 'auto', models: ['anthropic/claude-sonnet-4'] } }, env)).toEqual([
+      'openrouter',
+      'groq',
+    ])
     // Nothing named: the free tier sinks.
-    expect(ids({}, env)).toEqual(['groq', 'openrouter'])
+    expect(ids({ chat: { chain: 'auto' } }, env)).toEqual(['groq', 'openrouter'])
   })
 
   /**
@@ -625,9 +642,9 @@ describe('the rotation set', () => {
     const env = { OPENROUTER_API_KEY: 'k', ANTHROPIC_API_KEY: 'k' }
     // OpenRouter is selected first by CHAIN and is the free tier, so anthropic
     // leads — and `chat.provider` agrees with `chain[0]`.
-    const resolved = cfg({}, env)
+    const resolved = cfg({ chat: { chain: 'auto' } }, env)
     expect(resolved.chat.provider).toBe('anthropic')
-    expect(ids({}, env)).toEqual(['anthropic', 'openrouter'])
+    expect(ids({ chat: { chain: 'auto' } }, env)).toEqual(['anthropic', 'openrouter'])
     // Declining rotation restores the single-provider answer, which CHAIN alone
     // has always given.
     expect(cfg({ chat: { chain: false } }, env).chat.provider).toBe('openrouter')
@@ -666,7 +683,7 @@ describe('the rotation set', () => {
       {},
     )
     expect(chain.map((m) => [m.id, m.model, m.models?.length ?? 0])).toEqual([
-      ['openrouter', null, 10],
+      ['openrouter', FREE_ROUTER, 0],
       ['groq', 'a/b', 0],
       ['cerebras', 'llama-3.3-70b', 2],
       ['ollama', 'qwen3:8b', 0],
@@ -977,11 +994,13 @@ describe('preferring a server of your own', () => {
   it('ships off, so nothing resolves differently until it is written', () => {
     expect(DEFAULTS.chat.preferLocal).toBe(false)
     expect(cfg({}, {}).chat.provider).toBe('openrouter')
-    expect(ids({}, {...LOCAL, OPENAI_API_KEY: 'k'})).toEqual(['openai', 'ollama'])
+    expect(ids({chat: {chain: 'auto'}}, {...LOCAL, OPENAI_API_KEY: 'k'})).toEqual(['openai', 'ollama'])
   })
 
   it('lifts a local server above every hosted one', () => {
-    expect(ids({chat: {preferLocal: true}}, {...LOCAL, OPENAI_API_KEY: 'k', OPENROUTER_API_KEY: 'k'})).toEqual([
+    expect(
+      ids({chat: {chain: 'auto', preferLocal: true}}, {...LOCAL, OPENAI_API_KEY: 'k', OPENROUTER_API_KEY: 'k'}),
+    ).toEqual([
       'ollama',
       'openai',
       'openrouter',

@@ -44,7 +44,7 @@ export const docPilot = {
   importDir: null,
   sources: null,
   openapi: null,
-  chat: { provider: 'auto', chain: 'auto', preferLocal: false, model: null, baseURL: null, models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192, reasoning: 'auto', verbosity: null, topP: null, seed: null },
+  chat: { provider: 'auto', chain: false, preferLocal: false, model: null, baseURL: null, models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192, reasoning: 'auto', verbosity: null, topP: null, seed: null },
   embed: 'auto',
   topK: null,
   maxIterations: 2,
@@ -119,11 +119,11 @@ written by hand; only the values are mechanical.
 | [`sources`](#sources) | `{ allow: string[] } \| null` | `null` | The https origins a page may name in `source:`, each optionally narrowed to a path prefix; `null` forbids `source:` outright — *server-only, and assigned whole rather than merged, so a partial object is the entire allowlist* |
 | [`openapi`](#openapi) | `string[] \| null` | `null` | Where the OpenAPI specs are, as paths from the project root — a directory, a file, or a `*` in the file name; `null` means `${docsDir}/public/openapi` — *server-only, and each spec claims `/reference/<basename>`, so two entries sharing a basename claim one route and the build says so* |
 | [`chat.provider`](#chat-provider) | `ProviderId \| 'auto'` | `'auto'` | Picks which service answers and where the request is sent; `'auto'` reads the environment and takes the first key it finds along [the chain](#the-provider-chain) — *fifteen ids, listed under [Choosing providers](/guide/providers); a misspelled one stops the build instead of quietly becoming a local Ollama* |
-| [`chat.chain`](#chat-chain) | `'auto' \| false \| Array<ProviderId \| ChainMember>` | `'auto'` | Which SERVICES may answer, in order — the provider-level form of `chat.models`; `'auto'` is every member of [the chain](#the-provider-chain) the environment selects, billed accounts before free tiers, an array is your own set, `false` is one provider chosen once — *fires only where `chat.provider` is also `'auto'`, so naming a provider is how rotation is declined; the embed half never rotates* |
+| [`chat.chain`](#chat-chain) | `'auto' \| false \| Array<ProviderId \| ChainMember>` | `false` | Which SERVICES may answer, in order — the provider-level form of `chat.models`; `false`, the shipped value, is one provider chosen once, `'auto'` is every member of [the chain](#the-provider-chain) the environment selects, billed accounts before free tiers, an array is your own set — *fires only where `chat.provider` is also `'auto'`, so naming a provider is how rotation is declined; the embed half never rotates* |
 | [`chat.preferLocal`](#chat-preferlocal) | `boolean` | `false` | Puts a server of your own — `custom`, `llamacpp`, `ollama` — at the FRONT of the ladder instead of the back, and makes an environment that selects nothing fall through to a local Ollama rather than to OpenRouter's free tier — *it reorders, it never selects: a local server is still reached by its address, and `readiness` says so when this moved nothing* |
-| [`chat.model`](#chat-model) | `string \| null` | `null` | The id the provider knows the model by — `null` takes that provider's own default from the table in [Choosing providers](/guide/providers), and `'auto'`, `'free'` and `''` normalise to it — *never inherited across providers; `openrouter` and `custom` have no default, so a free pool answers for the first and only you can answer for the second* |
+| [`chat.model`](#chat-model) | `string \| null` | `null` | The id the provider knows the model by — `null` and `''` take that provider's own default from the table in [Choosing providers](/guide/providers), `'auto'` and `'free'` ask for the shipped pool instead — *never inherited across providers; every provider has a default, `openrouter`'s being `openrouter/free`, except `custom`, which only you can answer for* |
 | [`chat.baseURL`](#chat-baseurl) | `string \| null` | `null` | Where the provider is, for one that is somewhere of your own — `null` takes the provider's own address, and `OLLAMA_BASE_URL` / `LLAMACPP_BASE_URL` / `CUSTOM_BASE_URL` set it from the environment — *ignored for a hosted provider, which the browser reaches through the same-origin `/ai`* |
-| [`chat.models`](#chat-models) | `string[] \| null` | `null` | An ordered fallback pool walked on a 429, a retired id or an empty answer, with the model that answered tried first next time — *left `null` on `openrouter` with no model named, the shipped free pool rotates anyway* |
+| [`chat.models`](#chat-models) | `string[] \| null` | `null` | An ordered fallback pool walked on a 429, a retired id or an empty answer, with the model that answered tried first next time — *a list is something you write: silence resolves to one model, and `model: 'free'` is how the shipped pool is asked for by name* |
 | [`chat.extraBody`](#chat-extrabody) | `Record<string, unknown> \| null` | *(the provider's own)* | Fields merged into the body of every chat request, for the things one brand understands and the transport does not — *PRESENCE decides: omit it and the provider's fragment stands, `null` posts the plain body, an object REPLACES rather than merges; it is not in `DEFAULTS` because there is no third value to ship* |
 | [`chat.temperature`](#chat-temperature-chat-maxtokens) | `number` | `0.2` | Sampling spread for the answering model; 0.2 keeps one question from yielding two different sets of steps, higher loosens the wording — *never sent to Anthropic, whose API rejects sampling parameters outright* |
 | [`chat.maxTokens`](#chat-temperature-chat-maxtokens) | `number` | `2048` | Caps the tokens in a single reply; a reply cut off at that ceiling is continued rather than lost, up to `budget.maxContinuations` — *every transport sends it, under the name that API gives it: `max_tokens`, `max_completion_tokens`, or Ollama's `options.num_predict`* |
@@ -140,7 +140,7 @@ written by hand; only the values are mechanical.
 | [`budget.rotateAbove`](#budget-oneshotbelow-budget-rotateabove) | `number` | `6` | Pool rotation stops once answers left reach this, buying back the request rather than a second opinion; `-1` retires the rule — *read whatever `mode` is, so `mode: 'agentic'` does not disable it — only `-1` or `budget: false` does* |
 | [`budget.maxContinuations`](#budget-maxcontinuations) | `number` | `1` | Follow-up requests a reply truncated at the provider's output ceiling may spend to finish itself; `0` loses the answer to a refusal — *0 to 3 only, and driven to `0` once two answers are left* |
 | [`budget.showRemaining`](#budget-showremaining) | `boolean` | `false` | Adds the muted line under the composer — answers left today, and where `embed: false` that this deployment has no embedder — *the count half needs a daily allowance: a declared `dailyLimit`, or the provider's own free pool* |
-| [`budget.probe`](#budget-probe) | `'auto' \| 'always' \| 'never'` | `'auto'` | Governs the tool-detection call made on page load: `'auto'` skips it for a pool, `'always'` keeps it, `'never'` drops it |
+| [`budget.probe`](#budget-probe) | `'auto' \| 'always' \| 'never'` | `'auto'` | Governs the tool-detection call made before a session's first answer: `'auto'` skips it on a hosted pool or free tier, `'always'` keeps it, `'never'` drops it |
 | [`budget.dailyLimit`](#budget-dailylimit) | `number \| null` | `null` | Declares a ceiling to count against locally for a metered service that sends no rate-limit headers; header counts still win — *`0` is reported and ignored — everything downstream reads a falsy ceiling as no ceiling at all* |
 | [`suggestions.questions`](#suggestions-questions) | `(string \| { q, answer, cite })[]` | `[]` | Replaces the built-in three empty-state openers with your own — the first five are used, extras, empties and repeats dropped and named on stdout — *`suggestions: ['One?']` — a bare array — sets this same key* |
 | [`suggestions.authored`](#suggestions-authored) | `{ q, answer, cite }[]` | `[]` | The openers you answered yourself: the prose ships verbatim and no model is called for it, at build time or in the browser — *resolved out of `questions`; writing it directly is what makes the resolver idempotent* |
@@ -384,7 +384,7 @@ the environment selects:
 | 4 | `together` | `TOGETHER_API_KEY` | yes | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
 | 5 | `fireworks` | `FIREWORKS_API_KEY` | yes | `accounts/fireworks/models/llama-v3p3-70b-instruct` |
 | 6 | `nebius` | `NEBIUS_API_KEY` | yes | `meta-llama/Llama-3.3-70B-Instruct` |
-| 7 | `openrouter` | `OPENROUTER_API_KEY` | yes | *the free pool* |
+| 7 | `openrouter` | `OPENROUTER_API_KEY` | yes | `openrouter/free` |
 | 8 | `anthropic` | `ANTHROPIC_API_KEY` | no | `claude-sonnet-4-6` |
 | 9 | `groq` | `GROQ_API_KEY` | no | `llama-3.3-70b-versatile` |
 | 10 | `deepseek` | `DEEPSEEK_API_KEY` | no | `deepseek-v4-flash` |
@@ -393,7 +393,7 @@ the environment selects:
 | 13 | `custom` | `CUSTOM_BASE_URL` *(`CUSTOM_API_KEY` authorises, and does not select)* | yes | — *you name it* |
 | 14 | `llamacpp` | `LLAMACPP_BASE_URL` | yes | `local` |
 | 15 | `ollama` | `OLLAMA_BASE_URL` | yes | `qwen3:8b` |
-| — | **nothing matched** | → `openrouter`, free tier | yes | *the free pool* |
+| — | **nothing matched** | → `openrouter`, free tier | yes | `openrouter/free` |
 
 **Providers that embed come first, and that is the whole ordering argument** —
 not a ranking of answer quality. One key covering both halves is the difference
@@ -464,20 +464,41 @@ than as a single shipped value that the next provider inherits — which is what
 used to happen, and what used to make `chat: { provider: 'openai' }` a
 build-stopping error for want of a name everybody could guess.
 
-Two providers still have no default, for two different reasons:
+One provider still has no default, and it is `custom`: it names a *host* and
+not a service, so there is no catalogue for this package to have an opinion
+about, and it stops the build rather than guessing.
 
-- `openrouter` falls back to its **free pool** (see `chat.models` below), because
-  a shared free tier is a list rather than a model.
-- `custom` stops the build, because it names a *host* and not a service — there
-  is no catalogue for this package to have an opinion about.
+`openrouter` used to be the second. Its default is now **`openrouter/free`** —
+the service's own router over the free tier, which picks a free model per request
+and skips the saturated ones. One id, one request, and the choosing happens a hop
+closer to the pool than a browser can see it.
 
 **These names are defaults, not guarantees.** Catalogues change. A wrong one
 fails loudly on the first request rather than silently at runtime, and
 `npx docpilot doctor --models` is the check that does not need a reader to hit it
 first.
 
-`'auto'` and `'free'` mean the same as leaving the key out, and are normalised to
-that before anything reads them — neither is ever sent as a model name.
+### `'free'` and `'auto'` ask for more than silence does
+
+They are the two values that mean something *other* than "use the default": both
+resolve to the shipped ten-id pool, which the browser then walks. Neither is ever
+sent as a model name — they are normalised away before anything reads them, and
+what the transport posts is the pool.
+
+Leaving the key out is not the same request. It takes the provider's default,
+like every other provider's, and the deployment posts the one id its config file
+names.
+
+```js
+chat: { provider: 'openrouter' }                  // openrouter/free — one id
+chat: { provider: 'openrouter', model: 'free' }   // ten ids, walked in order
+```
+
+::: tip Changed in 1.4.0
+Silence used to mean the pool. A site whose config named one model could post
+seven, because a refusal rotated through ids nobody had written down. If you were
+relying on that, `model: 'free'` is the same behaviour asked for by name.
+:::
 
 ### chat.baseURL
 
@@ -533,15 +554,22 @@ that works until somebody else's traffic arrives. It is `null` everywhere else o
 purpose: on a provider that bills per token, silently moving to another model
 changes what a turn costs without being asked.
 
+**A list is something you write down.** Silence resolves to one model — the
+provider's own default — and the two ways to get a list are both in the config
+file: this key, or [`chat.model: 'free'`](#chat-model) for the shipped one.
+
 ```js
-// the shipped free pool — nothing to write
-chat: { provider: 'openrouter' }
+// the shipped free pool, asked for by name
+chat: { provider: 'openrouter', model: 'free' }
 
 // a paid primary with free understudies
 chat: { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6', models: ['openrouter/free'] }
 
 // your own order, nothing else
 chat: { provider: 'openrouter', models: ['openai/gpt-oss-20b:free', 'google/gemma-4-31b-it:free'] }
+
+// and one model, which is what an omitted key now means
+chat: { provider: 'openrouter', model: 'openai/gpt-4o-mini' }
 ```
 
 Four failures never rotate, because asking the next model would be worse than
@@ -560,20 +588,17 @@ that is a trade only a comfortable budget can make.
 
 **A list here is a list of MODELS, and it says nothing about which services may
 answer.** When it runs out, [`chat.chain`](#chat-chain) asks the next provider —
-with that provider's own model, because a model id never crosses providers.
+with that provider's own model, because a model id never crosses providers. The
+chain ships `false`, so this only happens where you wrote it:
 
 ```js
-// two keys in the environment, and this is a two-provider deployment
+// two keys in the environment, and this is still a ONE-provider deployment
 chat: { models: ['gpt-4.1', 'gpt-4o'] }
+// → openai [gpt-4.1, gpt-4o]
+
+// the same, asking for the second service out loud
+chat: { chain: 'auto', models: ['gpt-4.1', 'gpt-4o'] }
 // → openai [gpt-4.1, gpt-4o] → groq [llama-3.3-70b-versatile]
-```
-
-To end the walk at your list, decline provider rotation as well — either by
-naming the provider, or with `false`:
-
-```js
-chat: { provider: 'openai', models: ['gpt-4.1', 'gpt-4o'] }  // the chain is not consulted
-chat: { chain: false, models: ['gpt-4.1', 'gpt-4o'] }        // one provider, chosen once
 ```
 
 The one thing a written list DOES do to the chain is keep its provider on the
@@ -582,25 +607,34 @@ billed rung — see [Billed accounts first](#billed-accounts-first).
 ### chat.chain
 
 - **Type:** `'auto' | false | Array<ProviderId | ChainMember>`
-- **Default:** `'auto'`
+- **Default:** `false`
 
 **Which services may answer, in order.** It is the provider-level form of the
 argument [`chat.models`](#chat-models) already makes about models: a 429, a
 retired id or a rejected key is a statement about *one* service, and a
-deployment with a second key in its environment should not spend a reader's
+deployment with a second key in its environment need not spend a reader's
 question on the first one's bad afternoon.
 
 | value | what answers |
 | --- | --- |
+| `false` | **the shipped value** — one provider, chosen once |
 | `'auto'` | every member of [the chain](#the-provider-chain) this environment selects, billed accounts first |
 | `[…]` | your own set, in the order you wrote it |
-| `false` | one provider, chosen once — every deployment that existed before this key |
 
-**An environment with one key resolves to one member**, which is the scalar
-configuration this package has always emitted, to the byte — same single proxy
-route, same request. `'auto'` changes what happens to an environment holding
-*several*: they are all walked, rather than the first one being the only one
-tried. It is [rung 1 of the answer ladder](/concepts/the-ladder).
+**It ships off**, and that is a statement about who decides rather than about
+whether walking two services is a good idea. It often is — but a request going to
+a provider that appears nowhere in the config file you are reading is a request
+nobody can account for from that file, and an environment variable set for a
+sibling service should not be able to change where a reader's question goes.
+Write `'auto'` and it walks. It is [rung 1 of the answer
+ladder](/concepts/the-ladder).
+
+::: tip Changed in 1.4.0
+`'auto'` shipped as the default for one release. An environment holding a single
+key resolved to a single member either way, so most deployments see no
+difference; one holding several now stops at the first unless you ask for the
+walk.
+:::
 
 #### Billed accounts first
 
@@ -642,7 +676,8 @@ chat: {
 An entry is a provider id, or a `ChainMember`: `{provider, name?, model?,
 models?, baseURL?, apiKeyEnv?}`. An entry that names no model falls to that
 provider's own default from the table in
-[Choosing providers](/guide/providers), or to its free pool where it has one.
+[Choosing providers](/guide/providers), and to nothing else — a list on a member
+behind the head is a list you wrote on that member.
 
 #### Two of one service
 
@@ -1281,11 +1316,14 @@ have to hold before a single rule below engages:
 
 1. **A daily allowance exists to be rationed** — either you wrote one down in
    [`dailyLimit`](#budget-dailylimit), or the answering half is running on a
-   provider's own **free pool**: `chat: { provider: 'openrouter' }` with no model
-   named, or with the shipped pool behind it. A funded key on a metered provider
-   is not a free tier; neither is a `chat.models` list you wrote yourself, since
-   a list you chose says nothing about which tier serves it. If one of those is
-   in fact metered, `dailyLimit` is how you say so.
+   provider's own **free catalogue**: `chat: { provider: 'openrouter' }` with no
+   model named, which is the router over that catalogue, or `model: 'free'`,
+   which is the pool behind it. It asks about the tier, not about the length of
+   the list. A funded key on a metered provider is not a free tier — naming a
+   model is how you say the account pays — and neither is a `chat.models` list
+   you wrote yourself, since a list you chose says nothing about which tier
+   serves it. If one of those is in fact metered, `dailyLimit` is how you say
+   so.
 2. **The number describing it is daily.** A count read from
    `x-ratelimit-remaining` is believed only when its reset is at least ten
    minutes out, because nginx, Kong, Tyk, AWS API Gateway and the IETF
@@ -1427,14 +1465,17 @@ at all — the low-budget sentence and the no-embedder note go with it.
 ### budget.probe
 
 `'auto' | 'always' | 'never'`. The capability probe is a full model call made
-before the reader has read a word — on a pool it asks up to three candidates —
-and on a 50-request day it is the single most expensive habit here: opening two
-pages spends two answers finding out something the configuration already implies.
+before a session's first answer — on a pool it asks up to three candidates — and
+on a 50-request day it is the single most expensive habit here: two sessions
+spend two answers finding out something the configuration already implies.
 
-`'auto'` skips it where a pool is configured, because a pooled provider's members
-are tool-capable by construction and the fallback parser recovers the case where
-one is not. `'always'` keeps the behaviour that shipped, for a local model zoo
-where the question is genuinely open. `'never'` skips it outright.
+`'auto'` skips it on a hosted pool **or on a provider's own free tier**, because
+either is an OpenAI-compatible service whose models are tool-capable by
+construction, and the fallback parser recovers the case where one is not. The
+question it asks is about the *service*, not about how many ids the browser was
+handed — so `chat: { provider: 'openrouter' }`, one id, skips it exactly as the
+ten-id pool does. `'always'` keeps the behaviour that shipped, for a local model
+zoo where the question is genuinely open. `'never'` skips it outright.
 
 ### budget.dailyLimit
 

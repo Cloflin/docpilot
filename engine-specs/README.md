@@ -46,6 +46,8 @@ The rule this directory exists to enforce:
 | [017](017-the-answer-the-author-wrote.md) | `{q, answer, cite}` — an opener's answer can be written by the author and shipped verbatim, never asked of the model |
 | [018](018-the-evidence-a-paraphrase-already-bought.md) | a dense-matched opener that cannot serve its own text still hands the turn its evidence — a paraphrase in another language stops working from a weaker signal |
 | [019](019-the-gate-cannot-read-the-readers-language.md) | `guard.mode` defaults to `'off'` — no threshold survives every language a site's readers use, so the model decides instead |
+| [020](020-a-turn-that-cost-twelve-requests.md) | a refusal's body is read and classified, so a parameter 404 retries the same model with less in it instead of buying the identical refusal once per pool member |
+| [021](021-a-model-nobody-wrote-down.md) | silence stops resolving to a ten-id pool — `openrouter` gets `openrouter/free` as its default, `chat.chain` ships `false`, and a list is something you write down |
 
 ## Shape of a spec
 

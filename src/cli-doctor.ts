@@ -246,13 +246,27 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
       )
     }
     /**
-     * A member a key selected and the chain did not take. `resolveChatChain`
-     * drops it because there is nothing to send it, and a silent drop is exactly
-     * the "why is it not talking to that" this block exists to answer.
+     * A member a key selected and the chain did not take, and WHY — a silent
+     * drop is exactly the "why is it not talking to that" this block exists to
+     * answer.
+     *
+     * There are two reasons and they want different sentences. Since 1.4.0
+     * `chat.chain` ships `false`, so the ordinary one is that nobody asked for a
+     * walk: every key but the head's is simply not in the set, which is not a
+     * fault and is fixed by writing `chain: 'auto'`. The other is the one this
+     * line was written for — the chain WAS being built and `resolveChatChain`
+     * dropped a member because there is nothing to send it. Printing the second
+     * sentence for the first case reads as a defect in a provider that has a
+     * perfectly good default.
      */
+    const walking = Array.isArray(docPilot.chat.chain) || (docPilot.chat.chain === 'auto' && docPilot.chat.providerAuto)
     for (const t of tried) {
       if (t.found && !at.has(t.id)) {
-        line(`${PAD}  ${''.padEnd(12)}${''.padEnd(22)}skipped — no model and no pool`)
+        line(
+          `${PAD}  ${''.padEnd(12)}${''.padEnd(22)}${
+            walking ? 'skipped — no model and no pool' : "not asked — chat.chain is false; write 'auto' to walk it"
+          }`,
+        )
       }
     }
   }

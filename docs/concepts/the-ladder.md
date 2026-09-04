@@ -39,11 +39,16 @@ step aside, and what the reader sees when it does.
 
 ## 1. Paid providers, in priority order
 
-[`chat.chain`](/reference/config#chat-chain) ships as `'auto'`, which is *every*
-provider the environment holds a key for, walked in order — not the first one and
-then a shrug. An environment with one key still selects one member, and a
-one-member chain is the scalar configuration this package has always emitted, to
-the byte. What changes is the environment holding several.
+[`chat.chain`](/reference/config#chat-chain) ships as `false` — one provider,
+chosen once. Write `'auto'` and it becomes *every* provider the environment holds
+a key for, walked in order rather than the first one and then a shrug. An
+environment with one key selects one member either way, which is the scalar
+configuration this package has always emitted, to the byte; the word is what
+changes an environment holding several.
+
+It ships off because a request going to a provider that appears nowhere in the
+config file you are reading is a request you cannot account for from that file.
+Everything below this line describes a ladder you asked for.
 
 **They are not walked in the order the table lists them.** [The provider
 chain](/guide/providers#name-nothing-the-provider-chain) is ordered by *what one
@@ -137,13 +142,22 @@ and no other. Give a later member its own.
 
 ## 2. The free pool
 
-Once the walk reaches a provider's own free catalogue, a second rotation starts
-inside that one member. `chat: {provider: 'openrouter'}` with no model named is
-an ordered pool of ten, headed by `openrouter/free` — OpenRouter's own router
-over the free tier — with nine explicit free ids behind it. A free id is a shared
-allocation, so its `429` reports how many other people are asking rather than
-anything about the model, and pinning one buys a panel that works until somebody
-else's traffic arrives.
+Once the walk reaches a provider's own free catalogue, the same argument arrives
+one level down — because a free id is a shared allocation, so its `429` reports
+how many other people are asking rather than anything about the model, and
+pinning one buys a panel that works until somebody else's traffic arrives.
+
+`chat: {provider: 'openrouter'}` with no model named answers that on the
+service's side: its default is **`openrouter/free`**, OpenRouter's own router
+over the free tier, which picks a free model per request and skips the saturated
+ones. One id, one request.
+
+`chat: {provider: 'openrouter', model: 'free'}` is the second rotation proper —
+an ordered pool of ten, the router at its head and nine explicit free ids behind
+it, walked by the browser. It is opt-in as of 1.4.0, for the reason
+[engine-spec 021](https://github.com/Cloflin/docpilot/blob/main/engine-specs) is
+about: a refusal that is really about the request body buys the identical refusal
+once per member.
 
 The two rotations are the same argument at two levels, and the table above is the
 difference between them. Both are metered by the thing that catches people out:

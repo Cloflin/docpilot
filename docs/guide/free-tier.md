@@ -4,14 +4,16 @@ OpenRouter's free tier is a real way to run this panel, and it is metered in a
 way that catches people out. This page is what the constraint actually is, what
 DocPilot does about it, and what you have to decide.
 
-It is also **rung 2 of [the answer ladder](/concepts/the-ladder)**: where the
-environment holds a billed key as well, the free pool sinks beneath it and
-answers only once that account has stepped aside, because fifty requests a day
-shared by every reader of the site is not the allowance to spend first. A chain
-mixing the two turns per-day rationing **off** — the rules below need one
-allowance to defend and that deployment has more than one — so a spent free day
-rotates to the billed member and starts billing with nothing on screen saying so.
-The build prints that consequence, and
+It is also **rung 2 of [the answer ladder](/concepts/the-ladder)**, in a
+deployment that asked for a ladder: [`chat.chain`](/reference/config#chat-chain)
+ships `false`, so an environment holding a billed key as well resolves to one
+member and this page describes the whole of it. Write `chain: 'auto'` and the
+free tier sinks beneath the billed account, answering only once that account has
+stepped aside, because fifty requests a day shared by every reader of the site is
+not the allowance to spend first. A chain mixing the two turns per-day rationing
+**off** — the rules below need one allowance to defend and that deployment has
+more than one — so a spent free day rotates to the billed member and starts
+billing with nothing on screen saying so. The build prints that consequence, and
 [`budget.dailyLimit`](/reference/config#budget-dailylimit) is how you state one
 ceiling for the whole chain and get the rationing back.
 
@@ -72,15 +74,34 @@ The difference is not free. A one-shot answer is as good as the first retrieval
 was, and the loop exists because the first retrieval is sometimes not good
 enough. What one-shot buys is roughly three times as many questions in a day.
 
-## One key, ten models
+## One key, one router — and ten models if you ask
 
-The panel is not pinned to a model. `chat: { provider: 'openrouter' }` with no
-model named resolves to an **ordered pool of ten**, and the reason is what a free
-id actually is: a shared allocation, so its `429` reports how many other people
-are asking rather than anything about the model. Pinning one buys a panel that
-works until somebody else's traffic arrives.
+`chat: { provider: 'openrouter' }` with no model named resolves to
+**`openrouter/free`**: OpenRouter's own router over the free tier, which picks a
+free model per request and skips the saturated ones. One id, one request, and the
+choosing happens on the service's side.
 
-So a turn walks the list instead:
+That answers the thing a free id actually is — a shared allocation, whose `429`
+reports how many other people are asking rather than anything about the model —
+without a browser walking a list nobody wrote down. Pinning one *specific* free
+id still buys a panel that works until somebody else's traffic arrives; the
+router is the alternative to both.
+
+::: warning Changed in 1.4.0
+Silence used to resolve to the ten-id pool below, and a turn walked it. It does
+not any more: a refusal that is really about the request body buys the identical
+refusal once per member, so one bad afternoon could spend seven of the fifty on a
+site whose config file named one model. `model: 'free'` is the same behaviour
+asked for by name.
+:::
+
+## The pool, asked for by name
+
+```js
+chat: { provider: 'openrouter', model: 'free' },
+```
+
+That is the **ordered pool of ten**, walked by the browser itself:
 
 | | |
 | --- | --- |
