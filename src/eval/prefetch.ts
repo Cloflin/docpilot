@@ -26,6 +26,7 @@
  */
 import { providerFor } from '../theme/docpilot/providers.js'
 import { embeddingsOf } from '../build/build-rag-index.js'
+import { glossQuery } from '../theme/docpilot/text.js'
 
 /** The batch `docpilot index` has always bought at. */
 export const BATCH = 32
@@ -102,7 +103,8 @@ export async function prefetchEmbeddings(
         res = await fetchImpl(p.embedUrl(baseURL), {
           method: 'POST',
           headers: p.headers(apiKey),
-          body: JSON.stringify(p.embedBody(model, slice.map((t) => `${prefix}${t}`))),
+          // `glossQuery` here as in `embedQuery`: the vectors have to be its to the bit.
+          body: JSON.stringify(p.embedBody(model, slice.map((t) => `${prefix}${glossQuery(t)}`))),
         })
       } catch {
         // Unreachable. The caller's per-text path words that failure, and words

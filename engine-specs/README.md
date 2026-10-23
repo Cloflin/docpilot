@@ -50,6 +50,8 @@ The rule this directory exists to enforce:
 | [021](021-a-model-nobody-wrote-down.md) | silence stops resolving to a ten-id pool — `openrouter` gets `openrouter/free` as its default, `chat.chain` ships `false`, and a list is something you write down |
 | [022](022-the-turn-that-forgot-what-it-was-following.md) | three defects between one turn and the next: the cited ids come back with a restored turn, a prior answer reaches the model as its skeleton rather than its first 300 characters, and `search_docs` searches the query the gate won on — both halves of it |
 | [023](023-an-antecedent-one-hop-short.md) | an ellipsis chains two questions back when the turn it follows was itself composed — and the eval sets learn to hold a conversation longer than one pair |
+| [024](024-the-code-the-last-answer-showed.md) | measured, not adopted: a host-built summary of the previous turn (its code, its sources) lost or tied against the control in two A/B runs — 013 and 022 already carry what a follow-up needs |
+| [025](025-the-word-the-embedder-never-saw.md) | the embedder reads the corpus's own terms beside the reader's: `embedQuery` appends the canonicals a question's vocabulary aliases name, so a Russian question stops losing to dense ordering the section lexical already ranked first |
 
 ## Shape of a spec
 

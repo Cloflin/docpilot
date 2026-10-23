@@ -386,6 +386,8 @@ export function identifierParts(s) {
  *   terms: Record<string, string[]>,
  *   phrases: Map<string, string[]>,
  *   tokens: Map<string, string[]>,
+ *   gloss: Map<string, string>,
+ *   glossStems: Map<string, string>,
  *   maxPhrase: number,
  *   signature: string,
  *   hash: string,
@@ -453,6 +455,10 @@ export function setVocabulary(map) {
   }
   const phrases = new Map()
   const tokens = new Map()
+  // The same pairs, keyed back to the canonical as WRITTEN — `glossQuery` below
+  // names the term to the embedder, which reads words, not stems.
+  const gloss = new Map()
+  const glossStems = new Map()
   // A canonical may not also be an alias: the token pass would then rewrite what
   // the phrase pass just wrote and the map would have a cycle in it.
   const canonicalKeys = new Set()
@@ -491,10 +497,12 @@ export function setVocabulary(map) {
         continue
       }
       phrases.set(phraseKey, surface)
+      gloss.set(phraseKey, canonical)
       maxPhrase = Math.max(maxPhrase, a.length)
       if (a.length === 1) {
         const stem = stemLite(a[0])
         if (stem.length >= 2 && !tokens.has(stem)) tokens.set(stem, stemmed)
+        if (stem.length >= 2 && !glossStems.has(stem)) glossStems.set(stem, canonical)
       }
       kept.push(phraseKey)
       report.aliases++
@@ -508,8 +516,59 @@ export function setVocabulary(map) {
     return report
   }
   const signature = parts.join(';')
-  VOCAB = { terms: map, phrases, tokens, maxPhrase, signature, hash: fnv1a32(signature) }
+  VOCAB = { terms: map, phrases, tokens, gloss, glossStems, maxPhrase, signature, hash: fnv1a32(signature) }
   return report
+}
+
+/**
+ * The question as the EMBEDDER should read it — engine-spec 025.
+ *
+ * The vocabulary rewrites the lexical channel only: `terms()` maps `локаль` onto
+ * `locale` and BM25 ranks the right section first, but the dense channel still
+ * embeds the raw Russian question, and `rank()` orders the fused pool by dense
+ * cosine alone (MMR_LAMBDA 1.0). Measured on a Russian question against an
+ * English corpus with `text-embedding-3-small`: lexical #1, final top-8 absent.
+ *
+ * APPENDED, NEVER SUBSTITUTED. The canonical terms the question's aliases name
+ * go on a line after it, so the embedder reads both the reader's words and the
+ * corpus's; nothing the reader wrote is removed. A canonical the question
+ * already contains is not repeated, so an English question in the corpus's own
+ * words — and an opener question — embeds exactly as before.
+ *
+ * Same matching as the lexical passes: longest declared phrase first at each
+ * position, otherwise one token by its stem. No vocabulary, no change.
+ */
+export function glossQuery(s) {
+  const text = String(s ?? '')
+  // EVAL-ONLY, on the terms of `DOCPILOT_HISTORY_CONDENSE`: `=0` is the control
+  // arm of the A/B, on one build. Read at call time. Not a configuration key.
+  if (!VOCAB || globalThis.process?.env?.DOCPILOT_GLOSS === '0') return text
+  const toks = surfaceTokens(text)
+  const have = ` ${toks.join(' ')} `
+  const out = []
+  const add = (canonical) => {
+    if (out.includes(canonical)) return
+    const key = surfaceTokens(canonical).join(' ')
+    if (key && have.includes(` ${key} `)) return
+    out.push(canonical)
+  }
+  for (let i = 0; i < toks.length; ) {
+    let taken = 0
+    for (let n = Math.min(VOCAB.maxPhrase, toks.length - i); n >= 1; n--) {
+      const canonical = VOCAB.gloss.get(toks.slice(i, i + n).join(' '))
+      if (canonical) {
+        add(canonical)
+        taken = n
+        break
+      }
+    }
+    if (!taken) {
+      const canonical = VOCAB.glossStems.get(stemLite(toks[i]))
+      if (canonical) add(canonical)
+    }
+    i += taken || 1
+  }
+  return out.length ? `${text}\n${out.join(', ')}` : text
 }
 
 /** The declared pairs, for the block the model reads. Null when nothing is installed. */

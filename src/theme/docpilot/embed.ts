@@ -14,6 +14,7 @@
  * applies the document-side counterpart by the identical test.
  */
 import { providerFor } from './providers.js'
+import { glossQuery } from './text.js'
 
 const queryPrefix = (model) => (/nomic/i.test(model) ? 'search_query: ' : '')
 
@@ -71,7 +72,7 @@ export async function embedQuery(
   // cost of every follow-up on a free tier that counts requests rather than
   // tokens.
   const many = Array.isArray(text)
-  const inputs = (many ? text : [text]).map((t) => `${queryPrefix(model)}${t}`)
+  const inputs = (many ? text : [text]).map((t) => `${queryPrefix(model)}${glossQuery(t)}`)
   if (many && inputs.length === 0) return []
 
   let res
