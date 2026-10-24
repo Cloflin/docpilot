@@ -1041,6 +1041,8 @@ html.docpilot-dark {
     background: var(--dp-code-bg);
     border: 1px solid var(--dp-line);
     border-radius: var(--dp-r-md);
+    margin-top: 12px;
+    margin-bottom: 16px;
   }
 
   pre {
@@ -1528,6 +1530,12 @@ html.docpilot-light .docpilot__passage .shiki span {
 .docpilot__source-n {
   font-size: 13px;
   color: inherit;
+}
+
+.docpilot__source > .docpilot__source-n,
+.docpilot__source > a,
+.docpilot__source > .docpilot__result-body {
+  align-self: baseline;
 }
 .docpilot__source-title {
   font-size: 14px;
