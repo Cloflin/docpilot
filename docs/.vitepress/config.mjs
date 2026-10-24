@@ -123,11 +123,12 @@ export const docPilot = {
     : {
         chat: {
           provider: 'openrouter',
-          model: 'openai/gpt-4o-mini',
+          model: 'deepseek/deepseek-v4-flash',
+          reasoning: true,
         },
         embed: {
           provider: 'openrouter',
-          model: 'openai/text-embedding-3-small',
+          model: 'qwen/qwen3-embedding-8b',
         },
       }),
   budget: { probe: 'never' },
