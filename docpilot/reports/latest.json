@@ -8,24 +8,57 @@
   "lexical": false,
   "vectorlessIndex": false,
   "provider": "ollama",
-  "indexHash": "797980fe",
+  "indexHash": "dc7d03a4",
   "promptHash": "32b8a225",
-  "chunkCount": 570,
-  "embedModel": "bge-m3",
+  "chunkCount": 581,
+  "embedModel": "qwen/qwen3-embedding-8b",
   "guard": {
-   "tau": 0.3,
-   "tauLexical": 0.3,
+   "tau": 0.57,
+   "tauLexical": 0.51,
    "wDense": 0.75,
    "wLexical": 0.25,
    "denseMode": "cosine",
-   "cosFloor": 0.44,
-   "cosCeil": 0.64,
-   "source": "provisional",
-   "calibratedAt": null,
-   "zexp": null,
-   "zexpSource": "closed-form",
-   "overRefusalUB95": null,
-   "gatePrecision": null
+   "cosFloor": 0.28,
+   "cosCeil": 0.68,
+   "source": "calibrated-reduced",
+   "calibratedAt": "dc7d03a4",
+   "zexp": [
+    {
+     "n": 8,
+     "z": 1.1684
+    },
+    {
+     "n": 11,
+     "z": 1.2578
+    },
+    {
+     "n": 25,
+     "z": 1.8912
+    },
+    {
+     "n": 50,
+     "z": 2.3836
+    },
+    {
+     "n": 114,
+     "z": 3.0844
+    },
+    {
+     "n": 308,
+     "z": 4.2962
+    },
+    {
+     "n": 581,
+     "z": 4.8794
+    },
+    {
+     "n": 581,
+     "z": 4.8794
+    }
+   ],
+   "zexpSource": "measured",
+   "overRefusalUB95": 0.026084456833815568,
+   "gatePrecision": 0.476
   },
   "guardMode": "off",
   "records": 96,
@@ -52,9 +85,12 @@
    "maxIterations": 2,
    "numCtx": 8192
   },
-  "ranAt": "2026-09-04T11:05:52.551Z",
+  "historyCondense": true,
+  "lastAnswerFull": true,
+  "antecedentHops": 2,
+  "ranAt": "2026-10-23T12:55:18.555Z",
   "chatBase": "http://localhost:11434",
-  "embedBase": "http://127.0.0.1:11434",
+  "embedBase": "https://openrouter.ai",
   "node": "v26.8.1",
   "package": "1.4.0",
   "goldenSha": "f52b55763c41130f",
@@ -64,9 +100,9 @@
  "summary": {
   "positives": 66,
   "negatives": 30,
-  "retrievalF1": 0.2751596047050594,
+  "retrievalF1": 0.33510428964974415,
   "recall8": 0.803030303030303,
-  "mrr": 0.5658910533910534,
+  "mrr": 0.6348484848484849,
   "answerF1": null,
   "identifierRecall": null,
   "citationPrecision": null,
@@ -74,8 +110,8 @@
   "supportPrecision": null,
   "unsupportedAnswerRate": null,
   "language": null,
-  "gateOverRefusal": 3,
-  "gateOverRefusalUB95": 0.10840055055865168,
+  "gateOverRefusal": 5,
+  "gateOverRefusalUB95": 0.14756924370687072,
   "answerOverRefusal": 0,
   "answerOverRefusalUB95": 0.03938095626898518,
   "negativesCaught": 0,
@@ -134,8 +170,8 @@
    "English": {
     "positives": 60,
     "negatives": 29,
-    "recall8": 0.8333333333333334,
-    "mrr": 0.5641468253968254,
+    "recall8": 0.825,
+    "mrr": 0.6483333333333334,
     "answerF1": null,
     "identifierRecall": null,
     "citationRecall": null,
@@ -145,8 +181,8 @@
    "Russian": {
     "positives": 6,
     "negatives": 1,
-    "recall8": 0.5,
-    "mrr": 0.5833333333333334,
+    "recall8": 0.5833333333333334,
+    "mrr": 0.5,
     "answerF1": null,
     "identifierRecall": null,
     "citationRecall": null,
@@ -159,7 +195,7 @@
     "positives": 38,
     "negatives": 24,
     "recall8": 0.9210526315789473,
-    "mrr": 0.6828007518796992,
+    "mrr": 0.7916666666666666,
     "answerF1": null,
     "identifierRecall": null,
     "citationRecall": null,
@@ -169,7 +205,7 @@
     "positives": 8,
     "negatives": 0,
     "recall8": 1,
-    "mrr": 0.5324404761904762,
+    "mrr": 0.6229166666666668,
     "answerF1": null,
     "identifierRecall": null,
     "citationRecall": null,
@@ -179,7 +215,7 @@
     "positives": 10,
     "negatives": 1,
     "recall8": 0.75,
-    "mrr": 0.4642857142857143,
+    "mrr": 0.5083333333333334,
     "answerF1": null,
     "identifierRecall": null,
     "citationRecall": null,
@@ -189,7 +225,7 @@
     "positives": 10,
     "negatives": 5,
     "recall8": 0.25,
-    "mrr": 0.25,
+    "mrr": 0.175,
     "answerF1": null,
     "identifierRecall": null,
     "citationRecall": null,
@@ -201,14 +237,18 @@
     "q-01",
     "q-02",
     "q-03",
+    "q-04",
     "q-05",
+    "q-06",
     "q-07",
+    "q-08",
     "q-09",
     "q-10",
     "q-11",
     "q-12",
     "q-13",
     "q-15",
+    "q-16",
     "q-17",
     "q-18",
     "q-19",
@@ -220,10 +260,12 @@
     "q-25",
     "q-26",
     "q-27",
+    "q-28",
     "q-29",
     "q-30",
     "q-31",
     "q-32",
+    "q-33",
     "q-34",
     "q-35",
     "q-37",
@@ -239,22 +281,14 @@
     "q-47",
     "q-48",
     "q-50",
-    "q-51",
     "q-52",
+    "q-55",
     "q-57",
     "q-59",
     "q-60",
     "q-63",
+    "q-64",
     "q-65"
-   ],
-   "gold-below-primed": [
-    "q-04",
-    "q-06",
-    "q-08",
-    "q-16",
-    "q-28",
-    "q-33",
-    "q-64"
    ],
    "neg-answered:refuse:no-evidence": [
     "n-01",
@@ -294,9 +328,9 @@
     "q-14",
     "q-36",
     "q-49",
+    "q-51",
     "q-53",
     "q-54",
-    "q-55",
     "q-56",
     "q-58",
     "q-61",
@@ -308,45 +342,11 @@
   "missPages": {
    "undescribed": [
     {
-     "page": "/reference/cli",
-     "described": false,
-     "records": [
-      "q-04",
-      "q-36"
-     ]
-    },
-    {
-     "page": "/guide/providers",
-     "described": false,
-     "records": [
-      "q-06",
-      "q-16",
-      "q-53"
-     ]
-    },
-    {
-     "page": "/concepts/a-turn",
-     "described": false,
-     "records": [
-      "q-08",
-      "q-28",
-      "q-49"
-     ]
-    },
-    {
      "page": "/guide/social-openers",
      "described": false,
      "records": [
       "q-14",
       "q-56"
-     ]
-    },
-    {
-     "page": "/guide/credentials",
-     "described": false,
-     "records": [
-      "q-33",
-      "q-55"
      ]
     },
     {
@@ -358,10 +358,38 @@
      ]
     },
     {
+     "page": "/reference/cli",
+     "described": false,
+     "records": [
+      "q-36"
+     ]
+    },
+    {
+     "page": "/concepts/a-turn",
+     "described": false,
+     "records": [
+      "q-49"
+     ]
+    },
+    {
      "page": "/concepts/the-gate",
      "described": false,
      "records": [
       "q-49"
+     ]
+    },
+    {
+     "page": "/guide/free-tier",
+     "described": false,
+     "records": [
+      "q-51"
+     ]
+    },
+    {
+     "page": "/guide/providers",
+     "described": false,
+     "records": [
+      "q-53"
      ]
     },
     {
@@ -386,15 +414,14 @@
      ]
     },
     {
-     "page": "/guide/indexing",
+     "page": "/reference/config",
      "described": false,
      "records": [
-      "q-64",
       "q-66"
      ]
     },
     {
-     "page": "/reference/config",
+     "page": "/guide/indexing",
      "described": false,
      "records": [
       "q-66"
@@ -405,85 +432,7 @@
   }
  },
  "incomparable": [],
- "diff": [
-  {
-   "key": "retrievalF1",
-   "from": 0.29325724780270246,
-   "to": 0.2751596047050594,
-   "delta": -0.018097643097643057,
-   "better": false
-  },
-  {
-   "key": "recall8",
-   "from": 0.8409090909090909,
-   "to": 0.803030303030303,
-   "delta": -0.037878787878787956,
-   "better": false
-  },
-  {
-   "key": "mrr",
-   "from": 0.5983225108225109,
-   "to": 0.5658910533910534,
-   "delta": -0.03243145743145748,
-   "better": false
-  },
-  {
-   "key": "recall8[English]",
-   "from": 0.8666666666666667,
-   "to": 0.8333333333333334,
-   "delta": -0.033333333333333326,
-   "better": false
-  },
-  {
-   "key": "mrr[English]",
-   "from": 0.6131547619047618,
-   "to": 0.5641468253968254,
-   "delta": -0.049007936507936445,
-   "better": false
-  },
-  {
-   "key": "recall8[Russian]",
-   "from": 0.5833333333333334,
-   "to": 0.5,
-   "delta": -0.08333333333333337,
-   "better": false
-  },
-  {
-   "key": "mrr[Russian]",
-   "from": 0.45,
-   "to": 0.5833333333333334,
-   "delta": 0.13333333333333336,
-   "better": true
-  },
-  {
-   "key": "recall8[depth=2]",
-   "from": 0.9,
-   "to": 0.75,
-   "delta": -0.15000000000000002,
-   "better": false
-  },
-  {
-   "key": "mrr[depth=2]",
-   "from": 0.6583333333333334,
-   "to": 0.4642857142857143,
-   "delta": -0.19404761904761914,
-   "better": false
-  },
-  {
-   "key": "recall8[depth=3]",
-   "from": 0.35,
-   "to": 0.25,
-   "delta": -0.09999999999999998,
-   "better": false
-  },
-  {
-   "key": "mrr[depth=3]",
-   "from": 0.27,
-   "to": 0.25,
-   "delta": -0.020000000000000018,
-   "better": false
-  }
- ],
+ "diff": [],
  "rows": [
   {
    "id": "q-01",
@@ -501,19 +450,20 @@
    "retrievedIds": [
     "concepts/the-gate#",
     "concepts/the-gate#five-settled-turns-five-causes",
-    "guide/troubleshooting#a-follow-up-is-refused",
-    "concepts/the-gate#follow-ups",
-    "guide/why#why-the-gate-sits-on-the-retrieval-side-and-why-it-is-opt-in"
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "concepts/the-gate#follow-ups~2"
    ],
    "rankedIds": [
     "concepts/the-gate#",
     "concepts/the-gate#five-settled-turns-five-causes",
-    "guide/troubleshooting#a-follow-up-is-refused",
-    "concepts/the-gate#follow-ups",
-    "guide/why#why-the-gate-sits-on-the-retrieval-side-and-why-it-is-opt-in",
     "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
     "concepts/the-gate#follow-ups~2",
-    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted"
+    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check",
+    "reference/config#guard",
+    "concepts/the-gate#follow-ups",
+    "concepts/the-gate#two-channels"
    ],
    "lang": "English",
    "goldPages": [
@@ -521,9 +471,9 @@
     "/guide/philosophy"
    ],
    "retrieval": {
-    "p": 0.6,
-    "r": 0.5,
-    "f1": 0.5454545454545454
+    "p": 1,
+    "r": 1,
+    "f1": 1
    },
    "recall8": 1,
    "mrr": 1,
@@ -540,27 +490,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.9457179764028707,
-   "D": 0.9276239685371609,
+   "G": 0.8702852353100226,
+   "D": 0.8270469804133634,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#follow-ups~4",
     "concepts/the-gate#two-channels",
-    "reference/config#it-rewrites-it-never-adds",
-    "concepts/the-gate#follow-ups",
-    "concepts/the-gate#follow-ups~3"
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "reference/cli#feedback~3",
+    "concepts/a-turn#3-retrieval-and-the-gate"
    ],
    "rankedIds": [
-    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#follow-ups~4",
     "concepts/the-gate#two-channels",
-    "reference/config#it-rewrites-it-never-adds",
-    "concepts/the-gate#follow-ups",
-    "concepts/the-gate#follow-ups~3",
-    "concepts/the-gate#",
     "concepts/the-gate#five-settled-turns-five-causes",
-    "guide/social-openers#why-it-exists"
+    "reference/cli#feedback~3",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/evaluation#what-it-needs",
+    "guide/social-openers#why-it-exists",
+    "concepts/the-gate#follow-ups"
    ],
    "lang": "English",
    "goldPages": [
@@ -593,20 +543,20 @@
    "gatePass": true,
    "retrievedIds": [
     "guide/free-tier#the-constraint-is-requests-not-tokens",
+    "guide/what-it-costs#the-one-number-to-watch",
     "guide/free-tier#",
-    "guide/free-tier#one-key-one-router-and-ten-models-if-you-ask",
-    "reference/config#budget",
+    "guide/comparison#and-what-0-does-not-cover",
     "concepts/the-ladder#2-the-free-pool"
    ],
    "rankedIds": [
     "guide/free-tier#the-constraint-is-requests-not-tokens",
+    "guide/what-it-costs#the-one-number-to-watch",
     "guide/free-tier#",
-    "guide/free-tier#one-key-one-router-and-ten-models-if-you-ask",
-    "reference/config#budget",
+    "guide/comparison#and-what-0-does-not-cover",
     "concepts/the-ladder#2-the-free-pool",
-    "guide/free-tier#when-the-build-runs-out~3",
-    "guide/free-tier#writing-your-own-order",
-    "guide/free-tier#what-you-have-to-decide"
+    "guide/free-tier#what-you-have-to-decide",
+    "guide/free-tier#what-docpilot-does-without-being-asked",
+    "guide/free-tier#when-it-runs-out"
    ],
    "lang": "English",
    "goldPages": [
@@ -638,23 +588,22 @@
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "install/web#the-index",
+    "reference/cli#index",
+    "guide/faq#the-commands",
+    "install#",
     "reference/cli#",
-    "guide#overview",
-    "guide/faq#the-commands~2",
-    "install#2-the-index",
-    "guide/faq#doctor-what-ci-gates-on"
+    "guide/indexing#",
+    "reference/cli#embedder-question"
    ],
    "rankedIds": [
-    "install/web#the-index",
-    "reference/cli#",
-    "guide#overview",
-    "guide/faq#the-commands~2",
-    "install#2-the-index",
-    "guide/other-sites#the-index-does-not-need-a-site",
     "reference/cli#index",
-    "reference/cli#slash-commands",
-    "guide/faq#doctor-what-ci-gates-on",
+    "guide/faq#the-commands",
+    "install#",
+    "reference/cli#",
+    "guide/indexing#",
+    "guide/indexing#built-site",
+    "guide/other-sites#the-index-does-not-need-a-site",
+    "guide/comparison#what-docpilot-is-worse-at",
     "reference/cli#embedder-question"
    ],
    "lang": "English",
@@ -662,12 +611,12 @@
     "/reference/cli"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
    },
    "recall8": 1,
-   "mrr": 0.14285714285714285,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -688,20 +637,22 @@
    "gatePass": true,
    "retrievedIds": [
     "guide#overview~2",
-    "guide/other-sites#the-index-does-not-need-a-site",
     "install#",
-    "install/vitepress#the-config",
-    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not"
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "install/vitepress#",
+    "guide/faq#how-do-i-get-started",
+    "install/vitepress#the-config"
    ],
    "rankedIds": [
     "guide#overview~2",
-    "guide/other-sites#the-index-does-not-need-a-site",
     "install#",
-    "install/vitepress#the-config",
     "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
-    "install/vitepress#the-theme",
+    "install/vitepress#",
     "guide/faq#how-do-i-get-started",
-    "install/vitepress#"
+    "guide/other-sites#mounting",
+    "install/vitepress#the-theme",
+    "guide/other-sites#the-index-does-not-need-a-site",
+    "install/vitepress#the-config"
    ],
    "lang": "English",
    "goldPages": [
@@ -709,9 +660,9 @@
     "/install"
    ],
    "retrieval": {
-    "p": 0.4,
+    "p": 0.3333333333333333,
     "r": 1,
-    "f1": 0.5714285714285715
+    "f1": 0.5
    },
    "recall8": 1,
    "mrr": 1,
@@ -728,28 +679,28 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.882874293000877,
-   "D": 0.843832390667836,
+   "G": 0.9996368216619838,
+   "D": 0.9995157622159784,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/production#docker~2",
     "guide/credentials#",
     "guide/panel#a-question-with-a-key-in-it",
-    "guide/production#ask-what-the-contract-is",
-    "reference/config#openapi",
+    "guide/providers#where-the-key-lives",
+    "guide/faq#how-do-i-get-started",
+    "guide/faq#how-do-i-get-started~3",
     "guide/credentials#what-happens",
     "guide/panel#hello"
    ],
    "rankedIds": [
-    "guide/production#docker~2",
     "guide/credentials#",
     "guide/panel#a-question-with-a-key-in-it",
-    "guide/production#ask-what-the-contract-is",
-    "reference/config#openapi",
-    "guide/credentials#what-happens",
     "guide/providers#where-the-key-lives",
+    "guide/faq#how-do-i-get-started",
+    "guide/faq#how-do-i-get-started~3",
+    "guide/credentials#what-happens",
+    "guide/production#ask-what-the-contract-is",
     "guide/production#nginx~3",
     "guide/panel#hello"
    ],
@@ -758,12 +709,12 @@
     "/guide/providers"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.14285714285714285,
+    "r": 1,
+    "f1": 0.25
    },
    "recall8": 1,
-   "mrr": 0.14285714285714285,
+   "mrr": 0.3333333333333333,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -777,36 +728,36 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.7800940450360317,
-   "D": 0.7067920600480423,
+   "G": 0.9104312609797056,
+   "D": 0.8805750146396074,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "concepts/the-ladder#",
-    "concepts/the-ladder#1-paid-providers-in-priority-order~2",
-    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
     "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
-    "concepts/the-ladder#1-paid-providers-in-priority-order"
+    "concepts/the-ladder#what-never-happens",
+    "reference/config#suggestionsauthored",
+    "reference/config#suggestionsanswers"
    ],
    "rankedIds": [
     "concepts/the-ladder#",
-    "concepts/the-ladder#1-paid-providers-in-priority-order~2",
-    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
     "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
-    "concepts/the-ladder#1-paid-providers-in-priority-order",
     "concepts/the-ladder#what-never-happens",
-    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
-    "concepts/the-ladder#4-the-hybrid-answer"
+    "reference/config#suggestionsauthored",
+    "reference/config#suggestionsanswers",
+    "reference/config#chatpreferlocal",
+    "concepts/the-ladder#1-paid-providers-in-priority-order",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2"
    ],
    "lang": "English",
    "goldPages": [
     "/concepts/the-ladder"
    ],
    "retrieval": {
-    "p": 1,
+    "p": 0.6,
     "r": 0.5,
-    "f1": 0.6666666666666666
+    "f1": 0.5454545454545454
    },
    "recall8": 0.5,
    "mrr": 1,
@@ -823,27 +774,37 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.43145785919182156,
-   "D": 0.24194381225576211,
+   "G": 0.25,
+   "D": 0,
    "L": 1,
    "channel": "raw",
-   "gatePass": true,
+   "gatePass": false,
    "retrievedIds": [
-    "guide/evaluation#the-golden-set",
-    "reference/config#parameters~5",
-    "reference/theme#the-whole-set~2",
-    "reference/config#ui",
-    "reference/cli#init"
+    "reference/config#quote",
+    "reference/config#budgetprobe",
+    "guide/panel#the-composer",
+    "guide/faq#",
+    "reference/config#parameters~2",
+    "reference/config#quotefromanswer",
+    "guide/panel#scoping-the-question",
+    "guide/faq#how-do-i-get-started",
+    "reference/config#parameters~3"
    ],
    "rankedIds": [
-    "guide/evaluation#the-golden-set",
-    "reference/config#parameters~5",
-    "reference/theme#the-whole-set~2",
-    "reference/config#ui",
-    "reference/cli#init",
-    "guide/appearance#the-tokens~4",
-    "guide/appearance#the-tokens~2",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2"
+    "reference/config#quote",
+    "reference/config#budgetprobe",
+    "guide/panel#the-composer",
+    "guide/faq#",
+    "reference/config#parameters~2",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "reference/config#suggestionsauthored",
+    "guide/faq#the-commands~2",
+    "reference/config#quotefromanswer",
+    "guide/panel#scoping-the-question",
+    "guide/faq#how-do-i-get-started",
+    "reference/config#parameters~3",
+    "guide/social-openers#making-it-yours",
+    "guide/faq#doctor-what-ci-gates-on"
    ],
    "lang": "English",
    "goldPages": [],
@@ -863,29 +824,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.845788523826766,
-   "D": 0.8610513651023546,
+   "G": 0.95,
+   "D": 1,
    "L": 0.8,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "install/docusaurus#options",
-    "guide/comparison#choosing",
     "guide/comparison#sources",
+    "install#",
     "guide/comparison#architecture",
-    "guide/comparison#how-the-money-is-arranged",
-    "install/docusaurus#syntax-highlighting"
+    "guide/llms-txt#robotstxt",
+    "guide/indexing#built-site"
    ],
    "rankedIds": [
-    "install/docusaurus#options",
-    "guide/comparison#choosing",
     "guide/comparison#sources",
+    "install#",
     "guide/comparison#architecture",
-    "guide/comparison#how-the-money-is-arranged",
     "guide/llms-txt#robotstxt",
-    "install/web#the-index",
-    "guide/other-sites#the-index-does-not-need-a-site",
-    "install/docusaurus#syntax-highlighting"
+    "guide/indexing#built-site",
+    "guide#overview",
+    "guide/comparison#choosing",
+    "guide/other-sites#the-index-does-not-need-a-site"
    ],
    "lang": "English",
    "goldPages": [],
@@ -905,26 +864,27 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.2461265034054536,
-   "D": 0.3281686712072715,
+   "G": 0.288317059563071,
+   "D": 0.3844227460840947,
    "L": 0,
    "channel": "raw",
    "gatePass": false,
    "retrievedIds": [
-    "reference/theme#overriding",
     "reference/theme#the-dark-set~2",
-    "reference/theme#the-dark-set",
-    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
-    "reference/theme#the-whole-set~2"
-   ],
-   "rankedIds": [
-    "reference/theme#overriding",
-    "reference/theme#the-dark-set~2",
-    "reference/theme#the-dark-set",
-    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
     "reference/theme#the-whole-set~2",
+    "reference/theme#overriding",
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
     "reference/theme#",
     "reference/theme#the-whole-set"
+   ],
+   "rankedIds": [
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-whole-set~2",
+    "reference/theme#overriding",
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#",
+    "reference/theme#the-whole-set",
+    "reference/theme#the-dark-set"
    ],
    "lang": "English",
    "goldPages": [],
@@ -944,44 +904,41 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.7654898831959892,
-   "D": 0.687319844261319,
+   "G": 1,
+   "D": 1,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/panel#past-conversations",
-    "guide/panel#",
-    "guide/history#where",
     "reference/config#history",
-    "reference/config#historysaveonunload",
-    "guide/panel#opening-it",
+    "guide/history#what-is-stored",
+    "guide/history#what-the-reader-sees~2",
+    "concepts/a-turn#conversation-memory",
+    "reference/config#parameters~4",
     "reference/config#historyexportthread"
    ],
    "rankedIds": [
-    "guide/panel#past-conversations",
-    "guide/panel#",
-    "guide/history#where",
     "reference/config#history",
-    "reference/config#historysaveonunload",
-    "guide/history#",
+    "guide/history#what-is-stored",
+    "guide/history#what-the-reader-sees~2",
     "concepts/a-turn#conversation-memory",
-    "guide/panel#telling-you-it-was-wrong",
-    "guide/panel#opening-it",
-    "reference/config#historyexportthread",
-    "guide/history#what-the-reader-sees"
+    "reference/config#parameters~4",
+    "guide/history#where",
+    "guide/history#what-the-reader-sees",
+    "concepts/a-turn#conversation-memory~2",
+    "reference/config#historyexportthread"
    ],
    "lang": "English",
    "goldPages": [
     "/concepts/a-turn"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
    },
    "recall8": 1,
-   "mrr": 0.14285714285714285,
+   "mrr": 0.25,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -1001,23 +958,22 @@
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/history#",
-    "guide/history#where",
     "reference/config#history",
-    "guide/panel#past-conversations",
+    "guide/history#where",
     "guide/history#what-is-stored",
-    "guide/history#what-the-reader-sees",
+    "guide/panel#past-conversations",
+    "guide/history#what-the-reader-sees~2",
     "reference/config#historyexportthread"
    ],
    "rankedIds": [
-    "guide/history#",
-    "guide/history#where",
     "reference/config#history",
-    "guide/panel#past-conversations",
+    "guide/history#where",
     "guide/history#what-is-stored",
-    "reference/config#historysaveonunload",
+    "guide/panel#past-conversations",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#",
+    "concepts/guarantees#~2",
     "guide/history#what-the-reader-sees",
-    "guide/history#when-the-docs-change",
     "reference/config#historyexportthread"
    ],
    "lang": "English",
@@ -1025,9 +981,9 @@
     "/guide/history"
    ],
    "retrieval": {
-    "p": 0.2857142857142857,
+    "p": 0.3333333333333333,
     "r": 1,
-    "f1": 0.4444444444444445
+    "f1": 0.5
    },
    "recall8": 1,
    "mrr": 0.5,
@@ -1051,21 +1007,21 @@
    "gatePass": true,
    "retrievedIds": [
     "guide/credentials#",
-    "guide/credentials#what-happens",
     "guide/panel#a-question-with-a-key-in-it",
+    "guide/credentials#what-happens",
     "reference/config#feedbackcomment",
     "guide/credentials#this-is-not-a-security-boundary",
     "guide/panel#hello"
    ],
    "rankedIds": [
     "guide/credentials#",
-    "guide/credentials#what-happens",
     "guide/panel#a-question-with-a-key-in-it",
+    "guide/credentials#what-happens",
     "reference/config#feedbackcomment",
     "guide/credentials#this-is-not-a-security-boundary",
-    "guide/production#the-body",
-    "reference/config#parameters~5",
-    "reference/config#parameters~4",
+    "concepts/guarantees#~2",
+    "guide/comparison#the-chat-itself",
+    "guide/faq#how-do-i-get-started~3",
     "guide/panel#hello"
    ],
    "lang": "English",
@@ -1078,7 +1034,7 @@
     "f1": 0.5
    },
    "recall8": 1,
-   "mrr": 0.5,
+   "mrr": 0.3333333333333333,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -1092,27 +1048,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.7750861044662981,
-   "D": 0.8112259170661753,
+   "G": 0.9166666666666666,
+   "D": 1,
    "L": 0.6666666666666666,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/indexing#vectors-are-quantised",
     "guide/indexing#vectors-are-quantised~2",
-    "guide/indexing#a-second-index-to-measure-against~2",
-    "guide/why#why-not-a-vector-database",
-    "guide/faq#what-the-cli-knows-and-you-do-not"
+    "reference/cli#embedder-question~4",
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "guide/what-it-costs#where-the-money-actually-goes"
    ],
    "rankedIds": [
     "guide/indexing#vectors-are-quantised",
     "guide/indexing#vectors-are-quantised~2",
-    "guide/indexing#a-second-index-to-measure-against~2",
-    "guide/why#why-not-a-vector-database",
-    "guide/faq#what-the-cli-knows-and-you-do-not",
-    "guide/why#what-it-costs",
-    "guide/providers#no-embedder-at-all",
-    "reference/config#embed-false"
+    "reference/cli#embedder-question~4",
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "guide/what-it-costs#where-the-money-actually-goes",
+    "reference/cli#embedder-question~3",
+    "guide/what-it-costs#what-a-reader-downloads",
+    "guide/why#why-not-a-vector-database"
    ],
    "lang": "English",
    "goldPages": [
@@ -1138,40 +1094,40 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.9535608771495394,
-   "D": 0.9380811695327193,
+   "G": 1,
+   "D": 1,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/panel#scoping-the-question",
     "reference/config#quote",
-    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
-    "reference/config#parameters~5",
-    "guide/indexing#what-gets-indexed",
-    "reference/config#quotefromanswer",
-    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+    "reference/config#suggestionsauthored",
+    "reference/config#parameters~4",
+    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "reference/config#quotefromanswer"
    ],
    "rankedIds": [
     "guide/panel#scoping-the-question",
     "reference/config#quote",
+    "reference/config#suggestionsauthored",
+    "reference/config#parameters~4",
+    "concepts/guarantees#claims-this-documentation-will-not-make",
     "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
-    "reference/config#parameters~5",
-    "guide/indexing#what-gets-indexed",
-    "guide/evaluation#what-it-needs",
-    "reference/skills#docs-rag~2",
-    "reference/cli#split-identifiers",
+    "reference/config#suggestionsscoped",
+    "reference/config#scope",
     "reference/config#quotefromanswer",
-    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "reference/config#suggestionsfollowups"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/panel"
    ],
    "retrieval": {
-    "p": 0.14285714285714285,
+    "p": 0.16666666666666666,
     "r": 1,
-    "f1": 0.25
+    "f1": 0.2857142857142857
    },
    "recall8": 1,
    "mrr": 1,
@@ -1188,30 +1144,30 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.901358459642538,
-   "D": 0.8684779461900507,
+   "G": 0.8551795897037787,
+   "D": 0.8069061196050383,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/panel#when-it-refuses",
-    "guide/panel#when-something-is-wrong",
-    "guide/panel#hello",
-    "guide/panel#the-empty-panel",
+    "concepts/the-gate#five-settled-turns-five-causes",
     "concepts/the-gate#",
-    "guide/panel#while-it-answers"
+    "guide/panel#",
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "guide/panel#opening-it"
    ],
    "rankedIds": [
     "guide/panel#when-it-refuses",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "concepts/the-gate#",
+    "guide/panel#",
+    "guide/troubleshooting#a-follow-up-is-refused",
     "guide/panel#when-something-is-wrong",
     "guide/panel#hello",
-    "guide/panel#the-empty-panel",
-    "concepts/the-gate#",
-    "guide/panel#showing-the-reader-how-it-works",
-    "concepts/the-gate#five-settled-turns-five-causes",
-    "guide/panel#",
-    "guide/panel#while-it-answers",
-    "guide/panel#opening-it"
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/panel#opening-it",
+    "guide/panel#while-it-answers"
    ],
    "lang": "English",
    "goldPages": [
@@ -1237,29 +1193,30 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.8967098058237675,
-   "D": 0.9733908522094677,
+   "G": 0.9166666666666666,
+   "D": 1,
    "L": 0.6666666666666666,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/panel#",
     "guide/panel#hello",
     "concepts/a-turn#2-is-it-a-question-at-all",
-    "guide/social-openers#why-it-exists",
+    "guide/panel#",
     "guide/i18n#the-keys~2",
-    "guide/panel#opening-it",
-    "guide/panel#while-it-answers"
+    "guide/social-openers#why-it-exists",
+    "guide/panel#while-it-answers",
+    "guide/panel#opening-it"
    ],
    "rankedIds": [
-    "guide/panel#",
     "guide/panel#hello",
     "concepts/a-turn#2-is-it-a-question-at-all",
-    "guide/social-openers#why-it-exists",
+    "guide/panel#",
     "guide/i18n#the-keys~2",
+    "guide/social-openers#why-it-exists",
     "guide/panel#the-empty-panel",
-    "guide/panel#while-it-answers",
+    "guide/social-openers#",
     "guide/panel#showing-the-reader-how-it-works",
+    "guide/panel#while-it-answers",
     "guide/panel#opening-it"
    ],
    "lang": "English",
@@ -1286,31 +1243,30 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.2714672624745418,
-   "D": 0.13973412774383354,
+   "G": 0.9166666666666666,
+   "D": 1,
    "L": 0.6666666666666666,
    "channel": "raw",
-   "gatePass": false,
+   "gatePass": true,
    "retrievedIds": [
     "guide/i18n#fallback-per-leaf",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#the-shape",
     "guide/i18n#the-keys~3",
-    "guide/i18n#the-keys~2",
     "guide/i18n#two-selectors-one-key-space",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~3",
     "guide/i18n#the-keys",
     "guide/i18n#interpolation"
    ],
    "rankedIds": [
     "guide/i18n#fallback-per-leaf",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
-    "guide/i18n#the-keys~3",
-    "guide/i18n#the-keys~2",
-    "guide/i18n#two-selectors-one-key-space",
     "guide/i18n#the-shape",
+    "guide/i18n#the-keys~3",
+    "guide/i18n#two-selectors-one-key-space",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~3",
+    "guide/i18n#the-keys~2",
     "guide/i18n#interpolation",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
-    "guide/i18n#the-keys",
-    "guide/i18n#what-is-not-translatable"
+    "guide/i18n#what-is-not-translatable",
+    "guide/i18n#the-keys"
    ],
    "lang": "English",
    "goldPages": [
@@ -1336,39 +1292,41 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.9797380545966865,
-   "D": 0.9729840727955821,
+   "G": 1,
+   "D": 1,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "concepts/the-ladder#1-paid-providers-in-priority-order",
-    "guide/providers#two-keys-and-which-answers-first~2",
-    "guide/providers#two-keys-and-which-answers-first",
     "reference/config#chatchain",
-    "reference/config#chatchain~2"
+    "reference/config#chatprovider",
+    "guide/providers#name-nothing-the-provider-chain~2",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "reference/config#chatchain~3",
+    "reference/config#the-provider-chain"
    ],
    "rankedIds": [
-    "concepts/the-ladder#1-paid-providers-in-priority-order",
-    "guide/providers#two-keys-and-which-answers-first~2",
-    "guide/providers#two-keys-and-which-answers-first",
     "reference/config#chatchain",
-    "reference/config#chatchain~2",
-    "guide/troubleshooting#it-is-talking-to-a-provider-i-never-chose",
+    "reference/config#chatprovider",
+    "guide/providers#name-nothing-the-provider-chain~2",
     "guide/providers#name-nothing-the-provider-chain~3",
-    "reference/config#the-provider-chain~3"
+    "reference/config#chatchain~3",
+    "reference/config#chatchain~2",
+    "reference/config#the-provider-chain~2",
+    "reference/config#the-provider-chain~3",
+    "reference/config#the-provider-chain"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/providers"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.3333333333333333,
+    "r": 1,
+    "f1": 0.5
    },
    "recall8": 1,
-   "mrr": 0.14285714285714285,
+   "mrr": 0.3333333333333333,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -1388,22 +1346,21 @@
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide#installing",
     "reference/cli#",
-    "reference/cli#init",
-    "install/web#the-index",
-    "guide/faq#the-commands~2",
-    "guide/faq#doctor-what-ci-gates-on"
+    "guide/faq#one-source-of-truth",
+    "guide#installing",
+    "install#",
+    "guide/faq#the-commands"
    ],
    "rankedIds": [
-    "guide#installing",
     "reference/cli#",
+    "guide/faq#one-source-of-truth",
+    "guide#installing",
+    "install#",
+    "guide/faq#the-commands",
     "reference/cli#init",
-    "install/web#the-index",
+    "guide/troubleshooting#",
     "guide/faq#the-commands~2",
-    "reference/cli#update",
-    "reference/cli#help",
-    "reference/skills#every-command-as-a-slash-command",
     "guide/faq#doctor-what-ci-gates-on"
    ],
    "lang": "English",
@@ -1424,27 +1381,30 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.3670101133990619,
-   "D": 0.4060134845320826,
+   "G": 0.5108858738609572,
+   "D": 0.5978478318146097,
    "L": 0.25,
    "channel": "raw",
-   "gatePass": true,
+   "gatePass": false,
    "retrievedIds": [
-    "guide/faq#3-your-own-styles-all-the-way-down",
-    "guide/llms-txt#robotstxt",
-    "guide/faq#how-do-i-get-started~2",
-    "concepts/a-turn#3-retrieval-and-the-gate",
-    "install/typescript#"
+    "guide/production#a-receiver",
+    "guide/other-sites#mounting",
+    "install/web#the-config",
+    "guide/production#",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/panel#hello"
    ],
    "rankedIds": [
-    "guide/faq#3-your-own-styles-all-the-way-down",
-    "guide/llms-txt#robotstxt",
-    "guide/faq#how-do-i-get-started~2",
-    "concepts/a-turn#3-retrieval-and-the-gate",
-    "install/typescript#",
-    "guide/providers#a-chat-provider-that-cannot-embed",
-    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
-    "guide/evaluation#a-narrowed-sweep-writes-no-answer-only-a-report"
+    "guide/production#a-receiver",
+    "guide/other-sites#mounting",
+    "install/web#the-config",
+    "guide/production#",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/production#docker",
+    "reference/config#suggestionsauthored",
+    "reference/cli#tune-writes~3",
+    "guide/panel#hello",
+    "reference/cli#the-step-everyone-forgets"
    ],
    "lang": "English",
    "goldPages": [],
@@ -1464,27 +1424,27 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.4949197864387464,
-   "D": 0.5487819374738842,
+   "G": 0.6013357763454799,
+   "D": 0.6906699240161953,
    "L": 0.3333333333333333,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/history#where",
-    "guide/history#",
-    "guide/history#what-is-stored",
-    "guide/history#two-tabs",
     "guide/history#what-the-reader-sees~2",
+    "guide/history#what-is-stored",
+    "guide/history#",
+    "guide/history#when-the-docs-change",
     "guide/history#what-the-reader-sees"
    ],
    "rankedIds": [
     "guide/history#where",
-    "guide/history#",
-    "guide/history#what-is-stored",
-    "guide/history#two-tabs",
     "guide/history#what-the-reader-sees~2",
+    "guide/history#what-is-stored",
+    "guide/history#",
     "guide/history#when-the-docs-change",
-    "guide/history#what-the-reader-sees"
+    "guide/history#what-the-reader-sees",
+    "guide/history#two-tabs"
    ],
    "lang": "English",
    "goldPages": [],
@@ -1510,21 +1470,21 @@
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide#overview",
-    "guide/free-tier#what-docpilot-does-without-being-asked",
     "concepts/guarantees#claims-this-documentation-will-not-make",
-    "reference/config#all-defaults~2",
-    "reference/config#citations"
+    "guide/comparison#what-docpilot-is-worse-at",
+    "guide#overview",
+    "guide/why#the-problem",
+    "reference/config#parameters~4"
    ],
    "rankedIds": [
-    "guide#overview",
-    "guide/free-tier#what-docpilot-does-without-being-asked",
     "concepts/guarantees#claims-this-documentation-will-not-make",
-    "reference/config#all-defaults~2",
-    "reference/config#citations",
     "guide/comparison#what-docpilot-is-worse-at",
-    "guide/why#what-it-costs",
-    "guide/why#the-problem"
+    "guide#overview",
+    "guide/why#the-problem",
+    "reference/config#parameters~4",
+    "guide/comparison#the-chat-itself",
+    "concepts/guarantees#",
+    "guide/why#why-not-a-hosted-answer-service"
    ],
    "lang": "English",
    "goldPages": [
@@ -1536,7 +1496,7 @@
     "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 0.3333333333333333,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -1557,20 +1517,20 @@
    "gatePass": true,
    "retrievedIds": [
     "concepts/a-turn#3-retrieval-and-the-gate",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem",
     "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
-    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem~3"
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "concepts/a-turn#4-the-primed-turn"
    ],
    "rankedIds": [
     "concepts/a-turn#3-retrieval-and-the-gate",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem",
     "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
-    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem~3",
-    "guide/evaluation#bench-two-retrieval-configurations",
     "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate"
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "concepts/a-turn#4-the-primed-turn",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "concepts/the-gate#two-channels",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem"
    ],
    "lang": "English",
    "goldPages": [
@@ -1603,20 +1563,20 @@
    "gatePass": true,
    "retrievedIds": [
     "guide/imported-pages#the-allowlist-is-a-security-boundary",
-    "guide/faq#the-skills-docs-rag-and-docs-import~3",
-    "reference/cli#import",
+    "concepts/guarantees#what-this-is-not",
+    "guide/philosophy#say-plainly-what-it-is-not",
     "reference/skills#docs-import",
-    "reference/cli#what-it-may-never-touch"
+    "reference/config#sources"
    ],
    "rankedIds": [
     "guide/imported-pages#the-allowlist-is-a-security-boundary",
-    "guide/faq#the-skills-docs-rag-and-docs-import~3",
-    "reference/cli#import",
-    "reference/skills#docs-import",
-    "reference/cli#what-it-may-never-touch",
-    "reference/cli#calibrate~2",
     "concepts/guarantees#what-this-is-not",
-    "guide/production#content-security-policy"
+    "guide/philosophy#say-plainly-what-it-is-not",
+    "reference/skills#docs-import",
+    "reference/config#sources",
+    "guide/credentials#this-is-not-a-security-boundary",
+    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "reference/cli#import"
    ],
    "lang": "English",
    "goldPages": [
@@ -1642,27 +1602,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.8786194765311877,
-   "D": 0.8381593020415836,
+   "G": 1,
+   "D": 1,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/indexing#blocks-a-chunk-is-never-cut-through",
-    "reference/cli#what-it-may-never-touch",
-    "guide/indexing#vectors-are-quantised",
     "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#what-moves-when-you-upgrade",
+    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
     "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table"
    ],
    "rankedIds": [
     "guide/indexing#blocks-a-chunk-is-never-cut-through",
-    "reference/cli#what-it-may-never-touch",
-    "guide/indexing#vectors-are-quantised",
     "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#what-moves-when-you-upgrade",
+    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
     "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table",
-    "concepts/the-ladder#what-never-happens",
-    "guide/evaluation#the-golden-set~3",
-    "guide/indexing#what-moves-when-you-upgrade"
+    "concepts/a-turn#5-tools-if-the-model-wants-more",
+    "guide/indexing#what-gets-indexed",
+    "guide/evaluation#the-golden-set~3"
    ],
    "lang": "English",
    "goldPages": [
@@ -1688,8 +1648,8 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.8539061214766224,
-   "D": 0.916319273079941,
+   "G": 0.9166666666666666,
+   "D": 1,
    "L": 0.6666666666666666,
    "channel": "raw",
    "gatePass": true,
@@ -1698,7 +1658,7 @@
     "guide/panel#the-composer",
     "guide/panel#reading-the-answer",
     "guide/panel#scoping-the-question",
-    "guide/panel#telling-you-it-was-wrong",
+    "guide/panel#showing-the-reader-how-it-works",
     "guide/panel#a-question-with-a-key-in-it"
    ],
    "rankedIds": [
@@ -1706,11 +1666,11 @@
     "guide/panel#the-composer",
     "guide/panel#reading-the-answer",
     "guide/panel#scoping-the-question",
-    "guide/panel#telling-you-it-was-wrong",
     "guide/panel#showing-the-reader-how-it-works",
     "guide/panel#working-the-thread",
-    "guide/panel#a-question-with-a-key-in-it",
-    "guide/panel#hello"
+    "guide/panel#in-the-readers-language",
+    "guide/panel#telling-you-it-was-wrong",
+    "guide/panel#a-question-with-a-key-in-it"
    ],
    "lang": "English",
    "goldPages": [
@@ -1743,21 +1703,21 @@
    "gatePass": true,
    "retrievedIds": [
     "install/react#mounting",
+    "install/react#",
+    "install/javascript#mounting",
+    "install#",
     "install/javascript#composing-the-pieces-yourself",
-    "guide#overview",
-    "install/react#keeping-it-in-step",
-    "install/web#the-index",
     "install/react#why-it-imports-a-prebuilt-bundle"
    ],
    "rankedIds": [
     "install/react#mounting",
+    "install/react#",
+    "install/javascript#mounting",
+    "install#",
     "install/javascript#composing-the-pieces-yourself",
-    "guide#overview",
-    "install/react#keeping-it-in-step",
-    "install/web#the-index",
-    "guide#overview~2",
+    "guide/other-sites#mounting",
     "install/typescript#the-types-you-will-actually-name",
-    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "install#which-entry-point-is-yours",
     "install/react#why-it-imports-a-prebuilt-bundle"
    ],
    "lang": "English",
@@ -1790,21 +1750,21 @@
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/highlighting#choosing-one",
-    "install/docusaurus#syntax-highlighting",
     "reference/highlighting#",
-    "guide#overview",
-    "install/javascript#every-option"
+    "reference/highlighting#choosing-one",
+    "install/javascript#every-option",
+    "guide/faq#5-syntax-highlighting",
+    "install/docusaurus#syntax-highlighting"
    ],
    "rankedIds": [
-    "reference/highlighting#choosing-one",
-    "install/docusaurus#syntax-highlighting",
     "reference/highlighting#",
-    "guide#overview",
+    "reference/highlighting#choosing-one",
     "install/javascript#every-option",
-    "guide/appearance#what-the-panels-chrome-does~3",
+    "guide/faq#5-syntax-highlighting",
+    "install/docusaurus#syntax-highlighting",
+    "install/react#the-rest-of-the-options",
     "guide/appearance#syntax-highlighting",
-    "install/react#the-rest-of-the-options"
+    "reference/highlighting#and-a-stylesheet-for-two-of-the-three"
    ],
    "lang": "English",
    "goldPages": [
@@ -1816,7 +1776,7 @@
     "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 1,
+   "mrr": 0.5,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -1830,27 +1790,29 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.5050620222078861,
-   "D": 0.6734160296105148,
+   "G": 0.5192797223632067,
+   "D": 0.6923729631509423,
    "L": 0,
    "channel": "raw",
-   "gatePass": true,
+   "gatePass": false,
    "retrievedIds": [
-    "reference/config#chatmodels~2",
-    "concepts/the-gate#",
-    "reference/config#chatmodels",
     "guide/troubleshooting#every-question-is-refused",
-    "guide/social-openers#what-happens"
+    "concepts/the-gate#",
+    "guide/providers#when-the-refusal-is-the-accounts-not-the-requests",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "guide/providers#reasoning-on-a-rotating-pool",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
    ],
    "rankedIds": [
-    "reference/config#chatmodels~2",
-    "concepts/the-gate#",
-    "reference/config#chatmodels",
     "guide/troubleshooting#every-question-is-refused",
-    "guide/social-openers#what-happens",
-    "guide/providers#what-each-provider-honours~3",
-    "guide/providers#asking-for-the-pool",
-    "reference/config#chatmodel"
+    "concepts/the-gate#",
+    "guide/providers#when-the-refusal-is-the-accounts-not-the-requests",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "guide/providers#reasoning-on-a-rotating-pool",
+    "guide/philosophy#the-host-checks-not-the-prompt",
+    "guide/social-openers#why-it-exists",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
    ],
    "lang": "Russian",
    "goldPages": [
@@ -1858,9 +1820,9 @@
     "/concepts/the-gate"
    ],
    "retrieval": {
-    "p": 0.2,
+    "p": 0.16666666666666666,
     "r": 0.5,
-    "f1": 0.28571428571428575
+    "f1": 0.25
    },
    "recall8": 0.5,
    "mrr": 0.5,
@@ -1877,27 +1839,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.9361900199566966,
-   "D": 0.9149200266089288,
+   "G": 1,
+   "D": 1,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/cli#what-it-may-never-touch~3",
     "reference/config#topk~2",
-    "reference/config#if-your-config-already-sets-topk",
     "reference/config#topk",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~4",
+    "reference/config#if-your-config-already-sets-topk",
     "reference/cli#what-it-sweeps-and-what-it-leaves-alone"
    ],
    "rankedIds": [
-    "reference/cli#what-it-may-never-touch~3",
     "reference/config#topk~2",
-    "reference/config#if-your-config-already-sets-topk",
     "reference/config#topk",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~4",
+    "reference/config#if-your-config-already-sets-topk",
     "reference/cli#what-it-sweeps-and-what-it-leaves-alone",
-    "reference/config#all-defaults~2",
     "reference/cli#what-it-may-never-touch~2",
-    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~4"
+    "reference/cli#what-it-may-never-touch~3",
+    "reference/config#all-defaults~2"
    ],
    "lang": "English",
    "goldPages": [
@@ -1909,7 +1871,7 @@
     "f1": 0.5714285714285715
    },
    "recall8": 1,
-   "mrr": 0.5,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -1923,27 +1885,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.7929855835233439,
-   "D": 0.790647444697792,
+   "G": 0.9191942983644723,
+   "D": 0.9589257311526297,
    "L": 0.8,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "concepts/the-ladder#2-the-free-pool",
+    "guide/free-tier#what-costs-a-model-its-turn",
     "guide/free-tier#the-pool-asked-for-by-name",
     "guide/free-tier#writing-your-own-order",
-    "guide/free-tier#what-costs-a-model-its-turn",
     "guide/free-tier#when-the-body-is-the-problem-not-the-model~2"
    ],
    "rankedIds": [
     "concepts/the-ladder#2-the-free-pool",
+    "guide/free-tier#what-costs-a-model-its-turn",
     "guide/free-tier#the-pool-asked-for-by-name",
     "guide/free-tier#writing-your-own-order",
-    "guide/free-tier#what-costs-a-model-its-turn",
     "guide/free-tier#when-the-body-is-the-problem-not-the-model~2",
-    "guide/providers#asking-for-the-pool",
-    "guide/free-tier#what-docpilot-does-without-being-asked",
-    "reference/config#chatmodels"
+    "guide/free-tier#one-key-one-router-and-ten-models-if-you-ask",
+    "reference/config#chatmodels",
+    "guide/free-tier#what-docpilot-does-without-being-asked"
    ],
    "lang": "English",
    "goldPages": [
@@ -1969,27 +1931,29 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.576141610956589,
-   "D": 0.6015221479421187,
+   "G": 0.726457414039786,
+   "D": 0.8019432187197147,
    "L": 0.5,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/config#chatmodels~2",
-    "reference/config#suggestionsreveal",
     "reference/config#chatmodels",
-    "reference/config#chatreasoning",
-    "guide/providers#thinking-turned-off"
+    "reference/config#chat",
+    "guide/free-tier#what-costs-a-model-its-turn",
+    "reference/config#budget~3",
+    "guide/providers#asking-for-the-pool",
+    "reference/config#chatprovider"
    ],
    "rankedIds": [
-    "reference/config#chatmodels~2",
-    "reference/config#suggestionsreveal",
     "reference/config#chatmodels",
-    "reference/config#chatreasoning",
-    "guide/providers#thinking-turned-off",
+    "reference/config#chat",
+    "guide/free-tier#what-costs-a-model-its-turn",
+    "reference/config#budget~3",
+    "guide/providers#asking-for-the-pool",
+    "guide/panel#when-something-is-wrong",
     "reference/config#all-defaults~3",
-    "reference/config#chatmodel",
-    "reference/config#all-defaults~2"
+    "reference/config#all-defaults~2",
+    "reference/config#chatprovider"
    ],
    "lang": "English",
    "goldPages": [],
@@ -2009,27 +1973,29 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.08333333333333333,
-   "D": 0,
+   "G": 0.3794447109614748,
+   "D": 0.3948151701708553,
    "L": 0.3333333333333333,
    "channel": "raw",
    "gatePass": false,
    "retrievedIds": [
     "reference/config#suggestionsanswers",
-    "guide/production#verifying",
-    "concepts/the-ladder#writing-the-order-yourself",
-    "reference/config#parameters~5",
-    "reference/config#suggestionsauthored~2"
+    "reference/config#parameters~4",
+    "concepts/a-turn#1-the-credential-check",
+    "reference/config#suggestionsauthored",
+    "reference/config#suggestions~2",
+    "concepts/a-turn#2-is-it-a-question-at-all"
    ],
    "rankedIds": [
     "reference/config#suggestionsanswers",
-    "guide/production#verifying",
-    "concepts/the-ladder#writing-the-order-yourself",
-    "reference/config#parameters~5",
-    "reference/config#suggestionsauthored~2",
-    "reference/theme#the-whole-set~2",
     "reference/config#parameters~4",
-    "reference/config#suggestionsreveal"
+    "concepts/a-turn#1-the-credential-check",
+    "reference/config#suggestionsauthored",
+    "reference/config#suggestions~2",
+    "reference/config#suggestionsfollowups",
+    "reference/config#suggestionsauthored~2",
+    "guide/free-tier#when-the-build-runs-out~3",
+    "concepts/a-turn#2-is-it-a-question-at-all"
    ],
    "lang": "English",
    "goldPages": [],
@@ -2049,23 +2015,23 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0,
-   "D": 0,
+   "G": 0.30510802785479474,
+   "D": 0.40681070380639295,
    "L": 0,
    "channel": "raw",
    "gatePass": false,
    "retrievedIds": [
-    "guide/social-openers#what-it-deliberately-does-not-do",
-    "guide/social-openers#why-it-exists",
     "guide/social-openers#what-happens",
     "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#why-it-exists",
     "guide/social-openers#making-it-yours"
    ],
    "rankedIds": [
-    "guide/social-openers#what-it-deliberately-does-not-do",
-    "guide/social-openers#why-it-exists",
     "guide/social-openers#what-happens",
     "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#why-it-exists",
     "guide/social-openers#making-it-yours",
     "guide/social-openers#"
    ],
@@ -2087,27 +2053,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.3690130958873793,
-   "D": 0.358684127849839,
+   "G": 0.7750815986989469,
+   "D": 0.9001087982652625,
    "L": 0.4,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/cli#environment",
     "reference/cli#",
-    "guide/comparison#architecture",
-    "guide/providers#name-nothing-the-provider-chain",
-    "guide/other-sites#the-index-does-not-need-a-site"
+    "guide/faq#one-source-of-truth",
+    "reference/cli#environment",
+    "guide/faq#the-commands",
+    "reference/skills#every-command-as-a-slash-command"
    ],
    "rankedIds": [
-    "reference/cli#environment",
     "reference/cli#",
-    "guide/comparison#architecture",
-    "guide/providers#name-nothing-the-provider-chain",
-    "guide/other-sites#the-index-does-not-need-a-site",
-    "reference/cli#the-pages-own-markdown-wins~2",
-    "reference/cli#vocabulary",
-    "reference/cli#what-it-may-never-touch~3"
+    "guide/faq#one-source-of-truth",
+    "reference/cli#environment",
+    "guide/faq#the-commands",
+    "reference/skills#every-command-as-a-slash-command",
+    "reference/cli#init",
+    "guide/production#",
+    "guide/imported-pages#importing-one"
    ],
    "lang": "English",
    "goldPages": [],
@@ -2127,26 +2093,26 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.9026509185891305,
-   "D": 0.9535345581188406,
+   "G": 0.9375,
+   "D": 1,
    "L": 0.75,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
-    "reference/config#embedfallback",
     "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
-    "reference/cli#embedder-question~3",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "reference/config#embedfallback~2",
+    "reference/config#embedfallback",
     "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate"
    ],
    "rankedIds": [
-    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
-    "reference/config#embedfallback",
     "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
-    "reference/cli#embedder-question~3",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "reference/config#embedfallback~2",
+    "reference/config#embedfallback",
     "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
-    "guide/providers#no-embedder-at-all",
-    "reference/cli#embedder-question~2",
+    "reference/cli#embedder-question~5",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
     "guide/evaluation#when-eval-says-retrieval-is-the-problem~2"
    ],
    "lang": "English",
@@ -2159,7 +2125,7 @@
     "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 0.3333333333333333,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -2173,28 +2139,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 1,
-   "G": 0.7301482272016776,
-   "D": 0.6401976362689035,
+   "G": 1,
+   "D": 1,
    "L": 1,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "guide/panel#past-conversations",
-    "reference/config#parameters~4",
-    "reference/config#composerdraft",
-    "guide/panel#the-composer",
-    "guide/panel#telling-you-it-was-wrong",
-    "guide/panel#scoping-the-question"
+    "concepts/a-turn#conversation-memory",
+    "concepts/a-turn#conversation-memory~2",
+    "guide/history#what-is-stored",
+    "guide/history#what-the-reader-sees~2",
+    "reference/config#parameters~4"
    ],
    "rankedIds": [
-    "guide/panel#past-conversations",
-    "reference/config#parameters~4",
-    "reference/config#composerdraft",
-    "guide/panel#the-composer",
-    "guide/panel#telling-you-it-was-wrong",
-    "guide/panel#working-the-thread",
     "concepts/a-turn#conversation-memory",
-    "guide/history#where",
+    "concepts/a-turn#conversation-memory~2",
+    "guide/history#what-is-stored",
+    "guide/history#what-the-reader-sees~2",
+    "reference/config#parameters~4",
+    "guide/panel#the-composer",
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "guide/panel#working-the-thread",
     "guide/panel#scoping-the-question"
    ],
    "lang": "English",
@@ -2202,12 +2167,12 @@
     "/concepts/a-turn"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
    },
    "recall8": 1,
-   "mrr": 0.14285714285714285,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -2221,27 +2186,27 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.9679169745929503,
-   "D": 0.9572226327906005,
+   "G": 0.8971902789094641,
+   "D": 0.8629203718792855,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/cli#what-it-may-never-touch",
-    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "reference/cli#calibrate",
     "guide/evaluation#calibrate-before-you-ship",
-    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
-    "guide/evaluation#carrying-a-calibration-across-embedders"
+    "reference/cli#calibrate~2",
+    "reference/cli#calibrate~3",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3"
    ],
    "rankedIds": [
-    "reference/cli#what-it-may-never-touch",
-    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "reference/cli#calibrate",
     "guide/evaluation#calibrate-before-you-ship",
-    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
-    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "reference/cli#calibrate~2",
     "reference/cli#calibrate~3",
-    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index",
-    "reference/cli#calibrate~2"
+    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "guide/evaluation#",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "guide/evaluation#where-the-questions-come-from"
    ],
    "lang": "English",
    "goldPages": [
@@ -2249,12 +2214,12 @@
     "/guide/evaluation"
    ],
    "retrieval": {
-    "p": 0.2,
-    "r": 0.5,
-    "f1": 0.28571428571428575
+    "p": 0.8,
+    "r": 1,
+    "f1": 0.888888888888889
    },
    "recall8": 1,
-   "mrr": 0.3333333333333333,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -2275,30 +2240,29 @@
    "gatePass": true,
    "retrievedIds": [
     "reference/skills#why-they-are-copied",
-    "guide/faq#the-skills-docs-rag-and-docs-import~3",
-    "guide/faq#the-skills-docs-rag-and-docs-import",
     "guide/faq#the-skills-docs-rag-and-docs-import~4",
-    "reference/skills#docs-import",
+    "reference/skills#",
+    "guide/faq#the-skills-docs-rag-and-docs-import",
     "reference/skills#where-they-go"
    ],
    "rankedIds": [
     "reference/skills#why-they-are-copied",
-    "guide/faq#the-skills-docs-rag-and-docs-import~3",
-    "guide/faq#the-skills-docs-rag-and-docs-import",
     "guide/faq#the-skills-docs-rag-and-docs-import~4",
-    "reference/skills#docs-import",
-    "reference/cli#slash-commands~2",
+    "reference/skills#",
+    "guide/faq#the-skills-docs-rag-and-docs-import",
     "reference/skills#where-they-go",
-    "reference/skills#refreshing-them-after-an-upgrade"
+    "guide/faq#the-skills-docs-rag-and-docs-import~3",
+    "reference/cli#init-targets",
+    "reference/cli#slash-commands~2"
    ],
    "lang": "English",
    "goldPages": [
     "/reference/skills"
    ],
    "retrieval": {
-    "p": 0.16666666666666666,
+    "p": 0.2,
     "r": 1,
-    "f1": 0.2857142857142857
+    "f1": 0.33333333333333337
    },
    "recall8": 1,
    "mrr": 1,
@@ -2321,33 +2285,32 @@
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#the-whole-set",
     "reference/theme#",
-    "reference/theme#the-whole-set~2",
-    "reference/theme#overriding",
-    "reference/theme#the-dark-set",
-    "reference/theme#the-whole-set"
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-whole-set~2"
    ],
    "rankedIds": [
-    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#the-whole-set",
     "reference/theme#",
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#the-dark-set~2",
     "reference/theme#the-whole-set~2",
     "reference/theme#overriding",
-    "reference/theme#the-dark-set",
-    "reference/theme#the-whole-set",
-    "reference/theme#the-dark-set~2"
+    "reference/theme#the-dark-set"
    ],
    "lang": "English",
    "goldPages": [
     "/reference/theme"
    ],
    "retrieval": {
-    "p": 0.16666666666666666,
+    "p": 0.2,
     "r": 1,
-    "f1": 0.2857142857142857
+    "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 1,
+   "mrr": 0.3333333333333333,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -2361,29 +2324,29 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.5146473039657499,
-   "D": 0.6861964052876665,
+   "G": 0.7055910412085548,
+   "D": 0.9407880549447397,
    "L": 0,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/history#where",
-    "guide/history#what-is-stored",
     "guide/history#",
-    "reference/config#history",
     "guide/panel#past-conversations",
+    "reference/config#history",
+    "guide/history#what-is-stored",
     "guide/history#what-the-reader-sees",
     "reference/config#historyexportthread"
    ],
    "rankedIds": [
     "guide/history#where",
-    "guide/history#what-is-stored",
     "guide/history#",
-    "reference/config#history",
     "guide/panel#past-conversations",
+    "reference/config#history",
+    "guide/history#what-is-stored",
+    "guide/history#what-the-reader-sees~2",
     "reference/config#historysaveonunload",
-    "reference/config#composerdraft",
-    "reference/cli#update-conflicts",
+    "concepts/guarantees#~2",
     "guide/history#what-the-reader-sees",
     "reference/config#historyexportthread"
    ],
@@ -2411,27 +2374,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.9092957059355449,
-   "D": 0.9623942745807265,
+   "G": 0.9375,
+   "D": 1,
    "L": 0.75,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "reference/config#guardtau-guardtaulexical",
     "reference/config#guard",
-    "reference/config#topk",
-    "reference/cli#what-it-may-never-touch",
-    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2"
+    "guide/evaluation#calibrate-before-you-ship",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "guide/evaluation#carrying-a-calibration-across-embedders"
    ],
    "rankedIds": [
     "reference/config#guardtau-guardtaulexical",
     "reference/config#guard",
-    "reference/config#topk",
-    "reference/cli#what-it-may-never-touch",
+    "guide/evaluation#calibrate-before-you-ship",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
     "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
     "reference/config#topk~2",
-    "guide/evaluation#carrying-a-calibration-across-embedders~2",
-    "guide/evaluation#carrying-a-calibration-across-embedders~3"
+    "guide/evaluation#carrying-a-calibration-across-embedders~2"
    ],
    "lang": "English",
    "goldPages": [],
@@ -2451,27 +2414,29 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.2237334041414503,
-   "D": 0.09831120552193373,
+   "G": 0.5355396605923746,
+   "D": 0.5140528807898328,
    "L": 0.6,
    "channel": "raw",
    "gatePass": false,
    "retrievedIds": [
-    "guide/faq#3-your-own-styles-all-the-way-down",
-    "guide/faq#how-do-i-get-started",
-    "guide/faq#how-do-i-get-started~2",
-    "guide#wiring-the-config",
-    "install#1-the-settings-optional"
+    "guide/providers#fully-local-no-key",
+    "guide/comparison#architecture",
+    "reference/config#parameters~2",
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "reference/cli#feedback~2",
+    "reference/config#parameters~3"
    ],
    "rankedIds": [
-    "guide/faq#3-your-own-styles-all-the-way-down",
-    "guide/faq#how-do-i-get-started",
-    "guide/faq#how-do-i-get-started~2",
-    "guide#wiring-the-config",
-    "install#1-the-settings-optional",
-    "guide/llms-txt#robotstxt",
+    "guide/providers#fully-local-no-key",
+    "guide/comparison#architecture",
+    "reference/config#parameters~2",
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "reference/cli#feedback~2",
+    "install/docusaurus#the-settings",
     "guide#nothing-set-up-yet",
-    "concepts/the-gate#follow-ups"
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "reference/config#parameters~3"
    ],
    "lang": "English",
    "goldPages": [],
@@ -2491,27 +2456,27 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.08333333333333333,
-   "D": 0,
-   "L": 0.3333333333333333,
+   "G": 0.28978798716976784,
+   "D": 0.3863839828930238,
+   "L": 0,
    "channel": "raw",
    "gatePass": false,
    "retrievedIds": [
-    "guide/indexing#what-moves-when-you-upgrade",
-    "guide/indexing#vectors-are-quantised",
-    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
+    "guide/indexing#mdx-and-specs",
     "guide/indexing#what-gets-indexed",
-    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page"
+    "guide/indexing#frontmatter-that-helps",
+    "guide/indexing#built-site"
    ],
    "rankedIds": [
-    "guide/indexing#what-moves-when-you-upgrade",
-    "guide/indexing#vectors-are-quantised",
-    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
+    "guide/indexing#mdx-and-specs",
     "guide/indexing#what-gets-indexed",
+    "guide/indexing#frontmatter-that-helps",
+    "guide/indexing#built-site",
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
     "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
-    "guide/indexing#~2",
-    "guide/indexing#a-second-index-to-measure-against~2",
-    "guide/indexing#when-to-rebuild"
+    "guide/indexing#a-second-index-to-measure-against~2"
    ],
    "lang": "English",
    "goldPages": [],
@@ -2531,28 +2496,28 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.6649445572849627,
-   "D": 0.636592743046617,
+   "G": 0.7403937939963634,
+   "D": 0.7371917253284845,
    "L": 0.75,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/credentials#this-is-not-a-security-boundary",
-    "guide/social-openers#why-it-exists",
     "concepts/a-turn#1-the-credential-check",
+    "guide/credentials#what-happens",
+    "guide/credentials#this-is-not-a-security-boundary",
     "reference/cli#doctor~5",
-    "reference/cli#what-it-may-never-touch",
+    "guide/why#why-citations-are-checked-by-the-host",
     "concepts/a-turn#2-is-it-a-question-at-all"
    ],
    "rankedIds": [
-    "guide/credentials#this-is-not-a-security-boundary",
-    "guide/social-openers#why-it-exists",
     "concepts/a-turn#1-the-credential-check",
-    "reference/cli#doctor~5",
-    "reference/cli#what-it-may-never-touch",
-    "guide/social-openers#what-it-deliberately-does-not-do",
-    "concepts/the-gate#five-settled-turns-five-causes",
     "guide/credentials#what-happens",
+    "guide/credentials#this-is-not-a-security-boundary",
+    "reference/cli#doctor~5",
+    "guide/why#why-citations-are-checked-by-the-host",
+    "guide/credentials#",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "guide/troubleshooting#every-question-is-refused~2",
     "concepts/a-turn#2-is-it-a-question-at-all"
    ],
    "lang": "English",
@@ -2560,12 +2525,12 @@
     "/guide/credentials"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
    },
    "recall8": 1,
-   "mrr": 0.125,
+   "mrr": 0.5,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -2579,29 +2544,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.9430807140690859,
-   "D": 0.9241076187587812,
+   "G": 0.9820818776793913,
+   "D": 0.9761091702391883,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "concepts/a-turn#3-retrieval-and-the-gate",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
     "concepts/the-gate#two-channels",
-    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold",
-    "guide/appearance#five-entry-points~2",
-    "guide/appearance#surfaces-come-in-three-levels"
+    "reference/cli#what-it-costs",
+    "concepts/the-gate#follow-ups~2",
+    "concepts/the-gate#follow-ups~4"
    ],
    "rankedIds": [
     "concepts/a-turn#3-retrieval-and-the-gate",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
     "concepts/the-gate#two-channels",
-    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold",
-    "guide/appearance#five-entry-points~2",
     "reference/cli#what-it-costs",
-    "concepts/the-gate#follow-ups",
+    "concepts/the-gate#follow-ups~2",
+    "concepts/the-gate#follow-ups~4",
     "concepts/the-gate#five-settled-turns-five-causes",
-    "guide/appearance#surfaces-come-in-three-levels"
+    "concepts/a-turn#conversation-memory~2",
+    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold"
    ],
    "lang": "English",
    "goldPages": [
@@ -2609,9 +2572,9 @@
     "/concepts/the-gate"
    ],
    "retrieval": {
-    "p": 0.3333333333333333,
+    "p": 0.4,
     "r": 1,
-    "f1": 0.5
+    "f1": 0.5714285714285715
    },
    "recall8": 1,
    "mrr": 1,
@@ -2628,27 +2591,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 1,
-   "G": 0.9670798972904577,
-   "D": 0.9561065297206103,
+   "G": 0.9612559439993869,
+   "D": 0.9483412586658491,
    "L": 1,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
     "concepts/the-gate#two-channels",
+    "reference/cli#what-it-costs",
     "concepts/a-turn#3-retrieval-and-the-gate",
     "reference/skills#what-changed-in-docs-rag-this-release~2",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
-    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold"
+    "reference/cli#feedback~3"
    ],
    "rankedIds": [
     "concepts/the-gate#two-channels",
+    "reference/cli#what-it-costs",
     "concepts/a-turn#3-retrieval-and-the-gate",
     "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "reference/cli#feedback~3",
     "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
-    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold",
-    "guide/troubleshooting#every-question-is-refused~2",
-    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
-    "guide/troubleshooting#every-question-is-refused"
+    "concepts/the-gate#follow-ups~4",
+    "concepts/the-gate#five-settled-turns-five-causes"
    ],
    "lang": "English",
    "goldPages": [
@@ -2680,20 +2643,20 @@
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
+    "guide/why#what-it-costs",
     "reference/config#embed-false",
     "guide/providers#no-embedder-at-all",
-    "guide/free-tier#when-the-build-runs-out",
-    "guide/indexing#~2",
-    "guide/why#what-it-costs"
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "guide/indexing#~2"
    ],
    "rankedIds": [
+    "guide/why#what-it-costs",
     "reference/config#embed-false",
     "guide/providers#no-embedder-at-all",
-    "guide/free-tier#when-the-build-runs-out",
+    "guide/what-it-costs#what-you-are-not-paying-for",
     "guide/indexing#~2",
-    "guide/why#what-it-costs",
-    "reference/cli#embedder-question~3",
-    "reference/cli#what-it-costs",
+    "guide/indexing#a-second-index-to-measure-against",
+    "guide/what-it-costs#where-the-money-actually-goes",
     "guide/indexing#"
    ],
    "lang": "English",
@@ -2728,18 +2691,18 @@
    "gatePass": true,
    "retrievedIds": [
     "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "guide/imported-pages#what-an-imported-page-is",
     "guide/imported-pages#importing-one",
-    "guide/imported-pages#its-path-is-an-id-not-a-link",
     "guide/imported-pages#importing-one~2",
-    "guide/imported-pages#what-an-imported-page-is"
+    "guide/imported-pages#importing-one~3"
    ],
    "rankedIds": [
     "guide/imported-pages#the-allowlist-is-a-security-boundary",
-    "guide/imported-pages#importing-one",
-    "guide/imported-pages#its-path-is-an-id-not-a-link",
-    "guide/imported-pages#importing-one~2",
     "guide/imported-pages#what-an-imported-page-is",
+    "guide/imported-pages#importing-one",
+    "guide/imported-pages#importing-one~2",
     "guide/imported-pages#importing-one~3",
+    "guide/imported-pages#its-path-is-an-id-not-a-link",
     "guide/imported-pages#",
     "guide/imported-pages#its-path-is-an-id-not-a-link~2"
    ],
@@ -2767,27 +2730,27 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.8143750185074752,
-   "D": 0.7525000246766336,
+   "G": 0.8925423413723816,
+   "D": 0.8567231218298421,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#what-moves-when-you-upgrade",
     "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
-    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table",
     "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
-    "guide/indexing#what-moves-when-you-upgrade"
+    "guide/indexing#vectors-are-quantised"
    ],
    "rankedIds": [
     "guide/indexing#blocks-a-chunk-is-never-cut-through",
-    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
-    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table",
-    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
     "guide/indexing#what-moves-when-you-upgrade",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
+    "guide/indexing#vectors-are-quantised",
     "guide/indexing#what-gets-indexed",
-    "guide/indexing#when-to-rebuild",
-    "guide/indexing#vectors-are-quantised"
+    "guide/indexing#vectors-are-quantised~2",
+    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table"
    ],
    "lang": "English",
    "goldPages": [
@@ -2813,39 +2776,40 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.7038720825679209,
-   "D": 0.6051627767572278,
+   "G": 1,
+   "D": 1,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/providers#a-chat-provider-that-cannot-embed~2",
-    "guide/providers#one-provider-if-it-can-do-both",
-    "guide/providers#a-knob-docpilot-does-not-name",
-    "guide/providers#name-nothing-the-provider-chain~3",
-    "guide/providers#name-nothing-the-provider-chain~2"
-   ],
-   "rankedIds": [
-    "guide/providers#a-chat-provider-that-cannot-embed~2",
-    "guide/providers#one-provider-if-it-can-do-both",
-    "guide/providers#a-knob-docpilot-does-not-name",
-    "guide/providers#name-nothing-the-provider-chain~3",
     "guide/providers#name-nothing-the-provider-chain~2",
     "guide/providers#a-chat-provider-that-cannot-embed",
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/providers#",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "guide/providers#name-nothing-the-provider-chain"
+   ],
+   "rankedIds": [
+    "guide/providers#name-nothing-the-provider-chain~2",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/providers#",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "guide/providers#one-provider-if-it-can-do-both",
     "guide/providers#name-nothing-the-provider-chain",
-    "guide/providers#"
+    "guide/providers#two-keys-and-which-answers-first~2"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/providers"
    ],
    "retrieval": {
-    "p": 0.4,
+    "p": 0.5,
     "r": 1,
-    "f1": 0.5714285714285715
+    "f1": 0.6666666666666666
    },
    "recall8": 1,
-   "mrr": 0.25,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -2859,37 +2823,38 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.7157878010839341,
-   "D": 0.7043837347785789,
+   "G": 0.8716294632530586,
+   "D": 0.9121726176707448,
    "L": 0.75,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/social-openers#why-it-exists",
     "guide/social-openers#what-happens",
-    "guide/social-openers#making-it-yours",
-    "guide/social-openers#what-it-deliberately-does-not-do",
-    "guide/social-openers#four-kinds-eighteen-languages"
-   ],
-   "rankedIds": [
     "guide/social-openers#why-it-exists",
-    "guide/social-openers#what-happens",
-    "guide/social-openers#making-it-yours",
     "guide/social-openers#what-it-deliberately-does-not-do",
     "guide/social-openers#four-kinds-eighteen-languages",
-    "guide/social-openers#"
+    "guide/social-openers#",
+    "guide/social-openers#making-it-yours"
+   ],
+   "rankedIds": [
+    "guide/social-openers#what-happens",
+    "guide/social-openers#why-it-exists",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#",
+    "guide/social-openers#making-it-yours"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/social-openers"
    ],
    "retrieval": {
-    "p": 0.2,
+    "p": 0.16666666666666666,
     "r": 1,
-    "f1": 0.33333333333333337
+    "f1": 0.2857142857142857
    },
    "recall8": 1,
-   "mrr": 0.5,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -2903,27 +2868,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.5779748176873327,
-   "D": 0.6372997569164437,
-   "L": 0.4,
+   "G": 0.8519573712482247,
+   "D": 0.8692764949976328,
+   "L": 0.8,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/config#embed",
     "reference/config#embed-false",
-    "reference/skills#what-changed-in-docs-rag-this-release~2",
-    "guide/why#what-it-costs",
+    "reference/config#embed",
+    "reference/cli#embedder-question~4",
+    "guide/providers#openrouter-with-nothing-named~2",
     "guide/providers#no-embedder-at-all"
    ],
    "rankedIds": [
-    "reference/config#embed",
     "reference/config#embed-false",
-    "reference/skills#what-changed-in-docs-rag-this-release~2",
-    "guide/why#what-it-costs",
+    "reference/config#embed",
+    "reference/cli#embedder-question~4",
+    "guide/providers#openrouter-with-nothing-named~2",
     "guide/providers#no-embedder-at-all",
-    "reference/cli#embedder-question~2",
-    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
-    "reference/cli#embedder-question~3"
+    "guide/evaluation#carrying-a-calibration-across-embedders~2",
+    "reference/cli#embedder-question~5",
+    "guide/providers#openrouter-with-nothing-named"
    ],
    "lang": "English",
    "goldPages": [],
@@ -2943,28 +2908,28 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.9166666666666666,
-   "D": 1,
+   "G": 0.8583877006608748,
+   "D": 0.9222947119922775,
    "L": 0.6666666666666666,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check",
+    "concepts/the-gate#follow-ups~2",
     "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
-    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "concepts/the-gate#follow-ups~4",
     "concepts/the-gate#",
-    "guide/panel#when-it-refuses",
     "concepts/the-gate#two-channels"
    ],
    "rankedIds": [
     "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check",
+    "concepts/the-gate#follow-ups~2",
     "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
-    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "concepts/the-gate#follow-ups~4",
     "concepts/the-gate#",
-    "guide/panel#when-it-refuses",
-    "concepts/a-turn#3-retrieval-and-the-gate",
-    "concepts/the-gate#follow-ups~3",
     "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "concepts/the-gate#follow-ups",
+    "concepts/the-gate#five-settled-turns-five-causes",
     "concepts/the-gate#two-channels"
    ],
    "lang": "English",
@@ -2985,27 +2950,27 @@
    "scoped": true,
    "followUp": false,
    "depth": 0,
-   "G": 0.5169794296623864,
-   "D": 0.4393059062165153,
+   "G": 0.6342256663676238,
+   "D": 0.5956342218234983,
    "L": 0.75,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/appearance#five-entry-points",
     "guide/appearance#what-the-panels-chrome-does~3",
-    "guide/appearance#the-tokens~4",
-    "guide/appearance#the-panel-wears-your-font",
-    "guide/appearance#the-tokens~2"
+    "guide/appearance#five-entry-points",
+    "guide/appearance#the-tokens~2",
+    "guide/appearance#two-shapes-two-placements",
+    "guide/appearance#the-tokens~3"
    ],
    "rankedIds": [
-    "guide/appearance#five-entry-points",
     "guide/appearance#what-the-panels-chrome-does~3",
-    "guide/appearance#the-tokens~4",
-    "guide/appearance#the-panel-wears-your-font",
+    "guide/appearance#five-entry-points",
     "guide/appearance#the-tokens~2",
-    "guide/appearance#the-tokens~3",
     "guide/appearance#two-shapes-two-placements",
-    "guide/appearance#syntax-highlighting"
+    "guide/appearance#the-tokens~3",
+    "guide/appearance#",
+    "guide/appearance#the-panel-wears-your-font",
+    "guide/appearance#the-tokens~4"
    ],
    "lang": "English",
    "goldPages": [],
@@ -3025,28 +2990,28 @@
    "scoped": false,
    "followUp": true,
    "depth": 1,
-   "G": 0.9910399394559597,
-   "D": 0.9880532526079463,
-   "L": 1,
-   "channel": "raw",
+   "G": 0.9583333333333334,
+   "D": 1,
+   "L": 0.8333333333333334,
+   "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "concepts/the-gate#",
     "guide/panel#when-it-refuses",
-    "guide/why#why-the-gate-sits-on-the-retrieval-side-and-why-it-is-opt-in",
-    "concepts/the-gate#follow-ups~2",
-    "guide/troubleshooting#a-follow-up-is-refused",
-    "concepts/the-gate#"
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "concepts/the-gate#follow-ups~2"
    ],
    "rankedIds": [
-    "guide/panel#when-it-refuses",
-    "guide/why#why-the-gate-sits-on-the-retrieval-side-and-why-it-is-opt-in",
-    "concepts/the-gate#follow-ups~2",
-    "guide/troubleshooting#a-follow-up-is-refused",
-    "concepts/the-gate#",
     "concepts/the-gate#five-settled-turns-five-causes",
-    "guide/free-tier#five-failures-that-do-not-rotate",
-    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
-    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+    "concepts/the-gate#",
+    "guide/panel#when-it-refuses",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "concepts/the-gate#follow-ups~2",
+    "guide/troubleshooting#every-question-is-refused",
+    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "concepts/the-gate#two-channels"
    ],
    "lang": "English",
    "goldPages": [
@@ -3058,7 +3023,7 @@
     "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 1,
+   "mrr": 0.3333333333333333,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -3072,27 +3037,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 1,
-   "G": 0.9174751645250313,
-   "D": 0.889966886033375,
+   "G": 1,
+   "D": 1,
    "L": 1,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
     "guide/providers#one-provider-if-it-can-do-both",
     "guide/providers#a-chat-provider-that-cannot-embed",
-    "guide/providers#a-chat-provider-that-cannot-embed~2",
-    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate"
+    "reference/cli#doctor~3",
+    "reference/cli#embedder-question",
+    "guide/providers#name-nothing-the-provider-chain~2"
    ],
    "rankedIds": [
     "guide/providers#one-provider-if-it-can-do-both",
     "guide/providers#a-chat-provider-that-cannot-embed",
-    "guide/providers#a-chat-provider-that-cannot-embed~2",
-    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "reference/cli#doctor~3",
     "reference/cli#embedder-question",
-    "guide/providers#no-embedder-at-all",
-    "guide/providers#openrouter-with-nothing-named"
+    "guide/providers#name-nothing-the-provider-chain~2",
+    "reference/config#embed",
+    "reference/config#the-provider-chain~2",
+    "concepts/the-ladder#1-paid-providers-in-priority-order"
    ],
    "lang": "English",
    "goldPages": [
@@ -3124,21 +3089,21 @@
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
+    "guide/history#what-the-reader-sees~2",
     "guide/history#",
     "guide/panel#past-conversations",
     "reference/config#history",
     "guide/history#what-the-reader-sees",
-    "reference/config#historysaveonunload",
     "reference/config#historyexportthread"
    ],
    "rankedIds": [
+    "guide/history#what-the-reader-sees~2",
     "guide/history#",
     "guide/panel#past-conversations",
     "reference/config#history",
     "guide/history#what-the-reader-sees",
+    "guide/history#where",
     "reference/config#historysaveonunload",
-    "guide/history#what-the-reader-sees~2",
-    "guide/history#when-the-docs-change",
     "guide/history#what-is-stored",
     "reference/config#historyexportthread"
    ],
@@ -3147,12 +3112,12 @@
     "/guide/history"
    ],
    "retrieval": {
-    "p": 0.16666666666666666,
+    "p": 0.3333333333333333,
     "r": 1,
-    "f1": 0.2857142857142857
+    "f1": 0.5
    },
    "recall8": 1,
-   "mrr": 0.25,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -3166,27 +3131,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 1,
-   "G": 0.9499137647013881,
-   "D": 0.9332183529351842,
+   "G": 0.8141332617314058,
+   "D": 0.752177682308541,
    "L": 1,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
     "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
-    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
-    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "concepts/the-ladder#",
     "concepts/the-ladder#what-never-happens",
-    "concepts/the-ladder#"
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "concepts/a-turn#4-the-primed-turn"
    ],
    "rankedIds": [
     "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
-    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
-    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
-    "concepts/the-ladder#what-never-happens",
     "concepts/the-ladder#",
-    "concepts/the-ladder#4-the-hybrid-answer",
-    "concepts/the-ladder#1-paid-providers-in-priority-order~2",
-    "concepts/the-ladder#what-costs-a-provider-its-turn"
+    "concepts/the-ladder#what-never-happens",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "concepts/a-turn#4-the-primed-turn",
+    "guide/panel#while-it-answers",
+    "reference/config#chatpreferlocal",
+    "concepts/the-ladder#4-the-hybrid-answer"
    ],
    "lang": "English",
    "goldPages": [
@@ -3198,7 +3163,7 @@
     "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 0.3333333333333333,
+   "mrr": 0.25,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -3218,23 +3183,23 @@
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "guide/i18n#the-keys~2",
-    "guide/i18n#",
     "guide/panel#in-the-readers-language",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#",
+    "guide/i18n#the-keys~2",
+    "guide/i18n#what-is-not-translatable",
     "guide/i18n#fallback-per-leaf",
     "guide/i18n#the-shape",
     "guide/i18n#the-keys"
    ],
    "rankedIds": [
-    "guide/i18n#the-keys~2",
-    "guide/i18n#",
     "guide/panel#in-the-readers-language",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#",
+    "guide/i18n#the-keys~2",
+    "guide/i18n#what-is-not-translatable",
     "guide/i18n#fallback-per-leaf",
     "guide/i18n#two-selectors-one-key-space",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
-    "guide/i18n#what-is-not-translatable",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "reference/config#parameters~5",
     "guide/i18n#the-shape",
     "guide/i18n#the-keys"
    ],
@@ -3268,21 +3233,21 @@
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "guide/free-tier#the-constraint-is-requests-not-tokens",
     "guide/free-tier#",
-    "guide/free-tier#when-it-runs-out",
-    "concepts/the-ladder#2-the-free-pool",
-    "guide/panel#when-something-is-wrong"
+    "guide/what-it-costs#the-one-number-to-watch",
+    "guide/comparison#and-what-0-does-not-cover",
+    "guide/free-tier#the-constraint-is-requests-not-tokens",
+    "guide/free-tier#when-it-runs-out"
    ],
    "rankedIds": [
-    "guide/free-tier#the-constraint-is-requests-not-tokens",
     "guide/free-tier#",
+    "guide/what-it-costs#the-one-number-to-watch",
+    "guide/comparison#and-what-0-does-not-cover",
+    "guide/free-tier#the-constraint-is-requests-not-tokens",
     "guide/free-tier#when-it-runs-out",
     "concepts/the-ladder#2-the-free-pool",
-    "guide/panel#when-something-is-wrong",
-    "guide/free-tier#what-you-have-to-decide",
-    "guide/free-tier#when-the-build-runs-out~3",
-    "guide/free-tier#the-pool-asked-for-by-name"
+    "guide/free-tier#what-docpilot-does-without-being-asked",
+    "guide/panel#when-something-is-wrong"
    ],
    "lang": "English",
    "goldPages": [
@@ -3294,7 +3259,7 @@
     "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 0.3333333333333333,
+   "mrr": 0.2,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -3308,27 +3273,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.46951634407550247,
-   "D": 0.49268845876733663,
+   "G": 0.85,
+   "D": 1,
    "L": 0.4,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "concepts/a-turn#3-retrieval-and-the-gate",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem",
     "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "reference/config#embedfallback~2",
     "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
-    "reference/cli#tune"
+    "reference/skills#docs-rag"
    ],
    "rankedIds": [
     "concepts/a-turn#3-retrieval-and-the-gate",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem",
     "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "reference/config#embedfallback~2",
     "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
-    "reference/cli#tune",
-    "reference/highlighting#the-five-rules",
-    "install#installing-it",
-    "guide/faq#how-do-i-get-started"
+    "reference/skills#docs-rag",
+    "reference/cli#what-it-sweeps-and-what-it-leaves-alone",
+    "reference/config#topk~2",
+    "reference/config#it-rewrites-it-never-adds"
    ],
    "lang": "English",
    "goldPages": [],
@@ -3348,27 +3313,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.5242886286579821,
-   "D": 0.44905150487730944,
+   "G": 0.8942051719901356,
+   "D": 0.9422735626535141,
    "L": 0.75,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/config#chatchain",
+    "guide/providers#asking-for-the-pool",
     "concepts/the-ladder#1-paid-providers-in-priority-order~2",
-    "guide/indexing#what-moves-when-you-upgrade",
-    "guide/free-tier#writing-your-own-order",
-    "reference/cli#eval-flags~3"
+    "reference/config#chatchain~2",
+    "reference/config#chatmodels",
+    "guide/providers#reasoning-on-a-rotating-pool"
    ],
    "rankedIds": [
-    "reference/config#chatchain",
+    "guide/providers#asking-for-the-pool",
     "concepts/the-ladder#1-paid-providers-in-priority-order~2",
-    "guide/indexing#what-moves-when-you-upgrade",
-    "guide/free-tier#writing-your-own-order",
-    "reference/cli#eval-flags~3",
-    "reference/config#parameters~3",
+    "reference/config#chatchain~2",
     "reference/config#chatmodels",
-    "install#installing-it"
+    "guide/providers#reasoning-on-a-rotating-pool",
+    "guide/providers#what-each-provider-honours~3",
+    "reference/config#chatmodel",
+    "guide/providers#a-local-model-that-thinks"
    ],
    "lang": "English",
    "goldPages": [],
@@ -3388,29 +3353,31 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.7125169942791328,
-   "D": 0.8166893257055104,
+   "G": 0.7755506830412294,
+   "D": 0.9007342440549726,
    "L": 0.4,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/panel#showing-the-reader-how-it-works",
-    "guide/panel#opening-it",
-    "guide/panel#the-empty-panel",
-    "reference/config#promptshow-promptallowappend",
+    "reference/config#parameters~5",
     "guide/where-it-goes#",
-    "reference/config#promptoverride-promptextend"
+    "guide/panel#",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/comparison#the-chat-itself",
+    "guide/panel#opening-it"
    ],
    "rankedIds": [
-    "guide/panel#showing-the-reader-how-it-works",
-    "guide/panel#opening-it",
-    "guide/panel#the-empty-panel",
-    "reference/config#promptshow-promptallowappend",
-    "guide/where-it-goes#",
     "reference/config#parameters~5",
-    "install/javascript#mounting",
+    "guide/where-it-goes#",
     "guide/panel#",
-    "reference/config#promptoverride-promptextend"
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/comparison#the-chat-itself",
+    "reference/config#promptshow-promptallowappend",
+    "guide/i18n#",
+    "guide/panel#the-empty-panel",
+    "guide/panel#opening-it",
+    "reference/config#promptoverride-promptextend",
+    "guide/i18n#the-shape"
    ],
    "lang": "English",
    "goldPages": [],
@@ -3430,28 +3397,33 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.765750397629715,
-   "D": 0.68766719683962,
+   "G": 0.9413739143793687,
+   "D": 0.9218318858391583,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/config#suggestionsprecomputed",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/panel#",
     "guide#next-steps",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
-    "concepts/a-turn#3-retrieval-and-the-gate"
+    "guide/i18n#the-keys~2",
+    "guide/faq#",
+    "reference/config#quotefromanswer",
+    "guide/panel#opening-it",
+    "guide/faq#how-do-i-get-started",
+    "reference/config#quotefromdocs"
    ],
    "rankedIds": [
-    "reference/config#suggestionsprecomputed",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
-    "guide#next-steps",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
-    "concepts/a-turn#3-retrieval-and-the-gate",
-    "guide/panel#the-empty-panel",
-    "guide/i18n#two-selectors-one-key-space",
     "guide/panel#",
-    "guide/panel#opening-it"
+    "guide#next-steps",
+    "guide/i18n#the-keys~2",
+    "guide/faq#",
+    "reference/config#quotefromanswer",
+    "guide/panel#the-empty-panel",
+    "guide/panel#while-it-answers",
+    "guide/panel#while-it-answers~2",
+    "guide/panel#opening-it",
+    "guide/faq#how-do-i-get-started",
+    "reference/config#quotefromdocs"
    ],
    "lang": "English",
    "goldPages": [],
@@ -3471,27 +3443,27 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.8539755809331102,
-   "D": 0.8886341079108137,
+   "G": 0.8666726496465066,
+   "D": 0.9055635328620087,
    "L": 0.75,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/indexing#when-to-rebuild",
-    "guide/indexing#a-second-index-to-measure-against",
-    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "reference/config#embedfallback~2",
+    "reference/config#embed-false",
     "guide/why#what-it-costs",
-    "reference/cli#embedder-question~4"
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "guide/providers#no-embedder-at-all"
    ],
    "rankedIds": [
-    "guide/indexing#when-to-rebuild",
-    "guide/indexing#a-second-index-to-measure-against",
-    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "reference/config#embedfallback~2",
+    "reference/config#embed-false",
     "guide/why#what-it-costs",
-    "reference/cli#embedder-question~4",
-    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "guide/providers#no-embedder-at-all",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
     "guide/faq#what-the-cli-knows-and-you-do-not",
-    "reference/cli#embedder-question~3"
+    "guide/what-it-costs#where-the-money-actually-goes"
    ],
    "lang": "English",
    "goldPages": [],
@@ -3511,27 +3483,32 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.492097009939517,
-   "D": 0.38946267991935596,
-   "L": 0.8,
+   "G": 0.7361601165771224,
+   "D": 0.7815468221028299,
+   "L": 0.6,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
+    "reference/config#quote",
+    "reference/config#parameters~4",
+    "guide/panel#the-composer",
     "guide/comparison#the-chat-itself",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
-    "concepts/the-ladder#writing-the-order-yourself",
-    "guide/social-openers#making-it-yours",
-    "guide/production#the-body"
+    "reference/config#composerdeeplink",
+    "reference/config#quotefromanswer",
+    "guide/panel#scoping-the-question"
    ],
    "rankedIds": [
+    "reference/config#quote",
+    "reference/config#parameters~4",
+    "guide/panel#the-composer",
     "guide/comparison#the-chat-itself",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
-    "concepts/the-ladder#writing-the-order-yourself",
-    "guide/social-openers#making-it-yours",
-    "guide/production#the-body",
-    "guide/credentials#what-happens",
+    "reference/config#composerdeeplink",
     "reference/config#parameters~5",
-    "guide/history#what-the-reader-sees"
+    "guide/evaluation#where-the-questions-come-from",
+    "guide/credentials#",
+    "reference/config#quotefromanswer",
+    "guide/panel#scoping-the-question",
+    "guide/credentials#what-happens"
    ],
    "lang": "English",
    "goldPages": [],
@@ -3551,29 +3528,28 @@
    "scoped": false,
    "followUp": false,
    "depth": 0,
-   "G": 0.5603015799573559,
-   "D": 0.5804021066098077,
+   "G": 0.82315642155946,
+   "D": 0.9308752287459467,
    "L": 0.5,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "reference/config#chatverbosity",
+    "guide/panel#",
+    "guide/panel#in-the-readers-language",
+    "guide/i18n#the-keys~2",
+    "reference/config#parameters~5",
     "guide/panel#showing-the-reader-how-it-works",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
-    "reference/config#quotefromanswer",
-    "guide/panel#telling-you-it-was-wrong",
-    "reference/config#quotefromdocs"
+    "guide/panel#opening-it"
    ],
    "rankedIds": [
-    "reference/config#chatverbosity",
-    "guide/panel#showing-the-reader-how-it-works",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
-    "reference/config#quotefromanswer",
-    "guide/panel#telling-you-it-was-wrong",
-    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
-    "guide/appearance#what-the-panels-chrome-does~2",
     "guide/panel#",
-    "reference/config#quotefromdocs",
+    "guide/panel#in-the-readers-language",
+    "guide/i18n#the-keys~2",
+    "reference/config#parameters~5",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/where-it-goes#",
+    "guide/panel#working-the-thread",
+    "guide/panel#while-it-answers",
     "guide/panel#opening-it"
    ],
    "lang": "English",
@@ -3600,23 +3576,25 @@
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "install/web#the-index",
+    "install#",
+    "guide/comparison#what-docpilot-is-worse-at",
+    "guide#overview",
     "reference/cli#index",
-    "guide/other-sites#the-index-does-not-need-a-site",
-    "guide#installing",
-    "install#2-the-index",
-    "reference/cli#embedder-question"
+    "guide/llms-txt#",
+    "reference/cli#embedder-question",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not"
    ],
    "rankedIds": [
-    "install/web#the-index",
+    "install#",
+    "guide/comparison#what-docpilot-is-worse-at",
+    "guide#overview",
     "reference/cli#index",
-    "guide/other-sites#the-index-does-not-need-a-site",
-    "guide#installing",
-    "install#2-the-index",
+    "guide/llms-txt#",
+    "guide/comparison#architecture",
     "guide/indexing#built-site",
-    "reference/cli#vocabulary",
-    "reference/cli#split-identifiers",
-    "reference/cli#embedder-question"
+    "install/web#the-index",
+    "reference/cli#embedder-question",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not"
    ],
    "lang": "English",
    "goldPages": [],
@@ -3636,36 +3614,37 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.7786662112044795,
-   "D": 0.7525073292250203,
-   "L": 0.8571428571428571,
+   "G": 0.9583333333333334,
+   "D": 1,
+   "L": 0.8333333333333334,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
+    "concepts/the-gate#follow-ups~4",
     "concepts/the-gate#follow-ups~2",
-    "guide/i18n#the-keys~2",
+    "concepts/the-gate#follow-ups~3",
     "concepts/the-gate#follow-ups",
-    "guide/social-openers#what-it-deliberately-does-not-do",
-    "guide/panel#while-it-answers~2"
+    "guide/troubleshooting#a-follow-up-is-refused"
    ],
    "rankedIds": [
+    "concepts/the-gate#follow-ups~4",
     "concepts/the-gate#follow-ups~2",
-    "guide/i18n#the-keys~2",
+    "concepts/the-gate#follow-ups~3",
     "concepts/the-gate#follow-ups",
-    "guide/social-openers#what-it-deliberately-does-not-do",
-    "guide/panel#while-it-answers~2",
-    "guide/history#two-tabs",
-    "guide/panel#while-it-answers",
-    "reference/config#uibackground~2"
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "guide/panel#hello",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/panel#while-it-answers"
    ],
    "lang": "English",
    "goldPages": [
     "/concepts/the-gate"
    ],
    "retrieval": {
-    "p": 0.4,
+    "p": 0.8,
     "r": 1,
-    "f1": 0.5714285714285715
+    "f1": 0.888888888888889
    },
    "recall8": 1,
    "mrr": 1,
@@ -3682,36 +3661,38 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.3568048311649237,
-   "D": 0.23764453679132685,
-   "L": 0.7142857142857143,
+   "G": 0.8821910728163821,
+   "D": 0.9540325415329539,
+   "L": 0.6666666666666666,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "guide/social-openers#why-it-exists",
+    "concepts/a-turn#4-the-primed-turn",
     "concepts/the-gate#five-settled-turns-five-causes",
-    "concepts/the-gate#",
-    "concepts/the-ladder#what-never-happens",
-    "guide/troubleshooting#every-question-is-refused"
+    "concepts/a-turn#",
+    "concepts/a-turn#conversation-memory~2",
+    "guide/panel#when-it-refuses",
+    "concepts/a-turn#1-the-credential-check"
    ],
    "rankedIds": [
-    "guide/social-openers#why-it-exists",
+    "concepts/a-turn#4-the-primed-turn",
     "concepts/the-gate#five-settled-turns-five-causes",
-    "concepts/the-gate#",
+    "concepts/a-turn#",
+    "concepts/a-turn#conversation-memory~2",
+    "guide/panel#when-it-refuses",
+    "concepts/a-turn#conversation-memory",
+    "concepts/the-ladder#4-the-hybrid-answer",
     "concepts/the-ladder#what-never-happens",
-    "guide/troubleshooting#every-question-is-refused",
-    "guide/troubleshooting#still-stuck",
-    "reference/cli#what-it-may-never-touch",
-    "concepts/the-ladder#4-the-hybrid-answer"
+    "concepts/a-turn#1-the-credential-check"
    ],
    "lang": "English",
    "goldPages": [
     "/concepts/the-gate"
    ],
    "retrieval": {
-    "p": 0.2,
+    "p": 0.16666666666666666,
     "r": 1,
-    "f1": 0.33333333333333337
+    "f1": 0.2857142857142857
    },
    "recall8": 1,
    "mrr": 0.5,
@@ -3728,32 +3709,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.5700983818292185,
-   "D": 0.5601311757722912,
-   "L": 0.6,
-   "channel": "composed",
+   "G": 0.5841122747582976,
+   "D": 0.44548303301106346,
+   "L": 1,
+   "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/troubleshooting#an-answer-was-generated-but-not-shown",
-    "guide/where-it-goes#the-one-thing-with-no-default",
-    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "concepts/the-ladder#",
+    "reference/config#embedfallback",
     "guide/panel#when-something-is-wrong",
-    "guide/other-sites#the-base-invariant",
-    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus",
-    "guide/other-sites#the-three-selectors"
+    "guide/free-tier#five-failures-that-do-not-rotate"
    ],
    "rankedIds": [
-    "guide/troubleshooting#an-answer-was-generated-but-not-shown",
-    "guide/where-it-goes#the-one-thing-with-no-default",
-    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "concepts/the-ladder#",
+    "reference/config#embedfallback",
     "guide/panel#when-something-is-wrong",
-    "guide/other-sites#the-base-invariant",
-    "guide/imported-pages#its-path-is-an-id-not-a-link",
-    "guide/imported-pages#its-path-is-an-id-not-a-link~2",
-    "concepts/guarantees#",
-    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus",
-    "guide/other-sites#the-three-selectors",
-    "guide/imported-pages#importing-one"
+    "guide/free-tier#five-failures-that-do-not-rotate",
+    "reference/config#parameters~4",
+    "guide/appearance#what-degrades-and-how",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2"
    ],
    "lang": "English",
    "goldPages": [
@@ -3780,39 +3756,41 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.2915127538442263,
-   "D": 0.38868367179230173,
+   "G": 0.5441172590134938,
+   "D": 0.7254896786846584,
    "L": 0,
    "channel": "composed",
    "gatePass": false,
    "retrievedIds": [
+    "concepts/a-turn#",
     "concepts/a-turn#4-the-primed-turn",
-    "guide/panel#while-it-answers",
-    "guide/providers#two-keys-and-which-answers-first",
-    "concepts/the-ladder#",
-    "guide/providers#two-keys-and-which-answers-first~2"
+    "guide/free-tier#the-pool-asked-for-by-name",
+    "reference/config#chatmodels~2",
+    "guide/providers#a-local-model-that-thinks",
+    "concepts/a-turn#1-the-credential-check"
    ],
    "rankedIds": [
+    "concepts/a-turn#",
     "concepts/a-turn#4-the-primed-turn",
-    "guide/panel#while-it-answers",
-    "guide/providers#two-keys-and-which-answers-first",
-    "concepts/the-ladder#",
-    "guide/providers#two-keys-and-which-answers-first~2",
-    "guide#next-steps",
-    "concepts/the-ladder#1-paid-providers-in-priority-order",
-    "concepts/a-turn#conversation-memory"
+    "guide/free-tier#the-pool-asked-for-by-name",
+    "reference/config#chatmodels~2",
+    "guide/providers#a-local-model-that-thinks",
+    "reference/config#budgetmode",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "reference/config#budgetprobe",
+    "concepts/a-turn#1-the-credential-check"
    ],
    "lang": "Russian",
    "goldPages": [
     "/concepts/a-turn"
    ],
    "retrieval": {
-    "p": 0.2,
+    "p": 0.16666666666666666,
     "r": 1,
-    "f1": 0.33333333333333337
+    "f1": 0.2857142857142857
    },
    "recall8": 1,
-   "mrr": 1,
+   "mrr": 0.5,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -3826,39 +3804,39 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 1,
-   "D": 1,
+   "G": 0.9232060603502076,
+   "D": 0.8976080804669434,
    "L": 1,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
+    "guide/what-it-costs#what-a-question-costs-you",
     "guide/free-tier#what-a-turn-costs",
+    "guide/what-it-costs#what-raises-the-bill",
     "reference/config#budgetoneshotbelow-budgetrotateabove",
-    "reference/config#maxiterations",
-    "guide/free-tier#when-the-build-runs-out~2",
-    "guide/free-tier#what-costs-a-model-its-turn"
+    "guide/what-it-costs#where-the-money-actually-goes"
    ],
    "rankedIds": [
+    "guide/what-it-costs#what-a-question-costs-you",
     "guide/free-tier#what-a-turn-costs",
+    "guide/what-it-costs#what-raises-the-bill",
     "reference/config#budgetoneshotbelow-budgetrotateabove",
-    "reference/config#maxiterations",
-    "guide/free-tier#when-the-build-runs-out~2",
-    "guide/free-tier#what-costs-a-model-its-turn",
-    "concepts/a-turn#6-validation",
-    "concepts/the-ladder#what-costs-a-provider-its-turn",
-    "concepts/the-ladder#what-costs-a-provider-its-turn~2"
+    "guide/what-it-costs#where-the-money-actually-goes",
+    "concepts/a-turn#4-the-primed-turn",
+    "reference/cli#what-it-costs",
+    "concepts/a-turn#conversation-memory"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/free-tier"
    ],
    "retrieval": {
-    "p": 0.2,
-    "r": 1,
-    "f1": 0.33333333333333337
+    "p": 0,
+    "r": 0,
+    "f1": 0
    },
-   "recall8": 1,
-   "mrr": 0.25,
+   "recall8": 0,
+   "mrr": 0,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -3872,27 +3850,28 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.439393759728149,
-   "D": 0.41919167963753196,
+   "G": 0.5045421299985078,
+   "D": 0.5060561733313438,
    "L": 0.5,
    "channel": "raw",
-   "gatePass": true,
+   "gatePass": false,
    "retrievedIds": [
+    "reference/config#chatchain~2",
     "concepts/the-ladder#1-paid-providers-in-priority-order~2",
-    "reference/config#chatchain",
-    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
-    "guide/providers#two-keys-and-which-answers-first",
-    "concepts/the-ladder#1-paid-providers-in-priority-order"
+    "reference/config#parameters~4",
+    "guide/history#what-is-stored",
+    "reference/cli#feedback~4"
    ],
    "rankedIds": [
+    "reference/config#chatchain~2",
     "concepts/the-ladder#1-paid-providers-in-priority-order~2",
-    "reference/config#chatchain",
-    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
-    "guide/providers#two-keys-and-which-answers-first",
-    "concepts/the-ladder#1-paid-providers-in-priority-order",
-    "guide/evaluation#the-golden-set~4",
-    "concepts/the-ladder#writing-the-order-yourself",
-    "reference/config#chatchain~2"
+    "reference/config#parameters~4",
+    "guide/history#what-is-stored",
+    "reference/cli#feedback~4",
+    "guide/history#what-the-reader-sees",
+    "guide/faq#the-commands~2",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "guide/faq#doctor-what-ci-gates-on"
    ],
    "lang": "English",
    "goldPages": [
@@ -3900,12 +3879,12 @@
     "/guide/providers"
    ],
    "retrieval": {
-    "p": 0.4,
-    "r": 1,
-    "f1": 0.5714285714285715
+    "p": 0.2,
+    "r": 0.5,
+    "f1": 0.28571428571428575
    },
-   "recall8": 1,
-   "mrr": 1,
+   "recall8": 0.5,
+   "mrr": 0.5,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -3919,27 +3898,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.7485390103204179,
-   "D": 0.7313853470938905,
-   "L": 0.8,
+   "G": 0.7901842092802678,
+   "D": 0.7619122790403571,
+   "L": 0.875,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "guide/why#what-it-costs",
-    "guide/free-tier#when-the-build-runs-out",
-    "guide/free-tier#when-the-build-runs-out~2",
-    "guide/free-tier#when-the-build-runs-out~3",
-    "guide/free-tier#the-constraint-is-requests-not-tokens"
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "guide/what-it-costs#where-the-money-actually-goes",
+    "guide/what-it-costs#what-a-reader-downloads",
+    "reference/cli#what-it-costs",
+    "guide/free-tier#when-the-build-runs-out~3"
    ],
    "rankedIds": [
-    "guide/why#what-it-costs",
-    "guide/free-tier#when-the-build-runs-out",
-    "guide/free-tier#when-the-build-runs-out~2",
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "guide/what-it-costs#where-the-money-actually-goes",
+    "guide/what-it-costs#what-a-reader-downloads",
+    "reference/cli#what-it-costs",
     "guide/free-tier#when-the-build-runs-out~3",
-    "guide/free-tier#the-constraint-is-requests-not-tokens",
-    "reference/cli#embedder-question~4",
-    "guide/free-tier#what-a-turn-costs",
-    "reference/cli#embedder-question~3"
+    "guide/why#what-it-costs",
+    "reference/cli#embedder-question~5",
+    "guide/free-tier#when-the-build-runs-out"
    ],
    "lang": "English",
    "goldPages": [
@@ -3965,27 +3944,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.75,
-   "D": 1,
+   "G": 0.6980794459194561,
+   "D": 0.9307725945592749,
    "L": 0,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "reference/config#chatmodels~2",
-    "guide/free-tier#five-failures-that-do-not-rotate",
     "guide/free-tier#what-costs-a-model-its-turn",
+    "guide/free-tier#five-failures-that-do-not-rotate",
+    "reference/config#chatmodels~2",
     "concepts/the-ladder#what-never-happens",
-    "reference/config#budgetoneshotbelow-budgetrotateabove"
+    "reference/config#chatmodels"
    ],
    "rankedIds": [
-    "reference/config#chatmodels~2",
-    "guide/free-tier#five-failures-that-do-not-rotate",
     "guide/free-tier#what-costs-a-model-its-turn",
+    "guide/free-tier#five-failures-that-do-not-rotate",
+    "reference/config#chatmodels~2",
     "concepts/the-ladder#what-never-happens",
-    "reference/config#budgetoneshotbelow-budgetrotateabove",
+    "reference/config#chatmodels",
     "concepts/the-ladder#what-costs-a-provider-its-turn~2",
-    "guide/troubleshooting#every-question-is-refused",
-    "reference/config#uiwaitingescalation"
+    "concepts/the-ladder#what-costs-a-provider-its-turn",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung"
    ],
    "lang": "Russian",
    "goldPages": [
@@ -4011,39 +3990,41 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.6779854472234459,
-   "D": 0.5706472629645944,
-   "L": 1,
-   "channel": "raw",
+   "G": 0.8986823441496495,
+   "D": 0.948243125532866,
+   "L": 0.75,
+   "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "concepts/the-ladder#",
-    "concepts/guarantees#what-this-is-not",
-    "guide/social-openers#what-it-deliberately-does-not-do",
-    "guide/evaluation#carrying-a-calibration-across-embedders",
-    "reference/cli#what-it-may-never-touch"
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/credentials#",
+    "guide/credentials#this-is-not-a-security-boundary",
+    "guide/credentials#what-happens",
+    "guide/panel#while-it-answers~2",
+    "guide/panel#hello"
    ],
    "rankedIds": [
-    "concepts/the-ladder#",
-    "concepts/guarantees#what-this-is-not",
-    "guide/social-openers#what-it-deliberately-does-not-do",
-    "guide/evaluation#carrying-a-calibration-across-embedders",
-    "reference/cli#what-it-may-never-touch",
-    "reference/config#parameters~5",
-    "install#installing-it",
-    "guide/appearance#what-degrades-and-how"
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/credentials#",
+    "guide/credentials#this-is-not-a-security-boundary",
+    "guide/credentials#what-happens",
+    "guide/panel#while-it-answers~2",
+    "guide/production#the-body",
+    "guide/i18n#the-keys~2",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/panel#hello"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/credentials"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
    },
-   "recall8": 0,
-   "mrr": 0,
+   "recall8": 1,
+   "mrr": 0.3333333333333333,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -4057,27 +4038,31 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.458168586665461,
-   "D": 0.27755811555394805,
+   "G": 0.608561159787834,
+   "D": 0.4780815463837787,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/providers#two-keys-and-which-answers-first",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "concepts/a-turn#",
+    "guide/faq#",
     "guide/free-tier#the-pool-asked-for-by-name",
-    "concepts/the-ladder#2-the-free-pool",
-    "concepts/the-ladder#1-paid-providers-in-priority-order",
-    "reference/config#uiwaitingescalation"
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "concepts/a-turn#1-the-credential-check",
+    "guide/faq#how-do-i-get-started"
    ],
    "rankedIds": [
-    "guide/providers#two-keys-and-which-answers-first",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "concepts/a-turn#",
+    "guide/faq#",
     "guide/free-tier#the-pool-asked-for-by-name",
-    "concepts/the-ladder#2-the-free-pool",
-    "concepts/the-ladder#1-paid-providers-in-priority-order",
-    "reference/config#uiwaitingescalation",
-    "reference/config#chatchain",
-    "guide/appearance#what-the-panels-chrome-does~2",
-    "guide/panel#while-it-answers"
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "concepts/a-turn#1-the-credential-check",
+    "guide/panel#while-it-answers",
+    "guide/appearance#the-tokens~4",
+    "guide/faq#how-do-i-get-started",
+    "concepts/a-turn#2-is-it-a-question-at-all"
    ],
    "lang": "English",
    "goldPages": [
@@ -4103,39 +4088,38 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.295940751736496,
-   "D": 0.39458766898199465,
+   "G": 0.6413831866148155,
+   "D": 0.8551775821530874,
    "L": 0,
    "channel": "composed",
-   "gatePass": false,
+   "gatePass": true,
    "retrievedIds": [
     "guide/history#two-tabs",
-    "guide/indexing#blocks-a-chunk-is-never-cut-through",
-    "reference/config#historysaveonunload",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#where",
     "guide/panel#past-conversations",
-    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table"
+    "reference/config#composerdraft"
    ],
    "rankedIds": [
     "guide/history#two-tabs",
-    "guide/indexing#blocks-a-chunk-is-never-cut-through",
-    "reference/config#historysaveonunload",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#where",
     "guide/panel#past-conversations",
-    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table",
-    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
-    "reference/cli#level~3",
-    "guide/history#",
-    "guide/history#what-the-reader-sees"
+    "reference/config#composerdraft",
+    "reference/config#historysaveonunload",
+    "guide/history#what-the-reader-sees",
+    "guide/history#when-the-docs-change"
    ],
    "lang": "Russian",
    "goldPages": [
     "/guide/history"
    ],
    "retrieval": {
-    "p": 0.2,
-    "r": 0.5,
-    "f1": 0.28571428571428575
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
    },
-   "recall8": 0.5,
+   "recall8": 1,
    "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
@@ -4150,31 +4134,33 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.322754829096606,
-   "D": 0.09700643879547471,
+   "G": 0.5803315344292129,
+   "D": 0.44044204590561725,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/evaluation#the-golden-set~3",
-    "concepts/guarantees#~2",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
-    "guide/appearance#five-entry-points~2",
-    "reference/cli#tune-writes~3",
-    "guide/appearance#surfaces-come-in-three-levels",
-    "reference/cli#the-step-everyone-forgets"
+    "guide/comparison#what-each-of-them-publishes",
+    "guide/production#the-body~2",
+    "reference/config#chat-false",
+    "guide/faq#the-commands~2",
+    "guide/providers#",
+    "guide/comparison#what-each-of-them-publishes~2",
+    "guide/faq#doctor-what-ci-gates-on",
+    "guide/providers#name-nothing-the-provider-chain"
    ],
    "rankedIds": [
-    "guide/evaluation#the-golden-set~3",
-    "concepts/guarantees#~2",
-    "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
-    "guide/appearance#five-entry-points~2",
-    "reference/cli#tune-writes~3",
-    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "guide/comparison#what-each-of-them-publishes",
+    "guide/production#the-body~2",
+    "reference/config#chat-false",
+    "guide/faq#the-commands~2",
+    "guide/providers#",
     "reference/config#parameters~4",
-    "concepts/a-turn#5-tools-if-the-model-wants-more",
-    "guide/appearance#surfaces-come-in-three-levels",
-    "reference/cli#the-step-everyone-forgets"
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "guide/providers#openrouter-with-nothing-named~2",
+    "guide/comparison#what-each-of-them-publishes~2",
+    "guide/faq#doctor-what-ci-gates-on",
+    "guide/providers#name-nothing-the-provider-chain"
    ],
    "lang": "English",
    "goldPages": [
@@ -4200,39 +4186,39 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.9901222330390858,
-   "D": 0.9868296440521143,
-   "L": 1,
+   "G": 0.9166666666666666,
+   "D": 1,
+   "L": 0.6666666666666666,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
     "install/web#colours",
+    "reference/config#uitheme~2",
+    "reference/config#uitheme",
     "reference/theme#the-dark-set~2",
-    "reference/theme#the-dark-set",
-    "guide/appearance#the-tokens~6",
-    "guide/appearance#syntax-highlighting"
+    "reference/highlighting#both-colour-schemes"
    ],
    "rankedIds": [
     "install/web#colours",
-    "reference/theme#the-dark-set~2",
-    "reference/theme#the-dark-set",
-    "guide/appearance#the-tokens~6",
-    "guide/appearance#syntax-highlighting",
-    "reference/config#uitheme",
     "reference/config#uitheme~2",
-    "reference/theme#the-whole-set~2"
+    "reference/config#uitheme",
+    "reference/theme#the-dark-set~2",
+    "reference/highlighting#both-colour-schemes",
+    "guide/appearance#the-panel-wears-your-font",
+    "guide/faq#2-the---dp--css-tokens-colour-and-geometry",
+    "guide/appearance#syntax-highlighting"
    ],
    "lang": "English",
    "goldPages": [
     "/reference/theme"
    ],
    "retrieval": {
-    "p": 0.4,
+    "p": 0.2,
     "r": 1,
-    "f1": 0.5714285714285715
+    "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 0.5,
+   "mrr": 0.25,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -4246,28 +4232,30 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.715120966236258,
-   "D": 0.6201612883150106,
-   "L": 1,
+   "G": 0.96875,
+   "D": 1,
+   "L": 0.875,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
+    "install/react#keeping-it-in-step",
+    "install/react#mounting",
     "install/javascript#mounting",
     "install/vue#the-router",
-    "reference/config#if-your-config-already-sets-topk",
-    "install/react#keeping-it-in-step",
-    "concepts/the-ladder#2-the-free-pool",
+    "install/react#the-rest-of-the-options",
+    "install/react#why-it-imports-a-prebuilt-bundle",
     "install/vue#where-the-config-comes-from"
    ],
    "rankedIds": [
+    "install/react#keeping-it-in-step",
+    "install/react#mounting",
     "install/javascript#mounting",
     "install/vue#the-router",
-    "reference/config#if-your-config-already-sets-topk",
-    "install/react#keeping-it-in-step",
-    "concepts/the-ladder#2-the-free-pool",
-    "guide/free-tier#when-the-body-is-the-problem-not-the-model",
-    "reference/config#chatpreferlocal",
     "install/react#the-rest-of-the-options",
+    "install/javascript#composing-the-pieces-yourself",
+    "guide/other-sites#what-a-host-actually-supplies",
+    "guide/other-sites#mounting",
+    "install/react#why-it-imports-a-prebuilt-bundle",
     "install/vue#where-the-config-comes-from"
    ],
    "lang": "English",
@@ -4275,12 +4263,12 @@
     "/install/react"
    ],
    "retrieval": {
-    "p": 0.16666666666666666,
-    "r": 0.5,
-    "f1": 0.25
+    "p": 0.2857142857142857,
+    "r": 1,
+    "f1": 0.4444444444444445
    },
-   "recall8": 0.5,
-   "mrr": 0.25,
+   "recall8": 1,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -4294,27 +4282,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.9085530498823787,
-   "D": 0.878070733176505,
-   "L": 1,
+   "G": 0.7814587816875335,
+   "D": 0.8336117089167113,
+   "L": 0.625,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "guide/appearance#the-tokens~4",
-    "reference/theme#the-dark-set",
-    "guide/appearance#the-tokens~2",
-    "guide/appearance#the-tokens~3",
-    "reference/highlighting#both-colour-schemes"
+    "guide#next-steps",
+    "reference/config#suggestionsauthored",
+    "guide/faq#5-syntax-highlighting",
+    "reference/config#suggestionsauthored~2",
+    "guide/indexing#"
    ],
    "rankedIds": [
-    "guide/appearance#the-tokens~4",
-    "reference/theme#the-dark-set",
-    "guide/appearance#the-tokens~2",
-    "guide/appearance#the-tokens~3",
+    "guide#next-steps",
+    "reference/config#suggestionsauthored",
+    "guide/faq#5-syntax-highlighting",
+    "reference/config#suggestionsauthored~2",
+    "guide/indexing#",
     "reference/highlighting#both-colour-schemes",
-    "guide/appearance#syntax-highlighting",
-    "guide/faq#2-the---dp--css-tokens-colour-and-geometry",
-    "reference/theme#the-whole-set~2"
+    "guide/indexing#what-gets-indexed",
+    "guide/panel#while-it-answers"
    ],
    "lang": "English",
    "goldPages": [
@@ -4340,28 +4328,30 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.5408887957414852,
-   "D": 0.7211850609886469,
+   "G": 0.4741014091510311,
+   "D": 0.6321352122013748,
    "L": 0,
    "channel": "composed",
-   "gatePass": true,
+   "gatePass": false,
    "retrievedIds": [
-    "reference/config#it-rewrites-it-never-adds",
-    "guide/providers#name-nothing-the-provider-chain~3",
-    "guide/credentials#what-happens",
-    "guide/social-openers#making-it-yours",
-    "reference/config#the-provider-chain"
+    "guide/i18n#the-keys~3",
+    "guide/i18n#",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "guide/free-tier#five-failures-that-do-not-rotate",
+    "guide/i18n#the-shape",
+    "guide/i18n#interpolation"
    ],
    "rankedIds": [
-    "reference/config#it-rewrites-it-never-adds",
-    "guide/providers#name-nothing-the-provider-chain~3",
-    "guide/credentials#what-happens",
+    "guide/i18n#the-keys~3",
+    "guide/i18n#",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "guide/free-tier#five-failures-that-do-not-rotate",
+    "guide/i18n#the-shape",
     "guide/social-openers#making-it-yours",
-    "reference/config#the-provider-chain",
-    "concepts/a-turn#2-is-it-a-question-at-all",
-    "guide/panel#a-question-with-a-key-in-it",
-    "reference/config#chatchain~4",
-    "guide/panel#hello"
+    "concepts/guarantees#~2",
+    "reference/config#suggestionsquestions",
+    "guide/i18n#interpolation",
+    "reference/config#suggestionsauthored"
    ],
    "lang": "Russian",
    "goldPages": [
@@ -4387,44 +4377,42 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.7878562256882415,
-   "D": 0.7171416342509886,
-   "L": 1,
-   "channel": "raw",
+   "G": 0.96875,
+   "D": 1,
+   "L": 0.875,
+   "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
+    "guide/imported-pages#what-an-imported-page-is",
     "guide/imported-pages#its-path-is-an-id-not-a-link",
-    "install/vue#the-router",
     "reference/config#importdir",
-    "guide/other-sites#routes-are-derived-from-file-paths",
-    "reference/config#chatchain~5",
-    "install/vue#where-the-config-comes-from",
-    "guide/other-sites#a-sidebar-buys-you-the-scope-picker"
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "guide/imported-pages#its-path-is-an-id-not-a-link~2",
+    "guide/imported-pages#importing-one"
    ],
    "rankedIds": [
+    "guide/imported-pages#what-an-imported-page-is",
     "guide/imported-pages#its-path-is-an-id-not-a-link",
-    "install/vue#the-router",
     "reference/config#importdir",
-    "guide/other-sites#routes-are-derived-from-file-paths",
-    "reference/config#chatchain~5",
-    "reference/config#parameters~3",
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
     "guide/imported-pages#its-path-is-an-id-not-a-link~2",
-    "install/react#keeping-it-in-step",
-    "install/vue#where-the-config-comes-from",
-    "guide/other-sites#a-sidebar-buys-you-the-scope-picker",
-    "guide/imported-pages#importing-one"
+    "reference/config#sources",
+    "reference/cli#the-pages-own-markdown-wins",
+    "guide/other-sites#routes-are-derived-from-file-paths",
+    "guide/imported-pages#importing-one",
+    "guide/other-sites#a-sidebar-buys-you-the-scope-picker"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/imported-pages"
    ],
    "retrieval": {
-    "p": 0.14285714285714285,
+    "p": 0.3333333333333333,
     "r": 1,
-    "f1": 0.25
+    "f1": 0.5
    },
    "recall8": 1,
-   "mrr": 1,
+   "mrr": 0.5,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -4438,41 +4426,39 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.6906243938858261,
-   "D": 0.5874991918477681,
-   "L": 1,
+   "G": 0.9588673364597763,
+   "D": 0.9784897819463684,
+   "L": 0.9,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "guide/history#two-tabs",
-    "guide/providers#",
-    "guide/evaluation#the-golden-set~4",
-    "concepts/a-turn#5-tools-if-the-model-wants-more",
-    "guide/appearance#the-tokens~3",
-    "guide/providers#name-nothing-the-provider-chain"
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/providers#openrouter-with-nothing-named~2",
+    "guide/indexing#vectors-are-quantised~2",
+    "guide/indexing#what-moves-when-you-upgrade"
    ],
    "rankedIds": [
-    "guide/history#two-tabs",
-    "guide/providers#",
-    "guide/evaluation#the-golden-set~4",
-    "concepts/a-turn#5-tools-if-the-model-wants-more",
-    "guide/appearance#the-tokens~3",
-    "reference/config#budgetoneshotbelow-budgetrotateabove",
     "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
-    "guide/appearance#the-tokens~4",
-    "guide/providers#name-nothing-the-provider-chain"
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/providers#openrouter-with-nothing-named~2",
+    "guide/indexing#vectors-are-quantised~2",
+    "guide/indexing#what-moves-when-you-upgrade",
+    "reference/config#chatverbosity",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "guide/free-tier#when-the-build-runs-out"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/indexing"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
    },
    "recall8": 1,
-   "mrr": 0.14285714285714285,
+   "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -4486,39 +4472,39 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.9369045890656114,
-   "D": 0.9158727854208151,
+   "G": 0.968229181383139,
+   "D": 0.9576389085108519,
    "L": 1,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
+    "reference/cli#level",
     "reference/cli#level~2",
-    "guide/evaluation#how-much-of-the-set-to-run~2",
     "guide/evaluation#how-much-of-the-set-to-run",
-    "guide/evaluation#the-golden-set~2",
-    "reference/cli#level"
+    "guide/evaluation#how-much-of-the-set-to-run~2",
+    "guide/free-tier#"
    ],
    "rankedIds": [
-    "reference/cli#level~2",
-    "guide/evaluation#how-much-of-the-set-to-run~2",
-    "guide/evaluation#how-much-of-the-set-to-run",
-    "guide/evaluation#the-golden-set~2",
     "reference/cli#level",
-    "guide/evaluation#the-golden-set~3",
-    "reference/cli#update-conflicts",
-    "reference/cli#eval-flags"
+    "reference/cli#level~2",
+    "guide/evaluation#how-much-of-the-set-to-run",
+    "guide/evaluation#how-much-of-the-set-to-run~2",
+    "guide/free-tier#",
+    "guide/free-tier#writing-your-own-order",
+    "guide/free-tier#when-the-build-runs-out",
+    "guide/evaluation#lint-it-first"
    ],
    "lang": "English",
    "goldPages": [
     "/guide/evaluation"
    ],
    "retrieval": {
-    "p": 0.4,
-    "r": 1,
-    "f1": 0.5714285714285715
+    "p": 0.2,
+    "r": 0.5,
+    "f1": 0.28571428571428575
    },
-   "recall8": 1,
-   "mrr": 0.5,
+   "recall8": 0.5,
+   "mrr": 0.25,
    "scopeContainment": 1,
    "scoredAsNegative": false,
    "observed": "answer",
@@ -4532,27 +4518,28 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.397146656518197,
-   "D": 0.3073066531353738,
-   "L": 0.6666666666666666,
-   "channel": "composed",
-   "gatePass": true,
+   "G": 0.4317962810941918,
+   "D": 0.4090617081255891,
+   "L": 0.5,
+   "channel": "raw",
+   "gatePass": false,
    "retrievedIds": [
-    "guide/evaluation#the-golden-set~2",
-    "reference/cli#doctor~5",
-    "reference/config#chatreasoning",
-    "guide/panel#telling-you-it-was-wrong",
-    "reference/config#chatreasoning~2"
+    "guide/providers#",
+    "guide/evaluation#the-golden-set~4",
+    "guide/appearance#the-tokens~4",
+    "guide/evaluation#the-golden-set~3",
+    "guide/indexing#a-second-index-to-measure-against",
+    "guide/providers#name-nothing-the-provider-chain"
    ],
    "rankedIds": [
-    "guide/evaluation#the-golden-set~2",
-    "reference/cli#doctor~5",
-    "reference/config#chatreasoning",
-    "guide/panel#telling-you-it-was-wrong",
-    "reference/config#chatreasoning~2",
     "guide/providers#",
-    "reference/cli#doctor~4",
+    "guide/evaluation#the-golden-set~4",
+    "guide/appearance#the-tokens~4",
+    "guide/evaluation#the-golden-set~3",
+    "guide/indexing#a-second-index-to-measure-against",
+    "guide/free-tier#five-failures-that-do-not-rotate",
     "guide/indexing#a-second-index-to-measure-against~2",
+    "reference/config#chatreasoning",
     "guide/providers#name-nothing-the-provider-chain"
    ],
    "lang": "English",
@@ -4580,28 +4567,35 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.17221115101580603,
-   "D": 0.06294820135440804,
+   "G": 0.6425624572693052,
+   "D": 0.6900832763590736,
    "L": 0.5,
    "channel": "raw",
-   "gatePass": false,
+   "gatePass": true,
    "retrievedIds": [
-    "guide/evaluation#the-golden-set",
-    "guide/appearance#the-tokens~3",
-    "guide/appearance#the-tokens~4",
     "reference/config#parameters~4",
-    "reference/config#suggestionsreveal"
+    "guide/social-openers#what-happens",
+    "reference/config#chat",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/faq#the-commands~2",
+    "reference/config#chatprovider",
+    "guide/social-openers#making-it-yours",
+    "guide/faq#doctor-what-ci-gates-on"
    ],
    "rankedIds": [
-    "guide/evaluation#the-golden-set",
-    "guide/appearance#the-tokens~3",
-    "guide/appearance#the-tokens~4",
     "reference/config#parameters~4",
-    "reference/config#suggestionsreveal",
-    "reference/config#suggestionsmatchcos~2",
-    "concepts/the-gate#follow-ups~3",
+    "guide/social-openers#what-happens",
+    "reference/config#chat",
     "guide/social-openers#four-kinds-eighteen-languages",
-    "guide/social-openers#making-it-yours"
+    "guide/faq#the-commands~2",
+    "reference/config#quote",
+    "guide/panel#hello",
+    "reference/config#parameters~3",
+    "reference/config#chatprovider",
+    "guide/social-openers#making-it-yours",
+    "guide/faq#doctor-what-ci-gates-on",
+    "reference/config#quotefromanswer",
+    "guide/panel#while-it-answers"
    ],
    "lang": "English",
    "goldPages": [],
@@ -4621,27 +4615,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 2,
-   "G": 0.5273166087515028,
-   "D": 0.7030888116686703,
+   "G": 0.75,
+   "D": 1,
    "L": 0,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/comparison#what-each-of-them-publishes~2",
     "guide/comparison#how-the-money-is-arranged",
-    "guide/comparison#choosing",
+    "guide/comparison#what-each-of-them-publishes~2",
     "guide#overview",
-    "guide/why#what-it-costs"
+    "guide/comparison#sources",
+    "guide/comparison#choosing"
    ],
    "rankedIds": [
-    "guide/comparison#what-each-of-them-publishes~2",
     "guide/comparison#how-the-money-is-arranged",
-    "guide/comparison#choosing",
+    "guide/comparison#what-each-of-them-publishes~2",
     "guide#overview",
-    "guide/why#what-it-costs",
+    "guide/comparison#sources",
+    "guide/comparison#choosing",
     "reference/config#parameters~3",
-    "reference/config#chatchain~4",
-    "reference/config#topk"
+    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "reference/config#chatchain~4"
    ],
    "lang": "English",
    "goldPages": [],
@@ -4661,28 +4655,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.7515786773446946,
-   "D": 0.7798826809040373,
-   "L": 0.6666666666666666,
+   "G": 0.9583333333333334,
+   "D": 1,
+   "L": 0.8333333333333334,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "reference/config#guardmode-guardsupportminidentifiers",
-    "reference/config#embed-false",
-    "reference/config#it-rewrites-it-never-adds",
-    "reference/config#suggestionsauthored~2",
-    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2"
+    "guide/indexing#when-to-rebuild",
+    "guide/faq#three-sequences-that-are-easy-to-get-wrong",
+    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "reference/config#embed-false"
    ],
    "rankedIds": [
-    "reference/config#guardmode-guardsupportminidentifiers",
+    "guide/indexing#when-to-rebuild",
+    "guide/faq#three-sequences-that-are-easy-to-get-wrong",
+    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
     "reference/config#embed-false",
-    "reference/config#it-rewrites-it-never-adds",
-    "reference/config#suggestionsauthored~2",
-    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
-    "guide/panel#a-question-with-a-key-in-it",
-    "guide/troubleshooting#every-question-is-refused~2",
+    "reference/cli#embedder-question~3",
     "guide/indexing#vectors-are-quantised",
-    "guide/panel#hello"
+    "guide/indexing#a-second-index-to-measure-against~2"
    ],
    "lang": "English",
    "goldPages": [],
@@ -4702,27 +4695,27 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.5421962712569884,
-   "D": 0.5895950283426512,
+   "G": 0.488989383110202,
+   "D": 0.5186525108136026,
    "L": 0.4,
    "channel": "raw",
-   "gatePass": true,
+   "gatePass": false,
    "retrievedIds": [
-    "guide/faq#the-skills-docs-rag-and-docs-import~3",
-    "reference/skills#refreshing-them-after-an-upgrade",
+    "guide/production#",
     "guide/faq#how-do-i-get-started",
-    "reference/cli#update",
-    "guide#installing"
+    "guide/faq#how-do-i-get-started~2",
+    "guide/faq#how-do-i-get-started~3",
+    "guide/production#content-security-policy"
    ],
    "rankedIds": [
-    "guide/faq#the-skills-docs-rag-and-docs-import~3",
-    "reference/skills#refreshing-them-after-an-upgrade",
+    "guide/production#",
     "guide/faq#how-do-i-get-started",
-    "reference/cli#update",
-    "guide#installing",
-    "reference/config#parameters~4",
+    "guide/faq#how-do-i-get-started~2",
+    "guide/faq#how-do-i-get-started~3",
+    "guide/production#content-security-policy",
+    "guide#overview",
     "guide/credentials#",
-    "reference/config#uifablabel-uifabicon",
+    "reference/config#feedback",
     "guide/credentials#what-happens"
    ],
    "lang": "English",
@@ -4743,28 +4736,28 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.9166666666666666,
-   "D": 1,
-   "L": 0.6666666666666666,
+   "G": 0.8634436318766835,
+   "D": 0.9429248425022446,
+   "L": 0.625,
    "channel": "composed",
    "gatePass": true,
    "retrievedIds": [
-    "guide/production#cross-origin-feedback",
     "guide/production#make-it-same-origin",
-    "reference/config#budgetoneshotbelow-budgetrotateabove",
-    "reference/config#feedbackcomment",
-    "guide/production#upsert-on-messageid",
+    "guide/production#a-receiver",
+    "guide/production#cross-origin-feedback",
+    "reference/config#feedbackendpoint",
+    "guide/production#why-each-rule-is-there",
     "guide/production#the-body"
    ],
    "rankedIds": [
-    "guide/production#cross-origin-feedback",
     "guide/production#make-it-same-origin",
-    "reference/config#budgetoneshotbelow-budgetrotateabove",
-    "reference/config#feedbackcomment",
-    "guide/production#upsert-on-messageid",
-    "guide/free-tier#what-a-turn-costs",
-    "guide/why#what-it-costs",
-    "concepts/the-ladder#what-costs-a-provider-its-turn",
+    "guide/production#a-receiver",
+    "guide/production#cross-origin-feedback",
+    "reference/config#feedbackendpoint",
+    "guide/production#why-each-rule-is-there",
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "guide/free-tier#when-the-body-is-the-problem-not-the-model",
+    "guide/production#content-security-policy",
     "guide/production#the-body"
    ],
    "lang": "English",
@@ -4785,30 +4778,29 @@
    "scoped": false,
    "followUp": true,
    "depth": 3,
-   "G": 0.15889953404039947,
-   "D": 0.21186604538719928,
+   "G": 0.35508101886599436,
+   "D": 0.47344135848799246,
    "L": 0,
    "channel": "raw",
    "gatePass": false,
    "retrievedIds": [
-    "reference/cli#tune",
-    "reference/cli#lint",
-    "reference/cli#feedback~2",
-    "guide/evaluation#the-golden-set",
     "reference/cli#index",
+    "guide/indexing#",
+    "reference/cli#feedback~2",
+    "guide/philosophy#nothing-new-to-run",
+    "guide/production#ci-where-the-index-gets-built",
     "reference/cli#embedder-question"
    ],
    "rankedIds": [
-    "reference/cli#tune",
-    "reference/cli#lint",
-    "reference/cli#feedback~2",
-    "guide/evaluation#the-golden-set",
     "reference/cli#index",
-    "guide/evaluation#what-it-needs",
-    "guide/indexing#a-second-index-to-measure-against",
-    "reference/config#composer",
-    "reference/cli#embedder-question",
-    "reference/config#composereditlastonarrowup"
+    "guide/indexing#",
+    "reference/cli#feedback~2",
+    "guide/philosophy#nothing-new-to-run",
+    "guide/production#ci-where-the-index-gets-built",
+    "guide/indexing#~2",
+    "guide/indexing#built-site",
+    "guide/production#upsert-on-messageid",
+    "reference/cli#embedder-question"
    ],
    "lang": "Russian",
    "goldPages": [],

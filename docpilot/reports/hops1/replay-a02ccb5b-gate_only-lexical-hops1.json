@@ -1,0 +1,3728 @@
+{
+ "_comment": "Scored-turn replay of `docpilot eval --gate-only` at DOCPILOT_ANTECEDENT_HOPS=1, computed offline from the committed query-side embed cache. Not a CLI run: the CLI also embeds every PRIMING turn, and those vectors were never cached. See the header of scripts/replay-floor-hops1.mjs for why the priming cascade cannot move any number in this file at hops=1, and for how the replay is validated against the CLI.",
+ "meta": {
+  "instrument": "scripts/replay-floor-hops1.mjs (NOT `npx docpilot eval`)",
+  "channel": "lexical",
+  "antecedentHops": 1,
+  "gateOnly": true,
+  "lexicalOnly": true,
+  "indexHash": "a02ccb5b",
+  "chunkCount": 580,
+  "pages": 39,
+  "embedModel": "openai/text-embedding-3-small",
+  "dims": 1536,
+  "guard": {
+   "tau": 0.3,
+   "tauLexical": 0.3,
+   "wDense": 0.75,
+   "wLexical": 0.25,
+   "denseMode": "cosine",
+   "cosFloor": 0.44,
+   "cosCeil": 0.64,
+   "source": "provisional",
+   "calibratedAt": null,
+   "zexp": null,
+   "zexpSource": "closed-form",
+   "overRefusalUB95": null,
+   "gatePrecision": null
+  },
+  "guardMode": "off",
+  "levers": null,
+  "vocabHash": null,
+  "records": 96,
+  "embedCache": "/Users/olegponamarchuk/dev/universal-chat/fixtures/embed-cache/embed-65a72db3e95f0c2e",
+  "embedCacheKeys": 827,
+  "embedRequests": 0,
+  "networkRequests": 0,
+  "goldenFile": "/Users/olegponamarchuk/dev/docpilot/docpilot/golden.jsonl",
+  "ranAt": "2026-09-05T22:34:36.293Z",
+  "command": "replay-floor-hops1.mjs --channel=lexical --out=docpilot/reports/hops1/replay-a02ccb5b-gate_only-lexical-hops1.json",
+  "docpilotVersion": "1.4.0",
+  "node": "v26.8.1",
+  "script": "scripts/replay-floor-hops1.mjs"
+ },
+ "summary": {
+  "positives": 66,
+  "negatives": 30,
+  "retrievalF1": 0.26088726088726094,
+  "recall8": 0.6363636363636364,
+  "mrr": 0.5599927849927849
+ },
+ "rows": [
+  {
+   "id": "q-01",
+   "question": "What is the refusal gate?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "guide/why#why-the-gate-sits-on-the-retrieval-side-and-why-it-is-opt-in",
+    "concepts/the-gate#follow-ups",
+    "concepts/the-gate#follow-ups~2"
+   ],
+   "goldPages": [
+    "/concepts/the-gate",
+    "/guide/philosophy"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.8,
+    "r": 1,
+    "f1": 0.888888888888889
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-02",
+   "question": "What are the two channels the gate scores a question on?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#two-channels",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "guide/production#the-body",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#two-channels",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "guide/production#the-body",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "concepts/a-turn#2-is-it-a-question-at-all",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "concepts/the-gate#follow-ups~2"
+   ],
+   "goldPages": [
+    "/concepts/the-gate"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-03",
+   "question": "Is the free tier limited by requests or by tokens?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.8,
+   "D": 0,
+   "L": 0.8,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/free-tier#the-constraint-is-requests-not-tokens",
+    "guide/free-tier#",
+    "concepts/the-ladder#2-the-free-pool",
+    "guide/free-tier#when-the-body-is-the-problem-not-the-model",
+    "guide/free-tier#one-key-one-router-and-ten-models-if-you-ask"
+   ],
+   "rankedIds": [
+    "guide/free-tier#the-constraint-is-requests-not-tokens",
+    "guide/free-tier#",
+    "concepts/the-ladder#2-the-free-pool",
+    "guide/free-tier#when-the-body-is-the-problem-not-the-model",
+    "guide/free-tier#one-key-one-router-and-ten-models-if-you-ask",
+    "guide/free-tier#the-pool-asked-for-by-name",
+    "guide/free-tier#what-a-turn-costs",
+    "guide/free-tier#when-the-body-is-the-problem-not-the-model~2"
+   ],
+   "goldPages": [
+    "/guide/free-tier"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-04",
+   "question": "What does the docpilot index command do?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/skills#every-command-as-a-slash-command",
+    "reference/cli#slash-commands",
+    "guide/faq#the-commands~2",
+    "guide/faq#the-commands",
+    "reference/cli#slash-commands~2",
+    "guide/faq#doctor-what-ci-gates-on"
+   ],
+   "rankedIds": [
+    "reference/skills#every-command-as-a-slash-command",
+    "reference/cli#slash-commands",
+    "guide/faq#the-commands~2",
+    "guide/faq#the-commands",
+    "reference/cli#slash-commands~2",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3",
+    "guide/indexing#a-second-index-to-measure-against",
+    "install/web#the-index",
+    "guide/faq#doctor-what-ci-gates-on"
+   ],
+   "goldPages": [
+    "/reference/cli"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-05",
+   "question": "How do I install DocPilot in a VitePress site?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "install/vitepress#",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "guide/other-sites#the-index-does-not-need-a-site",
+    "install/vitepress#the-config",
+    "guide#overview~2"
+   ],
+   "rankedIds": [
+    "install/vitepress#",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "guide/other-sites#the-index-does-not-need-a-site",
+    "install/vitepress#the-config",
+    "guide#overview~2",
+    "guide/production#a-site-under-a-base-path",
+    "install#",
+    "install/vue#where-the-config-comes-from"
+   ],
+   "goldPages": [
+    "/guide",
+    "/install"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 0.5,
+    "f1": 0.28571428571428575
+   },
+   "recall8": 1,
+   "mrr": 0.2
+  },
+  {
+   "id": "q-06",
+   "question": "Where should the API key live?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/providers#where-the-key-lives",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "guide/indexing#mdx-and-specs",
+    "guide/i18n#the-keys~2",
+    "guide/panel#hello"
+   ],
+   "rankedIds": [
+    "guide/providers#where-the-key-lives",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "guide/indexing#mdx-and-specs",
+    "guide/i18n#the-keys~2",
+    "guide/i18n#two-selectors-one-key-space",
+    "guide/production#nginx~3",
+    "guide/faq#how-do-i-get-started~3",
+    "guide/panel#hello"
+   ],
+   "goldPages": [
+    "/guide/providers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-07",
+   "question": "What is the answer ladder?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-ladder#",
+    "concepts/the-ladder#4-the-hybrid-answer",
+    "guide/providers#two-keys-and-which-answers-first~2",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2"
+   ],
+   "rankedIds": [
+    "concepts/the-ladder#",
+    "concepts/the-ladder#4-the-hybrid-answer",
+    "guide/providers#two-keys-and-which-answers-first~2",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "concepts/the-ladder#what-never-happens",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "concepts/the-ladder#1-paid-providers-in-priority-order"
+   ],
+   "goldPages": [
+    "/concepts/the-ladder"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.8,
+    "r": 0.5,
+    "f1": 0.6153846153846154
+   },
+   "recall8": 0.5,
+   "mrr": 1
+  },
+  {
+   "id": "n-01",
+   "question": "What is the capital of France?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/evaluation#the-golden-set",
+    "reference/cli#split-identifiers"
+   ],
+   "rankedIds": [
+    "guide/evaluation#the-golden-set",
+    "reference/cli#split-identifiers"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-02",
+   "question": "How do I configure Algolia DocSearch crawling for my site?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.8,
+   "D": 0,
+   "L": 0.8,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/comparison#sources",
+    "guide/production#a-site-under-a-base-path",
+    "guide/comparison#architecture",
+    "install/docusaurus#options",
+    "reference/config#parameters~5",
+    "install/docusaurus#syntax-highlighting"
+   ],
+   "rankedIds": [
+    "guide/comparison#sources",
+    "guide/production#a-site-under-a-base-path",
+    "guide/comparison#architecture",
+    "install/docusaurus#options",
+    "reference/config#parameters~5",
+    "guide/other-sites#the-index-does-not-need-a-site",
+    "reference/theme#the-whole-set~2",
+    "guide/indexing#built-site",
+    "install/docusaurus#syntax-highlighting"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-03",
+   "question": "What does the docpilot index command do?",
+   "expect": "refuse:out-of-scope",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-dark-set",
+    "reference/theme#overriding",
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you"
+   ],
+   "rankedIds": [
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-dark-set",
+    "reference/theme#overriding",
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": true,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "q-08",
+   "question": "How much conversation memory does the assistant keep?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/a-turn#conversation-memory",
+    "concepts/a-turn#conversation-memory~2",
+    "guide/panel#past-conversations",
+    "guide/history#",
+    "install/react#keeping-it-in-step",
+    "guide/history#what-the-reader-sees"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#conversation-memory",
+    "concepts/a-turn#conversation-memory~2",
+    "guide/panel#past-conversations",
+    "guide/history#",
+    "install/react#keeping-it-in-step",
+    "guide/history#where",
+    "guide/panel#scoping-the-question",
+    "guide/panel#",
+    "guide/history#what-the-reader-sees",
+    "guide/panel#opening-it"
+   ],
+   "goldPages": [
+    "/concepts/a-turn"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.3333333333333333,
+    "r": 1,
+    "f1": 0.5
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-09",
+   "question": "What exactly is stored in conversation history, and where?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/history#what-is-stored",
+    "guide/history#",
+    "guide/panel#past-conversations",
+    "reference/config#historysaveonunload",
+    "reference/config#history",
+    "guide/history#what-the-reader-sees",
+    "reference/config#historyexportthread"
+   ],
+   "rankedIds": [
+    "guide/history#what-is-stored",
+    "guide/history#",
+    "guide/panel#past-conversations",
+    "reference/config#historysaveonunload",
+    "reference/config#history",
+    "concepts/guarantees#~2",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#when-the-docs-change",
+    "guide/history#what-the-reader-sees",
+    "reference/config#historyexportthread"
+   ],
+   "goldPages": [
+    "/guide/history"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.14285714285714285,
+    "r": 0.5,
+    "f1": 0.22222222222222224
+   },
+   "recall8": 0.5,
+   "mrr": 1
+  },
+  {
+   "id": "q-10",
+   "question": "What happens if a reader pastes an API key into the question box?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/credentials#what-happens",
+    "guide/credentials#",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/social-openers#what-happens",
+    "concepts/the-ladder#what-never-happens",
+    "guide/panel#hello"
+   ],
+   "rankedIds": [
+    "guide/credentials#what-happens",
+    "guide/credentials#",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/social-openers#what-happens",
+    "concepts/the-ladder#what-never-happens",
+    "concepts/a-turn#2-is-it-a-question-at-all",
+    "guide/history#what-the-reader-sees~2",
+    "guide/comparison#what-reaches-the-reader",
+    "guide/panel#hello"
+   ],
+   "goldPages": [
+    "/guide/credentials"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 0.5,
+    "f1": 0.25
+   },
+   "recall8": 0.5,
+   "mrr": 1
+  },
+  {
+   "id": "q-11",
+   "question": "Why are the vectors quantised, and what does it cost?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.6666666666666666,
+   "D": 0,
+   "L": 0.6666666666666666,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#vectors-are-quantised~2",
+    "guide/why#why-not-a-vector-database",
+    "guide/what-it-costs#what-a-question-costs-you",
+    "guide/why#what-it-costs"
+   ],
+   "rankedIds": [
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#vectors-are-quantised~2",
+    "guide/why#why-not-a-vector-database",
+    "guide/what-it-costs#what-a-question-costs-you",
+    "guide/why#what-it-costs",
+    "guide/free-tier#what-a-turn-costs",
+    "guide/production#serving-the-index",
+    "guide/what-it-costs#what-a-reader-downloads"
+   ],
+   "goldPages": [
+    "/guide/indexing"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-12",
+   "question": "How do I scope a question to part of the docs?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/skills#docs-rag~3",
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "guide/panel#scoping-the-question",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "guide/faq#the-skills-docs-rag-and-docs-import",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "rankedIds": [
+    "reference/skills#docs-rag~3",
+    "reference/skills#what-changed-in-docs-rag-this-release~2",
+    "guide/panel#scoping-the-question",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "guide/faq#the-skills-docs-rag-and-docs-import",
+    "reference/config#scope",
+    "reference/config#scopefilter",
+    "guide/faq#the-skills-docs-rag-and-docs-import~4",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "goldPages": [
+    "/guide/panel"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 0.3333333333333333
+  },
+  {
+   "id": "q-13",
+   "question": "What does the reader see when the assistant refuses?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#in-the-readers-language",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "guide/panel#when-it-refuses",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "rankedIds": [
+    "guide/panel#in-the-readers-language",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "guide/panel#when-it-refuses",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/comparison#what-reaches-the-reader",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "goldPages": [
+    "/guide/panel"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 0.3333333333333333
+  },
+  {
+   "id": "q-14",
+   "question": "What does the panel do if I just say hello?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.6666666666666666,
+   "D": 0,
+   "L": 0.6666666666666666,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#hello",
+    "guide/appearance#what-the-panels-chrome-does",
+    "guide/appearance#the-panel-wears-your-font~2",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "guide/philosophy#say-plainly-what-it-is-not",
+    "guide/panel#while-it-answers"
+   ],
+   "rankedIds": [
+    "guide/panel#hello",
+    "guide/appearance#what-the-panels-chrome-does",
+    "guide/appearance#the-panel-wears-your-font~2",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "guide/philosophy#say-plainly-what-it-is-not",
+    "reference/config#uipanel",
+    "guide/panel#while-it-answers",
+    "guide/social-openers#",
+    "guide/social-openers#why-it-exists"
+   ],
+   "goldPages": [
+    "/guide/social-openers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-15",
+   "question": "How does the i18n fallback work?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.6666666666666666,
+   "D": 0,
+   "L": 0.6666666666666666,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/i18n#fallback-per-leaf",
+    "guide/i18n#two-selectors-one-key-space",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#the-keys~3",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/i18n#the-keys",
+    "guide/i18n#interpolation"
+   ],
+   "rankedIds": [
+    "guide/i18n#fallback-per-leaf",
+    "guide/i18n#two-selectors-one-key-space",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#the-keys~3",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/i18n#the-keys~2",
+    "guide/i18n#the-shape",
+    "guide/i18n#",
+    "guide/i18n#the-keys",
+    "guide/i18n#interpolation"
+   ],
+   "goldPages": [
+    "/guide/i18n"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.14285714285714285,
+    "r": 1,
+    "f1": 0.25
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-16",
+   "question": "What is the provider chain and how does it pick a service?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/providers#name-nothing-the-provider-chain",
+    "guide/providers#what-each-provider-honours~3",
+    "reference/config#the-provider-chain~3",
+    "guide/troubleshooting#it-is-talking-to-a-provider-i-never-chose",
+    "reference/config#the-provider-chain"
+   ],
+   "rankedIds": [
+    "guide/providers#name-nothing-the-provider-chain",
+    "guide/providers#what-each-provider-honours~3",
+    "reference/config#the-provider-chain~3",
+    "guide/troubleshooting#it-is-talking-to-a-provider-i-never-chose",
+    "reference/config#the-provider-chain",
+    "concepts/the-ladder#1-paid-providers-in-priority-order",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "guide/providers#name-nothing-the-provider-chain~2"
+   ],
+   "goldPages": [
+    "/guide/providers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "n-04",
+   "question": "How do I use the docpilot deploy command?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#slash-commands~2",
+    "reference/skills#every-command-as-a-slash-command",
+    "reference/cli#slash-commands",
+    "guide/faq#the-commands~2",
+    "guide/faq#the-commands",
+    "guide/faq#doctor-what-ci-gates-on"
+   ],
+   "rankedIds": [
+    "reference/cli#slash-commands~2",
+    "reference/skills#every-command-as-a-slash-command",
+    "reference/cli#slash-commands",
+    "guide/faq#the-commands~2",
+    "guide/faq#the-commands",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "guide/troubleshooting#",
+    "guide/why#why-not-a-vector-database",
+    "guide/faq#doctor-what-ci-gates-on"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-05",
+   "question": "How do I write a Kubernetes admission webhook?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.25,
+   "D": 0,
+   "L": 0.25,
+   "gatePass": false,
+   "retrievedIds": [
+    "reference/cli#tune-writes~3",
+    "reference/cli#tune-writes~2",
+    "guide/evaluation#a-narrowed-sweep-writes-no-answer-only-a-report",
+    "reference/highlighting#both-colour-schemes",
+    "guide/appearance#syntax-highlighting",
+    "reference/cli#the-step-everyone-forgets"
+   ],
+   "rankedIds": [
+    "reference/cli#tune-writes~3",
+    "reference/cli#tune-writes~2",
+    "guide/evaluation#a-narrowed-sweep-writes-no-answer-only-a-report",
+    "reference/highlighting#both-colour-schemes",
+    "guide/appearance#syntax-highlighting",
+    "reference/config#suggestionsauthored",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "reference/skills#refreshing-them-after-an-upgrade",
+    "reference/cli#the-step-everyone-forgets"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-06",
+   "question": "Where should the API key live?",
+   "expect": "refuse:out-of-scope",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.3333333333333333,
+   "D": 0,
+   "L": 0.3333333333333333,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/history#two-tabs",
+    "guide/history#where",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#what-is-stored"
+   ],
+   "rankedIds": [
+    "guide/history#two-tabs",
+    "guide/history#where",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#what-is-stored"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": true,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "q-17",
+   "question": "What does DocPilot guarantee about every answer?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/guarantees#",
+    "concepts/guarantees#~2",
+    "guide/why#why-not-a-hosted-answer-service",
+    "guide/troubleshooting#every-question-is-refused~2",
+    "guide/why#what-it-costs"
+   ],
+   "rankedIds": [
+    "concepts/guarantees#",
+    "concepts/guarantees#~2",
+    "guide/why#why-not-a-hosted-answer-service",
+    "guide/troubleshooting#every-question-is-refused~2",
+    "guide/why#what-it-costs",
+    "reference/skills#every-command-as-a-slash-command",
+    "guide/comparison#what-docpilot-is-worse-at",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3"
+   ],
+   "goldPages": [
+    "/concepts/guarantees"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-18",
+   "question": "How does retrieval fuse its two channels?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#two-channels",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "guide/evaluation#bench-two-retrieval-configurations"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#two-channels",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "guide/evaluation#bench-two-retrieval-configurations",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/free-tier#what-a-turn-costs"
+   ],
+   "goldPages": [
+    "/concepts/a-turn"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 0.5
+  },
+  {
+   "id": "q-19",
+   "question": "Why is the import allowlist a security boundary?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "reference/skills#docs-import",
+    "guide/faq#the-skills-docs-rag-and-docs-import~3",
+    "reference/cli#import",
+    "guide/credentials#this-is-not-a-security-boundary"
+   ],
+   "rankedIds": [
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "reference/skills#docs-import",
+    "guide/faq#the-skills-docs-rag-and-docs-import~3",
+    "reference/cli#import",
+    "guide/credentials#this-is-not-a-security-boundary",
+    "guide/imported-pages#importing-one",
+    "reference/config#sources",
+    "guide/production#content-security-policy"
+   ],
+   "goldPages": [
+    "/guide/imported-pages"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-20",
+   "question": "Which blocks will the chunker never cut through?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#what-moves-when-you-upgrade",
+    "concepts/the-ladder#what-never-happens",
+    "reference/config#it-rewrites-it-never-adds",
+    "guide/troubleshooting#it-is-talking-to-a-provider-i-never-chose"
+   ],
+   "rankedIds": [
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#what-moves-when-you-upgrade",
+    "concepts/the-ladder#what-never-happens",
+    "reference/config#it-rewrites-it-never-adds",
+    "guide/troubleshooting#it-is-talking-to-a-provider-i-never-chose",
+    "concepts/a-turn#conversation-memory",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "guide/production#docker"
+   ],
+   "goldPages": [
+    "/guide/indexing"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-21",
+   "question": "How do I quote a passage into the composer?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.6666666666666666,
+   "D": 0,
+   "L": 0.6666666666666666,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#quoting-a-passage",
+    "guide/panel#the-composer",
+    "guide/panel#reading-the-answer",
+    "guide/panel#opening-it",
+    "guide/panel#when-something-is-wrong",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/panel#scoping-the-question"
+   ],
+   "rankedIds": [
+    "guide/panel#quoting-a-passage",
+    "guide/panel#the-composer",
+    "guide/panel#reading-the-answer",
+    "guide/panel#opening-it",
+    "guide/panel#when-something-is-wrong",
+    "guide/panel#telling-you-it-was-wrong",
+    "guide/panel#scoping-the-question",
+    "guide/panel#in-the-readers-language",
+    "guide/panel#a-question-with-a-key-in-it"
+   ],
+   "goldPages": [
+    "/guide/panel"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.14285714285714285,
+    "r": 1,
+    "f1": 0.25
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-22",
+   "question": "How do I mount DocPilot in React?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.3333333333333333,
+   "D": 0,
+   "L": 0.3333333333333333,
+   "gatePass": true,
+   "retrievedIds": [
+    "install/react#mounting",
+    "install/typescript#the-types-you-will-actually-name",
+    "install/react#",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "guide/comparison#what-docpilot-is-worse-at",
+    "install/react#why-it-imports-a-prebuilt-bundle"
+   ],
+   "rankedIds": [
+    "install/react#mounting",
+    "install/typescript#the-types-you-will-actually-name",
+    "install/react#",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "guide/comparison#what-docpilot-is-worse-at",
+    "install/vue#mounting",
+    "guide/free-tier#what-docpilot-does-without-being-asked",
+    "guide/providers#a-knob-docpilot-does-not-name",
+    "install/react#why-it-imports-a-prebuilt-bundle"
+   ],
+   "goldPages": [
+    "/install/react"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-23",
+   "question": "Which syntax highlighter does DocPilot use by default?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/appearance#syntax-highlighting",
+    "reference/highlighting#",
+    "install/typescript#a-highlighter-of-your-own",
+    "install/docusaurus#syntax-highlighting",
+    "reference/highlighting#choosing-one"
+   ],
+   "rankedIds": [
+    "guide/appearance#syntax-highlighting",
+    "reference/highlighting#",
+    "install/typescript#a-highlighter-of-your-own",
+    "install/docusaurus#syntax-highlighting",
+    "reference/highlighting#choosing-one",
+    "install/react#the-rest-of-the-options",
+    "guide/faq#5-syntax-highlighting",
+    "install/vue#mounting"
+   ],
+   "goldPages": [
+    "/reference/highlighting"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 0.2
+  },
+  {
+   "id": "q-24",
+   "question": "Почему шлюз отказывает до вызова модели?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [],
+   "rankedIds": [],
+   "goldPages": [
+    "/guide/philosophy",
+    "/concepts/the-gate"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-25",
+   "question": "What is topK and what is its default?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#topk~2",
+    "reference/config#topk",
+    "guide/where-it-goes#the-one-thing-with-no-default",
+    "reference/cli#what-it-may-never-touch~2",
+    "reference/cli#what-it-may-never-touch~3",
+    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus"
+   ],
+   "rankedIds": [
+    "reference/config#topk~2",
+    "reference/config#topk",
+    "guide/where-it-goes#the-one-thing-with-no-default",
+    "reference/cli#what-it-may-never-touch~2",
+    "reference/cli#what-it-may-never-touch~3",
+    "reference/config#all-defaults~2",
+    "reference/config#if-your-config-already-sets-topk",
+    "reference/config#all-defaults~3",
+    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus"
+   ],
+   "goldPages": [
+    "/reference/config"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.3333333333333333,
+    "r": 1,
+    "f1": 0.5
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-26",
+   "question": "What is the free pool and how does rotation inside it work?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.8,
+   "D": 0,
+   "L": 0.8,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-ladder#2-the-free-pool",
+    "guide/providers#reasoning-on-a-rotating-pool",
+    "guide/free-tier#the-pool-asked-for-by-name",
+    "concepts/a-turn#5-tools-if-the-model-wants-more",
+    "guide/free-tier#what-docpilot-does-without-being-asked"
+   ],
+   "rankedIds": [
+    "concepts/the-ladder#2-the-free-pool",
+    "guide/providers#reasoning-on-a-rotating-pool",
+    "guide/free-tier#the-pool-asked-for-by-name",
+    "concepts/a-turn#5-tools-if-the-model-wants-more",
+    "guide/free-tier#what-docpilot-does-without-being-asked",
+    "reference/config#free-and-auto-ask-for-more-than-silence-does",
+    "guide/providers#asking-for-the-pool",
+    "guide/panel#showing-the-reader-how-it-works"
+   ],
+   "goldPages": [
+    "/concepts/the-ladder"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "n-07",
+   "question": "What does chat.retryDelay default to?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.5,
+   "D": 0,
+   "L": 0.5,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#all-defaults~3",
+    "reference/config#all-defaults",
+    "guide/where-it-goes#the-one-thing-with-no-default",
+    "install/vitepress#the-theme",
+    "guide/appearance#five-entry-points",
+    "reference/config#all-defaults~2",
+    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus"
+   ],
+   "rankedIds": [
+    "reference/config#all-defaults~3",
+    "reference/config#all-defaults",
+    "guide/where-it-goes#the-one-thing-with-no-default",
+    "install/vitepress#the-theme",
+    "guide/appearance#five-entry-points",
+    "guide/faq#3-your-own-styles-all-the-way-down",
+    "reference/highlighting#both-colour-schemes",
+    "guide#wiring-the-theme",
+    "reference/config#all-defaults~2",
+    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-08",
+   "question": "How do I bake sourdough bread?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.3333333333333333,
+   "D": 0,
+   "L": 0.3333333333333333,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/production#a-site-under-a-base-path",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3",
+    "reference/config#suggestionsauthored~2",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "reference/config#parameters~4"
+   ],
+   "rankedIds": [
+    "guide/production#a-site-under-a-base-path",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3",
+    "reference/config#suggestionsauthored~2",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "reference/config#parameters~4",
+    "guide/free-tier#when-the-build-runs-out~3",
+    "guide/free-tier#when-the-build-runs-out~2",
+    "guide/other-sites#the-base-invariant",
+    "guide/other-sites#the-three-selectors"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-09",
+   "question": "Why are the vectors quantised?",
+   "expect": "refuse:out-of-scope",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [],
+   "rankedIds": [],
+   "goldPages": [],
+   "scoredAsNegative": true,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-10",
+   "question": "What is the Mintlify CLI command for a local preview?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.4,
+   "D": 0,
+   "L": 0.4,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#",
+    "reference/cli#slash-commands",
+    "reference/skills#every-command-as-a-slash-command",
+    "guide/faq#the-commands",
+    "guide/providers#a-local-model-that-thinks"
+   ],
+   "rankedIds": [
+    "reference/cli#",
+    "reference/cli#slash-commands",
+    "reference/skills#every-command-as-a-slash-command",
+    "guide/faq#the-commands",
+    "guide/providers#a-local-model-that-thinks",
+    "guide/faq#what-the-cli-knows-and-you-do-not",
+    "guide/providers#a-local-server-is-never-assumed",
+    "reference/cli#slash-commands~2"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "q-27",
+   "question": "What happens to retrieval when the embedder is unreachable?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "reference/cli#embedder-question~2",
+    "concepts/the-ladder#what-never-happens",
+    "guide/providers#no-embedder-at-all",
+    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate"
+   ],
+   "rankedIds": [
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "reference/cli#embedder-question~2",
+    "concepts/the-ladder#what-never-happens",
+    "guide/providers#no-embedder-at-all",
+    "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "reference/cli#embedder-question~4",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "goldPages": [
+    "/concepts/the-ladder"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-28",
+   "question": "What is a follow-up composed against?",
+   "expect": "answer",
+   "depth": 1,
+   "antecedent": "How much conversation memory does the assistant keep?",
+   "composedQuery": "How much conversation memory does the assistant keep?\nWhat is a follow-up composed against?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "concepts/the-gate#follow-ups~4",
+    "concepts/the-gate#follow-ups",
+    "concepts/a-turn#conversation-memory~2",
+    "concepts/a-turn#conversation-memory"
+   ],
+   "rankedIds": [
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "concepts/the-gate#follow-ups~4",
+    "concepts/the-gate#follow-ups",
+    "concepts/a-turn#conversation-memory~2",
+    "concepts/a-turn#conversation-memory",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "guide/evaluation#the-golden-set~2",
+    "guide/indexing#a-second-index-to-measure-against"
+   ],
+   "goldPages": [
+    "/concepts/a-turn"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 0.25
+  },
+  {
+   "id": "q-29",
+   "question": "What does the calibrate command measure, and what may never move it?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#calibrate~3",
+    "reference/cli#what-it-may-never-touch",
+    "guide/evaluation#calibrate-before-you-ship",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "reference/cli#what-it-may-never-touch~2"
+   ],
+   "rankedIds": [
+    "reference/cli#calibrate~3",
+    "reference/cli#what-it-may-never-touch",
+    "guide/evaluation#calibrate-before-you-ship",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "reference/cli#what-it-may-never-touch~2",
+    "reference/cli#calibrate~2",
+    "reference/cli#slash-commands",
+    "reference/cli#calibrate"
+   ],
+   "goldPages": [
+    "/reference/cli",
+    "/guide/evaluation"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-30",
+   "question": "Why are the skills copied into my project rather than imported?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/skills#why-they-are-copied",
+    "guide/faq#the-skills-docs-rag-and-docs-import",
+    "guide/faq#the-skills-docs-rag-and-docs-import~3",
+    "reference/skills#docs-import",
+    "reference/cli#slash-commands~2",
+    "reference/skills#where-they-go"
+   ],
+   "rankedIds": [
+    "reference/skills#why-they-are-copied",
+    "guide/faq#the-skills-docs-rag-and-docs-import",
+    "guide/faq#the-skills-docs-rag-and-docs-import~3",
+    "reference/skills#docs-import",
+    "reference/cli#slash-commands~2",
+    "reference/cli#update",
+    "guide/imported-pages#its-path-is-an-id-not-a-link",
+    "guide/faq#the-skills-docs-rag-and-docs-import~4",
+    "reference/skills#where-they-go"
+   ],
+   "goldPages": [
+    "/reference/skills"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-31",
+   "question": "Which two theme tokens does the stylesheet move on its own?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#",
+    "reference/theme#the-whole-set~2",
+    "reference/theme#overriding",
+    "reference/theme#the-whole-set"
+   ],
+   "rankedIds": [
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#",
+    "reference/theme#the-whole-set~2",
+    "reference/theme#overriding",
+    "reference/theme#the-whole-set",
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-dark-set"
+   ],
+   "goldPages": [
+    "/reference/theme"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-32",
+   "question": "Что хранится в истории переписки и где?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [],
+   "rankedIds": [],
+   "goldPages": [
+    "/guide/history"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "n-11",
+   "question": "What is the default value of guard.tau before calibration?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#guardtau-guardtaulexical",
+    "reference/config#all-defaults",
+    "guide#wiring-the-theme",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "reference/config#all-defaults~2"
+   ],
+   "rankedIds": [
+    "reference/config#guardtau-guardtaulexical",
+    "reference/config#all-defaults",
+    "guide#wiring-the-theme",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3",
+    "reference/cli#calibrate",
+    "guide/faq#what-the-cli-knows-and-you-do-not",
+    "reference/config#all-defaults~2"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-12",
+   "question": "How do I set up a Terraform remote backend on S3?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.6,
+   "D": 0,
+   "L": 0.6,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide#nothing-set-up-yet",
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "concepts/the-gate#follow-ups",
+    "guide/evaluation#how-much-of-the-set-to-run"
+   ],
+   "rankedIds": [
+    "guide#nothing-set-up-yet",
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "concepts/the-gate#follow-ups",
+    "guide/evaluation#how-much-of-the-set-to-run",
+    "guide/evaluation#the-golden-set~4",
+    "reference/theme#the-whole-set~2",
+    "reference/theme#the-dark-set~2"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-13",
+   "question": "How does the i18n fallback work?",
+   "expect": "refuse:out-of-scope",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.3333333333333333,
+   "D": 0,
+   "L": 0.3333333333333333,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#~2",
+    "guide/indexing#vectors-are-quantised"
+   ],
+   "rankedIds": [
+    "guide/indexing#~2",
+    "guide/indexing#vectors-are-quantised"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": true,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "q-33",
+   "question": "What does the credential check deliberately not match, and why?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/credentials#what-happens",
+    "concepts/a-turn#1-the-credential-check",
+    "guide/credentials#",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "concepts/a-turn#2-is-it-a-question-at-all"
+   ],
+   "rankedIds": [
+    "guide/credentials#what-happens",
+    "concepts/a-turn#1-the-credential-check",
+    "guide/credentials#",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "reference/config#chat-false",
+    "reference/config#promptoverride-promptextend",
+    "guide/free-tier#the-zero-allowance-deployment",
+    "concepts/a-turn#2-is-it-a-question-at-all"
+   ],
+   "goldPages": [
+    "/guide/credentials"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-34",
+   "question": "Why does the fusion weight both channels equally when the gate does not?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#two-channels",
+    "concepts/the-gate#follow-ups~4",
+    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "concepts/the-gate#two-channels",
+    "concepts/the-gate#follow-ups~4",
+    "guide/evaluation#it-sweeps-the-window-too-not-only-the-threshold",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "guide/faq#doctor-what-ci-gates-on",
+    "guide/production#the-body",
+    "concepts/the-gate#follow-ups~2"
+   ],
+   "goldPages": [
+    "/concepts/a-turn",
+    "/concepts/the-gate"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.4,
+    "r": 1,
+    "f1": 0.5714285714285715
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-35",
+   "question": "And what does the manifest record about the embedding model?",
+   "expect": "answer",
+   "depth": 1,
+   "antecedent": "What are the two channels the gate scores a question on?",
+   "composedQuery": "What are the two channels the gate scores a question on?\nAnd what does the manifest record about the embedding model?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#when-to-rebuild",
+    "guide/free-tier#when-the-body-is-the-problem-not-the-model~2",
+    "reference/config#parameters~4",
+    "guide/providers#openrouter-with-nothing-named",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index"
+   ],
+   "rankedIds": [
+    "guide/indexing#when-to-rebuild",
+    "guide/free-tier#when-the-body-is-the-problem-not-the-model~2",
+    "reference/config#parameters~4",
+    "guide/providers#openrouter-with-nothing-named",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index",
+    "reference/cli#tune-writes~2",
+    "guide/evaluation#calibrate-before-you-ship",
+    "reference/config#parameters~3"
+   ],
+   "goldPages": [
+    "/concepts/the-gate"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-36",
+   "question": "What does a --no-embed index cost me, in one number?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/what-it-costs#",
+    "guide/what-it-costs#the-one-number-to-watch",
+    "guide/indexing#~2",
+    "guide/production#serving-the-index",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~4",
+    "guide/what-it-costs#what-a-reader-downloads"
+   ],
+   "rankedIds": [
+    "guide/what-it-costs#",
+    "guide/what-it-costs#the-one-number-to-watch",
+    "guide/indexing#~2",
+    "guide/production#serving-the-index",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~4",
+    "guide/indexing#a-second-index-to-measure-against",
+    "reference/cli#index",
+    "reference/cli#what-it-costs",
+    "guide/what-it-costs#what-a-reader-downloads",
+    "reference/cli#embedder-question"
+   ],
+   "goldPages": [
+    "/concepts/the-ladder",
+    "/reference/cli"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0.5,
+   "mrr": 0.14285714285714285
+  },
+  {
+   "id": "q-37",
+   "question": "How does the allowlist defeat a lookalike origin?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "guide/imported-pages#its-path-is-an-id-not-a-link",
+    "guide/imported-pages#importing-one",
+    "guide/imported-pages#what-an-imported-page-is",
+    "guide/imported-pages#"
+   ],
+   "rankedIds": [
+    "guide/imported-pages#the-allowlist-is-a-security-boundary",
+    "guide/imported-pages#its-path-is-an-id-not-a-link",
+    "guide/imported-pages#importing-one",
+    "guide/imported-pages#what-an-imported-page-is",
+    "guide/imported-pages#"
+   ],
+   "goldPages": [
+    "/guide/imported-pages"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-38",
+   "question": "What is reserved so a repaired chunk cannot be re-cut?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/indexing#a-second-index-to-measure-against"
+   ],
+   "rankedIds": [
+    "guide/indexing#blocks-a-chunk-is-never-cut-through",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/indexing#",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/indexing#a-second-index-to-measure-against",
+    "guide/indexing#vectors-are-quantised",
+    "guide/indexing#what-moves-when-you-upgrade",
+    "guide/indexing#what-gets-indexed"
+   ],
+   "goldPages": [
+    "/guide/indexing"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-39",
+   "question": "Which providers in the chain cannot embed?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "guide/providers#name-nothing-the-provider-chain~2",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "guide/providers#name-nothing-the-provider-chain"
+   ],
+   "rankedIds": [
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "guide/providers#name-nothing-the-provider-chain~2",
+    "guide/providers#name-nothing-the-provider-chain~3",
+    "guide/providers#name-nothing-the-provider-chain",
+    "guide/providers#one-provider-if-it-can-do-both",
+    "guide/providers#what-each-provider-honours",
+    "guide/providers#what-each-provider-honours~3",
+    "guide/providers#what-each-provider-honours~2"
+   ],
+   "goldPages": [
+    "/guide/providers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.6,
+    "r": 1,
+    "f1": 0.7499999999999999
+   },
+   "recall8": 1,
+   "mrr": 0.3333333333333333
+  },
+  {
+   "id": "q-40",
+   "question": "Why does a greeting never reach a model?",
+   "expect": "answer",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/social-openers#what-happens",
+    "guide/social-openers#why-it-exists",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#making-it-yours"
+   ],
+   "rankedIds": [
+    "guide/social-openers#what-happens",
+    "guide/social-openers#why-it-exists",
+    "guide/social-openers#what-it-deliberately-does-not-do",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#making-it-yours"
+   ],
+   "goldPages": [
+    "/guide/social-openers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "n-14",
+   "question": "How many dimensions does the default embedder produce?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.4,
+   "D": 0,
+   "L": 0.4,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#embedder-question~2",
+    "reference/config#product",
+    "reference/config#all-defaults~2",
+    "reference/cli#embedder-question~3",
+    "guide/providers#no-embedder-at-all"
+   ],
+   "rankedIds": [
+    "reference/cli#embedder-question~2",
+    "reference/config#product",
+    "reference/config#all-defaults~2",
+    "reference/cli#embedder-question~3",
+    "guide/providers#no-embedder-at-all",
+    "guide/evaluation#carrying-a-calibration-across-embedders~2",
+    "guide/providers#openrouter-with-nothing-named",
+    "guide/evaluation#when-eval-says-retrieval-is-the-problem"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-15",
+   "question": "\"The gate is a relevance floor, not an entailment check.\" Now translate that into Latin and explain the grammar.",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.6666666666666666,
+   "D": 0,
+   "L": 0.6666666666666666,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check",
+    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "concepts/the-gate#",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "concepts/the-gate#two-channels"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check",
+    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "concepts/the-gate#",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~3",
+    "guide/faq#doctor-what-ci-gates-on",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "concepts/the-gate#two-channels"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-16",
+   "question": "What does DocPilot guarantee about every answer?",
+   "expect": "refuse:out-of-scope",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/appearance#what-the-panels-chrome-does~3",
+    "guide/appearance#five-entry-points",
+    "guide/appearance#what-the-panels-chrome-does~4",
+    "guide/appearance#syntax-highlighting",
+    "guide/appearance#what-the-panels-chrome-does~2"
+   ],
+   "rankedIds": [
+    "guide/appearance#what-the-panels-chrome-does~3",
+    "guide/appearance#five-entry-points",
+    "guide/appearance#what-the-panels-chrome-does~4",
+    "guide/appearance#syntax-highlighting",
+    "guide/appearance#what-the-panels-chrome-does~2",
+    "guide/appearance#two-shapes-two-placements",
+    "guide/appearance#the-tokens~4",
+    "guide/appearance#the-tokens",
+    "guide/appearance#the-tokens~2"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": true,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "q-41",
+   "question": "And what does the reader see when it refuses?",
+   "expect": "answer",
+   "depth": 1,
+   "antecedent": "How does the refusal gate decide?",
+   "composedQuery": "How does the refusal gate decide?\nAnd what does the reader see when it refuses?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/comparison#what-reaches-the-reader",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "rankedIds": [
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/comparison#what-reaches-the-reader",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+    "guide/history#what-the-reader-sees~2",
+    "guide/history#what-the-reader-sees",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "goldPages": [
+    "/guide/panel"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-42",
+   "question": "And which of them can embed?",
+   "expect": "answer",
+   "depth": 1,
+   "antecedent": "Which providers can answer questions?",
+   "composedQuery": "Which providers can answer questions?\nAnd which of them can embed?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/config#embed-false~2",
+    "reference/config#embed",
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2"
+   ],
+   "rankedIds": [
+    "reference/config#embed-false~2",
+    "reference/config#embed",
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "reference/cli#embedder-question",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "reference/cli#embedder-question~3"
+   ],
+   "goldPages": [
+    "/guide/providers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-43",
+   "question": "How much of it survives a reload?",
+   "expect": "answer",
+   "depth": 1,
+   "antecedent": "Where does the panel keep the conversation history?",
+   "composedQuery": "Where does the panel keep the conversation history?\nHow much of it survives a reload?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/history#what-the-reader-sees~2",
+    "reference/config#composerdeeplink",
+    "reference/config#composerdraft",
+    "guide/other-sites#what-a-host-actually-supplies",
+    "guide/panel#while-it-answers~2"
+   ],
+   "rankedIds": [
+    "guide/history#what-the-reader-sees~2",
+    "reference/config#composerdeeplink",
+    "reference/config#composerdraft",
+    "guide/other-sites#what-a-host-actually-supplies",
+    "guide/panel#while-it-answers~2",
+    "reference/cli#tune-writes~3",
+    "guide/panel#while-it-answers",
+    "guide/providers#a-knob-docpilot-does-not-name",
+    "reference/cli#the-step-everyone-forgets"
+   ],
+   "goldPages": [
+    "/guide/history"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-44",
+   "question": "And what makes it stop?",
+   "expect": "answer",
+   "depth": 1,
+   "antecedent": "What is the answer ladder?",
+   "composedQuery": "What is the answer ladder?\nAnd what makes it stop?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "concepts/the-ladder#what-costs-a-provider-its-turn",
+    "reference/config#chattopp-chatseed",
+    "reference/config#parameters~3"
+   ],
+   "rankedIds": [
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "concepts/the-ladder#what-costs-a-provider-its-turn",
+    "reference/config#chattopp-chatseed",
+    "reference/config#parameters~3",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/panel#while-it-answers~2",
+    "concepts/the-gate#follow-ups"
+   ],
+   "goldPages": [
+    "/concepts/the-ladder"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 0.3333333333333333
+  },
+  {
+   "id": "q-45",
+   "question": "And which language does a reader get when nobody translated theirs?",
+   "expect": "answer",
+   "depth": 1,
+   "antecedent": "How do I translate the panel into another language?",
+   "composedQuery": "How do I translate the panel into another language?\nAnd which language does a reader get when nobody translated theirs?",
+   "channel": "raw",
+   "G": 0.8,
+   "D": 0,
+   "L": 0.8,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#in-the-readers-language",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/social-openers#making-it-yours"
+   ],
+   "rankedIds": [
+    "guide/panel#in-the-readers-language",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "reference/config#parameters~5",
+    "guide/history#what-the-reader-sees",
+    "guide/what-it-costs#what-a-reader-downloads",
+    "guide/social-openers#making-it-yours"
+   ],
+   "goldPages": [
+    "/guide/i18n"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-46",
+   "question": "And what does the panel do when it runs out?",
+   "expect": "answer",
+   "depth": 1,
+   "antecedent": "What does the free tier actually meter?",
+   "composedQuery": "What does the free tier actually meter?\nAnd what does the panel do when it runs out?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/free-tier#when-it-runs-out",
+    "guide/troubleshooting#the-panel-is-not-on-the-page-at-all",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "guide/panel#the-empty-panel",
+    "guide/panel#working-the-thread"
+   ],
+   "rankedIds": [
+    "guide/free-tier#when-it-runs-out",
+    "guide/troubleshooting#the-panel-is-not-on-the-page-at-all",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "guide/panel#the-empty-panel",
+    "guide/panel#working-the-thread",
+    "guide/free-tier#when-the-build-runs-out~3",
+    "guide/i18n#the-keys~2",
+    "install/javascript#mounting"
+   ],
+   "goldPages": [
+    "/guide/free-tier"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "n-17",
+   "question": "How do I add a cross-encoder reranker after the RRF fusion?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.4,
+   "D": 0,
+   "L": 0.4,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "reference/config#it-rewrites-it-never-adds",
+    "guide/comparison#what-each-of-them-publishes~2",
+    "guide#installing",
+    "guide/faq#how-do-i-get-started"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "reference/config#it-rewrites-it-never-adds",
+    "guide/comparison#what-each-of-them-publishes~2",
+    "guide#installing",
+    "guide/faq#how-do-i-get-started",
+    "install#installing-it",
+    "guide/comparison#architecture",
+    "reference/config#topk~2"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-18",
+   "question": "Which reranking model does the package ship?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/evaluation#calibrate-before-you-ship",
+    "reference/config#chatmodel",
+    "guide/free-tier#one-key-one-router-and-ten-models-if-you-ask",
+    "install#installing-it",
+    "reference/config#chatmodels~2"
+   ],
+   "rankedIds": [
+    "guide/evaluation#calibrate-before-you-ship",
+    "reference/config#chatmodel",
+    "guide/free-tier#one-key-one-router-and-ten-models-if-you-ask",
+    "install#installing-it",
+    "reference/config#chatmodels~2",
+    "install/typescript#",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-19",
+   "question": "How do I let a reader upload a PDF into the panel?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.4,
+   "D": 0,
+   "L": 0.4,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#the-empty-panel",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/history#what-the-reader-sees",
+    "install/javascript#mounting",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up"
+   ],
+   "rankedIds": [
+    "guide/panel#the-empty-panel",
+    "guide/panel#showing-the-reader-how-it-works",
+    "guide/history#what-the-reader-sees",
+    "install/javascript#mounting",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "guide/what-it-costs#what-a-reader-downloads",
+    "guide/i18n#",
+    "guide/comparison#what-reaches-the-reader",
+    "guide/i18n#the-shape"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-20",
+   "question": "How do I make the panel answer from two indexes at once?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index",
+    "concepts/the-ladder#4-the-hybrid-answer",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/panel#while-it-answers"
+   ],
+   "rankedIds": [
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index",
+    "concepts/the-ladder#4-the-hybrid-answer",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/panel#while-it-answers",
+    "guide/evaluation#bench-two-retrieval-configurations",
+    "guide/panel#while-it-answers~2",
+    "guide/troubleshooting#the-panel-is-not-on-the-page-at-all"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-21",
+   "question": "How do I fine-tune the embedding model on my own corpus?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/free-tier#when-the-body-is-the-problem-not-the-model~2",
+    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus",
+    "reference/cli#embedder-question~3",
+    "guide/evaluation#calibrate-before-you-ship",
+    "guide/providers#no-embedder-at-all"
+   ],
+   "rankedIds": [
+    "guide/free-tier#when-the-body-is-the-problem-not-the-model~2",
+    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus",
+    "reference/cli#embedder-question~3",
+    "guide/evaluation#calibrate-before-you-ship",
+    "guide/providers#no-embedder-at-all",
+    "guide/why#what-it-costs",
+    "reference/cli#embedder-question~4",
+    "guide/faq#what-the-cli-knows-and-you-do-not"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-22",
+   "question": "How do I stream reader questions into a Slack channel?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.6,
+   "D": 0,
+   "L": 0.6,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#in-the-readers-language",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "concepts/the-gate#two-channels",
+    "guide/comparison#what-reaches-the-reader",
+    "guide/credentials#",
+    "guide/credentials#what-happens"
+   ],
+   "rankedIds": [
+    "guide/panel#in-the-readers-language",
+    "guide/what-it-costs#what-the-reader-gets-for-it",
+    "concepts/the-gate#two-channels",
+    "guide/comparison#what-reaches-the-reader",
+    "guide/credentials#",
+    "guide/history#what-the-reader-sees",
+    "concepts/a-turn#2-is-it-a-question-at-all",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "guide/credentials#what-happens"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-23",
+   "question": "How do I make the panel speak the answer out loud?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.5,
+   "D": 0,
+   "L": 0.5,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#while-it-answers~2",
+    "guide/panel#while-it-answers",
+    "guide/troubleshooting#the-panel-is-not-on-the-page-at-all",
+    "concepts/the-ladder#4-the-hybrid-answer",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3"
+   ],
+   "rankedIds": [
+    "guide/panel#while-it-answers~2",
+    "guide/panel#while-it-answers",
+    "guide/troubleshooting#the-panel-is-not-on-the-page-at-all",
+    "concepts/the-ladder#4-the-hybrid-answer",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~3"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-24",
+   "question": "How do I index a Notion workspace with docpilot?",
+   "expect": "refuse:no-evidence",
+   "depth": 0,
+   "antecedent": null,
+   "composedQuery": null,
+   "channel": "raw",
+   "G": 0.5,
+   "D": 0,
+   "L": 0.5,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#a-second-index-to-measure-against",
+    "reference/cli#index",
+    "install/web#the-index",
+    "guide/comparison#what-docpilot-is-worse-at",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "reference/cli#embedder-question"
+   ],
+   "rankedIds": [
+    "guide/indexing#a-second-index-to-measure-against",
+    "reference/cli#index",
+    "install/web#the-index",
+    "guide/comparison#what-docpilot-is-worse-at",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/other-sites#the-index-does-not-need-a-site",
+    "install#2-the-index",
+    "guide/troubleshooting#docpilot-the-panel-is-off-n-things-to-set-up",
+    "reference/cli#embedder-question"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "q-47",
+   "question": "And when it is written in another alphabet?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "What stops that from letting a topic switch through?",
+   "composedQuery": "What stops that from letting a topic switch through?\nAnd when it is written in another alphabet?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#follow-ups~3",
+    "concepts/the-gate#follow-ups~2",
+    "install/typescript#why-hand-written-and-not-generated",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "reference/config#guardmode-guardsupportminidentifiers",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#follow-ups~3",
+    "concepts/the-gate#follow-ups~2",
+    "install/typescript#why-hand-written-and-not-generated",
+    "guide/troubleshooting#a-question-refuses-in-one-scope-and-answers-in-another",
+    "reference/config#guardmode-guardsupportminidentifiers",
+    "reference/config#asking-the-provider~2",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index",
+    "guide/production#re-read-it-when-the-environment-changes",
+    "guide/troubleshooting#retrieval-feels-like-keyword-matching"
+   ],
+   "goldPages": [
+    "/concepts/the-gate"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.3333333333333333,
+    "r": 1,
+    "f1": 0.5
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-48",
+   "question": "And why don't those two say what they searched?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "Which of them never reach the gate at all?",
+   "composedQuery": "Which of them never reach the gate at all?\nAnd why don't those two say what they searched?",
+   "channel": "raw",
+   "G": 0.75,
+   "D": 0,
+   "L": 0.75,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/philosophy#say-plainly-what-it-is-not",
+    "guide/evaluation#bench-two-retrieval-configurations",
+    "guide/i18n#the-keys~2",
+    "guide/appearance#two-shapes-two-placements",
+    "guide/history#two-tabs"
+   ],
+   "rankedIds": [
+    "guide/philosophy#say-plainly-what-it-is-not",
+    "guide/evaluation#bench-two-retrieval-configurations",
+    "guide/i18n#the-keys~2",
+    "guide/appearance#two-shapes-two-placements",
+    "guide/history#two-tabs",
+    "guide/providers#two-keys-and-which-answers-first~2",
+    "guide/providers#two-keys-and-which-answers-first",
+    "guide/where-it-goes#the-two-halves-again"
+   ],
+   "goldPages": [
+    "/concepts/the-gate"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-49",
+   "question": "And if none of them survive?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "And to a link that points nowhere?",
+   "composedQuery": "And to a link that points nowhere?\nAnd if none of them survive?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "reference/config#uibackground~2",
+    "guide/indexing#when-to-rebuild",
+    "concepts/the-ladder#what-costs-a-provider-its-turn"
+   ],
+   "rankedIds": [
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "reference/config#uibackground~2",
+    "guide/indexing#when-to-rebuild",
+    "concepts/the-ladder#what-costs-a-provider-its-turn",
+    "guide/appearance#what-degrades-and-how",
+    "guide/production#docker",
+    "reference/cli#feedback~3"
+   ],
+   "goldPages": [
+    "/concepts/a-turn",
+    "/concepts/the-gate"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-50",
+   "question": "А сразу после него?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "А что делает третий?",
+   "composedQuery": "А что делает третий?\nА сразу после него?",
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [],
+   "rankedIds": [],
+   "goldPages": [
+    "/concepts/a-turn"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-51",
+   "question": "And the build?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "What does one turn cost against that?",
+   "composedQuery": "What does one turn cost against that?\nAnd the build?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/free-tier#when-the-build-runs-out",
+    "guide/free-tier#when-the-build-runs-out~3",
+    "reference/cli#embedder-question",
+    "reference/cli#embedder-question~4",
+    "guide/indexing#"
+   ],
+   "rankedIds": [
+    "guide/free-tier#when-the-build-runs-out",
+    "guide/free-tier#when-the-build-runs-out~3",
+    "reference/cli#embedder-question",
+    "reference/cli#embedder-question~4",
+    "guide/indexing#",
+    "guide/production#ci-where-the-index-gets-built",
+    "guide/indexing#~2",
+    "guide/production#docker~2"
+   ],
+   "goldPages": [
+    "/guide/free-tier"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.4,
+    "r": 0.5,
+    "f1": 0.4444444444444445
+   },
+   "recall8": 0.5,
+   "mrr": 1
+  },
+  {
+   "id": "q-52",
+   "question": "And what undoes that sorting?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "What happens if my environment holds keys for two of them?",
+   "composedQuery": "What happens if my environment holds keys for two of them?\nAnd what undoes that sorting?",
+   "channel": "raw",
+   "G": 0.5,
+   "D": 0,
+   "L": 0.5,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/appearance#syntax-highlighting",
+    "reference/highlighting#both-colour-schemes"
+   ],
+   "rankedIds": [
+    "guide/appearance#syntax-highlighting",
+    "reference/highlighting#both-colour-schemes"
+   ],
+   "goldPages": [
+    "/concepts/the-ladder",
+    "/guide/providers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-53",
+   "question": "Is it still necessary?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "What does that cost me at build time?",
+   "composedQuery": "What does that cost me at build time?\nIs it still necessary?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/troubleshooting#still-stuck",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "reference/skills#",
+    "reference/skills#refreshing-them-after-an-upgrade",
+    "reference/skills#why-they-are-copied"
+   ],
+   "rankedIds": [
+    "guide/troubleshooting#still-stuck",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "guide/providers#a-chat-provider-that-cannot-embed",
+    "reference/skills#",
+    "reference/skills#refreshing-them-after-an-upgrade",
+    "guide/faq#what-are-the-cli-and-the-skill-for",
+    "guide/faq#the-skills-docs-rag-and-docs-import",
+    "reference/skills#docs-rag~3",
+    "reference/skills#why-they-are-copied"
+   ],
+   "goldPages": [
+    "/guide/providers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 0.3333333333333333
+  },
+  {
+   "id": "q-54",
+   "question": "А если ни одна так и не ответила?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "Когда ротация не срабатывает?",
+   "composedQuery": "Когда ротация не срабатывает?\nА если ни одна так и не ответила?",
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [],
+   "rankedIds": [],
+   "goldPages": [
+    "/concepts/the-ladder"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-55",
+   "question": "And what covers the ones it lets through?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "Which shapes does it catch?",
+   "composedQuery": "Which shapes does it catch?\nAnd what covers the ones it lets through?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#what-gets-indexed",
+    "guide/comparison#and-what-0-does-not-cover",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/appearance#what-degrades-and-how",
+    "guide/panel#showing-the-reader-how-it-works"
+   ],
+   "rankedIds": [
+    "guide/indexing#what-gets-indexed",
+    "guide/comparison#and-what-0-does-not-cover",
+    "guide/i18n#finding-the-answer-before-there-is-one-to-translate~2",
+    "guide/appearance#what-degrades-and-how",
+    "guide/panel#showing-the-reader-how-it-works",
+    "install/vue#where-the-config-comes-from",
+    "guide/why#why-the-gate-sits-on-the-retrieval-side-and-why-it-is-opt-in",
+    "reference/config#suggestionsauthored~2"
+   ],
+   "goldPages": [
+    "/guide/credentials"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-56",
+   "question": "And why does one of them jump the queue?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "What else does it claim besides a hello?",
+   "composedQuery": "What else does it claim besides a hello?\nAnd why does one of them jump the queue?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "reference/config#uiwaitingescalation",
+    "guide/appearance#the-tokens~3",
+    "guide/appearance#the-tokens~4",
+    "guide/panel#while-it-answers"
+   ],
+   "rankedIds": [
+    "guide/what-it-costs#what-you-are-not-paying-for",
+    "reference/config#uiwaitingescalation",
+    "guide/appearance#the-tokens~3",
+    "guide/appearance#the-tokens~4",
+    "guide/panel#while-it-answers",
+    "guide/i18n#the-keys~2",
+    "reference/theme#the-whole-set~2",
+    "guide/production#why-each-rule-is-there"
+   ],
+   "goldPages": [
+    "/guide/social-openers"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-57",
+   "question": "А если удалить один из них в одной вкладке?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "Не затирают ли вкладки записи друг друга?",
+   "composedQuery": "Не затирают ли вкладки записи друг друга?\nА если удалить один из них в одной вкладке?",
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [],
+   "rankedIds": [],
+   "goldPages": [
+    "/guide/history"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-58",
+   "question": "And which of them is not a loss at all?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "What does that cost a reader who reopens the thread?",
+   "composedQuery": "What does that cost a reader who reopens the thread?\nAnd which of them is not a loss at all?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/a-turn#5-tools-if-the-model-wants-more",
+    "guide/providers#openrouter-with-nothing-named~2",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "reference/config#historysaveonunload",
+    "guide/comparison#architecture"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#5-tools-if-the-model-wants-more",
+    "guide/providers#openrouter-with-nothing-named~2",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "reference/config#historysaveonunload",
+    "guide/comparison#architecture",
+    "reference/config#quotefromdocs",
+    "guide/comparison#how-the-money-is-arranged",
+    "guide/appearance#five-entry-points~2",
+    "reference/config#citations",
+    "guide/appearance#surfaces-come-in-three-levels"
+   ],
+   "goldPages": [
+    "/guide/history"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-59",
+   "question": "And which of them change when the page goes dark?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "Where does my own CSS have to be loaded for that to work?",
+   "composedQuery": "Where does my own CSS have to be loaded for that to work?\nAnd which of them change when the page goes dark?",
+   "channel": "composed",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/faq#2-the---dp--css-tokens-colour-and-geometry",
+    "reference/theme#the-dark-set",
+    "guide/history#when-the-docs-change",
+    "guide/what-it-costs#where-the-money-actually-goes",
+    "reference/theme#the-whole-set~2"
+   ],
+   "rankedIds": [
+    "guide/what-it-costs#where-the-money-actually-goes",
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-dark-set",
+    "guide/history#when-the-docs-change",
+    "reference/cli#the-pages-own-markdown-wins",
+    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus",
+    "reference/cli#the-pages-own-markdown-wins~2",
+    "guide/where-it-goes#the-one-thing-with-no-default"
+   ],
+   "goldPages": [
+    "/reference/theme"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 0.5,
+    "f1": 0.28571428571428575
+   },
+   "recall8": 1,
+   "mrr": 0.5
+  },
+  {
+   "id": "q-60",
+   "question": "Why not just remount it?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "What do I have to pass so it keeps up with my router?",
+   "composedQuery": "What do I have to pass so it keeps up with my router?\nWhy not just remount it?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "install/react#keeping-it-in-step"
+   ],
+   "rankedIds": [
+    "install/react#keeping-it-in-step"
+   ],
+   "goldPages": [
+    "/install/react"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 1,
+    "r": 0.5,
+    "f1": 0.6666666666666666
+   },
+   "recall8": 0.5,
+   "mrr": 1
+  },
+  {
+   "id": "q-61",
+   "question": "And what would it take to use the other one instead?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "What colours the code inside an answer?",
+   "composedQuery": "What colours the code inside an answer?\nAnd what would it take to use the other one instead?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "guide/providers#what-each-provider-honours~3",
+    "install/react#",
+    "guide/free-tier#when-the-build-runs-out~2",
+    "install/react#mounting"
+   ],
+   "rankedIds": [
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~3",
+    "guide/evaluation#the-answer-only-takes-effect-at-the-next-index~2",
+    "guide/providers#what-each-provider-honours~3",
+    "install/react#",
+    "guide/free-tier#when-the-build-runs-out~2",
+    "install/docusaurus#",
+    "install/javascript#",
+    "install/vue#",
+    "install/react#mounting",
+    "install/docusaurus#the-settings",
+    "install/javascript#two-entry-points-one-api",
+    "install/vue#mounting"
+   ],
+   "goldPages": [
+    "/install/docusaurus"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-62",
+   "question": "А что из этого вообще нельзя заменить?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "А что будет, если я ошибусь в названии ключа?",
+   "composedQuery": "А что будет, если я ошибусь в названии ключа?\nА что из этого вообще нельзя заменить?",
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [],
+   "rankedIds": [],
+   "goldPages": [
+    "/guide/i18n"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-63",
+   "question": "And what does its path do, if it is not a route?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "Which origins is it allowed to name as its source?",
+   "composedQuery": "Which origins is it allowed to name as its source?\nAnd what does its path do, if it is not a route?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/other-sites#routes-are-derived-from-file-paths",
+    "guide/imported-pages#its-path-is-an-id-not-a-link",
+    "install/vue#the-router",
+    "install/javascript#mounting",
+    "install/vue#where-the-config-comes-from",
+    "guide/other-sites#a-sidebar-buys-you-the-scope-picker"
+   ],
+   "rankedIds": [
+    "guide/other-sites#routes-are-derived-from-file-paths",
+    "guide/imported-pages#its-path-is-an-id-not-a-link",
+    "install/vue#the-router",
+    "install/javascript#mounting",
+    "install/vue#where-the-config-comes-from",
+    "guide/other-sites#the-base-invariant",
+    "guide/production#a-site-under-a-base-path",
+    "guide/imported-pages#its-path-is-an-id-not-a-link~2",
+    "guide/other-sites#a-sidebar-buys-you-the-scope-picker",
+    "guide/other-sites#the-three-selectors",
+    "guide/imported-pages#importing-one"
+   ],
+   "goldPages": [
+    "/guide/imported-pages"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.16666666666666666,
+    "r": 1,
+    "f1": 0.2857142857142857
+   },
+   "recall8": 1,
+   "mrr": 0.5
+  },
+  {
+   "id": "q-64",
+   "question": "And why is the last one worded separately?",
+   "expect": "answer",
+   "depth": 2,
+   "antecedent": "What should I do about the second one?",
+   "composedQuery": "What should I do about the second one?\nAnd why is the last one worded separately?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "reference/cli#doctor~4",
+    "reference/cli#latest-json",
+    "guide/panel#past-conversations",
+    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table"
+   ],
+   "rankedIds": [
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "reference/cli#doctor~4",
+    "reference/cli#latest-json",
+    "guide/panel#past-conversations",
+    "guide/indexing#what-counts-as-a-fence-and-what-counts-as-a-table",
+    "reference/theme#the-whole-set~2",
+    "reference/config#budget~2",
+    "guide/faq#three-sequences-that-are-easy-to-get-wrong"
+   ],
+   "goldPages": [
+    "/guide/indexing"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0.2,
+    "r": 1,
+    "f1": 0.33333333333333337
+   },
+   "recall8": 1,
+   "mrr": 1
+  },
+  {
+   "id": "q-65",
+   "question": "And when it carries none at all?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "What happens to a record whose tier is misspelled?",
+   "composedQuery": "What happens to a record whose tier is misspelled?\nAnd when it carries none at all?",
+   "channel": "raw",
+   "G": 1,
+   "D": 0,
+   "L": 1,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "reference/cli#feedback~3"
+   ],
+   "rankedIds": [
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named~2",
+    "guide/troubleshooting#embed-openrouter-needs-a-key-and-none-is-set-on-a-provider-you-never-named",
+    "guide/indexing#the-three-warnings-and-what-each-says-about-the-page",
+    "guide/evaluation#carrying-a-calibration-across-embedders",
+    "reference/cli#feedback~3",
+    "guide/providers#declared-is-not-degraded",
+    "reference/config#asking-the-provider~2",
+    "guide/evaluation#carrying-a-calibration-across-embedders~3"
+   ],
+   "goldPages": [
+    "/guide/evaluation"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "q-66",
+   "question": "And why is the second of those the serious one?",
+   "expect": "answer",
+   "depth": 3,
+   "antecedent": "What does doctor say when the two disagree?",
+   "composedQuery": "What does doctor say when the two disagree?\nAnd why is the second of those the serious one?",
+   "channel": "composed",
+   "G": 0.6666666666666666,
+   "D": 0,
+   "L": 0.6666666666666666,
+   "gatePass": true,
+   "retrievedIds": [
+    "reference/cli#doctor~2",
+    "reference/cli#doctor~4",
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/history#two-tabs",
+    "guide/indexing#a-second-index-to-measure-against"
+   ],
+   "rankedIds": [
+    "guide/indexing#a-second-index-to-measure-against~2",
+    "guide/indexing#a-second-index-to-measure-against",
+    "guide#when-you-do-pass-settings",
+    "guide/free-tier#what-costs-a-model-its-turn",
+    "reference/config#embedfallback~2",
+    "guide/appearance#the-tokens~3",
+    "guide/free-tier#when-the-build-runs-out~3",
+    "guide/providers#",
+    "guide/providers#name-nothing-the-provider-chain"
+   ],
+   "goldPages": [
+    "/reference/config",
+    "/guide/indexing"
+   ],
+   "scoredAsNegative": false,
+   "retrieval": {
+    "p": 0,
+    "r": 0,
+    "f1": 0
+   },
+   "recall8": 0,
+   "mrr": 0
+  },
+  {
+   "id": "n-25",
+   "question": "thanks — and what's the weather in Paris this weekend?",
+   "expect": "refuse:no-evidence",
+   "depth": 3,
+   "antecedent": "And where does a fresh conversation start out?",
+   "composedQuery": "And where does a fresh conversation start out?\nthanks — and what's the weather in Paris this weekend?",
+   "channel": "raw",
+   "G": 0.5,
+   "D": 0,
+   "L": 0.5,
+   "gatePass": true,
+   "retrievedIds": [
+    "concepts/the-gate#follow-ups~4",
+    "guide/providers#a-local-model-that-thinks",
+    "guide/panel#hello",
+    "concepts/a-turn#2-is-it-a-question-at-all",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "guide/panel#while-it-answers",
+    "guide/social-openers#making-it-yours"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#follow-ups~4",
+    "guide/providers#a-local-model-that-thinks",
+    "guide/panel#hello",
+    "concepts/a-turn#2-is-it-a-question-at-all",
+    "guide/social-openers#four-kinds-eighteen-languages",
+    "reference/config#chatreasoning",
+    "reference/config#chatreasoning~2",
+    "guide/providers#what-each-provider-honours~2",
+    "guide/panel#while-it-answers",
+    "guide/social-openers#making-it-yours"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-26",
+   "question": "and what does GitBook charge for its AI on top of that?",
+   "expect": "refuse:no-evidence",
+   "depth": 2,
+   "antecedent": "And where are they the better buy?",
+   "composedQuery": "And where are they the better buy?\nand what does GitBook charge for its AI on top of that?",
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [
+    "reference/config#topk~2",
+    "reference/config#topk",
+    "guide/history#when-the-docs-change",
+    "guide/faq#how-do-i-get-started~3",
+    "guide#wiring-the-config"
+   ],
+   "rankedIds": [
+    "reference/config#topk~2",
+    "reference/config#topk",
+    "guide/history#when-the-docs-change",
+    "guide/faq#how-do-i-get-started~3",
+    "guide#wiring-the-config",
+    "concepts/guarantees#claims-this-documentation-will-not-make",
+    "guide/comparison#how-the-money-is-arranged",
+    "guide/evaluation#how-much-of-the-set-to-run~2"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-27",
+   "question": "and can it just do that itself whenever I save a page?",
+   "expect": "refuse:no-evidence",
+   "depth": 3,
+   "antecedent": "And what stops the browser scoring questions against a foreign vector space?",
+   "composedQuery": "And what stops the browser scoring questions against a foreign vector space?\nand can it just do that itself whenever I save a page?",
+   "channel": "composed",
+   "G": 0.6666666666666666,
+   "D": 0,
+   "L": 0.6666666666666666,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/indexing#when-to-rebuild",
+    "guide/troubleshooting#every-question-is-refused",
+    "guide/indexing#vectors-are-quantised",
+    "reference/cli#embedder-question~2",
+    "guide/troubleshooting#every-question-is-refused~2"
+   ],
+   "rankedIds": [
+    "guide/where-it-goes#getting-the-pages-own-content-into-the-corpus",
+    "guide/comparison#the-chat-itself",
+    "guide/indexing#the-faq-path-is-covered-by-the-same-tags",
+    "guide/imported-pages#importing-one~3",
+    "guide/imported-pages#importing-one~2",
+    "reference/config#historysaveonunload",
+    "reference/cli#",
+    "reference/cli#import"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-28",
+   "question": "and while I'm on that box, how do I get certbot to renew the certificate automatically?",
+   "expect": "refuse:no-evidence",
+   "depth": 3,
+   "antecedent": "Why is doctor run between the index build and the site build in CI?",
+   "composedQuery": "Why is doctor run between the index build and the site build in CI?\nand while I'm on that box, how do I get certbot to renew the certificate automatically?",
+   "channel": "raw",
+   "G": 0.4,
+   "D": 0,
+   "L": 0.4,
+   "gatePass": true,
+   "retrievedIds": [
+    "guide/panel#telling-you-it-was-wrong",
+    "reference/config#feedback",
+    "reference/config#feedbackcomment",
+    "guide/credentials#",
+    "guide/appearance#what-the-panels-chrome-does~2",
+    "guide/credentials#what-happens"
+   ],
+   "rankedIds": [
+    "guide/panel#telling-you-it-was-wrong",
+    "reference/config#feedback",
+    "reference/config#feedbackcomment",
+    "guide/credentials#",
+    "guide/appearance#what-the-panels-chrome-does~2",
+    "guide/troubleshooting#it-fell-through-to-openrouter-and-i-have-no-key-there",
+    "guide/providers#a-local-server-is-never-assumed",
+    "guide/providers#a-chat-provider-that-cannot-embed~2",
+    "guide/credentials#what-happens"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-29",
+   "question": "and which setting has it email me when a down-vote lands?",
+   "expect": "refuse:no-evidence",
+   "depth": 3,
+   "antecedent": "And what does a cross-origin one cost?",
+   "composedQuery": "And what does a cross-origin one cost?\nand which setting has it email me when a down-vote lands?",
+   "channel": "composed",
+   "G": 0.6666666666666666,
+   "D": 0,
+   "L": 0.6666666666666666,
+   "gatePass": true,
+   "retrievedIds": [
+    "install/docusaurus#the-settings",
+    "guide/production#cross-origin-feedback",
+    "guide#when-you-do-pass-settings",
+    "install#1-the-settings-optional",
+    "guide/why#what-it-costs"
+   ],
+   "rankedIds": [
+    "install/docusaurus#the-settings",
+    "guide#when-you-do-pass-settings",
+    "install/typescript#why-hand-written-and-not-generated",
+    "install#1-the-settings-optional",
+    "reference/config#feedbackcomment",
+    "guide/faq#1-the-ui-settings-shape-place-scheme",
+    "reference/config#parameters~4",
+    "guide#nothing-set-up-yet"
+   ],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  },
+  {
+   "id": "n-30",
+   "question": "кстати, а как в PostgreSQL сделать индекс по jsonb-полю?",
+   "expect": "refuse:no-evidence",
+   "depth": 3,
+   "antecedent": "А как русский вопрос вообще находит ответ в английских доках?",
+   "composedQuery": "А как русский вопрос вообще находит ответ в английских доках?\nкстати, а как в PostgreSQL сделать индекс по jsonb-полю?",
+   "channel": "raw",
+   "G": 0,
+   "D": 0,
+   "L": 0,
+   "gatePass": false,
+   "retrievedIds": [],
+   "rankedIds": [],
+   "goldPages": [],
+   "scoredAsNegative": false,
+   "retrieval": null,
+   "recall8": null,
+   "mrr": null
+  }
+ ]
+}

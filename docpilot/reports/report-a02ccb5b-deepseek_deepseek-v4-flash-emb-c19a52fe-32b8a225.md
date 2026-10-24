@@ -1,0 +1,139 @@
+# DocPilot eval — deepseek/deepseek-v4-flash
+
+- index `a02ccb5b` · 580 chunks · embed `qwen/qwen3-embedding-8b`
+- prompt `32b8a225` · records 96 · maxIterations 2
+- transport native tools, think on
+- guard mode `cosine` tau `0.55` source `calibrated-reduced` calibratedAt `a02ccb5b`
+- guard.mode `off`
+
+## Hard gates
+
+| gate | value | verdict |
+|---|---|---|
+| hallucinated citations | 0 | pass |
+| scope containment | 1 | pass |
+
+## Metrics
+
+| metric | value |
+|---|---|
+| retrievalF1 | 0.328 |
+| recall8 | 0.803 |
+| mrr | 0.631 |
+| answerF1 | 0.415 |
+| identifierRecall | 0.617 |
+| citationPrecision | 0.613 |
+| citationRecall | 0.754 |
+| supportPrecision | 0.920 |
+| language | 1 |
+| negativesCaughtRate | 0.700 |
+| noAnswerPrecision | 0 |
+| scopeContainment | 1 |
+| cachedShare | 0.287 |
+| unsupportedAnswerRate | 0.062 |
+| hallucinated | 0 |
+| gateOverRefusal | 4 |
+| answerOverRefusal | 1 |
+| rejectedFetches | 0 |
+| promptTokens | 7461 |
+| outputTokens | 518 |
+| cachedTokens | 2141 |
+| tokensPerAcceptedAnswer | 11784 |
+| promptChars | 24772 |
+| promptCharsPeak | 10879 |
+| observationChars | 7899 |
+| iterationsPerAnswer | 1.785 |
+| latencyP50 | 9717 |
+| latencyP95 | 29365 |
+
+## By language
+
+> The corpus has one language; the readers do not. A mean over the whole
+> set describes neither population when they differ.
+
+| lang | pos | neg | recall8 | mrr | answerF1 | identifierRecall | negCaught |
+|---|---|---|---|---|---|---|---|
+| English | 60 | 29 | 0.825 | 0.650 | 0.431 | 0.635 | 0.690 |
+| Russian | 6 | 1 | 0.583 | 0.450 | 0.255 | 0.417 | 1 |
+
+## By chain depth
+
+> A question asked cold and a follow-up three turns into a chain are not
+> the same question, and a mean over both describes neither.
+
+| depth | pos | neg | recall8 | mrr | answerF1 | identifierRecall | negCaught |
+|---|---|---|---|---|---|---|---|
+| 0 | 38 | 24 | 0.921 | 0.804 | 0.447 | 0.662 | 0.708 |
+| 1 | 8 | 0 | 1 | 0.581 | 0.347 | 1 | — |
+| 2 | 10 | 1 | 0.750 | 0.471 | 0.479 | 0.698 | 1 |
+| 3 | 10 | 5 | 0.250 | 0.175 | 0.267 | 0.139 | 0.600 |
+
+## Over-refusal backlog — the ten positives closest to the floor
+
+| id | G | gate | observed | question |
+|---|---|---|---|---|
+| q-66 | 0.417 | **refused** | answer | And why is the second of those the serious one? |
+| q-52 | 0.446 | **refused** | answer | And what undoes that sorting? |
+| q-62 | 0.488 | **refused** | answer | А что из этого вообще нельзя заменить? |
+| q-24 | 0.507 | **refused** | answer | Почему шлюз отказывает до вызова модели? |
+| q-50 | 0.572 | pass | answer | А сразу после него? |
+| q-58 | 0.591 | pass | answer | And which of them is not a loss at all? |
+| q-49 | 0.607 | pass | answer | And if none of them survive? |
+| q-56 | 0.630 | pass | answer | And why does one of them jump the queue? |
+| q-57 | 0.647 | pass | answer | А если удалить один из них в одной вкладке? |
+| q-32 | 0.658 | pass | answer | Что хранится в истории переписки и где? |
+
+## Failure taxonomy
+
+> What moved, not how much. The four positive buckets have four
+> different fixes: a corpus edit, a ranking lever, the answer side,
+> and the gate.
+
+| bucket | n | ids |
+|---|---|---|
+| ok | 51 | q-01, q-02, q-03, q-04, q-05, q-06, q-07, q-08, q-09, q-10, q-11, q-12, q-13, q-15, q-16, q-17, q-18, q-19, q-20, q-21, q-22, q-23, q-25, q-26, q-27, q-28, q-29, q-30, q-31, q-32, q-33, q-34, q-35, q-37, q-38, q-39, q-40, q-41, q-42, q-43, q-45, q-46, q-47, q-48, q-55, q-57, q-59, q-60, q-63, q-64, q-65 |
+| gold-below-primed | 1 | q-52 |
+| retrieval-miss | 10 | q-14, q-36, q-49, q-51, q-53, q-54, q-56, q-58, q-62, q-66 |
+| primed-low-f1 | 3 | q-24, q-44, q-50 |
+| over-refused | 1 | q-61 |
+| neg-caught | 21 | n-01, n-02, n-03, n-05, n-06, n-07, n-08, n-09, n-10, n-12, n-13, n-15, n-16, n-19, n-20, n-22, n-23, n-25, n-26, n-29, n-30 |
+| neg-answered:refuse:no-evidence | 9 | n-04, n-11, n-14, n-17, n-18, n-21, n-24, n-27, n-28 |
+
+## Pages behind the misses that never say what they are for
+
+> A frontmatter `description` lands on the page's FIRST chunk and is
+> the one measured dense lever on this pipeline. A lead, not a verdict:
+> the answer may simply not be written anywhere.
+
+| page | records |
+|---|---|
+| `/guide/social-openers` | q-14, q-56 |
+| `/concepts/the-ladder` | q-36, q-52, q-54 |
+| `/reference/cli` | q-36 |
+| `/concepts/a-turn` | q-49 |
+| `/concepts/the-gate` | q-49 |
+| `/guide/free-tier` | q-51 |
+| `/guide/providers` | q-52, q-53 |
+| `/guide/history` | q-58 |
+| `/guide/i18n` | q-62 |
+| `/reference/config` | q-66 |
+| `/guide/indexing` | q-66 |
+
+## Re-search
+
+9 of 96 turns searched again in the model's own words; **9** of those crossed language.
+
+> A re-search moves the lexical half only: the dense half still scores the reader's original question. Records: n-02, n-07, n-13, n-19, n-20, n-22, n-23, n-24, n-26.
+
+## Misses
+
+- n-04(answer)
+- n-11(answer)
+- n-14(answer)
+- n-17(answer)
+- n-18(answer)
+- n-21(answer)
+- n-24(answer)
+- q-61(refuse:not-answerable)
+- n-27(answer)
+- n-28(answer)
