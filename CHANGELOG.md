@@ -7,6 +7,69 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 1.5.0 — 2026-10-24
+
+### Changed
+
+**Chunk vectors are one sign bit per dimension where the embedder can afford it
+— engine-spec 027.** `npx docpilot index` now measures the 1-bit error first and,
+under `--quantize=auto` (the default), writes the bit when that error is at most
+`0.015` mean |Δcos|, and int8 otherwise. Only the chunk side is binarised: the
+question stays float, the browser scores `Σ q[i] · sign(d[i])`, and one
+`cosScale` the build fits by least squares and writes into the manifest keeps D
+on the cosine scale the gate is calibrated in.
+
+On this site's own index (`qwen/qwen3-embedding-8b`, 4096 dimensions) the vector
+blob went from 2.3 MB to 292 KB on disk and from 916 KB to 292 KB over brotli.
+`eval --gate-only` against the int8 index it replaced: recall@8 0.803 for both,
+MRR 0.631 → 0.635, retrieval F1 0.328 → 0.335. On `bge-m3` (1024 dimensions)
+the bit cost MRR 0.572 → 0.540, its error is 0.023, and `auto` keeps it on int8.
+Truncating dimensions (Matryoshka) was measured and lost to the bit at every
+equal size; the build never truncates.
+
+**Re-run `calibrate` after the next `index`** if the format it reports changed:
+the scale is fitted, but a `tau` measured on one format is a measurement of that
+format. `--quantize=int8` keeps the 1.4 format byte for byte, and
+`--quantize=binary` forces the bit under its own `0.03` error gate.
+
+**A 1-bit index needs a 1.5 panel.** A manifest without `quant` is read exactly
+as before, so a 1.4 index works in 1.5. The reverse does not: a 1.4 panel sees a
+blob an eighth of the length it expects and reports *vector buffer does not
+match chunkCount × dims*. Rebuild the index and the panel from the same version.
+
+**The last answer travels whole; older answers travel as summaries — engine-spec
+026.** The skeleton that condensed every past answer runs out of budget from the
+top, and a follow-up's new fact lands at the end of an answer — a live chain lost
+step 4 of a four-step answer. The most recent answered pair now goes whole, up to
+`LAST_ANSWER_MAX` (2000 characters). Each older pair goes as its summary: one or
+two sentences the model writes into a new required `summary` field of the
+`answer` tool, which the reader never sees and the archive keeps. A pair with no
+summary falls back to the 1.4 skeleton.
+
+Measured A/B against the 1.4 skeleton on 8 five-turn chains × 5 runs: +0.035
+answerF1 on "clarify that detail" turns, −0.039 on "rewrite that answer" turns,
+no difference on the others, +6 % requests. `DOCPILOT_HISTORY_MODE=skeleton`
+and `DOCPILOT_ANSWER_SUMMARY=0` restore 1.4.
+
+**The embedder reads the corpus's own terms beside the reader's — engine-spec
+025.** The vocabulary used to rewrite only the lexical channel, so a Russian
+question against an English corpus had the right section ranked first by BM25
+and then cut from the top 8 by the dense ordering of the raw Russian text.
+`embedQuery` now appends the canonical terms the question's aliases name. No
+extra requests; without a vocabulary nothing changes. On the Stripo golden set,
+recall@8 0.811 → 0.833, and Russian recall@8 0.750 → 0.833.
+
+### Fixed
+
+**Enter no longer stops a running answer — ui-spec 014.** Pressing Enter while a
+turn was streaming called `session.stop()` and discarded the answer. It now does
+nothing during a turn, and the field stays writable so the next question can be
+typed while the current one finishes.
+
+**Code blocks and source rows in the panel.** Code blocks get vertical space
+from the text around them, and a source row's number, link and body share one
+baseline.
+
 ## 1.4.0 — 2026-09-04
 
 ### Breaking
