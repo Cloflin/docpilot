@@ -619,17 +619,18 @@ It scores every probe in `calibration.jsonl` against every configured opener. A
 probe is not an opener, so **every score it produces is a false positive waiting
 to happen**, and the highest of them is the floor `matchTau` has to sit above.
 
-Measured on this project's corpus, 597 probes × 3 openers = 1,791 pairs:
+Measured on this project's corpus, 639 probes × 3 openers = 1,917 pairs:
 
 ```
-    0.500  "What claims will this documentation not make?"
-           would match "What is this documentation about?"     [s-06/S]
-    0.500  "Is that requests or tokens?"
-           would match "How do I authenticate requests?"       [f-16/F]
-    0.333  "Is the limit on requests or on tokens?"            [s-27/S]
+    0.500  "What does the docs-rag skill do?"
+           would match "What are the CLI and the skill for?"   [u-153/U]
+    0.500  "What does the docs-import skill do?"
+           would match "What are the CLI and the skill for?"   [u-154/U]
+    0.500  "Which skills are copied?"                          [s-118/S]
+    0.333  "Can one provider do both chat and embeddings?"     [u-79/U]
 
     threshold   probes wrongly captured
-    0.500              2
+    0.500              3
     0.600              0
     0.650              0   <- shipped default
 ```
