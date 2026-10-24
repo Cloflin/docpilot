@@ -7,6 +7,22 @@
 
 import { setVocabulary, setTokenizer } from './text.js'
 
+/**
+ * A `quant: 'binary'` blob back to ±1 per dimension. The layout is
+ * `packSigns`' in `build/lib/quantize.js`: bit i of a row at byte `i >> 3`,
+ * bit `i & 7`, set meaning `+1`.
+ */
+export function unpackSigns(bytes: Uint8Array, rows: number, dims: number) {
+  const stride = Math.ceil(dims / 8)
+  const out = new Int8Array(rows * dims)
+  for (let r = 0; r < rows; r++) {
+    for (let i = 0; i < dims; i++) {
+      out[r * dims + i] = bytes[r * stride + (i >> 3)] & (1 << (i & 7)) ? 1 : -1
+    }
+  }
+  return out
+}
+
 let loading = null
 
 async function fetchJson(url) {
@@ -45,12 +61,22 @@ export function assembleIndex({ manifest, shards, vectorBuffer, dfDoc, openersDo
    * error, no `degraded`, a real embedding request every turn, and BM25.
    */
   const lexicalOnly = manifest.vectors === null
+  /**
+   * `quant: 'binary'` is engine-spec 027: one sign bit per dimension, unpacked
+   * here to ±1 so the retriever multiplies the same Int8Array either way, and
+   * `cosScale` carries it back onto the cosine scale. A manifest without the
+   * key is the int8 index every earlier build wrote.
+   */
+  const binary = manifest.quant === 'binary'
   let vectors = null
   if (!lexicalOnly) {
-    vectors = new Int8Array(vectorBuffer)
-    if (vectors.length !== manifest.chunkCount * manifest.dims) {
+    const want = manifest.chunkCount * (binary ? Math.ceil(manifest.dims / 8) : manifest.dims)
+    if (vectorBuffer.byteLength !== want) {
       throw new Error('vector buffer does not match chunkCount × dims')
     }
+    vectors = binary
+      ? unpackSigns(new Uint8Array(vectorBuffer), manifest.chunkCount, manifest.dims)
+      : new Int8Array(vectorBuffer)
   }
 
   chunks.forEach((c, i) => {
@@ -86,6 +112,9 @@ export function assembleIndex({ manifest, shards, vectorBuffer, dfDoc, openersDo
     byId: new Map(chunks.map((c) => [c.id, c])),
     vectors,
     dims: lexicalOnly ? 0 : manifest.dims,
+    // `dot / 127²` is the cosine for int8; a sign row needs `127 · cosScale` on top.
+    binary,
+    cosScale: binary ? 127 * manifest.cosScale : 1,
     lexicalOnly,
     df: dfDoc.df,
     /**

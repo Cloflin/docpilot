@@ -447,11 +447,29 @@ function miniSearchFor(index) {
   return ms
 }
 
-function dot(vectors, dims, row, query) {
+function dot(index, row, query) {
+  const { vectors, dims } = index
   const off = row * dims
   let sum = 0
   for (let i = 0; i < dims; i++) sum += vectors[off + i] * query[i]
-  return sum / 16129 // 127²
+  // 127² for int8; a 1-bit index also carries its fitted `cosScale` (spec 027).
+  return (sum / 16129) * (index.cosScale ?? 1)
+}
+
+/**
+ * Chunk-to-chunk cosine, for MMR's redundancy term.
+ *
+ * Two SIGN rows have no float side to fit a scale against, so a 1-bit index
+ * uses the SimHash identity instead: the fraction of agreeing signs is
+ * `1 - θ/π`, so `Σ a·b / dims = 1 - 2θ/π` and `cos θ = sin(π/2 · Σ a·b / dims)`.
+ */
+function pairCos(index, ra, rb) {
+  const { vectors, dims } = index
+  const oa = ra * dims
+  const ob = rb * dims
+  let sum = 0
+  for (let i = 0; i < dims; i++) sum += vectors[oa + i] * vectors[ob + i]
+  return index.binary ? Math.sin((Math.PI / 2) * (sum / dims)) : sum / 16129
 }
 
 /**
@@ -673,7 +691,7 @@ export function createRetrieval({
     // whole-corpus distribution to know what "similar" means for this query.
     const cosines = new Float64Array(index.chunks.length)
     for (let i = 0; i < index.chunks.length; i++) {
-      cosines[i] = dot(index.vectors, index.dims, i, queryVec)
+      cosines[i] = dot(index, i, queryVec)
     }
     // `scopedMax` is the best the SCOPE holds and is deliberately not narrowed by
     // `kind`: it is the gate's D, the gate never passes a kind, and a maximum
@@ -762,15 +780,10 @@ export function createRetrieval({
 
     const rowOf = (id) => index.byId.get(id).row
     const simTo = {
-      query: (id) => (queryVec ? dot(index.vectors, index.dims, rowOf(id), queryVec) : 0),
+      query: (id) => (queryVec ? dot(index, rowOf(id), queryVec) : 0),
       pair: (a, b) => {
         if (!queryVec) return index.byId.get(a).path === index.byId.get(b).path ? 1 : 0
-        const dims = index.dims
-        const oa = rowOf(a) * dims
-        const ob = rowOf(b) * dims
-        let sum = 0
-        for (let i = 0; i < dims; i++) sum += index.vectors[oa + i] * index.vectors[ob + i]
-        return sum / 16129
+        return pairCos(index, rowOf(a), rowOf(b))
       },
     }
 
@@ -1054,7 +1067,7 @@ export function createRetrieval({
       const scored =
         queryVec && !vectorless
           ? pool
-              .map((c) => [c, dot(index.vectors, index.dims, c.row, queryVec)])
+              .map((c) => [c, dot(index, c.row, queryVec)])
               .sort((a, b) => b[1] - a[1])
               .map(([c]) => c)
           : ms

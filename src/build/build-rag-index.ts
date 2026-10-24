@@ -38,7 +38,7 @@ import {
   EMBED_CACHE_DIR,
 } from '../cli-context.js'
 import { openEmbedCache } from './lib/embed-cache.js'
-import { l2normalise, toInt8, quantisationError } from './lib/quantize.js'
+import { l2normalise, toInt8, quantisationError, packSigns, binaryScale, binaryQuantisationError } from './lib/quantize.js'
 import { bakeOpeners, renderOpenerReport } from './lib/openers.js'
 import { resolveSuggestions, DEFAULT_SUGGESTIONS } from '../theme/docpilot/switches.js'
 import { openerQuestions } from '../theme/docpilot/openers.js'
@@ -130,6 +130,23 @@ const NO_EMBED = process.argv.includes('--no-embed') || noEmbed(docPilot)
  * name, which no key can see.
  */
 const REFRESH_EMBEDDINGS = process.argv.includes('--refresh-embeddings')
+
+/**
+ * `--quantize` — how the chunk vectors are written. engine-spec 027.
+ *
+ * `binary` keeps one sign bit per dimension: an eighth of int8. `int8` is the
+ * format every index before 027 was written in. `auto`, the default, measures
+ * the 1-bit error and takes the bit only under `AUTO_BINARY_MAX_ERR`.
+ */
+const QUANTIZE = argValue('quantize') || 'auto'
+
+/**
+ * Where `auto` stops taking the bit. Measured, not chosen: at 4096 dimensions
+ * (qwen3-embedding-8b) the 1-bit error is ~0.010 and the golden set ranks within
+ * noise of int8; at 1024 (bge-m3) it is ~0.026, MRR falls 0.57 → 0.54 and D
+ * moves 0.06. The error tracks width, and width is what decides.
+ */
+const AUTO_BINARY_MAX_ERR = 0.015
 
 /**
  * `embed.fallback: 'lexical'` — what to do when the embedder will not answer.
@@ -1543,6 +1560,8 @@ async function main() {
    */
   let dims = 0
   let flat = null
+  let cosScale = null
+  let binary = false
   /**
    * THE MODE THIS BUILD ARRIVED AT, which is not always the mode it was told.
    *
@@ -1561,13 +1580,32 @@ async function main() {
     else if (vectors.length !== chunks.length) die('embedding count does not match chunk count')
     else {
 
-      const qErr = quantisationError(vectors)
-      console.log(`  quantisation err ${qErr.toFixed(5)} mean |Δcos|`)
-      if (qErr > 0.01) die(`int8 quantisation error ${qErr.toFixed(4)} exceeds 0.01`)
-
       dims = vectors[0].length
-      flat = new Int8Array(dims * vectors.length)
-      vectors.forEach((v, i) => flat.set(toInt8(v), i * dims))
+      const bitScale = QUANTIZE === 'int8' ? null : binaryScale(vectors)
+      const bitErr = bitScale === null ? null : binaryQuantisationError(vectors, bitScale)
+      if (QUANTIZE === 'auto' && bitErr > AUTO_BINARY_MAX_ERR) {
+        console.log(
+          `  quantisation     1-bit err ${bitErr.toFixed(5)} > ${AUTO_BINARY_MAX_ERR} — int8 (--quantize=binary forces the bit)`,
+        )
+      }
+      if (QUANTIZE === 'binary' || (QUANTIZE === 'auto' && bitErr <= AUTO_BINARY_MAX_ERR)) {
+        /**
+         * Its own bound, because it is a different error: a float query against a
+         * sign, not two rounded bytes. 0.03 is three times the int8 gate and still
+         * well under the spread between a relevant chunk and an irrelevant one.
+         */
+        binary = true
+        cosScale = bitScale
+        console.log(`  quantisation err ${bitErr.toFixed(5)} mean |Δcos| (1-bit)`)
+        if (bitErr > 0.03) die(`1-bit quantisation error ${bitErr.toFixed(4)} exceeds 0.03 — rebuild with --quantize=int8`)
+        flat = packSigns(vectors)
+      } else {
+        const qErr = quantisationError(vectors)
+        console.log(`  quantisation err ${qErr.toFixed(5)} mean |Δcos|`)
+        if (qErr > 0.01) die(`int8 quantisation error ${qErr.toFixed(4)} exceeds 0.01`)
+        flat = new Int8Array(dims * vectors.length)
+        vectors.forEach((v, i) => flat.set(toInt8(v), i * dims))
+      }
     }
   }
   if (vectorless) {
@@ -1630,6 +1668,9 @@ async function main() {
     hash,
     embedModel: vectorless ? null : EMBED_MODEL,
     dims,
+    // engine-spec 027. Absent means int8, which keeps an int8 manifest
+    // byte-identical to the ones every earlier build wrote.
+    ...(vectorless || !binary ? {} : { quant: 'binary', cosScale }),
     chunkCount: chunks.length,
     shards,
     vectors: vecName,

@@ -15,7 +15,7 @@
 const artifacts = [
   { name: 'manifest.json', note: 'dims, guard, shards' },
   { name: 'chunks-NN.<hash>.json', note: '250 chunks per shard' },
-  { name: 'vectors.<hash>.bin', note: 'int8 embeddings' },
+  { name: 'vectors.<hash>.bin', note: '1-bit embeddings' },
   { name: 'df.<hash>.json', note: 'document frequencies' },
 ]
 
@@ -45,20 +45,21 @@ const channels = [
 
 /*
  * This site's own index, and the figures are the served file rather than a
- * rounded boast: 580 chunks × 1536 dims × 1 byte = 890,880 bytes, which is
- * exactly what `ls -l docs/public/rag/vectors.*.bin` prints. The float32 row is
- * the same array at 4 bytes a dimension.
+ * rounded boast: 584 chunks × 4096 dims × 1 bit = 299,008 bytes, which is
+ * exactly what `ls -l docs/public/rag/vectors.*.bin` prints. The int8 and
+ * float32 rows are the same array at 1 and 4 bytes a dimension (engine-spec 027).
  *
  * THESE MOVE WHEN THE CORPUS DOES. Adding a page changes the chunk count, and
  * the moment it does these two rows are a claim about a file that no longer
  * exists — `docs/guide/comparison.md`, `docs/guide/indexing.md` and the README
  * carry the same pair. The check is one line:
- *   node -e "const m=require('./docs/public/rag/manifest.json');console.log(m.chunkCount*m.dims)"
+ *   node -e "const m=require('./docs/public/rag/manifest.json');console.log(m.chunkCount*Math.ceil(m.dims/8))"
  * against `ls -l docs/public/rag/vectors.*.bin`.
  */
 const sizes = [
-  { label: 'float32', bytes: '3.4 MB', width: '100%', dim: true },
-  { label: 'int8', bytes: '870 KB', width: '25%', dim: false },
+  { label: 'float32', bytes: '9.1 MB', width: '100%', dim: true },
+  { label: 'int8', bytes: '2.3 MB', width: '25%', dim: true },
+  { label: '1-bit', bytes: '292 KB', width: '3.125%', dim: false },
 ]
 </script>
 
@@ -229,7 +230,7 @@ const sizes = [
       <div class="p-5 sm:p-15 pb-0 sm:pb-0 flex flex-col gap-3">
         <h5 class="text-white">Vectors a browser can afford</h5>
         <p class="max-w-[28rem] text-pretty">
-          Quantised to one byte per dimension at build time, with the error
+          Quantised to one bit per dimension at build time, with the error
           measured rather than assumed
         </p>
       </div>
@@ -250,11 +251,11 @@ const sizes = [
           </li>
         </ul>
         <p class="text-sm">
-          This site's own index &mdash; 580 chunks at 1536 dimensions, one signed
-          byte each, no per-vector scale to unpack. The build measures the
-          round-trip against the exact cosines and
-          <span class="text-white">refuses to ship above 0.01 mean |&Delta;cos|</span>;
-          this one comes in under 0.003.
+          This site's own index &mdash; 584 chunks at 4096 dimensions, one sign
+          bit each, scored against the question's full-precision vector. The build
+          measures that score against the exact cosines and
+          <span class="text-white">refuses to ship above 0.03 mean |&Delta;cos|</span>;
+          this one comes in at 0.009.
         </p>
       </div>
     </div>
@@ -263,8 +264,8 @@ const sizes = [
 
 <style scoped>
 /*
- * The int8 bar is a quarter of the float32 bar because the ratio is exactly
- * four — one signed byte a dimension against four. The gradient spans the bar
+ * The bars are in exact ratio: int8 is a quarter of float32 and the 1-bit bar
+ * a thirty-second — one bit a dimension against thirty-two. The gradient spans the bar
  * rather than the track behind it, so the short bar is the whole brand ramp
  * compressed and not a blue stub that reads as a different colour.
  */

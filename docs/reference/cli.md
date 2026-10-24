@@ -28,6 +28,7 @@ npx docpilot index --dry
 npx docpilot index --no-embed
 npx docpilot index --html-dir=dist
 npx docpilot index --refresh-embeddings
+npx docpilot index --quantize=binary
 ```
 
 Builds the retrieval index into `docs/public/rag/` (or wherever `indexDir` points). `--dry` chunks and reports without embedding — no network, no model — which is the loop for tuning chunking.
@@ -77,6 +78,8 @@ namespace, so a cache hit is always a vector from the space the index is being
 built in. `--refresh-embeddings` skips reading it — never writing it, so a
 refresh also repairs a file that went bad — for the one case a key cannot see,
 which is a provider that changed under a stable model name.
+
+`--quantize=auto|binary|int8` chooses how the chunk vectors are stored. `binary` keeps one sign bit per dimension — an eighth of `int8` — and scores it against the question's full-precision vector; `int8` is the one-byte format earlier builds wrote. `auto`, the default, measures the 1-bit error and takes the bit when it is at most `0.015` mean |Δcos|, which in practice means a wide embedder (4096 dimensions) gets the bit and a 1024-dimension one keeps the byte. Each format has its own build-time error gate, `0.03` and `0.01`. See [Vectors are quantised](/guide/indexing#vectors-are-quantised) for what the bit costs and when to keep the byte.
 
 `--no-embed` writes a real index with **no vectors in it**: no embedding calls, no `vectors.<hash>.bin`, and retrieval by BM25 alone. It is the one-off form of [`embed: false`](/reference/config#embed-false) — the config key is what a deployment sets, because the browser has to be told as well.
 

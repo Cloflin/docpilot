@@ -33,7 +33,7 @@ dated — and the list of rows those services win — is
 Because the index is a build artefact, not infrastructure. It is written by
 `npx docpilot index`, it is deterministic — identical input, byte-identical
 output — and it is served as static files by the host already serving your site.
-Vectors are quantised to eight bits and sharded, so a corpus the size of a real
+Vectors are quantised to one bit and sharded, so a corpus the size of a real
 documentation set is a download rather than a deployment; the numbers, and the
 scale at which they stop working, are in
 [Building the index](./indexing#vectors-are-quantised).

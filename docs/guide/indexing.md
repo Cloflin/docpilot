@@ -200,21 +200,58 @@ size of the first. Readers download neither one they are not using.
 
 ## Vectors are quantised
 
-Chunk vectors are stored as int8. The round-trip error is below 0.01 cosine, which is under the noise floor of the ranking it feeds, and it makes the difference between an index a browser downloads and one it does not.
+Chunk vectors are stored as **one sign bit per dimension** when the embedder is wide enough to afford it — a thirty-second of float32 and an eighth of int8. On this site's golden set the 1-bit index ranks within noise of the int8 one: the same recall@8, MRR within 0.01. At the widths current embedders produce, the bit is what keeps the blob in kilobytes.
 
-The scheme is the plainest one that works, and it is plain on purpose. Every vector is L2-normalised, then each dimension becomes `round(v × 127)` clamped to ±127 — **signed 8-bit, one byte per dimension, and no per-vector scale or offset stored anywhere.** Because the vectors are normalised, cosine *is* the dot product, so the browser scores with integer arithmetic over one flat `Int8Array` and divides once by 127² at the end. There is nothing to unpack per vector and nothing to look up per chunk.
+The scheme keeps the half that matters at full precision. Every chunk vector is L2-normalised and reduced to its signs, eight to a byte; the **question's** vector is never quantised. The browser scores `Σ q[i] · sign(d[i])` — an asymmetric product, which keeps far more of the cosine than comparing two sign strings would — and multiplies once by a corpus-wide `cosScale` the build fits by least squares and writes into the manifest. That one number is what keeps the dense score on the cosine scale the [gate](/concepts/the-gate) and its calibrated thresholds are written in.
 
-The blob is a single file, `vectors.<hash>.bin`, exactly `chunkCount × dims` bytes long — the store checks that on load and throws rather than scoring against a truncated download. The chunk **text** is what gets sharded, 250 chunks per `chunks-NN.<hash>.json`.
+The blob is a single file, `vectors.<hash>.bin`, exactly `chunkCount × dims / 8` bytes long — the store checks that on load and throws rather than scoring against a truncated download, then unpacks it to ±1 once. The chunk **text** is what gets sharded, 250 chunks per `chunks-NN.<hash>.json`.
 
-**The error is measured, not assumed.** Every build samples up to 200 vector pairs, compares the exact float cosine against the int8 round trip, and prints the mean absolute difference:
+**The error is measured, not assumed.** Every build samples up to 200 vector pairs, compares the exact float cosine against the 1-bit score, and prints the mean absolute difference:
 
 ```
-quantisation err 0.00243 mean |Δcos|
+quantisation err 0.00910 mean |Δcos| (1-bit)
 ```
 
-Above `0.01` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.
+Above `0.03` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.
 
-For scale: this documentation site indexes 580 chunks at 1536 dimensions, so its vector blob is 890,880 bytes — 870 KB, where float32 would have been 3.4 MB.
+**The bit is taken only where it holds.** By default (`--quantize=auto`) the build measures the 1-bit error first and writes the bit only when it is at most `0.015`; otherwise it writes **int8** — one signed byte per dimension, `round(v × 127)`, under a `0.01` gate — and says so. The error tracks width: at 4096 dimensions it is about `0.010` and ranking holds; at 1024 (`bge-m3`) it is about `0.023`, and MRR on the golden set falls from 0.57 to 0.54. `--quantize=binary` or `--quantize=int8` overrides the choice. Re-run `calibrate` after the format changes: the scale is fitted, but a threshold calibrated on one format is a measurement of that format.
+
+For scale: this documentation site indexes 584 chunks at 4096 dimensions, so its vector blob is 299,008 bytes — 292 KB, where int8 would have been 2.3 MB and float32 9.1 MB.
+
+### How the format was chosen {#how-the-format-was-chosen}
+
+The format was measured on this site's own corpus before it became the default, with the embedder this site runs (`qwen/qwen3-embedding-8b`, 4096 dimensions). Every variant was built from the same float32 vectors and ranked by the same retriever the panel runs. Two numbers decided it:
+
+- **dense agreement** — of the top 8 chunks that exact float32 cosine returns, how many the variant also returns, averaged over 827 questions (no gold needed);
+- **recall@8 and MRR** on the 96-question golden set, with hybrid retrieval.
+
+| variant | vector blob | dense agreement | recall@8 | MRR |
+|---|---|---|---|---|
+| int8, 4096 dims (the previous format) | 2.3 MB | 0.96 | 0.758 | 0.598 |
+| int4, 4096 dims | 1.1 MB | 0.94 | 0.780 | 0.629 |
+| **1-bit, 4096 dims (now)** | **290 KB** | **0.83** | **0.758** | **0.599** |
+| int8, first 1024 dims | 580 KB | 0.79 | 0.750 | 0.573 |
+| int8, first 512 dims | 290 KB | 0.70 | 0.727 | 0.579 |
+| 1-bit, first 2048 dims | 145 KB | 0.76 | 0.750 | 0.577 |
+| 1-bit, first 1024 dims | 73 KB | 0.68 | 0.712 | 0.550 |
+
+**At equal size, fewer bits beat fewer dimensions.** All 4096 dimensions at one bit agree with float32 on 83 % of the top 8; the first 512 dimensions at one byte, the same 290 KB, agree on 70 %. So the build never truncates. One gold chunk moves recall@8 on 96 questions by about 0.008, so a difference under 0.02 in that column is noise, not ranking.
+
+**The full eval agrees.** `npx docpilot eval --gate-only` on the rebuilt index, against the int8 index it replaced: recall@8 is 0.803 for both, MRR 0.631 → 0.635, retrieval F1 0.328 → 0.335. After re-calibration, `tau` moved from 0.55 to 0.57.
+
+**A narrower embedder cannot afford the bit.** The same comparison on `bge-m3` (1024 dimensions) kept recall@8 at 0.811 but lost MRR, 0.572 → 0.540, and moved the gate's D by 0.06 on average. That is why `auto` reads the measured error instead of always taking the bit, and why this site's `bge-m3` index is still int8.
+
+**Two ideas that sound right measured worse:**
+
+- **Centring before the sign** — subtracting the corpus mean vector, a common fix for anisotropic embeddings — lowered dense agreement from 0.83 to 0.77.
+- **Compressing the blob.** Sign bits look random to brotli and gzip: the 1-bit file compresses by under 2 %, where int8 compressed by about 60 %. The download is about three times smaller, not eight.
+
+To measure your own corpus, build each format and run the eval after each build. Both runs share one index hash, so compare the timestamped copies in `${evalDir}/reports/history/`, not `latest.json`:
+
+```bash
+npx docpilot index --quantize=int8 && npx docpilot eval --gate-only
+npx docpilot index --quantize=binary && npx docpilot eval --gate-only
+```
 
 ## Scale
 

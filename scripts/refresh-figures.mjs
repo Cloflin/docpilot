@@ -2,7 +2,7 @@
 /**
  * Rewrites every printed index figure to match docs/public/rag/manifest.json.
  *
- * The 11 claims below are a verbatim copy of the `claims` table in
+ * The claims below are a verbatim copy of the `claims` table in
  * test/docs-links.test.js ("docs — the printed index figures match the
  * committed index"). Each template is turned into a regex whose numeric parts
  * are wildcards, so the OLD values do not have to be known: whatever number is
@@ -24,10 +24,10 @@ const m = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'))
 const vectors = path.join(RAG, m.vectors ?? '')
 const bytes = fs.statSync(vectors).size
 
-if (bytes !== m.chunkCount * m.dims) {
+if (m.quant !== 'binary' || bytes !== m.chunkCount * Math.ceil(m.dims / 8)) {
   console.error(
-    `blob is not one byte per dimension: ${bytes} bytes vs ${m.chunkCount} × ${m.dims} = ${m.chunkCount * m.dims}.\n` +
-      `The figure templates assume one signed byte per dimension (src/build/lib/quantize.js).\n` +
+    `blob is not one bit per dimension: ${bytes} bytes vs ${m.chunkCount} × ${m.dims} / 8 = ${m.chunkCount * Math.ceil(m.dims / 8)}.\n` +
+      `The figure templates assume a 1-bit index (engine-spec 027, src/build/lib/quantize.js).\n` +
       `They need rewriting, not re-running.`,
   )
   process.exit(1)
@@ -36,7 +36,8 @@ if (bytes !== m.chunkCount * m.dims) {
 const n = m.chunkCount
 const dims = m.dims
 const kb = `${Math.round(bytes / 1024)} KB`
-const mb = `${((bytes * 4) / 1024 / 1024).toFixed(1)} MB`
+const int8 = `${((n * dims) / 1024 / 1024).toFixed(1)} MB`
+const mb = `${((n * dims * 4) / 1024 / 1024).toFixed(1)} MB`
 const grouped = bytes.toLocaleString('en-US')
 
 // [file, target text, regex matching the same sentence with any figures in it]
@@ -46,8 +47,8 @@ const SIZE = String.raw`[\d.,]+\s*(?:KB|MB|GB)`
 const claims = [
   [
     'docs/.vitepress/theme/FeatureGrid.vue',
-    `${n} chunks × ${dims} dims × 1 byte = ${grouped} bytes`,
-    new RegExp(`${NUM} chunks × ${NUM} dims × 1 byte = ${NUM} bytes`, 'g'),
+    `${n} chunks × ${dims} dims × 1 bit = ${grouped} bytes`,
+    new RegExp(`${NUM} chunks × ${NUM} dims × 1 bit = ${NUM} bytes`, 'g'),
   ],
   [
     'docs/.vitepress/theme/FeatureGrid.vue',
@@ -56,8 +57,13 @@ const claims = [
   ],
   [
     'docs/.vitepress/theme/FeatureGrid.vue',
-    `{ label: 'int8', bytes: '${kb}'`,
+    `{ label: 'int8', bytes: '${int8}'`,
     new RegExp(String.raw`\{ label: 'int8', bytes: '${SIZE}'`, 'g'),
+  ],
+  [
+    'docs/.vitepress/theme/FeatureGrid.vue',
+    `{ label: '1-bit', bytes: '${kb}'`,
+    new RegExp(String.raw`\{ label: '1-bit', bytes: '${SIZE}'`, 'g'),
   ],
   [
     'docs/.vitepress/theme/FeatureGrid.vue',
@@ -81,8 +87,8 @@ const claims = [
   ],
   [
     'docs/guide/comparison.md',
-    `${kb} of int8 vectors`,
-    new RegExp(`${SIZE} of int8 vectors`, 'g'),
+    `${kb} of 1-bit vectors`,
+    new RegExp(`${SIZE} of 1-bit vectors`, 'g'),
   ],
   [
     'docs/guide/indexing.md',
@@ -91,13 +97,13 @@ const claims = [
   ],
   [
     'docs/guide/indexing.md',
-    `${grouped} bytes — ${kb}, where float32 would have been ${mb}`,
-    new RegExp(`${NUM} bytes — ${SIZE}, where float32 would have been ${SIZE}`, 'g'),
+    `${grouped} bytes — ${kb}, where int8 would have been ${int8} and float32 ${mb}`,
+    new RegExp(`${NUM} bytes — ${SIZE}, where int8 would have been ${SIZE} and float32 ${SIZE}`, 'g'),
   ],
   [
     'README.md',
-    `${kb} for this project's own ${n}-chunk index, where float32 would be ${mb}`,
-    new RegExp(`${SIZE} for this project(?:'|’)s own ${NUM}-chunk index, where float32 would be ${SIZE}`, 'g'),
+    `${kb} for this project's own ${n}-chunk index, where int8 would be ${int8} and float32 ${mb}`,
+    new RegExp(`${SIZE} for this project(?:'|’)s own ${NUM}-chunk index, where int8 would be ${SIZE} and float32 ${SIZE}`, 'g'),
   ],
   [
     'README.md',

@@ -170,9 +170,9 @@ The upstream host needs a `resolver` only if it is resolved at runtime — that 
 | `manifest.json` | `no-cache` | unhashed, names every other file, 64 KB at most — the indexer refuses to write a larger one |
 | `chunks-NN.<hash>.json` | `immutable` | the text, 250 chunks per shard; compresses well with gzip |
 | `df.<hash>.json` | `immutable` | document frequencies for the lexical half |
-| `vectors.<hash>.bin` | `immutable` | `chunkCount × dims` bytes, Int8 — absent on an index built `--no-embed` |
+| `vectors.<hash>.bin` | `immutable` | `chunkCount × dims / 8` bytes of sign bits (`chunkCount × dims` with `--quantize=int8`) — absent on an index built `--no-embed` |
 
-`vectors.bin` is quantised already — 2,000 chunks at 1,024 dimensions is 2 MB — and compressing it again buys a few percent for real CPU. Leave it out of `gzip_types`, and make sure nothing in front of your host *transforms* it: a CDN "optimisation" that rewrites a response body corrupts the vectors, and the panel reports a buffer-length mismatch rather than a bad byte.
+`vectors.bin` is quantised already — 2,000 chunks at 1,024 dimensions is 250 KB of sign bits — and compressing it again buys nothing for real CPU. Leave it out of `gzip_types`, and make sure nothing in front of your host *transforms* it: a CDN "optimisation" that rewrites a response body corrupts the vectors, and the panel reports a buffer-length mismatch rather than a bad byte.
 
 Everything but `manifest.json` carries a content hash, so a deploy that overwrites the directory is atomic from a browser's point of view: new names, new fetches, no half-updated index. That property is what makes the `no-cache` on the manifest necessary and sufficient.
 

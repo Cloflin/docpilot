@@ -407,11 +407,12 @@ describe('docs — the committed index cannot go stale', () => {
 describe('docs — the printed index figures match the committed index', () => {
   const VECTORS = (m) => path.join(RAG, m.vectors ?? '')
 
-  it.skipIf(!fs.existsSync(MANIFEST))('the blob is one byte per dimension', () => {
+  it.skipIf(!fs.existsSync(MANIFEST))('the blob is one bit per dimension', () => {
     const m = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'))
     // If this ever fails, every figure below is derived from a false premise
     // and the templates in the next test need rewriting, not just re-running.
-    expect(fs.statSync(VECTORS(m)).size).toBe(m.chunkCount * m.dims)
+    expect(m.quant).toBe('binary')
+    expect(fs.statSync(VECTORS(m)).size).toBe(m.chunkCount * Math.ceil(m.dims / 8))
   })
 
   it.skipIf(!fs.existsSync(MANIFEST))('every page printing a figure prints the current one', () => {
@@ -419,7 +420,9 @@ describe('docs — the printed index figures match the committed index', () => {
     const bytes = fs.statSync(VECTORS(m)).size
     const n = m.chunkCount
     const kb = `${Math.round(bytes / 1024)} KB`
-    const mb = `${((bytes * 4) / 1024 / 1024).toFixed(1)} MB`
+    // The same array at one byte and at four bytes a dimension: what the bit buys.
+    const int8 = `${((n * m.dims) / 1024 / 1024).toFixed(1)} MB`
+    const mb = `${((n * m.dims * 4) / 1024 / 1024).toFixed(1)} MB`
     const grouped = bytes.toLocaleString('en-US')
 
     /**
@@ -430,21 +433,22 @@ describe('docs — the printed index figures match the committed index', () => {
      * sweep would either rewrite those or need exceptions for them.
      */
     const claims = [
-      ['docs/.vitepress/theme/FeatureGrid.vue', `${n} chunks × ${m.dims} dims × 1 byte = ${grouped} bytes`],
+      ['docs/.vitepress/theme/FeatureGrid.vue', `${n} chunks × ${m.dims} dims × 1 bit = ${grouped} bytes`],
       ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: 'float32', bytes: '${mb}'`],
-      ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: 'int8', bytes: '${kb}'`],
+      ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: 'int8', bytes: '${int8}'`],
+      ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: '1-bit', bytes: '${kb}'`],
       ['docs/.vitepress/theme/FeatureGrid.vue', `${n} chunks at ${m.dims} dimensions`],
       ['docs/.vitepress/theme/Comparison.vue', `${kb} for ${n} chunks`],
       ['docs/guide/comparison.md', `${kb} for this site's ${n} chunks at ${m.dims} dimensions`],
       ['docs/guide/comparison.md', `${n} chunks, ${m.dims} dimensions`],
       // The same sentence carries a third measurement the two claims above do
       // not reach: "405 chunks, 2048 dimensions," ends one line and "810 KB of
-      // int8 vectors" begins the next, so the KB token sits outside both spans
+      // 1-bit vectors" begins the next, so the KB token sits outside both spans
       // and a rebuild would have left it stale with this gate green.
-      ['docs/guide/comparison.md', `${kb} of int8 vectors`],
+      ['docs/guide/comparison.md', `${kb} of 1-bit vectors`],
       ['docs/guide/indexing.md', `indexes ${n} chunks at ${m.dims} dimensions`],
-      ['docs/guide/indexing.md', `${grouped} bytes — ${kb}, where float32 would have been ${mb}`],
-      ['README.md', `${kb} for this project's own ${n}-chunk index, where float32 would be ${mb}`],
+      ['docs/guide/indexing.md', `${grouped} bytes — ${kb}, where int8 would have been ${int8} and float32 ${mb}`],
+      ['README.md', `${kb} for this project's own ${n}-chunk index, where int8 would be ${int8} and float32 ${mb}`],
       ['README.md', `${kb} for this site's ${n} chunks`],
     ]
 
@@ -456,8 +460,8 @@ describe('docs — the printed index figures match the committed index', () => {
       stale.length
         ? [
             `the index was rebuilt and the printed figures were not updated. ` +
-              `The committed index is ${n} chunks × ${m.dims} dims = ${grouped} bytes ` +
-              `(${kb}; ${mb} as float32). Update:`,
+              `The committed index is ${n} chunks × ${m.dims} dims × 1 bit = ${grouped} bytes ` +
+              `(${kb}; ${int8} as int8, ${mb} as float32). Update:`,
             ...stale,
           ]
         : [],

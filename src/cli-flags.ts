@@ -103,6 +103,7 @@ export const COMMANDS = {
       { name: 'dry', kind: 'bool', help: 'chunk and report; no embeddings, no network, no cost' },
       { name: 'no-embed', kind: 'bool', help: 'a real index with no vectors in it' },
       { name: 'refresh-embeddings', kind: 'bool', help: 'ignore the embed cache and buy the corpus again' },
+      { name: 'quantize', kind: 'enum', values: ['auto', 'binary', 'int8'], example: 'int8', help: 'how chunk vectors are stored: one bit or one byte per dimension; auto measures and picks' },
       { name: 'html-dir', kind: 'value', example: 'dist', help: 'also index a site that is already built — any generator, no markdown needed' },
       { name: 'html-select', kind: 'value', example: 'main', help: 'the CSS selector naming the body of a built page' },
       { name: 'html-base', kind: 'value', example: 'https://example.com', help: 'the origin those built pages are served from' },
