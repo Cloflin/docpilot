@@ -46,34 +46,9 @@ const SIZE = String.raw`[\d.,]+\s*(?:KB|MB|GB)`
 
 const claims = [
   [
-    'docs/.vitepress/theme/FeatureGrid.vue',
-    `${n} chunks × ${dims} dims × 1 bit = ${grouped} bytes`,
-    new RegExp(`${NUM} chunks × ${NUM} dims × 1 bit = ${NUM} bytes`, 'g'),
-  ],
-  [
-    'docs/.vitepress/theme/FeatureGrid.vue',
-    `{ label: 'float32', bytes: '${mb}'`,
-    new RegExp(String.raw`\{ label: 'float32', bytes: '${SIZE}'`, 'g'),
-  ],
-  [
-    'docs/.vitepress/theme/FeatureGrid.vue',
-    `{ label: 'int8', bytes: '${int8}'`,
-    new RegExp(String.raw`\{ label: 'int8', bytes: '${SIZE}'`, 'g'),
-  ],
-  [
-    'docs/.vitepress/theme/FeatureGrid.vue',
-    `{ label: '1-bit', bytes: '${kb}'`,
-    new RegExp(String.raw`\{ label: '1-bit', bytes: '${SIZE}'`, 'g'),
-  ],
-  [
-    'docs/.vitepress/theme/FeatureGrid.vue',
-    `${n} chunks at ${dims} dimensions`,
-    new RegExp(`${NUM} chunks at ${NUM} dimensions`, 'g'),
-  ],
-  [
-    'docs/.vitepress/theme/Comparison.vue',
-    `${kb} for ${n} chunks`,
-    new RegExp(`${SIZE} for ${NUM} chunks`, 'g'),
+    'docs/introduction.md',
+    `${kb} for ${n} chunks at ${dims} dimensions`,
+    new RegExp(`${SIZE} for ${NUM} chunks at ${NUM} dimensions`, 'g'),
   ],
   [
     'docs/guide/comparison.md',

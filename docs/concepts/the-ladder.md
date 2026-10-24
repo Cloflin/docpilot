@@ -61,7 +61,7 @@ a funded key sits two rows below it. So the selected set sorts into three tiers,
 | tier | members | why here |
 |---|---|---|
 | 0 | every provider billed to your account | the allowance is yours, and it is per token |
-| 1 | a provider's own free catalogue — OpenRouter's [free pool](/guide/free-tier) | 50 requests a day, shared by every reader of the site |
+| 1 | a provider's own free catalogue — OpenRouter's [free pool](/reference/config#budget) | 50 requests a day, shared by every reader of the site |
 | 2 | a server of your own — `custom`, `llamacpp`, `ollama` | nobody but you can reach it |
 
 `openrouter` sits at position 7 of the table and answers *after* `groq` here.
@@ -162,7 +162,7 @@ once per member.
 The two rotations are the same argument at two levels, and the table above is the
 difference between them. Both are metered by the thing that catches people out:
 **requests per day, not tokens** — 50 of them under ten lifetime credits, 1000
-over. [Living on the free tier](/guide/free-tier) is the whole of that.
+over. [`budget`](/reference/config#budget) is the whole of that.
 
 **A mixed chain turns per-day rationing off.** Every rationing rule is gated on
 an allowance it can defend, and a free tier beside a metered account is two

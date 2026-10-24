@@ -7659,8 +7659,8 @@ describe('i18n — the documented key table matches the shipped one', () => {
    *
    * The two tests above hold `docs/guide/i18n.md`, which is the page a
    * translator opens. It is not the only page that quotes the totals: the
-   * README, the comparison table, the panel guide and the landing page's
-   * feature card all print "N strings … in M groups" as a selling point, and
+   * README, the comparison table, the panel guide and the i18n feature
+   * page all print "N strings … in M groups" as a selling point, and
    * none of them was checked. They had drifted to 158 in 22 against a tree of
    * 170 in 25 — the same failure, in the same shape, as the drift the block
    * above was written for, one file over.
@@ -7675,8 +7675,7 @@ describe('i18n — the documented key table matches the shipped one', () => {
       ['README.md', `Every reader-facing string — ${n} of them, in ${g} groups —`],
       ['docs/guide/comparison.md', `all ${n} of them, one at a time, in ${g} groups`],
       ['docs/guide/panel.md', `All ${n} reader-facing strings are replaceable one at a time, in ${g} groups`],
-      ['docs/.vitepress/theme/ChatFeatures.vue', `'${n} strings, one at a time'`],
-      ['docs/.vitepress/theme/ChatFeatures.vue', `replaceable, in ${g} groups.`],
+      ['docs/features/i18n.md', `${n} strings in ${g} groups`],
     ]
     const stale = claims
       .filter(([f, claim]) => !srcText(f).includes(claim))

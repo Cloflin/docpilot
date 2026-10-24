@@ -184,7 +184,7 @@ hosted half to bill from — no account, no service, no telemetry. You bring a
 model provider key and pay them directly, or run the whole thing on OpenRouter's
 free tier: one key, no card, and a ceiling of **50 requests a day** that also
 covers rebuilding the index. See
-[Living on the free tier](docs/guide/free-tier.md).
+[`budget`](docs/reference/config.md#budget).
 
 ### And how it is built
 
@@ -241,7 +241,7 @@ Chat only — no embeddings endpoint: `anthropic`, `deepseek`, `groq`, `xai`, `c
 
 Choosing one of them with `embed: 'auto'` borrows **OpenRouter's free embedding pool** for the retrieval half: set `OPENROUTER_API_KEY`, and `npx docpilot index` picks whichever free embedder answers. The borrow is printed rather than assumed — the text of every chunk is posted to OpenRouter at build time, so name `embed` explicitly if your corpus may not leave for a third party.
 
-`chat: { provider: 'openrouter' }` with no model named runs both halves on the **free tier**: chat rotates through a pool of free models per call, and `npx docpilot index` picks whichever free embedder answers and records it in the manifest. That tier meters **requests, not tokens** — 50 a day under 10 credits bought — and one turn is an embedding request plus two or three model calls, so fifty is a dozen-odd questions rather than fifty. What the panel does about that, and what you have to decide, is [Living on the free tier](docs/guide/free-tier.md).
+`chat: { provider: 'openrouter' }` with no model named runs both halves on the **free tier**: chat rotates through a pool of free models per call, and `npx docpilot index` picks whichever free embedder answers and records it in the manifest. That tier meters **requests, not tokens** — 50 a day under 10 credits bought — and one turn is an embedding request plus two or three model calls, so fifty is a dozen-odd questions rather than fifty. What the panel does about that, and what you have to decide, is [`budget`](docs/reference/config.md#budget).
 
 `embed: false` runs no embedder at all: the index carries no vectors and every question is retrieved by keyword. It is supported, and it costs most of the recall — measured on a 1191-chunk corpus, recall@8 fell from 0.97 to 0.41, retrieval F1 from 0.35 to 0.18, and 11 of 44 answerable questions were refused outright. Keyword matching also scores zero for a question asked in a language your corpus is not written in. Measure your own corpus with `npx docpilot eval --gate-only --lexical` before choosing it — it reads the golden set you wrote, so that comes first.
 

@@ -1,12 +1,8 @@
 ---
 layout: home
-theme: dark
-title: 'DocPilot — an AI assistant on every page of your site'
+title: DocPilot — an AI assistant for any site
 titleTemplate: false
+description: An AI chat assistant you embed on any website. It answers from your own pages, cites every claim, and keeps your model key off the page.
 ---
-
-<script setup>
-import Home from './.vitepress/theme/Home.vue'
-</script>
 
 <Home />

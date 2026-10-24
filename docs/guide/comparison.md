@@ -77,7 +77,7 @@ answers, and the project's own documentation opens its cost section with
   falls through to OpenRouter's free tier: one key, no card — and **50 requests
   a day** under 10 credits bought. That meters **requests, not tokens**, and one
   turn is an embedding request plus two or three model calls, so fifty is a
-  dozen-odd questions. [Living on the free tier](./free-tier).
+  dozen-odd questions. [`budget`](/reference/config#budget).
 - **Rebuilding the index draws on the same allowance** — but only for what
   changed. Vectors are cached by model and by chunk text, so editing one page
   costs one embedding request rather than one per 32 chunks of the corpus. A

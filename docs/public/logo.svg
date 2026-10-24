@@ -1,14 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-    <defs>
-      <linearGradient id="grad-h" gradientUnits="userSpaceOnUse" x1="422" y1="78" x2="91" y2="434">
-        <stop offset="0" stop-color="#476be3"></stop>
-        <stop offset="0.52" stop-color="#9277c7"></stop>
-        <stop offset="1" stop-color="#c56161"></stop>
-      </linearGradient>
-    </defs>
-    <path d="M0 -100C8 -30 30 -8 100 0C30 8 8 30 0 100C-8 30 -30 8 -100 0C-30 -8 -8 -30 0 -100Z" transform="translate(206 198) scale(1.15)" fill="url(#grad-h)"></path>
-    <path d="M0 -100C8 -30 30 -8 100 0C30 8 8 30 0 100C-8 30 -30 8 -100 0C-30 -8 -8 -30 0 -100Z" transform="translate(362 138) scale(0.6)" fill="url(#grad-h)"></path>
-    <path d="M0 -100C8 -30 30 -8 100 0C30 8 8 30 0 100C-8 30 -30 8 -100 0C-30 -8 -8 -30 0 -100Z" transform="translate(340 276) scale(0.36)" fill="#c56161"></path>
-    <rect x="91" y="378" width="181" height="56" rx="28" fill="url(#grad-h)"></rect>
-    <rect x="302" y="378" width="120" height="56" rx="28" fill="url(#grad-h)"></rect>
-  </svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <style>
+    .frame { stroke: #1C1C1E; } .panel { fill: #476BE3; }
+    @media (prefers-color-scheme: dark) { .frame { stroke: #FFFFFF; } .panel { fill: #879FED; } }
+  </style>
+  <rect class="frame" x="6" y="10" width="52" height="44" rx="10" fill="none" stroke-width="5"/>
+  <rect class="panel" x="39" y="18" width="11" height="28" rx="4"/>
+</svg>

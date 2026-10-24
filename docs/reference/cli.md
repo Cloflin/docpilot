@@ -648,7 +648,7 @@ Silent otherwise, which is the expected case. It **reports and never acts**: the
 
 **It is a flag rather than part of the default run because it is the only thing in `doctor` that touches the network.** `doctor` is the command CI gates on, and a check that fails when a third party is slow is a check that gets removed — which takes the readiness gate with it.
 
-It checks only a half that has a pool *and* a catalogue to check it against. On a provider that publishes neither, the line reads `no catalogue to check them against` rather than reporting every id as retired, and an unreachable catalogue is printed as unreachable rather than turned into a verdict. The exit code stays the readiness one either way — a retired id is news, not a broken configuration. See [Living on the free tier](/guide/free-tier).
+It checks only a half that has a pool *and* a catalogue to check it against. On a provider that publishes neither, the line reads `no catalogue to check them against` rather than reporting every id as retired, and an unreachable catalogue is printed as unreachable rather than turned into a verdict. The exit code stays the readiness one either way — a retired id is news, not a broken configuration. See [`budget`](/reference/config#budget).
 
 ## `init`
 

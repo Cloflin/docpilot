@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vitepress'
-import { extendConfig } from '@voidzero-dev/vitepress-theme/config.js'
+import tailwindcss from '@tailwindcss/vite'
 import { defineDocPilot } from '@cloflin/docpilot'
 import { openers } from './openers.mjs'
 
@@ -14,6 +14,28 @@ const repo = 'https://github.com/Cloflin/docpilot'
 const ragIndex = new URL('../public/rag/manifest.json', import.meta.url)
 
 const env = loadEnv('', process.cwd(), '')
+
+/**
+ * The index figures the demos print, read from the committed manifest at build
+ * time so a reindex moves them without an edit. The prose pages state the same
+ * numbers literally and are held by `test/docs-links.test.js`.
+ */
+const figures = (() => {
+  if (!existsSync(ragIndex)) return null
+  const m = JSON.parse(readFileSync(ragIndex, 'utf8'))
+  const bytes = m.chunkCount * Math.ceil(m.dims / 8)
+  return {
+    chunks: m.chunkCount,
+    dims: m.dims,
+    pages: m.pages.length,
+    bytes,
+    kb: `${Math.round(bytes / 1024)} KB`,
+    int8: `${((m.chunkCount * m.dims) / 1024 / 1024).toFixed(1)} MB`,
+    float32: `${((m.chunkCount * m.dims * 4) / 1024 / 1024).toFixed(1)} MB`,
+    tau: m.guard?.tau ?? null,
+    embedModel: m.embedModel,
+  }
+})()
 
 const LOCAL_EMBED = env.DOCPILOT_EMBED_LOCAL === '1'
 
@@ -138,42 +160,68 @@ export const docPilot = {
 
 const ai = defineDocPilot(docPilot, env)
 
-const sidebarForGuide = [
+/**
+ * Group icons: Lucide paths, raw SVG, because the theme renders `icon` as markup.
+ */
+const icons = {
+  start: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>',
+  features: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2Z"/></svg>',
+  guide: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',
+  concepts: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+  reference: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>',
+}
+
+const groups = [
   {
-    text: 'Introduction',
+    text: 'Get started',
+    icon: icons.start,
     items: [
-      { text: 'Getting started', link: '/guide/' },
+      { text: 'Introduction', link: '/introduction' },
+      { text: 'Security', link: '/guide/security', badge: 'new' },
+      { text: 'Quick start', link: '/guide/' },
+      { text: 'Install', link: '/install/' },
+      { text: 'VitePress', link: '/install/vitepress' },
+      { text: 'Docusaurus', link: '/install/docusaurus' },
+      { text: 'Vue', link: '/install/vue' },
+      { text: 'React', link: '/install/react' },
+      { text: 'JavaScript', link: '/install/javascript' },
+      { text: 'TypeScript', link: '/install/typescript' },
+      { text: 'Script tag', link: '/install/web' },
       { text: 'Where it can go', link: '/guide/where-it-goes' },
-      { text: 'Frequently asked', link: '/guide/faq' },
-      { text: 'Philosophy', link: '/guide/philosophy' },
-      { text: 'Why DocPilot', link: '/guide/why' },
-      { text: 'How it compares', link: '/guide/comparison' },
     ],
   },
   {
-    text: 'Install',
-    base: '/install/',
+    text: 'Features',
+    icon: icons.features,
     items: [
-      { text: 'Which entry point', link: '' },
-      { text: 'VitePress', link: 'vitepress' },
-      { text: 'Docusaurus', link: 'docusaurus' },
-      { text: 'Vue', link: 'vue' },
-      { text: 'React', link: 'react' },
-      { text: 'JavaScript', link: 'javascript' },
-      { text: 'TypeScript', link: 'typescript' },
-      { text: 'Web', link: 'web' },
+      { text: 'Overview', link: '/features/' },
+      { text: 'Triggers and layout', link: '/features/triggers' },
+      { text: 'Search scope', link: '/features/scope' },
+      { text: 'Sources and passages', link: '/features/sources' },
+      { text: 'Ask about a selection', link: '/features/quote' },
+      { text: 'Copy, retry, edit', link: '/features/actions' },
+      { text: 'Conversation history', link: '/features/history' },
+      { text: 'Conversation memory', link: '/features/memory', badge: 'new' },
+      { text: 'Model fallback', link: '/features/fallback' },
+      { text: 'Every language', link: '/features/i18n' },
+      { text: 'Suggestions', link: '/features/suggestions' },
+      { text: 'Status and reasoning', link: '/features/status' },
+      { text: 'Relevance gate', link: '/features/gate' },
+      { text: 'Feedback', link: '/features/feedback' },
+      { text: 'Pasted keys', link: '/features/credentials' },
+      { text: 'How this works', link: '/features/prompt' },
     ],
   },
   {
     text: 'Guide',
+    icon: icons.guide,
     items: [
       { text: 'The assistant panel', link: '/guide/panel' },
       { text: 'Choosing providers', link: '/guide/providers' },
-      { text: 'Living on the free tier', link: '/guide/free-tier' },
       { text: 'What it costs', link: '/guide/what-it-costs' },
       { text: 'Building the index', link: '/guide/indexing' },
-      { text: 'Imported pages', link: '/guide/imported-pages' },
       { text: 'Calibration and evaluation', link: '/guide/evaluation' },
+      { text: 'Imported pages', link: '/guide/imported-pages' },
       { text: 'Production', link: '/guide/production' },
       { text: 'A host of your own', link: '/guide/other-sites' },
       { text: 'Appearance', link: '/guide/appearance' },
@@ -183,30 +231,83 @@ const sidebarForGuide = [
       { text: 'Credentials in questions', link: '/guide/credentials' },
       { text: 'llms.txt and crawlers', link: '/guide/llms-txt' },
       { text: 'Troubleshooting', link: '/guide/troubleshooting' },
+      { text: 'Frequently asked', link: '/guide/faq' },
     ],
   },
   {
     text: 'Understanding it',
+    icon: icons.concepts,
     items: [
       { text: 'How a turn works', link: '/concepts/a-turn' },
       { text: 'The refusal gate', link: '/concepts/the-gate' },
       { text: 'The answer ladder', link: '/concepts/the-ladder' },
       { text: 'What it guarantees', link: '/concepts/guarantees' },
+      { text: 'Philosophy', link: '/guide/philosophy' },
+      { text: 'Why DocPilot', link: '/guide/why' },
+      { text: 'How it compares', link: '/guide/comparison' },
+    ],
+  },
+  {
+    text: 'Reference',
+    icon: icons.reference,
+    items: [
+      { text: 'Configuration', link: '/reference/config' },
+      { text: 'CLI', link: '/reference/cli' },
+      { text: 'Theme tokens', link: '/reference/theme' },
+      { text: 'Syntax highlighting', link: '/reference/highlighting' },
+      { text: 'Skills', link: '/reference/skills' },
     ],
   },
 ]
 
-const sidebarForReference = [
+/**
+ * Three sidebars, one per top-level section — Docs, Features, Reference — so
+ * each nav item opens its own page tree and prev/next stays inside it. Keyed by
+ * path prefix; the longest match wins.
+ */
+const [start, features, guide, concepts, reference] = groups
+const releases = {
+  text: 'Releases',
+  icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>',
+  items: [{ text: 'Changelog', link: '/changelog', badge: `v${pkg.version}` }],
+}
+const docs = [start, releases, guide, concepts]
+const sidebar = {
+  '/introduction': docs,
+  '/changelog': docs,
+  '/guide/': docs,
+  '/install/': docs,
+  '/concepts/': docs,
+  '/features/': [features],
+  '/reference/': [reference],
+}
+
+/**
+ * What `@cloflin/vitepress-theme/vite` exports, written out here. That entry
+ * ships as TypeScript source, and Node refuses to strip types under
+ * node_modules (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING), so a `.mjs`
+ * config cannot import it. Tailwind compiles the theme's stylesheet; the
+ * theme and its Vue dependencies have to be bundled for SSR, and kept out of
+ * the dev server's dependency pre-bundling.
+ */
+const cloflinTheme = () => [
+  tailwindcss(),
   {
-    text: 'Reference',
-    base: '/reference/',
-    items: [
-      { text: 'Configuration', link: 'config' },
-      { text: 'Theme tokens', link: 'theme' },
-      { text: 'Syntax highlighting', link: 'highlighting' },
-      { text: 'CLI', link: 'cli' },
-      { text: 'Skills', link: 'skills' },
-    ],
+    name: 'cloflin-vitepress-theme',
+    config: () => ({
+      ssr: { noExternal: ['@cloflin/vitepress-theme', 'motion-v', 'reka-ui'] },
+      // Pre-bundling would hand the theme's stylesheet to esbuild, which does not
+      // run Tailwind: the dev server then serves the CSS uncompiled.
+      optimizeDeps: { exclude: ['@cloflin/vitepress-theme'] },
+      // `@cloflin/docpilot/theme` imports `vitepress/theme` for its default
+      // Layout, and that import carries the default theme's global stylesheet,
+      // whose unlayered resets beat every Tailwind utility in this theme. The
+      // wrapper only uses it as a fallback when the theme has no Layout; this
+      // one has, so an empty module stands in.
+      resolve: {
+        alias: [{ find: /^vitepress\/theme$/, replacement: fileURLToPath(new URL('./theme/no-default-theme.js', import.meta.url)) }],
+      },
+    }),
   },
 ]
 
@@ -218,8 +319,8 @@ const devSource = () => ({
       resolve: {
         alias: [
           {
-            find: /^@cloflin\/docpilot\/theme$/,
-            replacement: fileURLToPath(new URL('../../src/theme/index.js', import.meta.url)),
+            find: /^@cloflin\/docpilot\/theme-without-styles$/,
+            replacement: fileURLToPath(new URL('../../src/theme/no-styles.js', import.meta.url)),
           },
         ],
       },
@@ -228,7 +329,7 @@ const devSource = () => ({
 })
 
 const config = defineConfig({
-  vite: { plugins: [ai.plugin(), devSource()] },
+  vite: { plugins: [cloflinTheme(), ai.plugin(), devSource()] },
 
   title: 'DocPilot',
   description:
@@ -262,78 +363,50 @@ const config = defineConfig({
 
   themeConfig: {
     docPilot: ai.themeConfig,
-    variant: 'rolldown',
+    figures,
+
+    // Per appearance, not `logo.svg`: that one switches on the OS setting
+    // (prefers-color-scheme), which disagrees with the site's own toggle.
+    logo: { light: '/mark-light.svg', dark: '/mark-dark.svg' },
+    siteTitle: false,
 
     nav: [
-      {
-        text: 'Guide',
-        activeMatch: '/(guide|concepts|install)',
-        link: '/guide/',
-      },
-      {
-        text: 'Reference',
-        activeMatch: '/reference',
-        link: '/reference/config',
-      },
-      {
-        text: `v${pkg.version}`,
-        items: [
-          { text: 'Releases', link: `${repo}/releases` },
-          {
-            text: 'npm',
-            link: 'https://www.npmjs.com/package/@cloflin/docpilot',
-          },
-        ],
-      },
+      { text: 'Docs', link: '/introduction', activeMatch: '^/(introduction|guide/|install/|concepts/)' },
+      { text: 'Features', link: '/features/', activeMatch: '^/features/' },
+      { text: 'Reference', link: '/reference/config', activeMatch: '^/reference/' },
+      { text: `v${pkg.version}`, link: '/changelog', activeMatch: '^/changelog' },
     ],
+    navCta: { text: 'Get started', link: '/guide/' },
 
-    sidebar: {
-      '/guide/': sidebarForGuide,
-      '/install/': sidebarForGuide,
-      '/concepts/': sidebarForGuide,
-      '/reference/': sidebarForReference,
-    },
+    sidebar,
+    outline: { level: [2, 3] },
 
-    outline: 'deep',
-
-    socialLinks: [{ icon: 'github', link: repo }],
+    socialLinks: [
+      { icon: 'github', link: repo },
+      { icon: 'npm', link: 'https://www.npmjs.com/package/@cloflin/docpilot' },
+      {
+        icon: {
+          svg: '<path fill="currentColor" d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12ZM7.12 20.45H3.56V9h3.56v11.45ZM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0Z"/>',
+        },
+        link: 'https://www.linkedin.com/in/oponamarchuk/',
+        ariaLabel: 'LinkedIn',
+      },
+      { icon: 'x', link: 'https://x.com/ponamarchuk_o', ariaLabel: 'X' },
+    ],
 
     editLink: {
       pattern: `${repo}/edit/main/docs/:path`,
       text: 'Edit this page on GitHub',
     },
+    lastUpdated: { text: 'Last updated' },
 
     footer: {
       message: 'Released under the MIT License.',
       copyright: '© 2025-present Cloflin and DocPilot contributors.',
-      nav: [
-        {
-          title: 'DocPilot',
-          items: [
-            { text: 'Getting started', link: '/guide/' },
-            { text: 'The assistant panel', link: '/guide/panel' },
-            { text: 'How it compares', link: '/guide/comparison' },
-            { text: 'Why DocPilot', link: '/guide/why' },
-            { text: 'Building the index', link: '/guide/indexing' },
-            { text: 'Configuration', link: '/reference/config' },
-            { text: 'CLI', link: '/reference/cli' },
-          ],
-        },
-        {
-          title: 'Understanding it',
-          items: [
-            { text: 'How a turn works', link: '/concepts/a-turn' },
-            { text: 'The refusal gate', link: '/concepts/the-gate' },
-            { text: 'The answer ladder', link: '/concepts/the-ladder' },
-            { text: 'What it guarantees', link: '/concepts/guarantees' },
-          ],
-        },
-      ],
-      social: [{ icon: 'github', link: repo }],
     },
 
     search: { provider: 'local' },
   },
 })
 
-export default extendConfig(config)
+export default config

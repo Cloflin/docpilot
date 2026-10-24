@@ -1,58 +1,45 @@
-import VoidZeroTheme, {
-  themeContextKey,
-} from '@voidzero-dev/vitepress-theme/src/index'
-// By package name, like any other consumer — the `exports` map and the shipped
-// stylesheet are both exercised by this site's own build.
-import { withDocPilot } from '@cloflin/docpilot/theme'
+import { h } from 'vue'
+import CloflinTheme from '@cloflin/vitepress-theme'
+// By package name, like any other consumer. The host-neutral core stylesheet,
+// not the VitePress one: that maps the panel's tokens onto the default theme's
+// `--vp-*` variables, which this theme does not have. `styles.css` maps them
+// onto this theme's `--cf-*` instead.
+import { withDocPilot } from '@cloflin/docpilot/theme-without-styles'
+import '@cloflin/docpilot/style/core.css'
 import './styles.css'
+import SiteFooter from './SiteFooter.vue'
 
-import wordmarkLight from './assets/docpilot-light.svg'
-import wordmarkDark from './assets/docpilot-dark.svg'
-import footerBg from './assets/footer-background.svg'
-import monoIcon from './assets/docpilot-mono.svg'
+// Every component in `demos/`, `intro/` and `home/`, registered by file name, so a page
+// can use `<ScopeDemo />` in its markdown without a script block.
+const components = import.meta.glob(['./demos/*.vue', './intro/*.vue', './home/*.vue'], { eager: true })
 
 /**
- * The docs theme, laid out the way the Rolldown docs are: the shared VoidZero
- * VitePress theme, plus a thin per-project layer that supplies this project's
- * own brand assets and colours.
+ * The docs theme: @cloflin/vitepress-theme, with the panel added through
+ * `withDocPilot` the way any consumer adds it. The wrapper renders the theme's
+ * Layout with `layout-bottom` (panel, floating button, quote popover) and
+ * `nav-bar-content-before` (navbar trigger) filled — both slots exist in this
+ * theme under the default theme's names.
  *
- * The theme injects its assets through `themeContextKey` rather than reading
- * them from config, so a project that extends it has to provide all five keys —
- * `Header.vue` and `Footer.vue` both `inject(...)!` without a fallback, and a
- * missing key is a render-time crash, not a missing logo.
- *
- * THE TWO LOGO KEYS ARE CROSSED, and deliberately. The theme names them after
- * the ink rather than the appearance — `Header.vue` renders `logoDark` under
- * `block dark:hidden`, so the key called dark is the one shown in LIGHT mode.
- * The files here are named the other way round, after the appearance they are
- * drawn for, which is the VitePress convention and the one `docs/public` already
- * follows. Renaming either side to agree would only move the crossover; this is
- * the single place it lives.
- *
- * `extends` chains `enhanceApp`: VitePress runs the base theme's first, then
- * this one's, so the base is deliberately not called by hand here.
- *
- * `withDocPilot` wraps that whole arrangement. This theme has no `Layout` of its
- * own — the VoidZero one arrives through `extends` — so the wrapper reads the
- * parent from there and renders it with four slots filled: the panel and the
- * floating button at the end of the layout, the trigger beside the navbar
- * search, and the call-to-action under each article. On a page using the
- * marketing layout only `layout-bottom` exists, so the panel is present there
- * and its navbar trigger is not; that is the host theme's shape, not a setting.
- *
- * With no index built, `themeConfig.docPilot` is `{enabled: false}` and all four
- * render nothing at all.
+ * The demo components are registered globally; see `components` below.
  */
-export default withDocPilot({
-  extends: VoidZeroTheme,
+/**
+ * The theme's Layout with the site footer appended to `layout-bottom`. It is a
+ * merge rather than a slot of its own because `withDocPilot` claims that slot
+ * for the panel: the wrapper renders this Layout as its parent and passes the
+ * panel in, and both end up in the slot.
+ */
+const Layout = (_props, { slots }) =>
+  h(CloflinTheme.Layout, null, {
+    ...slots,
+    'layout-bottom': () => [slots['layout-bottom']?.(), h(SiteFooter)],
+  })
 
+export default withDocPilot({
+  extends: CloflinTheme,
+  Layout,
   enhanceApp({ app }) {
-    app.provide(themeContextKey, {
-      logoDark: wordmarkLight,
-      logoLight: wordmarkDark,
-      logoAlt: 'DocPilot',
-      footerBg,
-      monoIcon,
-    })
+    for (const [file, mod] of Object.entries(components)) {
+      app.component(file.split('/').pop().replace('.vue', ''), mod.default)
+    }
   },
 })

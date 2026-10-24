@@ -207,7 +207,7 @@ sets the floor against your corpus rather than someone else's.
 | *AI answers are off in this environment.* | no key, or no index — the panel says so instead of pretending |
 
 Living inside a request-metered free tier is its own page:
-[Living on the free tier](/guide/free-tier).
+[`budget`](/reference/config#budget).
 
 ## Working the thread
 

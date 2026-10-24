@@ -646,7 +646,7 @@ table's order inside each:
 | rung | members |
 | --- | --- |
 | 1 | every provider billed to your account |
-| 2 | a provider's own free catalogue — OpenRouter's [free pool](/guide/free-tier) |
+| 2 | a provider's own free catalogue — OpenRouter's [free pool](/reference/config#budget) |
 | 3 | a server of your own — `custom`, `llamacpp`, `ollama` |
 
 OpenRouter sits at position 7 of the table and answers *after* `groq` here,
@@ -782,7 +782,7 @@ The ladder sorts a resolved set into three rungs — billed accounts, then a
 provider's own free catalogue, then `custom`, `llamacpp` and `ollama`. This puts
 the third rung at the front instead of the back, and makes an environment that
 selects nothing fall through to a local Ollama rather than to
-[OpenRouter's free tier](/guide/free-tier).
+[OpenRouter's free tier](/reference/config#budget).
 
 ```js
 chat: { preferLocal: true }
@@ -1982,7 +1982,7 @@ citation in it is withdrawn before the reader sees it.
 
 **What it costs.** A question the corpus has nothing for now spends a model
 turn before that is known, on every deployment. On [a shared free
-tier](/guide/free-tier) that is one of roughly fifty a day for the whole site.
+tier](/reference/config#budget) that is one of roughly fifty a day for the whole site.
 Write `guard: { mode: 'calibrated' }` to buy the pre-1.3 behaviour back on a
 single-language corpus with a probe set to calibrate against — `'dense-only'`
 is the same trade, narrowed to sites with no embedder at all.

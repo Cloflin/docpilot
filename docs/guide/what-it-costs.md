@@ -117,17 +117,3 @@ reader waits on is the embedding and the model.
   readers type in — so today an unanswerable question still spends a request
   finding out. Calibrate a threshold for your corpus and set `'calibrated'`, and
   it costs zero model calls instead.
-
-## The one number to watch
-
-On a free tier the constraint is **requests, not tokens**, and the daily
-allowance is shared by every reader of your site rather than held per person.
-DocPilot rations it for you rather than failing at the end of the day: below
-fifteen remaining a turn collapses to a single call, below six the pool stops
-rotating, and the reader is told when answers resume rather than shown a generic
-error. [Living on the free tier](/guide/free-tier) is the whole of that
-arithmetic.
-
-If you take one thing from this page: the bandwidth scales with your corpus, the
-token bill scales with your traffic, and the daily cap is the only one of the
-three that can stop the panel working for everybody at once.

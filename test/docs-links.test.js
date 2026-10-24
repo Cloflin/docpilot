@@ -433,12 +433,9 @@ describe('docs — the printed index figures match the committed index', () => {
      * sweep would either rewrite those or need exceptions for them.
      */
     const claims = [
-      ['docs/.vitepress/theme/FeatureGrid.vue', `${n} chunks × ${m.dims} dims × 1 bit = ${grouped} bytes`],
-      ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: 'float32', bytes: '${mb}'`],
-      ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: 'int8', bytes: '${int8}'`],
-      ['docs/.vitepress/theme/FeatureGrid.vue', `{ label: '1-bit', bytes: '${kb}'`],
-      ['docs/.vitepress/theme/FeatureGrid.vue', `${n} chunks at ${m.dims} dimensions`],
-      ['docs/.vitepress/theme/Comparison.vue', `${kb} for ${n} chunks`],
+      // The intro's demos read these figures from the manifest at build time
+      // (config.mjs → themeConfig.figures), so only the prose is held here.
+      ['docs/introduction.md', `${kb} for ${n} chunks at ${m.dims} dimensions`],
       ['docs/guide/comparison.md', `${kb} for this site's ${n} chunks at ${m.dims} dimensions`],
       ['docs/guide/comparison.md', `${n} chunks, ${m.dims} dimensions`],
       // The same sentence carries a third measurement the two claims above do

@@ -307,7 +307,7 @@ address — your own `chat.baseURL` outranks both.
 **Installing this package and running Ollama is not enough.** A local server is
 selected by its ADDRESS and by nothing else, and an environment that names
 nothing at all falls through to [OpenRouter's free
-tier](/guide/free-tier) rather than to `localhost:11434`.
+tier](/reference/config#budget) rather than to `localhost:11434`.
 
 That is deliberate, and the reason is that a build cannot tell the difference: a
 laptop with Ollama running and a CI box that has never heard of it are the same
