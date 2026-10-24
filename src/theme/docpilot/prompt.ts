@@ -61,6 +61,8 @@ export const TOOLS = [
       text: 'string, markdown, plain paragraphs / lists / code only',
       citations: 'string[], section ids copied verbatim from earlier tool results — never [1]-style numbers',
       confidence: 'number 0-1',
+      // engine-spec 026. Dropped from every schema when DOCPILOT_ANSWER_SUMMARY=0.
+      summary: 'string, one or two sentences: what this answer concluded, with the exact identifiers it used — the reader never sees it',
     },
   },
 ]
@@ -540,6 +542,72 @@ const HISTORY_PREFIX_MIN = 300
 const historyCondense = () => globalThis.process?.env?.DOCPILOT_HISTORY_CONDENSE !== '0'
 
 /**
+ * EVAL-ONLY, on the same terms: `DOCPILOT_LAST_ANSWER_FULL=0` condenses the last
+ * pair like the others, the control arm of engine-spec 026's A/B.
+ */
+const lastAnswerFull = () => globalThis.process?.env?.DOCPILOT_LAST_ANSWER_FULL !== '0'
+
+/**
+ * What the LAST answer is worth in the transcript — engine-spec 026.
+ *
+ * The skeleton keeps an answer's opening and the leading line of each block, and
+ * runs out of budget from the top: a live chain lost step 4 of a four-step
+ * answer and the `reasoning: false` a follow-up's answer put after restating the
+ * one before it — the end of an answer is where a follow-up's new fact lands.
+ * The last pair is the one the next question most often points into ("step 4",
+ * "everything we discussed"), so it travels whole up to this, and through the
+ * same skeleton above it. Older pairs are unchanged.
+ */
+export const LAST_ANSWER_MAX = 2000
+
+/**
+ * How the transcript carries past answers — engine-spec 026. The shipped mode is
+ * `summary-each+last`; the variable is the A/B's switch and the way back.
+ *
+ *   skeleton           every pair condensed (= DOCPILOT_LAST_ANSWER_FULL=0)
+ *   last-full          the last pair whole, older pairs condensed
+ *   summary-all+last   one message of every older answer's summary, the last pair whole
+ *   summary-each+last  each older pair as question + summary, the last pair whole
+ *   summary-only       one message of every answer's summary, no answer text at all
+ *
+ * The summaries are the model's own (`ANSWER_SUMMARY`) and therefore a channel
+ * the host does not author — the injection concern the questions-only line below
+ * is written against. That is a cost the A/B has to justify, not a detail.
+ */
+const HISTORY_MODES = ['skeleton', 'last-full', 'summary-all+last', 'summary-each+last', 'summary-only']
+const historyMode = () => {
+  const raw = globalThis.process?.env?.DOCPILOT_HISTORY_MODE
+  if (HISTORY_MODES.includes(raw)) return raw
+  return lastAnswerFull() ? 'summary-each+last' : 'skeleton'
+}
+
+/**
+ * Every answer carries a `summary` field the reader never sees — engine-spec 026.
+ * It is what `summary-each+last` sends in place of an older answer.
+ * `DOCPILOT_ANSWER_SUMMARY=0` removes the field and the instruction.
+ */
+export const answerSummary = () => globalThis.process?.env?.DOCPILOT_ANSWER_SUMMARY !== '0'
+
+export const SUMMARY_INSTRUCTION =
+  "Fill the answer tool's `summary` field: one or two sentences stating what this answer concluded, " +
+  'naming the exact identifiers it used. The reader never sees it.'
+
+/** An answer and the summary its last line carries, split. No tag → `summary: null`. */
+export function splitSummary(text) {
+  const s = String(text || '')
+  const m = s.match(/\n?\s*<summary>([\s\S]*?)<\/summary>\s*$/)
+  if (!m) return { answer: s, summary: null }
+  return { answer: s.slice(0, m.index).trimEnd(), summary: m[1].trim() || null }
+}
+
+/**
+ * What a pair's summary is when the model wrote none — a thread restored from a
+ * pre-026 archive, a fallback transport, a model that skipped the field: the
+ * skeleton every pair got before, so a missing summary degrades to 1.4 exactly.
+ */
+const summaryOf = (h) => h.summary || condenseAnswer(h.answer || '')
+
+/**
  * A line that opens or closes a fenced block, and its WHOLE marker run.
  *
  * Three characters was the defect. `/^\s*(```|~~~)/` matched either marker and
@@ -890,38 +958,67 @@ export function buildMessages({
 
   // The summary line is host-generated from prior QUESTIONS only, never from
   // answer text: a self-authored memory slot outliving the 3-pair window is a
-  // multi-turn injection channel the gate cannot see.
+  // multi-turn injection channel the gate cannot see. Inside the window an older
+  // answer now travels as the model's OWN summary of it (engine-spec 026) — the
+  // same model-written text the full answer already was, shorter, and still
+  // gone once the pair leaves the window.
   // A turn that failed or was refused has no answer, and an empty assistant
   // message is not a neutral placeholder: measured, two refused turns ahead of a
   // question that answers correctly on its own turned it into a refusal. History
   // carries only pairs that actually completed.
   const answered = history.filter((h) => h.answer && h.answer.trim())
-  const recent = answered.slice(-3)
-  const older = answered.slice(0, -3)
-  if (older.length) {
-    messages.push({
-      role: 'user',
-      content: `Earlier in this session the reader asked about: ${older.map((h) => h.question).join('; ')}`,
-    })
-  }
-  // A quoted question is unreadable without its passage — the same defect the
-  // answer condensation leaves behind, one turn earlier: a skeleton names the
-  // blocks, it does not carry their wording. It rides inside the question
-  // message, clamped harder than the live quote is.
-  for (const h of recent) {
-    const passage = clampTo(h.quote || '', HISTORY_QUOTE_MAX)
-    messages.push({
-      role: 'user',
-      content: passage ? `${QUOTE_WRAPPER}${passage}\n\n${h.question}` : h.question,
-    })
-    messages.push({
-      role: 'assistant',
-      // The off arm is the CONTROL and has to be the shipped prefix byte for
-      // byte, so it stays a code-UNIT `slice` — `condenseAnswer` counts code
-      // points, and an A/B whose control drifted from what shipped measures two
-      // changes at once. Only the number is named.
-      content: historyCondense() ? condenseAnswer(h.answer || '') : (h.answer || '').slice(0, HISTORY_PREFIX_MIN),
-    })
+  const mode = historyMode()
+  if (mode === 'summary-all+last' || mode === 'summary-only') {
+    // One message for every summarised pair, oldest first, then (unless
+    // summary-only) the last pair whole. No 3-pair window: the summary IS the window.
+    const summarised = mode === 'summary-only' ? answered : answered.slice(0, -1)
+    if (summarised.length) {
+      messages.push({
+        role: 'user',
+        content:
+          'Summary of this conversation so far:\n' +
+          summarised.map((h, i) => `${i + 1}. Q: ${h.question}\n   A: ${summaryOf(h)}`).join('\n'),
+      })
+    }
+    const last = mode === 'summary-only' ? null : answered[answered.length - 1]
+    if (last) {
+      messages.push({ role: 'user', content: last.question })
+      messages.push({ role: 'assistant', content: condenseAnswer(last.answer, LAST_ANSWER_MAX) })
+    }
+  } else {
+    const recent = answered.slice(-3)
+    const older = answered.slice(0, -3)
+    if (older.length) {
+      messages.push({
+        role: 'user',
+        content: `Earlier in this session the reader asked about: ${older.map((h) => h.question).join('; ')}`,
+      })
+    }
+    // A quoted question is unreadable without its passage — the same defect the
+    // answer condensation leaves behind, one turn earlier: a skeleton names the
+    // blocks, it does not carry their wording. It rides inside the question
+    // message, clamped harder than the live quote is.
+    for (const h of recent) {
+      const passage = clampTo(h.quote || '', HISTORY_QUOTE_MAX)
+      messages.push({
+        role: 'user',
+        content: passage ? `${QUOTE_WRAPPER}${passage}\n\n${h.question}` : h.question,
+      })
+      messages.push({
+        role: 'assistant',
+        // The off arm is the CONTROL and has to be the shipped prefix byte for
+        // byte, so it stays a code-UNIT `slice` — `condenseAnswer` counts code
+        // points, and an A/B whose control drifted from what shipped measures two
+        // changes at once. Only the number is named.
+        content: !historyCondense()
+          ? (h.answer || '').slice(0, HISTORY_PREFIX_MIN)
+          : h === recent[recent.length - 1] && mode !== 'skeleton'
+            ? condenseAnswer(h.answer || '', LAST_ANSWER_MAX)
+            : mode === 'summary-each+last'
+              ? summaryOf(h)
+              : condenseAnswer(h.answer || ''),
+      })
+    }
   }
 
   const instruction = clampAddendum(addendum)
@@ -934,7 +1031,11 @@ export function buildMessages({
   // The directive is derived from the QUESTION alone, never from the quote: the
   // quote is in whatever language the docs are, and a Russian question about an
   // English passage must still be answered in Russian.
-  const lang = languageDirective(question)
+  // The summary instruction rides with the language line, last before the
+  // answer: placed in the system block it was followed on the first turns and
+  // dropped from the third, where every prior answer in the transcript is
+  // already untagged and the model writes in their shape instead.
+  const lang = [languageDirective(question), answerSummary() ? SUMMARY_INSTRUCTION : ''].filter(Boolean).join('\n')
 
   /**
    * The quote rides INSIDE the question's message rather than beside it, which

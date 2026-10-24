@@ -1424,6 +1424,8 @@ export interface Turn {
   answerText: string
   /** The chunk ids this answer cited, for the next turn to inherit (spec 013). */
   citationIds?: string[]
+  /** The model's summary of this answer, sent in its place later (spec 026). */
+  answerSummary?: string | null
   sources: any[]
   results: any[]
   noStrongMatches: boolean
@@ -1584,6 +1586,9 @@ function settleAnswer(turn, result, started, signal = null) {
    * by citation.
    */
   turn.citationIds = result.citations
+  // engine-spec 026: the model's own one-line summary, sent in place of this
+  // answer once a newer one exists. Never rendered.
+  turn.answerSummary = result.summary || null
   const settle = () => {
     const { html, delinked } = renderAnswer(result.text, knownPaths.value, cited)
     turn.answerText = result.text
@@ -2573,6 +2578,7 @@ export async function submit(question, { quote = '' } = {}) {
       history: state.turns.slice(0, -1).map((t) => ({
         question: t.question,
         answer: t.answerText,
+        summary: t.answerSummary || null,
         quote: t.quote || '',
         // What that turn cited, so a follow-up can be primed with the evidence
         // rather than with the SHAPE of the answer that used it — `condenseAnswer`

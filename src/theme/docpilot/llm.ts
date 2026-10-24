@@ -10,7 +10,7 @@
  * one call in, `{ toolCall, text, think }` out.
  */
 
-import { TOOLS, FALLBACK_DOC } from './prompt.js'
+import { TOOLS, FALLBACK_DOC, answerSummary } from './prompt.js'
 import { providerFor } from './providers.js'
 import { readLimitHeaders, classifyLimit } from './budget.js'
 
@@ -88,6 +88,10 @@ export interface ChatOptions {
 export function toolSchemas(citableIds = null) {
   const ids = Array.isArray(citableIds) && citableIds.length ? citableIds : null
   const citationItems = ids ? { type: 'string', enum: ids } : { type: 'string' }
+  // engine-spec 026: `summary` is a REQUIRED field of the answer. Asked for as a
+  // line inside `text` it was written on half the turns; required by the schema,
+  // on all of them. `DOCPILOT_ANSWER_SUMMARY=0` drops it.
+  const summary = answerSummary()
   return TOOLS.map((t) => ({
     type: 'function',
     function: {
@@ -95,8 +99,8 @@ export function toolSchemas(citableIds = null) {
       description: t.description,
       parameters: {
         type: 'object',
-        properties: Object.fromEntries(
-          Object.entries(t.parameters).map(([k, v]) => [
+        properties: Object.fromEntries([
+          ...Object.entries(t.parameters).filter(([k]) => summary || k !== 'summary').map(([k, v]) => [
             k,
             k === 'citations'
               ? { type: 'array', items: citationItems, description: v }
@@ -104,8 +108,8 @@ export function toolSchemas(citableIds = null) {
                 ? { type: 'number', description: v }
                 : { type: 'string', description: v },
           ]),
-        ),
-        required: t.name === 'answer' ? ['text', 'citations', 'confidence'] : [],
+        ]),
+        required: t.name === 'answer' ? ['text', 'citations', 'confidence', ...(summary ? ['summary'] : [])] : [],
       },
     },
   }))

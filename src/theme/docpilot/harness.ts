@@ -11,7 +11,7 @@
 import { budgetPlan } from './budget.js'
 import { excerptWindow, TRUNCATED_NOTE } from './excerpt.js'
 import { chat, streamingAnswerText } from './llm.js'
-import { buildMessages, finalNote, OBS_NOTE } from './prompt.js'
+import { buildMessages, finalNote, OBS_NOTE, answerSummary } from './prompt.js'
 import { computeSupport } from './support.js'
 import { normalise } from './text.js'
 
@@ -126,6 +126,8 @@ function seedFromHistory(retrieval, history) {
  * that motivated it (a model citing `"1"`, the marker, instead of the id) is
  * now rejected at the provider rather than silently emptying the array here.
  */
+// `summary` — engine-spec 026, the same switch `toolSchemas` reads.
+const summarySchema = () => answerSummary()
 const answerSchema = (citableIds) => ({
   type: 'object',
   properties: {
@@ -135,8 +137,9 @@ const answerSchema = (citableIds) => ({
       items: citableIds.length ? { type: 'string', enum: citableIds } : { type: 'string' },
     },
     confidence: { type: 'number' },
+    ...(summarySchema() ? { summary: { type: 'string' } } : {}),
   },
-  required: ['text', 'citations', 'confidence'],
+  required: ['text', 'citations', 'confidence', ...(summarySchema() ? ['summary'] : [])],
   additionalProperties: false,
 })
 
@@ -1045,6 +1048,9 @@ export async function runTurn(options: RunTurnOptions) {
 
     return {
       text,
+      // engine-spec 026: what `summary-each+last` sends in place of this answer
+      // once it is no longer the last one. Never rendered.
+      summary: typeof args.summary === 'string' && args.summary.trim() ? args.summary.trim() : null,
       citations,
       phantom,
       confidence,

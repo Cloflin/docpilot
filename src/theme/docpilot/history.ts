@@ -54,6 +54,8 @@ export interface StoredTurn {
   state: string
   answerText: string
   sources: Array<Record<string, unknown>>
+  /** engine-spec 026 — the model's summary, so a reopened thread's next turn sends it. */
+  answerSummary?: string
   citedIdx?: number[]
   answerHtml?: string
   scope?: { kind?: string; paths?: string[]; label?: string }
@@ -170,6 +172,7 @@ export function slimTurn(turn, limits = LIMITS) {
   }))
 
   const out: StoredTurn = { id: turn.id, question: turn.question, state, answerText, sources }
+  if (turn.answerSummary) out.answerSummary = String(turn.answerSummary)
 
   // POSITION IS THE MEANING. `cited[i]` is the row citation i+1 resolved to, and
   // two citations into one section share one row — so this is an index per

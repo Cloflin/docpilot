@@ -106,7 +106,7 @@ import {
 import { previousReport, writeReport, diffSummaries } from '../src/eval/report.js'
 import { lintRecords, levelSummary } from '../src/eval/lint-golden.js'
 import { priorQuestions, chainDepth, isFollowUp } from '../src/eval/record.js'
-import { chainTexts } from '../src/eval/conversation.js'
+import { chainTexts, resolveChain } from '../src/eval/conversation.js'
 import { mmr, pageCap, resolveLevers, LEVER_NAMES } from '../src/theme/docpilot/retriever.js'
 import { parseRange, chooseCell, buildTuningDoc } from '../src/eval/tune.js'
 import { TUNING_OUT, CALIBRATION_OUT } from '../src/cli-context.js'
@@ -773,10 +773,15 @@ describe('gate', () => {
   })
 
   /**
-   * A MEASUREMENT SWITCH, for the A/B that decides whether the second hop pays,
-   * and read once at module scope through `globalThis.process` — so a value
-   * written into `process.env` after the import moves nothing and the graph has
-   * to be built again around it.
+   * A MEASUREMENT SWITCH, for the A/B that decides whether the second hop pays.
+   *
+   * Read at CALL time — `const hops = () => …` (gate.js), not the module-scope
+   * const this block used to describe — because every entry point applies
+   * `.env.local` AFTER its imports, so a module-scope read named the default
+   * while a knob set in that file took the other arm. The `vi.resetModules()`
+   * either side is therefore belt-and-braces rather than the mechanism: it is
+   * here so the next dynamic importer folds the real environment rather than
+   * whatever this case pinned.
    */
   const withHops = async (value, fn) => {
     const before = process.env.DOCPILOT_ANTECEDENT_HOPS
@@ -1972,18 +1977,34 @@ describe('prompt', () => {
 
     /**
      * `midBlock` suppresses every continuation line, so an answer of one
-     * paragraph contributes one clamped line however long it runs — measured
-     * against the shipped function, a 563-code-point paragraph came back as 26
-     * code points where the prefix returned 300. The skeleton is the better 360
-     * characters only when there are blocks to name.
+     * paragraph contributes one clamped line however long it runs — and the
+     * skeleton is the better 360 characters only when there are blocks to name.
+     *
+     * THE SKELETON AND THE RETURN VALUE ARE TWO NUMBERS, and the triple this
+     * block used to quote — "563 → 26, 'a'.repeat(1200) → 121, 'x'.repeat(361)
+     * → 121" — conflated them, against a 563-code-point paragraph that is not
+     * the one declared below. Re-measured against the shipped function: the
+     * paragraph this case uses is 396 code points, `'a'.repeat(1200)` and
+     * `'x'.repeat(361)` are the other two shapes, and all three SKELETONISE to
+     * 120 — `clampLine`'s ceiling, whatever the input length — so the floor
+     * fires on all three and all three RETURN 360, `max` code points of the
+     * prefix, against the 300 the `slice(0, 300)` this replaced returned. 121
+     * was the same skeleton read off a `clampLine` that still appended the
+     * ellipsis instead of spending it from the budget.
      */
     it('carries at least what the prefix carried when there is only one block to name', () => {
       const para =
         'The gate is scored on every turn and the mode decides whether it refuses before the model is called, which since 1.3 it does not, because the relevance floor has to be calibrated per corpus and per language and a token overlap is zero by construction for a question asked in a language the documentation is not written in, so the model is left to decide whether the question is answerable at all.'
-      expect(cp(para)).toBeGreaterThan(HISTORY_ANSWER_MAX)
+      expect(cp(para)).toBe(396)
       const out = condenseAnswer(para)
       expect(out).toContain(Array.from(para).slice(0, 300).join(''))
       expect(cp(out)).toBeGreaterThanOrEqual(300)
+      // The number the docblock above names, so the figure is held rather than
+      // only written down: the prefix, not the 120-code-point skeleton.
+      expect(cp(out)).toBe(HISTORY_ANSWER_MAX)
+      for (const shape of ['a'.repeat(1200), 'x'.repeat(361)]) {
+        expect(cp(condenseAnswer(shape))).toBe(HISTORY_ANSWER_MAX)
+      }
     })
 
     /**
@@ -2038,6 +2059,48 @@ describe('prompt', () => {
       )
     })
 
+    /**
+     * THE OPENING SENTENCE IS FOR PROSE, and an enumerated answer is the one
+     * shape it destroys — the case engine-spec 022 names as the motive for the
+     * whole function.
+     *
+     * `firstSentence` is `/^.*?[.!?…](?=\s|$)/`, which on `1. Open …` matches at
+     * the list marker itself: the whole first step became the two characters
+     * `1.` and the reader's own instruction was gone. The result still cleared
+     * HISTORY_PREFIX_MIN, so the skeleton shipped rather than falling back to
+     * the prefix, and the loss was invisible from every existing assertion —
+     * which is why this pins the first LINE and the floor together.
+     */
+    it('keeps the whole first step of an answer that opens with a numbered list', () => {
+      const steps = [
+        '1. Open `docs/.vitepress/config.mjs` and add the plugin to themeConfig.',
+        '2. Run `npm run docs:index` to rebuild both indexes.',
+        '3. Run `node scripts/refresh-figures.mjs` and index again.',
+        '',
+        '## What the rebuild costs',
+        '',
+        '- One embedding request per batch of thirty-two chunks, and no more than that.',
+        '- One manifest write, which is what the browser downloads on the next visit.',
+        '',
+        '## And where it is read back',
+        '',
+        'The panel reads the manifest back and refuses to score it against another.',
+      ].join('\n')
+      // The 473 code points the `firstSentence` docblock measures itself against.
+      expect(cp(steps)).toBe(473)
+
+      const lines = condenseAnswer(steps).split('\n')
+      expect(lines[0]).toBe('1. Open `docs/.vitepress/config.mjs` and add the plugin to themeConfig.')
+      expect(lines[0]).not.toBe('1.')
+      // The steps below it are list items too, so none of them is cut at its
+      // marker either, and the headings under them still get named.
+      expect(lines.slice(0, 3)).toEqual(steps.split('\n').slice(0, 3))
+      expect(lines).toContain('## And where it is read back')
+      // Above the floor, which is why the regression shipped: it was the
+      // skeleton that came back, not the prefix that would have carried the step.
+      expect(cp(condenseAnswer(steps))).toBeGreaterThanOrEqual(300)
+    })
+
     // `clampLine` and the fence opener trim their own trailing \r; a kept
     // block's body lines do not, so a fenced answer written with CRLF came back
     // with line endings the rest of the result does not use.
@@ -2066,10 +2129,15 @@ describe('prompt', () => {
       ].join('\n')
       expect(answer.indexOf('## The second heading')).toBeGreaterThan(300)
 
+      // An OLDER pair: the last one travels whole (engine-spec 026,
+      // test/last-answer.test.js), so the skeleton is what every pair before it gets.
       const m = buildMessages({
         ...base,
         question: 'and what does that cost?',
-        history: [{ question: 'what does a turn spend?', answer }],
+        history: [
+          { question: 'what does a turn spend?', answer },
+          { question: 'and per day?', answer: 'Fifty.' },
+        ],
       })
       const assistant = m.find((x) => x.role === 'assistant')
       expect(assistant.content).toContain('## The second heading, past character three hundred')
@@ -2078,11 +2146,14 @@ describe('prompt', () => {
     })
 
     /**
-     * The A/B switch, and it is read at MODULE SCOPE — `const HISTORY_CONDENSE =
-     * globalThis.process?.env?.DOCPILOT_HISTORY_CONDENSE !== '0'`. Writing the
-     * variable into `process.env` moves nothing; the build has to be made again,
-     * which is why this is a graph of its own and why the reset runs on the way
-     * out as well as on the way in.
+     * The A/B switch, and it is read at CALL time — `const historyCondense = ()
+     * => globalThis.process?.env?.DOCPILOT_HISTORY_CONDENSE !== '0'`, called at
+     * the one site in `buildMessages`. It was a module-scope const, and that is
+     * the arm the knob exists to make runnable being silently dropped: every
+     * entry point loads `.env.local` after its imports, so a value set there
+     * reached `meta` and not the function it names. The fresh graph here is kept
+     * anyway — the reset runs on the way out as well as in, so the next dynamic
+     * importer folds the real environment rather than whatever this case pinned.
      */
     describe('with the condensation switched off for the measurement', () => {
       afterEach(() => {
@@ -8663,8 +8734,17 @@ describe('runTurn — a re-search can buy its own vector', () => {
     })
   }
 
-  /** One `search_docs` with the given query, then an answer. */
-  const runWithSearch = async ({ query, embedQuery }) => {
+  /**
+   * One `search_docs` with the given query, then an answer.
+   *
+   * `composedQuery` is engine-spec 022c's half of the same argument and defaults
+   * to the shipped absence: `null` means the turn composed nothing, and then the
+   * text `queryVec` belongs to is the reader's question, to the byte. Omitting
+   * `query` altogether emits `{}` as the tool arguments — a `search_docs` the
+   * model called with no query of its own, which is the branch the default
+   * exists for.
+   */
+  const runWithSearch = async ({ query, embedQuery, composedQuery = null }) => {
     let step = 0
     vi.stubGlobal('fetch', async () => {
       step++
@@ -8696,6 +8776,7 @@ describe('runTurn — a re-search can buy its own vector', () => {
       config: { llm: { provider: 'ollama', baseURL: 'http://x', model: 'm' }, maxIterations: 4 },
       fallback: true,
       queryVec: Float64Array.from([127, 0, 0, 0]),
+      composedQuery,
       embedQuery,
     })
     return { searched, res }
@@ -8738,6 +8819,86 @@ describe('runTurn — a re-search can buy its own vector', () => {
     const { searched, res } = await runWithSearch({ query: 'something else', embedQuery: null })
     expect(Array.from(searched[0].queryVec)).toEqual([127, 0, 0, 0])
     expect(res.cost.embedRequests).toBe(0)
+  })
+
+  /**
+   * ── the harness half of engine-spec 022c ─────────────────────────────────
+   *
+   * `session.js` hands the composed vector over whenever the gate won on its
+   * composed channel, and the vector used to travel alone: `search_docs`
+   * defaulted its lexical query to `question`, so a model that re-searched
+   * without a query of its own fused BM25 over the raw tail with cosine over the
+   * composed text — one RRF over two different questions, on exactly the
+   * follow-up the composed channel exists to rescue. The three cases below are
+   * the three ways a turn reaches that default, and the last one costs a request.
+   */
+  const COMPOSED = `what is the alpha widget?\nhow is the alpha widget configured?`
+
+  it('searches the composed text when the model re-searches with no query of its own', async () => {
+    const asked = []
+    const embedQuery = async (t) => (asked.push(t), Float64Array.from([0, 127, 0, 0]))
+
+    const { searched, res } = await runWithSearch({ composedQuery: COMPOSED, embedQuery })
+    expect(searched[0].query).toBe(COMPOSED)
+    // The pair moves together — the composed text is what `queryVec` was
+    // embedded from, so the turn's own vector is already the right one and
+    // nothing is bought.
+    expect(asked).toEqual([])
+    expect(Array.from(searched[0].queryVec)).toEqual([127, 0, 0, 0])
+    expect(res.cost.embedRequests).toBe(0)
+
+    // Absent composes nothing, and then the default is the reader's question to
+    // the byte — every first turn, and every follow-up whose composed channel
+    // lost.
+    const bare = await runWithSearch({ embedQuery })
+    expect(bare.searched[0].query).toBe('how is the alpha widget configured?')
+  })
+
+  it('buys nothing for a model that echoes the composed text back verbatim', async () => {
+    const asked = []
+    const embedQuery = async (t) => (asked.push(t), Float64Array.from([0, 127, 0, 0]))
+
+    const { searched, res } = await runWithSearch({
+      // Case and punctuation are what `normalise` is for, and it is the same
+      // comparison `searchCache` keys on.
+      query: `What is the alpha widget?\nHow is the alpha widget configured?`,
+      composedQuery: COMPOSED,
+      embedQuery,
+    })
+    expect(asked).toEqual([])
+    expect(Array.from(searched[0].queryVec)).toEqual([127, 0, 0, 0])
+    expect(res.cost.embedRequests).toBe(0)
+  })
+
+  /**
+   * A PER-TURN REQUEST-COUNT CHANGE, pinned rather than discovered on a metered
+   * tier. The comparison moved from the question to the composed query, so the
+   * one string that used to buy nothing — the reader's own question, echoed
+   * back — is now a different text from the one `queryVec` holds, and it costs
+   * an embedding. That is the right vector to search on and it is not free.
+   */
+  it('buys one embedding for the raw question echoed back under a composed turn', async () => {
+    const asked = []
+    const embedQuery = async (t) => (asked.push(t), Float64Array.from([0, 127, 0, 0]))
+
+    const { searched, res } = await runWithSearch({
+      query: 'How is the alpha widget configured?',
+      composedQuery: COMPOSED,
+      embedQuery,
+    })
+    expect(asked).toEqual(['How is the alpha widget configured?'])
+    expect(Array.from(searched[0].queryVec)).toEqual([0, 127, 0, 0])
+    expect(res.cost.embedRequests).toBe(1)
+
+    // The same echo on a turn that composed nothing is still free — this is a
+    // cost the composed channel carries, not one every turn now pays.
+    asked.length = 0
+    const uncomposed = await runWithSearch({
+      query: 'How is the alpha widget configured?',
+      embedQuery,
+    })
+    expect(asked).toEqual([])
+    expect(uncomposed.res.cost.embedRequests).toBe(0)
   })
 })
 
@@ -9687,6 +9848,59 @@ describe('golden-set levels — report comparability and lint (W3 consumers)', (
   })
 
   /**
+   * `## By chain depth`, RENDERED — the section nothing in this suite had ever
+   * reached, because every `summary()` above carries no `byDepth` at all.
+   *
+   * It is `## By language` one axis over and it exists for the same reason: a
+   * question asked cold and a follow-up three turns into a chain are answered by
+   * different machinery, and a mean over both describes neither. The markdown is
+   * what a reader opens, so the row is where the split has to be legible — the
+   * JSON carrying the bucket is not the same claim.
+   */
+  it('renders one row per chain depth, and drops the section when there is only one bucket', () => {
+    const bucket = (over) => ({
+      positives: 8,
+      negatives: 2,
+      recall8: 0.75,
+      mrr: 0.5,
+      answerF1: 0.4,
+      identifierRecall: 1,
+      negativesCaughtRate: 0.5,
+      ...over,
+    })
+    const mdOf = (dir, name, over) => {
+      quietly(() => writeReport({ dir, name, meta: meta(), summary: summary(over), rows: [] }))
+      return fs.readFileSync(path.join(dir, name.replace(/\.json$/, '.md')), 'utf8')
+    }
+
+    const md = mdOf(fresh(), 'report-abc12345-m1-depth.json', {
+      byDepth: {
+        0: bucket({}),
+        2: bucket({ positives: 3, negatives: 0, recall8: 0.25, mrr: 0.125, answerF1: 0.2, identifierRecall: null, negativesCaughtRate: null }),
+      },
+    })
+    expect(md).toContain('## By chain depth')
+    expect(md).toContain('| depth | pos | neg | recall8 | mrr | answerF1 | identifierRecall | negCaught |')
+    expect(md).toContain('| 0 | 8 | 2 | 0.750 | 0.500 | 0.400 | 1 | 0.500 |')
+    // A bucket with no negatives has no rate to report, and `—` is what says so
+    // — a `0.000` there reads as "caught none of them".
+    expect(md).toContain('| 2 | 3 | 0 | 0.250 | 0.125 | 0.200 | — | — |')
+    // The depths the run scored and no others: the keys are derived from the
+    // summary, because how deep a golden set's chains run is the author's
+    // business rather than this module's.
+    const after = md.slice(md.indexOf('## By chain depth'))
+    const end = after.indexOf('\n## ')
+    const section = end === -1 ? after : after.slice(0, end)
+    expect(section.split('\n').filter((l) => /^\| \d/.test(l))).toHaveLength(2)
+
+    // `summarise` returns null for one bucket, which is the headline with a
+    // heading over it and nothing else — so the section is absent, not empty.
+    const flat = mdOf(fresh(), 'report-abc12345-m1-flat.json', { byDepth: null })
+    expect(flat).not.toContain('## By chain depth')
+    expect(flat).toContain('## Metrics')
+  })
+
+  /**
    * THE PREVIOUS RUN SURVIVES THIS ONE — spec 011, decision 6.
    *
    * `reportName` is a pure function of the inputs, so a rerun with nothing
@@ -9862,6 +10076,123 @@ describe('golden-set levels — report comparability and lint (W3 consumers)', (
       // named once more on its own
       expect(levelSummary([{ level: 'low' }, { level: 'nope' }])).toBe('low 2 (+1) · ultra 2 · unknown 1')
     })
+
+    /**
+     * `main()` — the half of this command that `lintRecords` cannot reach.
+     *
+     * The summary is where an author reads what their set holds before spending
+     * a run on it, and it counted the conversation by hand:
+     * `records.filter((r) => r.prev_question)` saw the legacy field and nothing
+     * else, so a set authored entirely with `prev_questions` reported ZERO
+     * follow-ups — here and in `--json` — while every one of its records is one.
+     * The histogram beside it is the other half of the same reading: eight
+     * follow-ups is eight one-hop records and eight two-hop chains alike, and
+     * only the latter exercise the second antecedent, so a set believed to hold
+     * chains and holding none reports the pre-023 behaviour under the new
+     * records' names. Both are read here by RUNNING the command, because there
+     * is no export for either.
+     */
+    describe('the summary a set is read by, as a process', () => {
+      const CHUNKS = ['a', 'b'].map((letter) => ({
+        id: `${letter}#one`,
+        path: `/${letter}`,
+        anchor: 'one',
+        title: `Page ${letter.toUpperCase()}`,
+        breadcrumb: 'Docs',
+        kind: 'guide',
+        text: `The ${letter} widget is configured with a manifest and a token. `.repeat(12),
+        prev: null,
+        next: null,
+      }))
+
+      /**
+       * A project laid out where `cli-context` looks with no config file —
+       * `docs/public/rag` for the index, `docpilot/` for the golden set — and
+       * every record authored with `prev_questions`, which is the whole point:
+       * not one `prev_question` in the file, so the count the fix replaced would
+       * read zero.
+       */
+      const project = () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-lint-'))
+        const rag = path.join(dir, 'docs', 'public', 'rag')
+        fs.mkdirSync(rag, { recursive: true })
+        fs.mkdirSync(path.join(dir, 'docpilot'), { recursive: true })
+        fs.writeFileSync(path.join(rag, 'chunks-00.json'), JSON.stringify(CHUNKS))
+        fs.writeFileSync(path.join(rag, 'df.json'), JSON.stringify({ df: {} }))
+        fs.writeFileSync(
+          path.join(rag, 'manifest.json'),
+          JSON.stringify({
+            version: 3,
+            hash: 'lint-hash',
+            embedModel: null,
+            dims: null,
+            chunkCount: CHUNKS.length,
+            vectors: null,
+            shards: ['chunks-00.json'],
+            df: 'df.json',
+            pages: CHUNKS.map((c) => ({ path: c.path, title: c.title, tail: 'Docs' })),
+            guard: {},
+          }),
+        )
+        const answerable = (id, chain) => ({
+          id,
+          question: 'how is the widget configured?',
+          expect: 'answer',
+          level: 'high',
+          gold_answer: 'The widget is configured with a manifest and a token that the build inlines.',
+          gold_chunks: ['a#one'],
+          identifiers: [],
+          lang: 'en',
+          ...(chain ? { prev_questions: chain } : {}),
+        })
+        const one = ['what is a widget?']
+        const two = ['what is a widget?', 'and how is it built?']
+        fs.writeFileSync(
+          path.join(dir, 'docpilot', 'golden.jsonl'),
+          [
+            answerable('c-0', null),
+            answerable('c-1', one),
+            answerable('c-2', two),
+            answerable('c-3', two),
+          ]
+            .map((r) => JSON.stringify(r))
+            .join('\n') + '\n',
+        )
+        return dir
+      }
+
+      const lintIn = async (dir, ...args) => {
+        const { spawnSync } = await import('node:child_process')
+        const r = spawnSync(process.execPath, [distEntry('src/eval/lint-golden.js'), ...args], {
+          cwd: dir,
+          encoding: 'utf8',
+        })
+        return { status: r.status, out: `${r.stdout}${r.stderr}` }
+      }
+
+      it('counts a conversation authored in the array spelling, and says how deep it runs', async () => {
+        const dir = project()
+        const { status, out } = await lintIn(dir)
+        // Only the gold-answer length warns, and a warning is not a failure.
+        expect(status).toBe(0)
+        expect(out).toContain('records          4')
+        // THE REGRESSION, in one line: three of the four are follow-ups and the
+        // hand-written filter saw none of them.
+        expect(out).toContain('follow-up        3')
+        expect(out).not.toContain('follow-up        0')
+        expect(out).toContain('by depth         {"0":1,"1":1,"2":2}')
+      })
+
+      it('carries the same two numbers into --json, which is what a script reads', async () => {
+        const { status, out } = await lintIn(project(), '--json')
+        expect(status).toBe(0)
+        const doc = JSON.parse(out)
+        expect(doc.followUps).toBe(3)
+        expect(doc.byDepth).toEqual({ 0: 1, 1: 1, 2: 2 })
+        expect(doc.records).toBe(4)
+        expect(doc.ok).toBe(true)
+      })
+    })
   })
 })
 
@@ -9948,6 +10279,119 @@ describe('golden-set chains — the record, the prefetch and the split', () => {
   })
 
   /**
+   * ── THE CASCADE ITSELF — the one eval-side walk of a conversation ─────────
+   *
+   * `chainTexts` above enumerates what a run may need to buy; this is what a run
+   * DOES. Every prior question is a real turn: it retrieves for itself, it wins
+   * or loses its own gate, and which question the next turn composes against is
+   * decided by that result rather than by position in the array. Four runners
+   * import it — run.js, calibrate.js, tune.js, answer-bench.js — and each of
+   * them held a private copy of the walk before it existed.
+   *
+   * The retriever arrives as a parameter, so the whole cascade runs against a
+   * stub that decides the channel per question: what is under test is which
+   * antecedent that decision produces, not how a real gate reaches it.
+   */
+  describe('every prior question asked, and the antecedent the scored one inherits', () => {
+    const Q1 = 'how do I style the panel?'
+    const Q2 = 'and on React?'
+    const Q3 = 'and on Docusaurus?'
+    const rec = { question: Q3, prev_questions: [Q1, Q2] }
+
+    /**
+     * `channelFor` is the stub's whole opinion. `evaluate` calls are recorded in
+     * order so the arguments each turn was gated on can be read back, and
+     * `embed` records the text it was asked for and answers with a value that
+     * names it — a swapped vector is then visible rather than inferred.
+     */
+    const cascade = async (channelFor, over = {}) => {
+      const gated = []
+      const bought = []
+      const retrieval = {
+        evaluate: (args) => {
+          const gate = { G: 1, channel: channelFor(args.question), chunks: [] }
+          gated.push({ args, gate })
+          return gate
+        },
+      }
+      const embed = async (text) => (bought.push(text), { of: text })
+      const out = await resolveChain({ rec, retrieval, embed, ...over })
+      return { gated, bought, out }
+    }
+
+    it('reaches back two questions when the middle turn won on its composed channel', async () => {
+      const { gated, out } = await cascade((q) => (q === Q2 ? 'composed' : 'raw'))
+      expect(out.antecedent).toBe(`${Q1}\n${Q2}`)
+      expect(out.composedQuery).toBe(`${Q1}\n${Q2}\n${Q3}`)
+      // …and the flag it read is that turn's own evaluated gate, not the
+      // record: `priors` is `chainAntecedent`'s argument shape verbatim.
+      expect(out.priors).toEqual([
+        { question: Q1, composed: false },
+        { question: Q2, composed: true },
+      ])
+      // The first prior is a plain turn with nothing behind it, so there is no
+      // composed channel for it to score at all.
+      expect(gated[0].args.previousQuestion).toBe(null)
+      expect(gated[1].args.previousQuestion).toBe(Q1)
+    })
+
+    it('takes the last question alone when that turn stayed on the raw channel', async () => {
+      const { out } = await cascade(() => 'raw')
+      expect(out.antecedent).toBe(Q2)
+      expect(out.composedQuery).toBe(`${Q2}\n${Q3}`)
+      expect(out.priors).toEqual([
+        { question: Q1, composed: false },
+        { question: Q2, composed: false },
+      ])
+    })
+
+    /**
+     * The two lists are indexed together by every caller — a hop that reads a
+     * gate at `i` and a vector at anything else is the defect `priorVecs` was
+     * added to close, and it does not surface as a crash: the priming turn runs,
+     * fuses BM25 over its own question with cosine over a question nobody has
+     * asked yet, and reports a number.
+     */
+    it('hands back one gate and one vector per prior turn, in the order they were asked', async () => {
+      const { gated, bought, out } = await cascade((q) => (q === Q2 ? 'composed' : 'raw'))
+      expect(out.priorGates).toHaveLength(out.priors.length)
+      expect(out.priorVecs).toHaveLength(out.priors.length)
+      expect(out.priorGates).toEqual([gated[0].gate, gated[1].gate])
+      expect(out.priorGates[0]).toBe(gated[0].gate)
+      expect(out.priorVecs).toEqual([{ of: Q1 }, { of: Q2 }])
+      // Each hop's question is embedded exactly once; the third purchase is the
+      // composition the second turn was scored on, which `chainTexts` named.
+      expect(bought).toEqual([Q1, Q2, `${Q1}\n${Q2}`])
+    })
+
+    /**
+     * `null` is "score it with no vector"; `undefined` is "there is no second
+     * query" — `evaluate()` reads the difference, and undefined here would score
+     * the follow-up on the raw channel alone against a `tauLexical` measured on
+     * both.
+     */
+    it('scores the composed channel with no vector under lexical, and buys nothing', async () => {
+      const { gated, bought, out } = await cascade((q) => (q === Q2 ? 'composed' : 'raw'), {
+        lexical: true,
+      })
+      expect(bought).toEqual([])
+      expect(gated.map((g) => g.args.mode)).toEqual(['lexical-only', 'lexical-only'])
+      // The first turn has no composition to score, which is the one place the
+      // slot is legitimately absent.
+      expect(gated[0].args.composedVec).toBeUndefined()
+      expect(gated[1].args.composedVec).toBe(null)
+      expect(gated[1].args.composedVec).not.toBe(undefined)
+      // The vector slot is the one this mode already left empty, so the per-hop
+      // list is byte-for-byte what a lexical run always had.
+      expect(out.priorVecs).toHaveLength(2)
+      for (const v of out.priorVecs) expect(v).toBeUndefined()
+      // The antecedent is still measured, not skipped: a lexical follow-up has a
+      // composed channel too.
+      expect(out.antecedent).toBe(`${Q1}\n${Q2}`)
+    })
+  })
+
+  /**
    * `byLanguage` one axis over. A question asked cold and a question three turns
    * into a chain are not answered by the same machinery, and depth 0 is most of
    * any golden set — so the mean holds the headline still while the one
@@ -9999,6 +10443,51 @@ describe('golden-set chains — the record, the prefetch and the split', () => {
     const previous = { summary: { byDepth: { 0: { recall8: 1 }, 1: { recall8: 0.25 } } } }
     expect(diffSummaries(previous, s).filter((d) => d.key.includes('depth='))).toEqual([
       { key: 'recall8[depth=1]', from: 0.25, to: 0.5, delta: 0.25, better: true },
+    ])
+  })
+
+  /**
+   * THE ONE-SIDED HALF OF THE SAME RULE, and it is the load-bearing one.
+   *
+   * A depth only one of the two runs scored is two different populations, so
+   * there is no delta to report — and the reason that has to hold for an ABSENT
+   * `byDepth` as well is the upgrade: every report already on disk was written
+   * before the bucket existed, and a first run after it lands would otherwise
+   * announce a change nobody made, once, at every reader. `languageKeys` states
+   * the rule one axis over and `goldenSha` states it for a field; this is the
+   * pair of readings that make it true here.
+   */
+  it('mints no depth key against a run that did not score that depth', async () => {
+    const { summarise } = await import('../src/eval/run.js')
+    const row = (over) => ({
+      id: 'r',
+      expect: 'answer',
+      observed: 'answer',
+      recall8: 1,
+      mrr: 1,
+      answerF1: 0.5,
+      identifierRecall: 1,
+      citationRecall: 1,
+      language: 1,
+      depth: 0,
+      ...over,
+    })
+    const s = summarise([row({ id: 'a', depth: 0 }), row({ id: 'b', depth: 1, recall8: 0.5 })])
+    expect(Object.keys(s.byDepth)).toEqual(['0', '1'])
+
+    // A predecessor written before the bucket existed. It still diffs on
+    // everything it does carry — the silence is scoped to the depth axis, not a
+    // report that stopped comparing.
+    const predates = { summary: { recall8: 0.25 } }
+    const acrossUpgrade = diffSummaries(predates, s)
+    expect(acrossUpgrade.filter((d) => d.key.includes('[depth='))).toEqual([])
+    expect(acrossUpgrade.some((d) => d.key === 'recall8')).toBe(true)
+
+    // And a depth one run has and the other does not: depth 0 is comparable and
+    // depth 1 is not, in the same pair.
+    const oneSided = diffSummaries({ summary: { byDepth: { 0: { recall8: 0.5 } } } }, s)
+    expect(oneSided.filter((d) => d.key.includes('[depth='))).toEqual([
+      { key: 'recall8[depth=0]', from: 0.5, to: 1, delta: 0.5, better: true },
     ])
   })
 })
@@ -12092,7 +12581,7 @@ describe('bench emit — the emitted tasks carry the levers they were primed und
    * through `bin/docpilot.js`, so `cli-context` falls back to those defaults and
    * no config file has to exist.
    */
-  const project = (tuning) => {
+  const project = (tuning, extra = []) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-bench-'))
     const rag = path.join(dir, 'docs', 'public', 'rag')
     fs.mkdirSync(rag, { recursive: true })
@@ -12126,25 +12615,33 @@ describe('bench emit — the emitted tasks carry the levers they were primed und
         ...(tuning ? { tuning } : {}),
       }),
     )
+    // `extra` defaults to nothing, so every call that predates the chain cases
+    // below writes the same one-record file it always did.
     fs.writeFileSync(
       path.join(dir, 'docpilot', 'golden.jsonl'),
-      `${JSON.stringify({
-        id: 'q-1',
-        question: 'how is the widget configured with a token?',
-        expect: 'answer',
-        gold_answer: 'With a manifest and a token.',
-        gold_chunks: ['a#one'],
-        identifiers: [],
-        lang: 'en',
-      })}\n`,
+      [
+        {
+          id: 'q-1',
+          question: 'how is the widget configured with a token?',
+          expect: 'answer',
+          gold_answer: 'With a manifest and a token.',
+          gold_chunks: ['a#one'],
+          identifiers: [],
+          lang: 'en',
+        },
+        ...extra,
+      ]
+        .map((r) => JSON.stringify(r))
+        .join('\n') + '\n',
     )
     return dir
   }
 
-  const emit = async (dir, config) => {
+  const emit = async (dir, config, history) => {
     const { spawnSync } = await import('node:child_process')
     const entry = distEntry('src/eval/answer-bench.js')
-    const r = spawnSync(process.execPath, [entry, 'emit', `--config=${config}`], {
+    const args = ['emit', `--config=${config}`, ...(history ? [`--history=${history}`] : [])]
+    const r = spawnSync(process.execPath, [entry, ...args], {
       cwd: dir,
       encoding: 'utf8',
     })
@@ -12191,6 +12688,149 @@ describe('bench emit — the emitted tasks carry the levers they were primed und
     // both read it strictly one task per line. A file whose first task alone
     // carried the levers would lose them to `--stage=2` filtering.
     for (const t of tasks) expect(t.levers).toEqual(levers)
+  })
+
+  /**
+   * ── ONE PASS PER HOP — the multi-pass protocol, run ──────────────────────
+   *
+   * A turn cannot be primed until the turn before it has been answered, so a
+   * chain of depth D takes D + 1 emits: the caller answers what came back,
+   * appends to one `--history` file, and re-runs. The two-pass shape this
+   * replaces was not a simplification, it was the depth ceiling —
+   * `rec.prev_question` held one question, so `!historyFile` could stand in for
+   * "pass 1" and there was nothing for a third pass to do.
+   *
+   * How far a record has got is read off the ANSWERS, never off the flag: the
+   * longest answered prefix of its chain. That is what makes the emit idempotent
+   * and what lets a partly-answered set advance the records it can — and it is
+   * only observable by running the passes, which is why this spawns three.
+   */
+  describe('a chain answered one hop at a time', () => {
+    const CHAINED = {
+      id: 'q-2',
+      question: 'and what does the token do in the manifest?',
+      expect: 'answer',
+      gold_answer: 'It names the widget the manifest was built for.',
+      gold_chunks: ['a#one'],
+      identifiers: [],
+      lang: 'en',
+      prev_questions: ['how is the widget configured?', 'and where is the manifest?'],
+    }
+
+    /** The append log `--history` is: later lines win, which is what an append means. */
+    const answer = (dir, file, id, text) =>
+      fs.appendFileSync(path.join(dir, file), `${JSON.stringify({ id, text })}\n`)
+
+    const idsOf = (tasks) => tasks.map((t) => t.id)
+
+    it('emits only the next unanswered hop, and reaches the scored turn on the third pass', async () => {
+      const dir = project(null, [CHAINED])
+
+      const one = await emit(dir, 'p1')
+      expect(idsOf(one.tasks)).toEqual(['q-1', 'q-2#prev1'])
+      const prev1 = one.tasks.find((t) => t.id === 'q-2#prev1')
+      // Numbered by position in the chain, oldest first — and stage stays 2 for
+      // the scored turn alone, because `--stage` is a public flag whose value 2
+      // means "the tasks with gold answers" in every script anybody has written.
+      expect(prev1.stage).toBe(1)
+      expect(prev1.scored).toBe(false)
+      expect(prev1.question).toBe(CHAINED.prev_questions[0])
+      // Not scored means no gold to copy, on all three fields.
+      expect(prev1.gold_answer).toBe('')
+      expect(prev1.gold_chunks).toEqual([])
+      expect(one.out).toContain('1 priming turn(s)')
+
+      answer(dir, 'ans.jsonl', 'q-2#prev1', 'It is configured with a manifest.')
+      const two = await emit(dir, 'p2', 'ans.jsonl')
+      // The hop that was answered is not re-emitted; the next one is.
+      expect(idsOf(two.tasks)).toEqual(['q-1', 'q-2#prev2'])
+      expect(two.tasks.find((t) => t.id === 'q-2#prev2').question).toBe(CHAINED.prev_questions[1])
+
+      answer(dir, 'ans.jsonl', 'q-2#prev2', 'The manifest is in docs/public/rag.')
+      const three = await emit(dir, 'p3', 'ans.jsonl')
+      expect(idsOf(three.tasks)).toEqual(['q-1', 'q-2'])
+      const scored = three.tasks.find((t) => t.id === 'q-2')
+      expect(scored.stage).toBe(2)
+      expect(scored.scored).toBe(true)
+      expect(scored.gold_answer).toBe(CHAINED.gold_answer)
+      // Both answered pairs are in the transcript, in the order they were asked,
+      // which is the whole reason `--history` accumulates rather than replaces.
+      expect(scored.prompt).toContain('It is configured with a manifest.')
+      expect(scored.prompt).toContain('The manifest is in docs/public/rag.')
+      expect(scored.prompt.indexOf('It is configured with a manifest.')).toBeLessThan(
+        scored.prompt.indexOf('The manifest is in docs/public/rag.'),
+      )
+      // Nothing left to answer, so the line that asks for another pass is gone.
+      expect(three.out).not.toContain('priming turn(s)')
+    })
+
+    /**
+     * `<id>#prev` is what a one-hop emit wrote before chains existed, and a
+     * bench file answered under that spelling has to keep priming its follow-up
+     * — or the upgrade silently re-emits every stage-1 turn that was already
+     * paid for. The same rule `record.js` keeps for `prev_question`.
+     */
+    it('reads a legacy bare #prev answer as the first hop', async () => {
+      const dir = project(null, [CHAINED])
+      answer(dir, 'legacy.jsonl', 'q-2#prev', 'It is configured with a manifest.')
+      const { tasks } = await emit(dir, 'legacy', 'legacy.jsonl')
+      // Hop 1 is primed by the old id, so what comes back is hop 2.
+      expect(idsOf(tasks)).toEqual(['q-1', 'q-2#prev2'])
+      expect(tasks.find((t) => t.id === 'q-2#prev2').question).toBe(CHAINED.prev_questions[1])
+    })
+
+    /**
+     * `t.scored ?? t.stage === 2` at both readers, and the `??` is what keeps a
+     * `.tasks.jsonl` emitted before the field existed readable: absent has to
+     * read as the stage test it was written under, or every scored row in an
+     * older file stops being scored the day the flag lands.
+     */
+    it('scores a task file written before the scored flag existed', async () => {
+      const dir = project(null)
+      const task = (id, stage) => ({
+        id,
+        stage,
+        config: 'legacyfile',
+        levers: {},
+        question: 'how is the widget configured with a token?',
+        lang: 'en',
+        prompt: 'p',
+        citable: ['a#one'],
+        sources: [{ id: 'a#one', title: 'Page A', path: '/a', text: CHUNKS[0].text }],
+        gold_answer: stage === 2 ? 'With a manifest and a token.' : '',
+        identifiers: [],
+        gold_chunks: stage === 2 ? ['a#one'] : [],
+      })
+      fs.writeFileSync(
+        path.join(dir, 'old.tasks.jsonl'),
+        [task('q-9#prev1', 1), task('q-9', 2)].map((t) => JSON.stringify(t)).join('\n') + '\n',
+      )
+      fs.writeFileSync(
+        path.join(dir, 'old.answers.jsonl'),
+        [
+          { id: 'q-9#prev1', text: 'primed', citations: ['a#one'] },
+          { id: 'q-9', text: 'With a manifest and a token.', citations: ['a#one'] },
+        ]
+          .map((a) => JSON.stringify(a))
+          .join('\n') + '\n',
+      )
+
+      const { spawnSync } = await import('node:child_process')
+      const r = spawnSync(
+        process.execPath,
+        [
+          distEntry('src/eval/answer-bench.js'),
+          'score',
+          '--tasks=old.tasks.jsonl',
+          '--answers=old.answers.jsonl',
+        ],
+        { cwd: dir, encoding: 'utf8' },
+      )
+      expect(r.status).toBe(0)
+      // One row, not two: the priming turn is still skipped with no `scored` key
+      // to read, and the scored one is still scored.
+      expect(`${r.stdout}${r.stderr}`).toContain('records                        1')
+    })
   })
 })
 

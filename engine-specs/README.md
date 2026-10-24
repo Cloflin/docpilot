@@ -52,6 +52,8 @@ The rule this directory exists to enforce:
 | [023](023-an-antecedent-one-hop-short.md) | an ellipsis chains two questions back when the turn it follows was itself composed — and the eval sets learn to hold a conversation longer than one pair |
 | [024](024-the-code-the-last-answer-showed.md) | measured, not adopted: a host-built summary of the previous turn (its code, its sources) lost or tied against the control in two A/B runs — 013 and 022 already carry what a follow-up needs |
 | [025](025-the-word-the-embedder-never-saw.md) | the embedder reads the corpus's own terms beside the reader's: `embedQuery` appends the canonicals a question's vocabulary aliases name, so a Russian question stops losing to dense ordering the section lexical already ranked first |
+| [026](026-the-last-answer-and-the-summaries.md) | the last answer travels whole and each older one as the model's own one-line `summary` — five transcript shapes A/B-tested on five-turn chains; none beat the skeleton outright, this one wins on clarifications and loses on rewrites |
+| [027](027-one-bit-a-dimension.md) | chunk vectors as one sign bit per dimension against a float question, scaled back onto the cosine by one fitted number — 2.3 MB → 291 KB on a 4096-dimension embedder with recall@8 unchanged; `auto` keeps int8 where the bit's error says it cannot afford it |
 
 ## Shape of a spec
 

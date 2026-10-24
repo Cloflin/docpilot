@@ -374,6 +374,7 @@ export function abKnobs() {
   const n = raw === undefined || raw === '' ? NaN : Number(raw)
   return {
     historyCondense: process.env.DOCPILOT_HISTORY_CONDENSE !== '0',
+    lastAnswerFull: process.env.DOCPILOT_LAST_ANSWER_FULL !== '0',
     antecedentHops: Number.isFinite(n)
       ? Math.min(Math.max(Math.trunc(n), 1), ANTECEDENT_HOPS)
       : ANTECEDENT_HOPS,
