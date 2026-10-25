@@ -86,14 +86,20 @@ export const redraws = () => Boolean(process.stderr.isTTY)
  * @param at under a non-TTY, whether this tick is worth a whole line. Under a
  *   terminal it is ignored: the redraw is free because it overwrites itself.
  *   The callers that already throttle — `% 20`, one per batch — pass nothing.
+ *
+ * `\x1b[K` — CLEAR TO THE END OF THE LINE — after the text, on both. A redraw
+ * that only returned the carriage left the tail of every longer line before
+ * it: `model fingerprint` hashing a short file name after a long one printed
+ * the new name with the end of the old one still beside it. Only under a
+ * terminal, which is the only place the escape is written at all.
  */
 export const tick = (text, at = true) => {
-  if (redraws()) process.stderr.write(`\r  ${text}`)
+  if (redraws()) process.stderr.write(`\r  ${text}\x1b[K`)
   else if (at) console.error(`  ${text}`)
 }
 
 /** The line that STAYS: it overwrites the ticks under a terminal, and stands alone without. */
 export const tock = (text) => {
-  if (redraws()) process.stderr.write(`\r  ${text}\n`)
+  if (redraws()) process.stderr.write(`\r  ${text}\x1b[K\n`)
   else console.error(`  ${text}`)
 }
