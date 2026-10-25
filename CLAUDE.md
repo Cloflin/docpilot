@@ -9,7 +9,7 @@ ESM-only, Node >= 20. TypeScript in `src/`, Vue components for the panel, VitePr
 ## Commands
 
 - `npm run verify` — the gate: `check → build:js → typecheck → conformance → vitest`. Run this, not its parts, before committing.
-- `npm test` — `vitest run` (happy-dom; the `--no-experimental-webstorage` flag is already in the script).
+- `npm test` — `vitest run` (happy-dom; `vitest.config.js` passes `--no-experimental-webstorage` to the workers where the node knows it).
 - `npm run check` — `scripts/check-docpilot.sh`, design-direction rules over `src/theme/**` SCSS and `DocPilot.vue`. Repo-internal, not shipped.
 - `npm run typecheck` / `npm run typecheck:dist` — the second one type-checks built `dist/` against `tsconfig.conformance.json`.
 - `npm run build` — css + js + web, three separate builders in `bin/`.

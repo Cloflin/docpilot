@@ -15,9 +15,16 @@
  */
 import vue from '@vitejs/plugin-vue'
 
+// Node 22+ ships a global `localStorage` that shadows happy-dom's in the mount
+// suite. The flag that turns it off does not exist on Node 20, where putting it
+// in NODE_OPTIONS stops node before a test runs — so it is passed to the test
+// workers only where this node knows it.
+const WEBSTORAGE_OFF = '--no-experimental-webstorage'
+
 export default {
   plugins: [vue()],
   test: {
     environment: 'node',
+    execArgv: process.allowedNodeEnvironmentFlags.has(WEBSTORAGE_OFF) ? [WEBSTORAGE_OFF] : [],
   },
 }
