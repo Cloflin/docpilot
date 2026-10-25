@@ -67,7 +67,7 @@ import {
   hardGatesFailed,
 } from './metrics.js'
 import { writeReport } from './report.js'
-import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
+import { filterByLevel, parseLevelArg, splitOf, DEFAULT_RUN_LEVEL } from './levels.js'
 import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 import { chainTexts, resolveChain } from './conversation.js'
 import { keyForBase, nodeEmbedTarget } from '../config.js'
@@ -226,10 +226,11 @@ const GATE_ONLY = has('gate-only')
  *
  * A corpus edit proposed from failing questions and then scored on the SAME
  * questions measures how well the edit was fitted to them, not whether it
- * helped. `split` on a record (`dev` / `test`) is the authoring-time partition:
- * `docpilot improve` and the tuning agent read `dev` failures only, and an edit
- * is proven on `test`. A record with no `split` belongs to neither half and to
- * every unsplit run, so a set that predates the field scores as it always did.
+ * helped. `split` on a record (`dev` / `test`) is the partition: `docpilot
+ * improve` and the tuning agent read `dev` failures only, and an edit is proven
+ * on `test`. A record with no `split` is assigned by a hash of its id
+ * (`splitOf`), so a set that predates the field splits without an edit; a run
+ * with no `--split` scores every record, as it always did.
  */
 const SPLIT = arg('split') ?? null
 
@@ -1837,10 +1838,8 @@ async function main() {
             `        run the whole set:  npx docpilot eval`,
     )
   }
-  const inSplit = SPLIT ? inLevel.filter((r) => r.split === SPLIT) : inLevel
-  if (SPLIT && !inSplit.length) {
-    die(`no records with "split": "${SPLIT}" at level ${RUN_LEVEL} — the field is set when the set is authored`)
-  }
+  const inSplit = SPLIT ? inLevel.filter((r) => splitOf(r) === SPLIT) : inLevel
+  if (SPLIT && !inSplit.length) die(`no records in the ${SPLIT} split at level ${RUN_LEVEL}`)
   const records = inSplit.slice(0, LIMIT || undefined)
 
   console.log(

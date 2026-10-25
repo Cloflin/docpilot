@@ -134,3 +134,23 @@ export function levelHistogram(records) {
   }
   return { levels: rows, unknown, total: records.length }
 }
+
+/**
+ * The half of the golden set a record belongs to — engine-spec 029.
+ *
+ * An authored `split` wins. A record without one is assigned by its id, so a set
+ * written before the field existed still splits — the same way on every machine
+ * and every run, with no command writing a byte of `golden.jsonl` (the rule every
+ * command here keeps). FNV-1a, the hash the report names already use; an even
+ * hash is `dev`.
+ */
+export function splitOf(rec) {
+  if (rec?.split === 'dev' || rec?.split === 'test') return rec.split
+  let h = 0x811c9dc5
+  const id = String(rec?.id ?? '')
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i)
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  return h % 2 === 0 ? 'dev' : 'test'
+}

@@ -17,6 +17,8 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { splitOf } from '../eval/levels.js'
+
 export const NGRAM = 8
 
 const words = (s) =>
@@ -60,7 +62,7 @@ export function measurementTouched(root: string, evalDir: string, ref = 'HEAD') 
 }
 
 export function leaks(added: Map<string, string>, records: any[], { split = 'test' } = {}) {
-  const gold = records.filter((r) => r.gold_answer && (!split || r.split === split || !r.split))
+  const gold = records.filter((r) => r.gold_answer && (!split || splitOf(r) === split))
   const index = new Map<string, string[]>()
   for (const r of gold) for (const g of ngrams(r.gold_answer)) index.set(g, [...(index.get(g) || []), r.id])
   const found = []

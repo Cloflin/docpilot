@@ -424,7 +424,7 @@ The **embedder** is not this flag. It is resolved from `docPilot.embed` by the s
 
 ### The split {#eval-split}
 
-A golden record may carry `"split": "dev"` or `"split": "test"`. `--split=dev` scores only the first half and `--split=test` only the second; a record without the field belongs to neither and runs only when no split is asked for. Propose documentation edits from `dev` failures — that is what [`improve`](#improve) reads — and prove them on `test`: an edit written against the questions it is scored on measures how well it was fitted to them. The split is part of the report's name and metadata, so a `dev` run never diffs against a `test` one.
+A golden record may carry `"split": "dev"` or `"split": "test"`. `--split=dev` scores only the first half and `--split=test` only the second; a record without the field is assigned by a hash of its id, the same way on every machine, so a set written before the field existed splits with no edit. Propose documentation edits from `dev` failures — that is what [`improve`](#improve) reads — and prove them on `test`: an edit written against the questions it is scored on measures how well it was fitted to them. The split is part of the report's name and metadata, so a `dev` run never diffs against a `test` one.
 
 ### The server runtime {#eval-runtime}
 
