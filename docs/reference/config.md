@@ -240,6 +240,8 @@ Anything other than these two stops the build.
 
 The path the panel posts a turn to under `runtime: 'server'`, and the base of `GET {endpoint}/manifest`. It must start with `/`: a cross-origin endpoint would need CORS, and CORS on an endpoint that spends your model allowance lets any page spend it.
 
+The other `server.*` keys — `limits`, `trustProxy`, `turnTimeoutMs`, `embedTimeoutMs`, `cache`, `metrics`, `allowedOrigins` and `turn` — are the operator's. They are read by the server only and never reach the page. Each is listed with its default on [Server operations](/guide/server-operations#settings).
+
 ## product
 
 - **Type:** `string | null`

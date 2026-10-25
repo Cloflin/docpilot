@@ -21,6 +21,7 @@ const engine = [
   { title: 'Pasted keys', body: 'A key typed into a question never leaves the browser.', link: '/features/credentials' },
   { title: 'Feedback', body: 'Thumbs, reasons, a comment — to your endpoint or the reader’s device.', link: '/features/feedback' },
   { title: 'How this works', body: 'Show readers the instruction the model runs under.', link: '/features/prompt' },
+  { title: 'The terminal', body: 'A home screen, project status and a live server monitor in the command line.', link: '/features/terminal' },
 ]
 </script>
 

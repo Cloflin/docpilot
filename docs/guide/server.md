@@ -4,6 +4,8 @@ description: Run the turn on your own server — the prompt, the thresholds, the
 
 # The server runtime
 
+This page sets the server install up. The operator settings — limits, deadlines, caches, metrics, signed history — are on [Server operations](/guide/server-operations). To decide between the two installs first, read [Choose your install](/install/choose).
+
 By default a turn runs in the reader's browser: it downloads the index, retrieves, scores the gate, runs the tool loop and builds the prompt, and your server only attaches the API key on the way out. Set `runtime: 'server'` and all of that runs on your machine instead.
 
 ```
@@ -89,7 +91,7 @@ export default { fetch: dp.handle }          // Workers, Bun, Deno, edge functio
 app.use(dp.node)                             // Express, Connect, node:http
 ```
 
-`authorize` runs before any work and is where authentication and rate limits go. The package ships neither: the reader's identity is your proxy's to know.
+`authorize` runs before any work and is where authentication goes. The package ships no authentication: the reader's identity is your proxy's to know. Rate limits are built in and on by default — see [Limits](/guide/server-operations#limits).
 
 ## The contract
 
@@ -97,6 +99,7 @@ app.use(dp.node)                             // Express, Connect, node:http
 |---|---|---|
 | `GET` | `{endpoint}/manifest` | the page list and sections; no thresholds, levers or file names |
 | `POST` | `{endpoint}` | `text/event-stream`: `phase`, `model`, `member`, `stream`, then one `settle` or `error` |
+| `GET` | `{endpoint}/metrics` | Prometheus text, or `docpilot.metrics/1` with `?format=json`; loopback, or the bearer token — see [the metrics endpoint](/guide/server-operations#metrics) |
 
 The request body is clamped on the server to what the panel could have sent: the question to 2000 characters, the history to 12 turns, the reader's instruction to 500. Nothing in it is trusted — the scope is rebuilt from page paths against your index, and the question is redacted again before anything is logged.
 
@@ -106,7 +109,7 @@ No response carries a CORS header. The endpoint spends your model allowance, so 
 
 **Each half sends its own key.** The embedding request carries only the embed provider's key, and the chat request only the chat provider's. A keyless embedder (Ollama, `custom`, `llamacpp`) gets no `Authorization` header. A hosted embedder whose key variable is not set fails, and the turn runs lexical-only with `embedder unreachable: …` in the log — export its variable. A Gemini embedder has no host the server can reach, so under the server runtime its turns run lexical-only.
 
-**History is the reader's, not yours.** The panel sends the earlier questions and answers of the conversation with each turn, and the model reads those answers as its own. A client can send answers your server never wrote. This is an accepted limit of a stateless endpoint. `dataset` never trains on them — see [Fine-tuning](/guide/fine-tuning#datasets).
+**History is the reader's, not yours, and it is signed.** The panel sends the earlier questions and answers of the conversation with each turn. Every answer leaves the server with a signature, and an entry that does not verify reaches the model quoted inside the reader's message, not as the model's own turn. Set `DOCPILOT_SERVER_SECRET` — see [Signed history](/guide/server-operations#signed-history). `dataset` never trains on earlier turns — see [Fine-tuning](/guide/fine-tuning#datasets).
 
 ## The turn log
 

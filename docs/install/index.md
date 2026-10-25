@@ -4,6 +4,8 @@ title: Installing
 
 # Installing
 
+**Decide first where a turn runs.** The static install (the default) runs it in the reader's browser, from an index your site publishes. The server install (`runtime: 'server'`) runs it on your server and publishes no index. Every page below works for both, and the choice is one setting. [Choose your install](/install/choose) has the comparison, what each makes public, and who each is for. If you are unsure, start with static.
+
 DocPilot has two halves, and only one of them cares what your site is built with.
 
 **The index does not need a site.** `npx docpilot index` walks markdown and writes
@@ -69,7 +71,7 @@ this package, which is why no line above reaches for a package by bare name —
 `npx docpilot` works only because the install on the line above it put that bin
 in `node_modules/.bin`.
 
-[`init`](/reference/cli#init) scaffolds the eval sets, the key names and the
+[`init`](/reference/cli#init) asks which install you want, prints the block to paste, scaffolds the eval sets, the key names and the
 authoring skills, and never overwrites. It asks which agent tool the skills go
 into — Claude Code, Codex, Cursor, Copilot — and installs a `/docpilot-*` slash
 command per CLI command beside them. It is safe to skip on a first look and

@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: An AI chat assistant you embed on any website. It answers from your own pages, cites every claim, and runs its search in the reader's browser.
+description: An AI chat assistant you embed on any website. It answers from your own pages, cites every claim, and runs either in the reader's browser or on your server.
 ---
 
 <script setup>
@@ -20,6 +20,10 @@ const features = [
 # Introduction
 
 **DocPilot is an AI chat assistant you embed on a website.** Put it on a documentation site, a landing page, a help centre or an app you already ship. It answers from your own pages, numbers every claim with a link to its source, and says so when your pages do not cover the question.
+
+**Choose first where a turn runs.** In the **static install**, the default, the reader's browser downloads the index and runs the search, the gate and the prompt, and your server only attaches the model key. In the **server install** (`runtime: 'server'`), the turn runs on your server: the index, the prompt, the thresholds and the keys stay there, and the page receives a stream. The reader sees the same chat in both.
+
+Use static if your pages are public and you want nothing extra to run. Use server if the corpus or the prompt must stay private, or you need rate limits and metrics. [Choose your install](/install/choose) has the comparison.
 
 It mounts on any platform: [VitePress](/install/vitepress), [Docusaurus](/install/docusaurus), [Vue](/install/vue), [React](/install/react), plain [JavaScript or TypeScript](/install/javascript), or one [`<script>` tag](/install/web) on any HTML page. The config, the index and the commands are the same on all of them.
 
@@ -43,7 +47,7 @@ The index is built once, at deploy time, by a CLI. Then you measure it and impro
 
 <Pipeline3D />
 
-The first three steps are enough to ship. The rest is how the assistant gets better: `eval` tells you which questions it gets wrong, `tune` and new pages fix them, and `feedback pull` turns your readers' thumbs-down into the next set of test questions. Every command is in the [CLI reference](/reference/cli).
+The first three steps are enough to ship. The rest is how the assistant gets better: `eval` tells you which questions it gets wrong, `improve` names the edit for each, `tune` and new pages fix them, and `feedback pull` turns your readers' thumbs-down into the next set of test questions. [Measure](/guide/measure) explains the numbers, and [Improve answers](/guide/improving) the loop. Every command is in the [CLI reference](/reference/cli).
 
 ## RAG, in plain words
 
@@ -54,7 +58,7 @@ RAG — *retrieval-augmented generation* — means the model does not answer fro
 3. **The model gets the question plus those passages**, and an instruction to use nothing else and to cite each claim.
 4. **The browser checks the answer.** A citation that points at a passage nobody retrieved is removed, and so is a link to a page that does not exist.
 
-Because steps 1 and 2 run without a server, the only thing your server does is forward the model call — see [Security](/guide/security).
+In the static install, steps 1 and 2 run without a server, so the only thing your server does is forward the model call. In the server install, your server runs all four. See [Security](/guide/security) for what each install makes public.
 
 ## How small the index is
 
@@ -82,7 +86,9 @@ Each feature has its own page with a live mock-up and the config that turns it o
 
 ## Where to go next
 
-- [Security](/guide/security) — why your model key never reaches the browser.
+- [Choose your install](/install/choose) — static or server, and what each makes public.
 - [Quick start](/guide/) — running on VitePress in ten minutes.
 - [Install](/install/) — the entry point for every other platform.
+- [Measure](/guide/measure) and [Improve answers](/guide/improving) — score the assistant, then fix what it gets wrong.
+- [Security](/guide/security) — the threat model of each install.
 - [Configuration](/reference/config) — every option, with its default.

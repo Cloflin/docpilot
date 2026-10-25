@@ -178,15 +178,17 @@ const icons = {
   guide: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',
   concepts: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
   reference: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>',
+  measure: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21v-6"/><path d="M12 21V3"/><path d="M19 21V9"/></svg>',
+  security: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>',
 }
 
 const groups = [
   {
-    text: 'Get started',
+    text: 'Start',
     icon: icons.start,
     items: [
       { text: 'Introduction', link: '/introduction' },
-      { text: 'Security', link: '/guide/security', badge: 'new' },
+      { text: 'Choose your install', link: '/install/choose', badge: 'new' },
       { text: 'Quick start', link: '/guide/' },
       { text: 'Install', link: '/install/' },
       { text: 'VitePress', link: '/install/vitepress' },
@@ -219,35 +221,53 @@ const groups = [
       { text: 'Feedback', link: '/features/feedback' },
       { text: 'Pasted keys', link: '/features/credentials' },
       { text: 'How this works', link: '/features/prompt' },
+      { text: 'The terminal', link: '/features/terminal', badge: 'new' },
     ],
   },
   {
-    text: 'Guide',
+    text: 'Measure and improve',
+    icon: icons.measure,
+    items: [
+      { text: 'Measure', link: '/guide/measure', badge: 'new' },
+      { text: 'Calibration and evaluation', link: '/guide/evaluation' },
+      { text: 'Improve answers', link: '/guide/improving' },
+      { text: 'Tune with Claude Code', link: '/guide/tuning-agent', badge: 'new' },
+      { text: 'llms.txt and crawlers', link: '/guide/llms-txt' },
+      { text: 'Fine-tuning', link: '/guide/fine-tuning' },
+      { text: 'The benchmark', link: '/guide/benchmarks', badge: 'new' },
+    ],
+  },
+  {
+    text: 'Security',
+    icon: icons.security,
+    items: [
+      { text: 'Security and threat model', link: '/guide/security' },
+      { text: 'Attack probes', link: '/guide/security-probes', badge: 'new' },
+      { text: 'Credentials in questions', link: '/guide/credentials' },
+    ],
+  },
+  {
+    text: 'Operate',
     icon: icons.guide,
     items: [
-      { text: 'The assistant panel', link: '/guide/panel' },
+      { text: 'The server runtime', link: '/guide/server' },
+      { text: 'Server operations', link: '/guide/server-operations', badge: 'new' },
+      { text: 'Production', link: '/guide/production' },
       { text: 'Choosing providers', link: '/guide/providers' },
       { text: 'What it costs', link: '/guide/what-it-costs' },
       { text: 'Building the index', link: '/guide/indexing' },
-      { text: 'Calibration and evaluation', link: '/guide/evaluation' },
       { text: 'Imported pages', link: '/guide/imported-pages' },
-      { text: 'Production', link: '/guide/production' },
-      { text: 'The server runtime', link: '/guide/server' },
-      { text: 'Improving answers from traffic', link: '/guide/improving' },
-      { text: 'Fine-tuning', link: '/guide/fine-tuning' },
       { text: 'A host of your own', link: '/guide/other-sites' },
+      { text: 'The assistant panel', link: '/guide/panel' },
       { text: 'Appearance', link: '/guide/appearance' },
       { text: 'Translating the panel', link: '/guide/i18n' },
       { text: 'Conversation history', link: '/guide/history' },
       { text: 'Social openers', link: '/guide/social-openers' },
-      { text: 'Credentials in questions', link: '/guide/credentials' },
-      { text: 'llms.txt and crawlers', link: '/guide/llms-txt' },
       { text: 'Troubleshooting', link: '/guide/troubleshooting' },
-      { text: 'Frequently asked', link: '/guide/faq' },
     ],
   },
   {
-    text: 'Understanding it',
+    text: 'Concepts',
     icon: icons.concepts,
     items: [
       { text: 'How a turn works', link: '/concepts/a-turn' },
@@ -268,6 +288,7 @@ const groups = [
       { text: 'Theme tokens', link: '/reference/theme' },
       { text: 'Syntax highlighting', link: '/reference/highlighting' },
       { text: 'Skills', link: '/reference/skills' },
+      { text: 'Frequently asked', link: '/guide/faq' },
     ],
   },
 ]
@@ -275,19 +296,26 @@ const groups = [
 /**
  * Three sidebars, one per top-level section — Docs, Features, Reference — so
  * each nav item opens its own page tree and prev/next stays inside it. Keyed by
- * path prefix; the longest match wins.
+ * path prefix; the longest match wins. The Docs sidebar carries five of the
+ * seven top-level groups (Start, Measure and improve, Security, Operate,
+ * Concepts) because their pages share the `/guide/` prefix; `/guide/faq` is
+ * the one page under it that belongs to Reference.
  */
-const [start, features, guide, concepts, reference] = groups
+const [start, features, measure, security, operate, concepts, reference] = groups
 const releases = {
   text: 'Releases',
   icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>',
-  items: [{ text: 'Changelog', link: '/changelog', badge: `v${pkg.version}` }],
+  items: [
+    { text: 'Changelog', link: '/changelog', badge: `v${pkg.version}` },
+    { text: 'Migrate to 2.0', link: '/guide/migrate-2' },
+  ],
 }
-const docs = [start, releases, guide, concepts]
+const docs = [start, releases, measure, security, operate, concepts]
 const sidebar = {
   '/introduction': docs,
   '/changelog': docs,
   '/guide/': docs,
+  '/guide/faq': [reference],
   '/install/': docs,
   '/concepts/': docs,
   '/features/': [features],
@@ -383,9 +411,20 @@ const config = defineConfig({
     siteTitle: false,
 
     nav: [
-      { text: 'Docs', link: '/introduction', activeMatch: '^/(introduction|guide/|install/|concepts/)' },
+      {
+        text: 'Docs',
+        link: '/introduction',
+        activeMatch:
+          '^/(introduction|install/|concepts/|guide/(?!measure|improving|tuning-agent|benchmarks|evaluation|llms-txt|fine-tuning|security|credentials|faq))',
+      },
       { text: 'Features', link: '/features/', activeMatch: '^/features/' },
-      { text: 'Reference', link: '/reference/config', activeMatch: '^/reference/' },
+      {
+        text: 'Measure',
+        link: '/guide/measure',
+        activeMatch: '^/guide/(measure|improving|tuning-agent|benchmarks|evaluation|llms-txt|fine-tuning)',
+      },
+      { text: 'Security', link: '/guide/security', activeMatch: '^/guide/(security|credentials)' },
+      { text: 'Reference', link: '/reference/config', activeMatch: '^/(reference/|guide/faq)' },
       { text: `v${pkg.version}`, link: '/changelog', activeMatch: '^/changelog' },
     ],
     navCta: { text: 'Get started', link: '/guide/' },

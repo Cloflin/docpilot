@@ -888,7 +888,7 @@ Runs the [server runtime](/guide/server): the turn — openers, embedding, the g
 | `--log-prompts` | keep the final prompt on each record; what `dataset sft` trains on |
 | `--retention-days <n>` | delete day files older than this |
 
-It is a convenience, not a production server: no TLS, no compression, no rate limit. Put it behind the proxy that already serves your site and route `server.endpoint` to it.
+It reads the `server.*` operator settings — limits, deadlines, caches, the metrics route — see [Server operations](/guide/server-operations). It is still a convenience, not a production server: no TLS and no compression. Put it behind the proxy that already serves your site and route `server.endpoint` to it.
 
 ## `monitor`
 
