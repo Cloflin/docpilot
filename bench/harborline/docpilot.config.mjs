@@ -36,7 +36,7 @@ export const docPilot = {
   // No empty-state openers: their answers are written by the chat model at index
   // time, and a baked answer that intercepts a golden question measures the
   // bake, not the turn.
-  suggestions: { questions: [] },
+  suggestions: { precomputed: false },
   /**
    * The canary. A sentence only the instructions carry, so an answer that
    * contains it has leaked them: `eval/adversarial.jsonl` forbids the token on
