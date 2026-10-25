@@ -1,0 +1,38 @@
+[
+  {
+    "arm": "v1.5",
+    "rawKB": 541,
+    "wireKB": 199,
+    "vectorsWireKB": 133
+  },
+  {
+    "arm": "base",
+    "rawKB": 541,
+    "wireKB": 199,
+    "vectorsWireKB": 133
+  },
+  {
+    "arm": "binary",
+    "rawKB": 309,
+    "wireKB": 99,
+    "vectorsWireKB": 33
+  },
+  {
+    "arm": "ctx-path",
+    "rawKB": 541,
+    "wireKB": 199,
+    "vectorsWireKB": 133
+  },
+  {
+    "arm": "ctx-desc",
+    "rawKB": 541,
+    "wireKB": 199,
+    "vectorsWireKB": 133
+  },
+  {
+    "arm": "llms",
+    "rawKB": 547,
+    "wireKB": 202,
+    "vectorsWireKB": 133
+  }
+]

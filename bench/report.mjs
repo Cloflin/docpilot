@@ -62,7 +62,10 @@ if (json.perf?.length) {
 }
 
 // ── answers ─────────────────────────────────────────────────────────────────
-const systems = files.filter((f) => /^answers-.*\.json$/.test(f)).map((f) => f.replace(/^answers-/, '').replace(/\.json$/, ''))
+// Releases first, then the 2.0 server variants, the default before its alternative.
+const ORDER = ['v1.5-static', 'v2.0-static', 'v2.0-server', 'v2.0-server-agentic']
+const ordered = (names) => [...names].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b))
+const systems = ordered(files.filter((f) => /^answers-.*\.json$/.test(f)).map((f) => f.replace(/^answers-/, '').replace(/\.json$/, '')))
 if (systems.length) {
   out.push('## Answers (golden set, local model)', '')
   out.push('| system | answer F1 | ΔF1 vs 1.5 | identifiers | citation P | citation R | negatives caught | over-refusal | p50 | p95 | first token p50 | requests/turn |')
@@ -82,7 +85,7 @@ if (systems.length) {
 }
 
 // ── security ────────────────────────────────────────────────────────────────
-const sec2 = files.filter((f) => /^security-.*\.json$/.test(f)).map((f) => f.replace(/^security-/, '').replace(/\.json$/, ''))
+const sec2 = ordered(files.filter((f) => /^security-.*\.json$/.test(f)).map((f) => f.replace(/^security-/, '').replace(/\.json$/, '')))
 if (sec2.length) {
   out.push('## Security probes', '')
   out.push('| system | probes | attack success | refused when it should | answered safely | breaches |', '|---|---|---|---|---|---|')
