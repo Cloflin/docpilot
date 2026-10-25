@@ -27,10 +27,14 @@ export const docPilot = {
     model: env.HARBORLINE_EMBED_MODEL || 'bge-m3',
     baseURL: env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
   },
+  // `HARBORLINE_CHAT_PROVIDER` moves the chat model to a hosted provider, which
+  // brings its own address and key (`openrouter` reads OPENROUTER_API_KEY).
   chat: {
-    provider: 'ollama',
+    provider: env.HARBORLINE_CHAT_PROVIDER || 'ollama',
     model: env.HARBORLINE_CHAT_MODEL || 'qwen3:8b',
-    baseURL: env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
+    ...(env.HARBORLINE_CHAT_PROVIDER && env.HARBORLINE_CHAT_PROVIDER !== 'ollama'
+      ? {}
+      : { baseURL: env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434' }),
   },
   // `HARBORLINE_GUARD_MODE=calibrated` turns the gate's refusals on for the
   // calibrated arm of bench/run.mjs. `calibrate` fits its thresholds on

@@ -3675,6 +3675,602 @@
           "hi": 0.1326530612244898
         }
       }
+    },
+    "v2.0-static-deepseek": {
+      "meta": {
+        "model": "deepseek/deepseek-v4-flash",
+        "runtime": "browser",
+        "records": 65
+      },
+      "summary": {
+        "positives": 50,
+        "negatives": 15,
+        "retrievalF1": 0.31019047619047635,
+        "recall8": 0.915,
+        "mrr": 0.6879999999999998,
+        "recall1": 0.48,
+        "recall3": 0.7,
+        "recall5": 0.845,
+        "ndcg8": 0.722774199450109,
+        "contextPrecision5": 0.6649999999999998,
+        "answerF1": 0.4380389884558035,
+        "identifierRecall": 0.782638888888889,
+        "citationPrecision": 0.4972789115646258,
+        "citationRecall": 0.8214285714285714,
+        "supportPrecision": 0.8907998981202175,
+        "unsupportedAnswerRate": 0.04081632653061224,
+        "language": 0.9795918367346939,
+        "gateOverRefusal": 0,
+        "gateOverRefusalUB95": 0.051335931689179104,
+        "answerOverRefusal": 1,
+        "answerOverRefusalUB95": 0.08480809081609769,
+        "negativesCaught": 14,
+        "negativesCaughtRate": 0.9333333333333333,
+        "noAnswerPrecision": null,
+        "hallucinated": 0,
+        "scopeContainment": 1,
+        "rejectedFetches": 0,
+        "iterationsPerAnswer": 1.8979591836734695,
+        "requestsPerTurn": 2.6769230769230767,
+        "promptTokens": 7761.584615384615,
+        "outputTokens": 1106.4307692307693,
+        "cachedTokens": 2646.646153846154,
+        "cachedShare": 0.34099301688988964,
+        "tokensPerAcceptedAnswer": 11763.69387755102,
+        "promptChars": 23520.061538461538,
+        "promptCharsPeak": 9275.23076923077,
+        "observationChars": 6430.461538461538,
+        "answerChars": 651.1076923076923,
+        "latencyP50": 13555,
+        "latencyP95": 39987,
+        "latencyP99": 52786,
+        "ttftP50": 10431,
+        "ttftP95": 30556,
+        "misses": [
+          "h-024(refuse:not-answerable)",
+          "hn-001(answer)"
+        ],
+        "languageFailures": [
+          "h-022"
+        ],
+        "byLanguage": {
+          "English": {
+            "positives": 41,
+            "negatives": 13,
+            "recall8": 0.9573170731707317,
+            "mrr": 0.6926829268292681,
+            "answerF1": 0.5040658768825644,
+            "identifierRecall": 0.7923076923076923,
+            "citationRecall": 0.85625,
+            "language": 0.975,
+            "negativesCaughtRate": 0.9230769230769231
+          },
+          "Russian": {
+            "positives": 9,
+            "negatives": 2,
+            "recall8": 0.7222222222222222,
+            "mrr": 0.6666666666666666,
+            "answerF1": 0.14458615100353298,
+            "identifierRecall": 0.7407407407407408,
+            "citationRecall": 0.6666666666666666,
+            "language": 1,
+            "negativesCaughtRate": 1
+          }
+        },
+        "byDepth": null,
+        "taxonomy": {
+          "ok": [
+            "h-001",
+            "h-002",
+            "h-003",
+            "h-004",
+            "h-006",
+            "h-007",
+            "h-008",
+            "h-009",
+            "h-021",
+            "h-022",
+            "h-025",
+            "h-026",
+            "h-027",
+            "h-036",
+            "h-037",
+            "h-040",
+            "h-041",
+            "h-042",
+            "h-043",
+            "h-044",
+            "h-045",
+            "h-057",
+            "h-060",
+            "h-061",
+            "h-069",
+            "h-070",
+            "h-071",
+            "h-072",
+            "h-078",
+            "h-079",
+            "h-081",
+            "h-082",
+            "h-089",
+            "h-090",
+            "h-091",
+            "h-098",
+            "h-099",
+            "h-101"
+          ],
+          "retrieval-miss": [
+            "h-005",
+            "h-039"
+          ],
+          "primed-low-f1": [
+            "h-010",
+            "h-023",
+            "h-056",
+            "h-058",
+            "h-080",
+            "h-092",
+            "h-100"
+          ],
+          "over-refused": [
+            "h-024"
+          ],
+          "gold-below-primed": [
+            "h-038",
+            "h-059"
+          ],
+          "neg-answered:refuse:no-evidence": [
+            "hn-001"
+          ],
+          "neg-caught": [
+            "hn-002",
+            "hn-003",
+            "hn-004",
+            "hn-005",
+            "hn-006",
+            "hn-007",
+            "hn-008",
+            "hn-009",
+            "hn-010",
+            "hn-011",
+            "hn-020",
+            "hn-021",
+            "hn-022",
+            "hn-023"
+          ]
+        },
+        "reSearch": {
+          "turns": 15,
+          "ofTurns": 65,
+          "crossLanguage": 15,
+          "crossLanguageIds": [
+            "h-024",
+            "h-038",
+            "h-044",
+            "h-099",
+            "hn-001",
+            "hn-002",
+            "hn-003",
+            "hn-004",
+            "hn-005",
+            "hn-006",
+            "hn-007",
+            "hn-008",
+            "hn-009",
+            "hn-010",
+            "hn-011"
+          ]
+        },
+        "missPages": {
+          "undescribed": [
+            {
+              "page": "/guides/queue-control",
+              "described": false,
+              "records": [
+                "h-038"
+              ]
+            }
+          ],
+          "checked": 3
+        }
+      },
+      "vs15": {
+        "answerF1": {
+          "n": 49,
+          "mean": 0.030720793806388712,
+          "lo": -0.0005032280359670701,
+          "hi": 0.06031221624355672
+        },
+        "citationRecall": {
+          "n": 49,
+          "mean": 0.061224489795918366,
+          "lo": 0.01020408163265306,
+          "hi": 0.1326530612244898
+        }
+      }
+    },
+    "v2.0-server-deepseek": {
+      "meta": {
+        "model": "deepseek/deepseek-v4-flash",
+        "runtime": "server",
+        "records": 65
+      },
+      "summary": {
+        "positives": 50,
+        "negatives": 15,
+        "retrievalF1": 0.2581746031746032,
+        "recall8": 0.71,
+        "mrr": 0.5071111111111111,
+        "recall1": 0.31,
+        "recall3": 0.505,
+        "recall5": 0.66,
+        "ndcg8": 0.5317152892412458,
+        "contextPrecision5": 0.4856666666666666,
+        "answerF1": 0.45426550592489906,
+        "identifierRecall": 0.7636363636363636,
+        "citationPrecision": 0.5537037037037037,
+        "citationRecall": 0.7555555555555555,
+        "supportPrecision": 0.8499247530445091,
+        "unsupportedAnswerRate": 0.06666666666666667,
+        "language": 1,
+        "gateOverRefusal": 7,
+        "gateOverRefusalUB95": 0.2392422575179839,
+        "answerOverRefusal": 2,
+        "answerOverRefusalUB95": 0.11390315290479143,
+        "negativesCaught": 15,
+        "negativesCaughtRate": 1,
+        "noAnswerPrecision": null,
+        "hallucinated": 0,
+        "scopeContainment": 1,
+        "rejectedFetches": 0,
+        "iterationsPerAnswer": 0,
+        "requestsPerTurn": 1,
+        "promptTokens": 2095.923076923077,
+        "outputTokens": 372.66153846153844,
+        "cachedTokens": 149.66153846153847,
+        "cachedShare": 0.07140602635152493,
+        "tokensPerAcceptedAnswer": 3565.733333333333,
+        "promptChars": null,
+        "promptCharsPeak": null,
+        "observationChars": null,
+        "answerChars": null,
+        "latencyP50": 17330,
+        "latencyP95": 45971,
+        "latencyP99": 113086,
+        "ttftP50": 13267,
+        "ttftP95": 22759,
+        "misses": [
+          "h-005(refuse:not-answerable)",
+          "h-023(refuse:not-answerable)",
+          "h-024(refuse:not-answerable)",
+          "h-099(refuse:not-answerable)",
+          "h-100(refuse:not-answerable)"
+        ],
+        "languageFailures": [],
+        "byLanguage": {
+          "English": {
+            "positives": 41,
+            "negatives": 13,
+            "recall8": 0.8048780487804879,
+            "mrr": 0.5978319783197832,
+            "answerF1": 0.4996076761841944,
+            "identifierRecall": 0.7964912280701754,
+            "citationRecall": 0.7948717948717948,
+            "language": 1,
+            "negativesCaughtRate": 1
+          },
+          "Russian": {
+            "positives": 9,
+            "negatives": 2,
+            "recall8": 0.2777777777777778,
+            "mrr": 0.09382716049382715,
+            "answerF1": 0.15954139923948016,
+            "identifierRecall": 0.5555555555555555,
+            "citationRecall": 0.5,
+            "language": 1,
+            "negativesCaughtRate": 1
+          }
+        },
+        "byDepth": null,
+        "taxonomy": {
+          "ok": [
+            "h-001",
+            "h-002",
+            "h-003",
+            "h-006",
+            "h-007",
+            "h-008",
+            "h-009",
+            "h-021",
+            "h-022",
+            "h-025",
+            "h-026",
+            "h-027",
+            "h-036",
+            "h-037",
+            "h-040",
+            "h-041",
+            "h-043",
+            "h-044",
+            "h-045",
+            "h-057",
+            "h-061",
+            "h-069",
+            "h-070",
+            "h-071",
+            "h-072",
+            "h-078",
+            "h-079",
+            "h-081",
+            "h-082",
+            "h-089",
+            "h-090",
+            "h-091",
+            "h-098",
+            "h-101"
+          ],
+          "retrieval-miss": [
+            "h-004",
+            "h-010",
+            "h-039",
+            "h-042",
+            "h-056",
+            "h-059"
+          ],
+          "over-refused": [
+            "h-005",
+            "h-023",
+            "h-024",
+            "h-099",
+            "h-100"
+          ],
+          "gold-below-primed": [
+            "h-038",
+            "h-060"
+          ],
+          "primed-low-f1": [
+            "h-058",
+            "h-080",
+            "h-092"
+          ],
+          "neg-caught": [
+            "hn-001",
+            "hn-002",
+            "hn-003",
+            "hn-004",
+            "hn-005",
+            "hn-006",
+            "hn-007",
+            "hn-008",
+            "hn-009",
+            "hn-010",
+            "hn-011",
+            "hn-020",
+            "hn-021",
+            "hn-022",
+            "hn-023"
+          ]
+        },
+        "reSearch": null,
+        "missPages": {
+          "undescribed": [
+            {
+              "page": "/guides/queue-control",
+              "described": false,
+              "records": [
+                "h-038"
+              ]
+            }
+          ],
+          "checked": 8
+        }
+      },
+      "vs15": {
+        "answerF1": {
+          "n": 45,
+          "mean": 0.026583095034908577,
+          "lo": -0.005078718548997769,
+          "hi": 0.059436637941212574
+        },
+        "citationRecall": {
+          "n": 45,
+          "mean": -0.005555555555555556,
+          "lo": -0.1388888888888889,
+          "hi": 0.11666666666666667
+        }
+      }
+    },
+    "v2.0-server-agentic-deepseek": {
+      "meta": {
+        "model": "deepseek/deepseek-v4-flash",
+        "runtime": "server",
+        "records": 65
+      },
+      "summary": {
+        "positives": 50,
+        "negatives": 15,
+        "retrievalF1": 0.31019047619047635,
+        "recall8": 0.915,
+        "mrr": 0.6879999999999998,
+        "recall1": 0.48,
+        "recall3": 0.7,
+        "recall5": 0.845,
+        "ndcg8": 0.722774199450109,
+        "contextPrecision5": 0.6649999999999998,
+        "answerF1": 0.4538879228585346,
+        "identifierRecall": 0.7744680851063831,
+        "citationPrecision": 0.4753472222222223,
+        "citationRecall": 0.8489583333333334,
+        "supportPrecision": 0.9151257307507307,
+        "unsupportedAnswerRate": 0.020833333333333332,
+        "language": 1,
+        "gateOverRefusal": 0,
+        "gateOverRefusalUB95": 0.051335931689179104,
+        "answerOverRefusal": 2,
+        "answerOverRefusalUB95": 0.11390315290479143,
+        "negativesCaught": 13,
+        "negativesCaughtRate": 0.8666666666666667,
+        "noAnswerPrecision": null,
+        "hallucinated": 0,
+        "scopeContainment": 1,
+        "rejectedFetches": 0,
+        "iterationsPerAnswer": 1.75,
+        "requestsPerTurn": 2.4,
+        "promptTokens": 6959.261538461538,
+        "outputTokens": 991.1538461538462,
+        "cachedTokens": 3556.4307692307693,
+        "cachedShare": 0.5110356536502547,
+        "tokensPerAcceptedAnswer": 10766.1875,
+        "promptChars": null,
+        "promptCharsPeak": null,
+        "observationChars": null,
+        "answerChars": null,
+        "latencyP50": 13690,
+        "latencyP95": 32849,
+        "latencyP99": 74215,
+        "ttftP50": 9791,
+        "ttftP95": 27738,
+        "misses": [
+          "h-024(refuse:not-answerable)",
+          "h-079(refuse:not-answerable)",
+          "hn-001(answer)",
+          "hn-003(answer)"
+        ],
+        "languageFailures": [],
+        "byLanguage": {
+          "English": {
+            "positives": 41,
+            "negatives": 13,
+            "recall8": 0.9573170731707317,
+            "mrr": 0.6926829268292681,
+            "answerF1": 0.5265700212966631,
+            "identifierRecall": 0.7824561403508771,
+            "citationRecall": 0.8910256410256411,
+            "language": 1,
+            "negativesCaughtRate": 0.8461538461538461
+          },
+          "Russian": {
+            "positives": 9,
+            "negatives": 2,
+            "recall8": 0.7222222222222222,
+            "mrr": 0.6666666666666666,
+            "answerF1": 0.13893216295997746,
+            "identifierRecall": 0.7407407407407408,
+            "citationRecall": 0.6666666666666666,
+            "language": 1,
+            "negativesCaughtRate": 1
+          }
+        },
+        "byDepth": null,
+        "taxonomy": {
+          "ok": [
+            "h-001",
+            "h-002",
+            "h-003",
+            "h-004",
+            "h-006",
+            "h-007",
+            "h-008",
+            "h-009",
+            "h-021",
+            "h-022",
+            "h-025",
+            "h-026",
+            "h-027",
+            "h-036",
+            "h-037",
+            "h-040",
+            "h-041",
+            "h-042",
+            "h-043",
+            "h-044",
+            "h-045",
+            "h-056",
+            "h-057",
+            "h-060",
+            "h-061",
+            "h-069",
+            "h-070",
+            "h-071",
+            "h-072",
+            "h-078",
+            "h-081",
+            "h-082",
+            "h-089",
+            "h-090",
+            "h-091",
+            "h-098",
+            "h-099",
+            "h-101"
+          ],
+          "retrieval-miss": [
+            "h-005",
+            "h-039"
+          ],
+          "primed-low-f1": [
+            "h-010",
+            "h-023",
+            "h-058",
+            "h-080",
+            "h-092",
+            "h-100"
+          ],
+          "over-refused": [
+            "h-024",
+            "h-079"
+          ],
+          "gold-below-primed": [
+            "h-038",
+            "h-059"
+          ],
+          "neg-answered:refuse:no-evidence": [
+            "hn-001",
+            "hn-003"
+          ],
+          "neg-caught": [
+            "hn-002",
+            "hn-004",
+            "hn-005",
+            "hn-006",
+            "hn-007",
+            "hn-008",
+            "hn-009",
+            "hn-010",
+            "hn-011",
+            "hn-020",
+            "hn-021",
+            "hn-022",
+            "hn-023"
+          ]
+        },
+        "reSearch": null,
+        "missPages": {
+          "undescribed": [
+            {
+              "page": "/guides/queue-control",
+              "described": false,
+              "records": [
+                "h-038"
+              ]
+            }
+          ],
+          "checked": 3
+        }
+      },
+      "vs15": {
+        "answerF1": {
+          "n": 48,
+          "mean": 0.04781320490688451,
+          "lo": 0.018740518974695322,
+          "hi": 0.0762522013488637
+        },
+        "citationRecall": {
+          "n": 48,
+          "mean": 0.08333333333333333,
+          "lo": 0.020833333333333332,
+          "hi": 0.16666666666666666
+        }
+      }
     }
   },
   "security": {

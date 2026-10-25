@@ -59,6 +59,29 @@ export const SYSTEMS = {
   // The gate on (guard.mode 'calibrated'), every other setting as above.
   'v2.0 static calibrated': { arm: 'calibrated', cli: 'v2', runtime: 'browser', env: { HARBORLINE_GUARD_MODE: 'calibrated' } },
   'v2.0 server calibrated': { arm: 'calibrated', cli: 'v2', runtime: 'server', env: { HARBORLINE_GUARD_MODE: 'calibrated' } },
+  // A hosted chat model on OpenRouter (metered, OPENROUTER_API_KEY), every other
+  // setting as above: what the model buys, against the local qwen3:8b.
+  'v2.0 static deepseek': {
+    arm: 'base',
+    cli: 'v2',
+    runtime: 'browser',
+    // The browser half's eval names a transport, not a provider id: OpenRouter is
+    // the `openai` adapter at its own address, and its key follows the address.
+    env: { DOCPILOT_PROVIDER: 'openai', DOCPILOT_BASE_URL: 'https://openrouter.ai/api' },
+    args: ['--model=deepseek/deepseek-v4-flash'],
+  },
+  'v2.0 server deepseek': {
+    arm: 'base',
+    cli: 'v2',
+    runtime: 'server',
+    env: { HARBORLINE_CHAT_PROVIDER: 'openrouter', HARBORLINE_CHAT_MODEL: 'deepseek/deepseek-v4-flash' },
+  },
+  'v2.0 server agentic deepseek': {
+    arm: 'base',
+    cli: 'v2',
+    runtime: 'server',
+    env: { HARBORLINE_CHAT_PROVIDER: 'openrouter', HARBORLINE_CHAT_MODEL: 'deepseek/deepseek-v4-flash', DOCPILOT_SERVER_LOOP: 'agentic' },
+  },
 }
 
 const binOf = (cli) => {
@@ -124,7 +147,7 @@ const steps = {
       if (which && name !== which) continue
       if (s.cli === 'v1.5' && !V15) continue
       const a = ARMS[s.arm]
-      const args = ['eval', `--level=${LEVEL}`, ...(s.cli === 'v2' ? ['--quiet', `--runtime=${s.runtime}`] : [])]
+      const args = ['eval', `--level=${LEVEL}`, ...(s.cli === 'v2' ? ['--quiet', `--runtime=${s.runtime}`] : []), ...(s.args || [])]
       const t0 = Date.now()
       const r = cli(s.cli, args, { ...s.env, HARBORLINE_INDEX_DIR: a.dir })
       save(`answers-${slug(name)}`, r.out, reportOf(r.out))
