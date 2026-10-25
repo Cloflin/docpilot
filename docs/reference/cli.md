@@ -755,7 +755,7 @@ The `next` rules, first match wins:
 npx docpilot init
 ```
 
-In a terminal, and only when nothing has already answered them, it asks up to four questions — which agent tool gets the skills, whether they go in this repository or in your home directory, where the button goes, and what shape the panel is. It prints the config block for the last two. It never edits your config: the block is yours to paste.
+In a terminal, and only when nothing has already answered them, it asks up to five questions — which agent tool gets the skills, whether they go in this repository or in your home directory, **which install** (the turn in the reader's browser — the static install — or on your server), where the button goes, and what shape the panel is. It prints the config block for the last three, and for the server install the commands that run it. It never edits your config: the block is yours to paste.
 
 | flag | effect |
 |---|---|
@@ -764,6 +764,7 @@ In a terminal, and only when nothing has already answered them, it asks up to fo
 | `--skills-dir=DIR` | a directory of your own, instead of a tool the table knows |
 | `--commands-dir=DIR` | where the `/docpilot-*` slash commands go |
 | `--no-commands` | install the skills and generate no slash commands |
+| `--runtime=browser\|server` | which install: `browser` (static, the default) or `server` |
 | `--trigger=nav\|fab\|both\|none` | where the button goes. A comma list works too — `--trigger=nav,fab` |
 | `--panel=auto\|drawer\|popup` | the shape of the panel |
 | `--yes`, `-y` | take the defaults, ask nothing |

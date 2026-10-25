@@ -83,6 +83,7 @@ export function parseUiFlags(argv = []) {
   const out: {
     ui: Record<string, string | string[]>
     install: { target?: string; scope?: string; skillsDir?: string; commandsDir?: string; commands?: boolean }
+    runtime?: string
     yes: boolean
     unknown: string[]
   } = { ui: {}, install: {}, yes: false, unknown: [] }
@@ -93,6 +94,13 @@ export function parseUiFlags(argv = []) {
     }
     if (arg === '--no-commands') {
       out.install.commands = false
+      continue
+    }
+    // engine-spec 037: which install — the turn in the reader's browser, or on
+    // the owner's server. Its own field, not `ui`: it is not a panel setting.
+    const rt = /^--runtime=(.*)$/.exec(arg)
+    if (rt) {
+      out.runtime = rt[1]
       continue
     }
     const m = /^--(trigger|panel)=(.*)$/.exec(arg)
@@ -192,6 +200,55 @@ export function uiSnippet(ui, configPath) {
 }
 
 /**
+ * THE INSTALL — engine-spec 037. The first thing a site owner decides, because
+ * every other setting follows from it: where the index lives, what the page
+ * downloads, what the owner's server has to run.
+ */
+export const RUNTIMES = ['browser', 'server']
+
+export const RUNTIME_QUESTION = {
+  key: 'runtime',
+  label: 'Where should a question be answered?',
+  options: RUNTIMES,
+  hints: {
+    browser: "static — the index ships with your site and the turn runs in the reader's browser; your server only relays the key",
+    server: 'server — the turn runs on your server; the index, the prompt and the keys never reach the page',
+  },
+  default: 'browser',
+}
+
+/** What the chosen install needs pasted and run, as `uiSnippet` prints placement. */
+export function runtimeSnippet(runtime, configPath) {
+  const where = configPath ? `the \`docPilot\` settings in ${configPath}` : 'your `docPilot` settings'
+  if (runtime !== 'server') {
+    return [
+      `  Install — static, the shipped default, so leaving it out of ${where} does the same:`,
+      '',
+      "    runtime: 'browser',",
+      '',
+      '  The reader downloads the index (npx docpilot index prints its size on the wire);',
+      '  the key stays behind the /ai proxy — npx docpilot doctor --proxy prints the contract.',
+    ].join('\n')
+  }
+  return [
+    `  Install — server, add this to ${where}:`,
+    '',
+    "    runtime: 'server',",
+    "    server: { endpoint: '/ai/turn' },",
+    '',
+    '  Then run the turn on your server — any one of:',
+    '',
+    '    npx docpilot serve --dir=<your built site> --log=docpilot/turns',
+    "    import { createDocPilotServer } from '@cloflin/docpilot/server'   — Node, Bun, Deno, Workers",
+    '',
+    '  Set DOCPILOT_SERVER_SECRET (answers are signed with it) and DOCPILOT_METRICS_TOKEN',
+    '  (npx docpilot monitor reads /ai/turn/metrics with it). Limits are on by default.',
+    '',
+    '  docpilot does not edit your config, so this one is yours to paste.',
+  ].join('\n')
+}
+
+/**
  * The two questions, in the order they are asked. `hint` is one line, because
  * a prompt that needs a paragraph is a prompt with the wrong options.
  */
@@ -281,11 +338,17 @@ export async function runInit({ argv = [], configPath = null } = {}) {
      * distinction is the whole reason a script can tell a typo from an outage.
      */
     console.error(`[docpilot] unknown option${flags.unknown.length === 1 ? '' : 's'}: ${flags.unknown.join(' ')}`)
-    console.error('  init accepts --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup,')
+    console.error('  init accepts --runtime=browser|server, --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup,')
     console.error('  --target=claude|codex|cursor|copilot|agents (or a comma list), --scope=project|user,')
     console.error('  --skills-dir=DIR, --commands-dir=DIR, --no-commands, --yes')
     return 2
   }
+
+  if (flags.runtime != null && !RUNTIMES.includes(flags.runtime)) {
+    console.error(`[docpilot] --runtime=${flags.runtime} is not one of: ${RUNTIMES.join(', ')}`)
+    return 2
+  }
+  let runtime = flags.runtime ?? RUNTIME_QUESTION.default
 
   if (flags.install.scope && !SCOPES.includes(flags.install.scope)) {
     console.error(`[docpilot] --scope=${flags.install.scope} is not one of: ${SCOPES.join(', ')}`)
@@ -363,6 +426,8 @@ export async function runInit({ argv = [], configPath = null } = {}) {
         install = { ...install, ...picked, commands: install.commands }
       }
       if (interactiveUi) {
+        // The install before the placement: it decides what the rest is about.
+        if (flags.runtime == null) runtime = await askOne(rl, RUNTIME_QUESTION)
         const picked = {}
         for (const q of UI_QUESTIONS) {
           picked[q.key] = await askOne(rl, q)
@@ -618,6 +683,7 @@ export async function runInit({ argv = [], configPath = null } = {}) {
     console.log('\n[docpilot] no skills installed — `npx docpilot update --target=claude` adds them later.')
   }
 
+  console.log(`\n${runtimeSnippet(runtime, configPath)}\n`)
   console.log(`\n${uiSnippet(ui, configPath)}\n`)
 
   console.log(`

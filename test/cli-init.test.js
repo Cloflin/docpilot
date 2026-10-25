@@ -330,3 +330,28 @@ describe('docpilot CLI: scaffolded levels and the command tables', () => {
   })
 })
 
+
+describe('the install question — engine-spec 037', async () => {
+  const { parseUiFlags, runtimeSnippet, RUNTIME_QUESTION } = await import('../src/cli-init.js')
+
+  it('reads --runtime into its own field, not into ui', () => {
+    const f = parseUiFlags(['--runtime=server', '--panel=popup'])
+    expect(f.runtime).toBe('server')
+    expect(f.ui).toEqual({ panel: 'popup' })
+    expect(f.unknown).toEqual([])
+  })
+
+  it('offers browser first, as the default', () => {
+    expect(RUNTIME_QUESTION.options).toEqual(['browser', 'server'])
+    expect(RUNTIME_QUESTION.default).toBe('browser')
+  })
+
+  it('prints the server block and how to run it, and never claims to edit the config', () => {
+    const out = runtimeSnippet('server', 'docpilot.config.mjs')
+    expect(out).toContain("runtime: 'server'")
+    expect(out).toContain('npx docpilot serve')
+    expect(out).toContain('DOCPILOT_SERVER_SECRET')
+    expect(out).toContain('does not edit your config')
+    expect(runtimeSnippet('browser', null)).toContain('the shipped default')
+  })
+})

@@ -258,6 +258,7 @@ export const COMMANDS = {
   init: {
     summary: 'scaffold the environment, the eval sets and the authoring skills',
     flags: [
+      { name: 'runtime', kind: 'enum', values: ['browser', 'server'], example: 'server', help: "which install: the turn in the reader's browser (static), or on your server" },
       { name: 'trigger', kind: 'enum', values: [...UI_TRIGGER_WORD_LIST, 'nav,fab'], example: 'fab', help: 'where the button lives; takes a comma list too' },
       { name: 'panel', kind: 'enum', values: UI_PANELS, example: 'drawer', help: 'the shape of the panel' },
       // `list`, not `enum`, for the same reason `--trigger` is: a project may
