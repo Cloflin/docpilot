@@ -488,6 +488,9 @@ const READERS = {
   traffic: ['src/traffic/cli.ts'],
   dataset: ['src/dataset/cli.ts'],
   improve: ['src/improve/cli.ts'],
+  // engine-spec 030.
+  status: ['src/cli-status.ts'],
+  monitor: ['src/cli-monitor.ts'],
 }
 
 /** The `## \`command\`` section of the CLI reference, up to the next `## `. */

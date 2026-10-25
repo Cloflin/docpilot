@@ -302,6 +302,24 @@ export const COMMANDS = {
       'A file you edited is replaced and your version is kept beside it as `.bak`,\n' +
       'named in the report. A file you did not edit is replaced in silence.',
   },
+
+  // ── engine-spec 030 ─────────────────────────────────────────────────────────
+  /**
+   * One picture of the project, and the command to run next. It reads what is
+   * on disk and re-chunks the docs; the network only when there is a server to
+   * reach, so in most projects it is free and offline.
+   */
+  status: {
+    summary: 'one picture of the project, and the command to run next',
+    flags: [
+      { name: 'json', kind: 'bool', help: 'one docpilot.status object on stdout instead of the picture' },
+      { name: 'url', kind: 'value', example: 'http://localhost:8787/ai/turn', help: 'a running server endpoint to reach; an origin alone takes the configured endpoint' },
+    ],
+    epilogue:
+      "No network unless --url names a server or the runtime is 'server', whose\n" +
+      'endpoint is reached on localhost:8787. It always exits 0: a stale index is\n' +
+      'a finding, and `doctor` is the gate a CI job exits on.',
+  },
   // ── engine-spec 028 ─────────────────────────────────────────────────────────
   traffic: {
     summary: 'read the turn log: content gaps, vocabulary misses, candidates for the golden set',
@@ -349,6 +367,21 @@ export const COMMANDS = {
     epilogue:
       "Needs runtime: 'server' in the docPilot settings. No TLS, no compression, no\n" +
       'rate limit: in production put it behind the proxy that serves your site.',
+  },
+
+  // engine-spec 030 — what `serve` is doing, while it does it.
+  monitor: {
+    summary: 'watch a running server — turns, latency, first token, outcomes, errors',
+    flags: [
+      { name: 'url', kind: 'value', example: 'http://localhost:8787/ai/turn', help: 'the server endpoint; default the configured endpoint on localhost:8787' },
+      { name: 'interval', kind: 'value', example: '2s', help: 'how often to poll: 500ms, 2s, 1m; default 2s' },
+      { name: 'once', kind: 'bool', help: 'poll once, print the snapshot as one JSON line, and exit' },
+      { name: 'token', kind: 'value', example: 'abc123', help: 'sent as a bearer token; default $DOCPILOT_METRICS_TOKEN' },
+    ],
+    epilogue:
+      'It reads GET {endpoint}/metrics?format=json. In a terminal it redraws in\n' +
+      'place and q quits; off one it prints one JSON line per poll, so the same\n' +
+      'command feeds a log.',
   },
 
   llms: {

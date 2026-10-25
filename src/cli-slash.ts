@@ -91,12 +91,13 @@ function frontmatter(command, spec, target) {
 }
 
 /**
- * The three commands that behave differently under an agent than under a person.
+ * The commands that behave differently under an agent than under a person.
  *
  * Two of them ask a question at a terminal and an agent has no terminal to
- * answer it at; the third rewrites the very file the agent is reading. All
- * three are surprises, and a surprise an agent has not been warned about is
- * reported to the reader as a fault.
+ * answer it at; the third rewrites the very file the agent is reading; the
+ * fourth never returns without a terminal to quit it from. All four are
+ * surprises, and a surprise an agent has not been warned about is reported to
+ * the reader as a fault.
  */
 const NOTES = {
   index:
@@ -106,6 +107,11 @@ const NOTES = {
   update:
     'It rewrites this file, and every other `docpilot-*` command beside it, from the installed package. ' +
     'Seeing this file change during the run is the command working, not damage.',
+  // The fourth surprise, and the only one that never ends: off a terminal it
+  // prints a JSON line per poll for as long as it is left running.
+  monitor:
+    'Under an agent there is no terminal, so it prints one JSON line per poll and never stops on its own — ' +
+    'pass `--once` for one snapshot.',
 }
 
 /**

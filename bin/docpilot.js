@@ -16,7 +16,7 @@
  * both carry the same named `docPilot` export.
  */
 import { pathToFileURL, fileURLToPath } from 'node:url'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const COMMANDS = [
@@ -38,6 +38,8 @@ const COMMANDS = [
   'traffic',
   'dataset',
   'improve',
+  'status',
+  'monitor',
 ]
 
 let [, , cmd, ...rest] = process.argv
@@ -55,14 +57,181 @@ let [, , cmd, ...rest] = process.argv
  * Here, above everything: like `--help` it must need no config, no key, no
  * network and no built `dist/`.
  */
+let askedForHelp = false
 if (cmd === 'help') {
   const target = rest.find((a) => !a.startsWith('-'))
   cmd = target ?? undefined
   rest = target ? ['--help'] : []
+  askedForHelp = !target
 }
 
-if (!cmd || cmd === '--help' || cmd === '-h') {
-  console.log(`
+/**
+ * THE HOME SCREEN — engine-spec 030.
+ *
+ * `npx docpilot` and nothing else, typed at a terminal, is somebody asking
+ * "where is this project, and what now?" — so it answers with the `status`
+ * picture and a menu of the commands that make sense now, the `next` rule's
+ * first. Each entry runs the real command.
+ *
+ * ONLY WHEN BOTH ENDS ARE A TERMINAL AND `CI` IS UNSET. A pipe, a CI job and
+ * `--help` get the global help below, byte for byte what they always got: a
+ * menu nobody can see is a hang, and the help is what a script that ran the
+ * bare name has always been handed. `help` with no command is a request for
+ * the help, not for the menu, which is why it is remembered above.
+ *
+ * And only with something built to run it: the bare name used to need nothing
+ * at all, so a clone that has not run `npm run build` still gets the help
+ * rather than a module-not-found from `dist/`.
+ */
+const HOME =
+  !cmd &&
+  !askedForHelp &&
+  Boolean(process.stdin.isTTY && process.stdout.isTTY) &&
+  !process.env.CI &&
+  existsSync(new URL('../dist/cli-home.js', import.meta.url))
+
+/**
+ * THE GLOBAL HELP, GROUPED — engine-spec 030.
+ *
+ * Every command in one column reads as a list to be memorised; six groups
+ * read as the order a project goes through them. A row is shown only when its
+ * command is in `COMMANDS`, so a row written ahead of its command prints
+ * nothing until the command is there to run.
+ *
+ * COLOUR IS THE ONLY DIFFERENCE between a terminal and a pipe. The words, the
+ * order and the line breaks are the same; escapes are added around the group
+ * titles and the command names, and only when `colorEnabled` says so. The UI
+ * module is imported in a `try` because this block must work with nothing
+ * built — without `dist/` the help is printed plain, which is what a pipe
+ * gets anyway.
+ */
+const HELP_GROUPS = [
+  [
+    'Set up',
+    [
+      [
+        'init',
+        'scaffold the environment, the eval sets and the authoring skills',
+        'asks which agent tool gets the skills — Claude Code, Codex,',
+        'Cursor, Copilot — and whether they go in this repository or in',
+        'your home directory',
+      ],
+      [
+        'update',
+        'refresh those copied skills, and the /docpilot-* slash commands,',
+        'after upgrading the package. A file you edited is replaced and',
+        'kept beside it as .bak; --dry shows the whole report first',
+      ],
+      [
+        'doctor',
+        'check the configuration without a full build',
+        '--proxy prints the reverse-proxy contract; --models checks a',
+        "free pool against the provider's live catalogue; --embed lists",
+        'every embedder this project could build with, and the command',
+        'that picks each one',
+      ],
+      [
+        'status',
+        'one picture of the project — index, guard, eval sets, the last',
+        'eval, the server — and the command to run next',
+      ],
+    ],
+  ],
+  [
+    'Build',
+    [
+      [
+        'index',
+        'build the retrieval index from your docs',
+        "asks which embedder to build with; the config's own answer is",
+        'the default, so Enter changes nothing',
+      ],
+      ['import', 'turn an allowlisted external page into a page of the corpus'],
+      [
+        'vocabulary',
+        'propose the names readers use for what your docs call something',
+        '--languages=ru,de  --limit=N  --replace  --dry',
+      ],
+    ],
+  ],
+  [
+    'Measure',
+    [
+      ['calibrate', 'measure the refusal thresholds against your corpus'],
+      ['lint', 'check the golden set against the index it measures'],
+      [
+        'eval',
+        'run the golden set and write a report',
+        '--level=low|medium|high|xhigh|max|ultra scores one tier of it',
+      ],
+      ['bench', 'compare two retrieval configurations on answer quality', '--level= takes the same six tiers'],
+      [
+        'tune',
+        'sweep the retrieval levers (lambda, k) against the golden set',
+        'into docpilot/tuning.json, with a report of the grid beside it',
+      ],
+    ],
+  ],
+  [
+    'Improve',
+    [
+      [
+        'improve',
+        "turn a report's failures into the edits worth making (plan),",
+        'judge an edit before/after (compare), guard it (check)',
+      ],
+      ['feedback', "turn readers' votes into candidates for the eval sets"],
+      ['traffic', 'read the turn log: content gaps, vocabulary misses, and', 'candidates for the golden set'],
+      ['llms', 'lint llms.txt against llmstxt.org and your index, or build one'],
+    ],
+  ],
+  [
+    'Operate',
+    [
+      [
+        'serve',
+        "run the turn on your server (runtime: 'server') and write the",
+        'turn log that traffic and dataset read',
+      ],
+      [
+        'monitor',
+        'watch a running server — turns per minute, latency, first',
+        'token, outcomes and errors, redrawn in place; q quits',
+      ],
+    ],
+  ],
+  [
+    'Train',
+    [
+      ['dataset', 'turn the turn log and votes into SFT, KTO or DPO training sets'],
+      [
+        'model',
+        "fingerprint weights, verify them, compare two checkpoints'",
+        'eval reports, check a training set for eval leakage',
+      ],
+    ],
+  ],
+]
+
+async function globalHelp() {
+  let c = { bold: (s) => s, accent: (s) => s }
+  try {
+    const { colorEnabled, palette } = await import('../dist/cli-ui.js')
+    c = palette(colorEnabled(process.stdout, process.env))
+  } catch {
+    // Nothing built: plain text, which is what a pipe gets anyway.
+  }
+  const rows = []
+  for (const [title, commands] of HELP_GROUPS) {
+    const present = commands.filter(([name]) => COMMANDS.includes(name))
+    if (!present.length) continue
+    rows.push('', `  ${c.bold(title)}`)
+    for (const [name, first, ...more] of present) {
+      rows.push(`    ${c.accent(name)}${' '.repeat(Math.max(1, 12 - name.length))}${first}`)
+      for (const line of more) rows.push(`                ${line}`)
+    }
+  }
+  return `
   docpilot <command>
 
   Installed in a project, every runner reaches this bin by the bare name:
@@ -71,44 +240,7 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
   "docpilot" on npm is not this package:
 
     npx @cloflin/docpilot init
-
-    index       build the retrieval index from your docs
-                asks which embedder to build with; the config's own answer is
-                the default, so Enter changes nothing
-    import      turn an allowlisted external page into a page of the corpus
-    vocabulary  propose the names readers use for what your docs call something
-                --languages=ru,de  --limit=N  --replace  --dry
-    calibrate   measure the refusal thresholds against your corpus
-    eval        run the golden set and write a report
-                --level=low|medium|high|xhigh|max|ultra scores one tier of it
-    bench       compare two retrieval configurations on answer quality
-                --level= takes the same six tiers
-    tune        sweep the retrieval levers (lambda, k) against the golden set
-                into docpilot/tuning.json, with a report of the grid beside it
-    lint        check the golden set against the index it measures
-    feedback    turn readers' votes into candidates for the eval sets
-    doctor      check the configuration without a full build
-                --proxy prints the reverse-proxy contract; --models checks a
-                free pool against the provider's live catalogue; --embed lists
-                every embedder this project could build with, and the command
-                that picks each one
-    init        scaffold the environment, the eval sets and the authoring skills
-                asks which agent tool gets the skills — Claude Code, Codex,
-                Cursor, Copilot — and whether they go in this repository or in
-                your home directory
-    update      refresh those copied skills, and the /docpilot-* slash commands,
-                after upgrading the package. A file you edited is replaced and
-                kept beside it as .bak; --dry shows the whole report first
-    serve       run the turn on your server (runtime: 'server') and write the
-                turn log the next four read
-    traffic     read the turn log: content gaps, vocabulary misses, and
-                candidates for the golden set
-    dataset     turn the turn log and votes into SFT, KTO or DPO training sets
-    llms        lint llms.txt against llmstxt.org and your index, or build one
-    model       fingerprint weights, verify them, compare two checkpoints'
-                eval reports, check a training set for eval leakage
-    improve     turn a report's failures into the edits worth making (plan),
-                judge an edit before/after (compare), guard it (check)
+${rows.join('\n')}
 
   The loop is  index → calibrate → lint → eval → bench,  with tune where it is
   retrieval that has to move — and then index again, because that is the step
@@ -135,12 +267,20 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
 
   npx docpilot --version  prints the installed version, and nothing else.
 
+  npx docpilot  with no command, in a terminal, opens the home screen: the
+  status picture and a menu of what to run next. Piped, or under CI, it prints
+  this help instead.
+
   "feedback" sits outside the loop: it reads what your own endpoint collected
   and PROPOSES probes for it, and with "feedback faq" the empty state's three
   openers. It never writes to the eval sets or to your config — a stratum is a
   judgement, a gold answer is written by a person, and the openers are the first
   thing every reader sees.
-`)
+`
+}
+
+if (!HOME && (!cmd || cmd === '--help' || cmd === '-h')) {
+  console.log(await globalHelp())
   process.exit(0)
 }
 
@@ -170,7 +310,7 @@ if (cmd === '--version' || cmd === '-v' || cmd === '-V') {
  */
 const { FAILED, USAGE, CANCELLED } = await import('../dist/cli-exit.js')
 
-if (!COMMANDS.includes(cmd)) {
+if (!HOME && !COMMANDS.includes(cmd)) {
   // `docter`, `evals`, `calibrat` — one edit away, and worth naming rather than
   // making somebody diff their typo against a list of eleven.
   const near = COMMANDS.filter((c) => editDistance(c, cmd) <= 2).sort(
@@ -451,6 +591,26 @@ if (cmd === 'vocabulary') {
 if (cmd === 'doctor') {
   const { runDoctor } = await import('../dist/cli-doctor.js')
   process.exit(await runDoctor({ docPilot: resolved, settings, argv: rest, env, configPath }))
+}
+
+// engine-spec 030 — the picture, the live view, and the screen that shows the
+// first. `status` takes the config path for `doctor`'s reason: it prints the
+// file the settings came from, and "no config" is the first of its rules.
+if (cmd === 'status') {
+  const { runStatus } = await import('../dist/cli-status.js')
+  process.exit(await runStatus({ docPilot: resolved, argv: rest, env, configPath }))
+}
+if (cmd === 'monitor') {
+  const { runMonitor } = await import('../dist/cli-monitor.js')
+  process.exit(await runMonitor({ docPilot: resolved, argv: rest, env }))
+}
+// The home screen runs the command it is asked for as a child of THIS file,
+// so it is handed this file's path rather than left to work out where it is.
+if (HOME) {
+  const { runHome } = await import('../dist/cli-home.js')
+  process.exit(
+    await runHome({ docPilot: resolved, env, configPath, commands: COMMANDS, bin: fileURLToPath(import.meta.url) }),
+  )
 }
 
 // engine-spec 028 — the server runtime and the four tools that read what it
