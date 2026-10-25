@@ -49,6 +49,19 @@
    boost 0.5 (`BOOST_ABOUT`). Links resolve the way `llms lint` resolves them.
    An index built without the file is byte-identical to before.
 
+## Measured
+
+Harborline, bge-m3, gate-only, test split: feeding the reference llms.txt
+(reader vocabulary on every page) moved nDCG@8 by −0.008 and MRR by −0.017
+(n.s.) overall — and LOWERED it on exactly the records it was written for:
+dead-letter −0.145, encryption −0.113, queue control −0.075, idempotency −0.065.
+The description lands on the page's first chunk; the fused pool is then ordered
+by dense cosine (`MMR_LAMBDA` 1.0), so the intro outranks the answering section.
+The `about` boost changes BM25 but barely the pool, and so the metrics not at
+all. **Not adopted**: `DOCPILOT_LLMS_FILE` stays an experiment, and the
+`describe-page` lever was rewritten to put the readers' words into the section
+that answers (a heading or one `<llm-only>` line).
+
 ## Why it fits
 
 The diagnosis reads only what the report and the index already hold (`rankedIds`,
