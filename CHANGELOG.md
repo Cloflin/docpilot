@@ -7,7 +7,66 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
-## 1.5.0 — 2026-10-24
+## 1.5.0 — 2026-10-25
+
+### Added
+
+**`runtime: 'server'` — the turn on your own server, engine-spec 028.** Openers,
+embedding, the gate, the tool loop and the prompt run in the new
+`@cloflin/docpilot/server` (a Web-standard `handle(Request)` plus a `node`
+middleware); the panel posts a question and reads an SSE stream. The prompt, the
+thresholds, the transports, the keys and the corpus stay out of the bundle — the
+browser holds the page list and the text of the chunks an answer cited. `'browser'`
+stays the default and its client config is unchanged apart from the two new keys.
+`docs:dev` mounts the endpoint itself; `npx docpilot serve` runs it on a port.
+
+**The turn log** — one `docpilot.turn/1` line per turn, one file per UTC day,
+redacted, no IP or user agent, `retentionDays` to prune, `prompts` to keep the
+final prompt. Four commands read it:
+
+- `docpilot traffic report|candidates` — content gaps, vocabulary misses, pages
+  retrieved and never cited, failure by language, outcomes per prompt and index
+  hash; golden candidates with `needsReview: true`, never into `golden.jsonl`.
+- `docpilot dataset sft|kto|dpo` — TRL/OpenAI training sets from turns and votes,
+  golden questions always excluded, holdout split by conversation.
+- `docpilot llms lint|build` — llms.txt against llmstxt.org and against the index.
+- `docpilot model fingerprint|verify|compare|contamination` — sha256 manifests
+  with safetensors/GGUF header metadata, a paired McNemar + bootstrap comparison
+  of two eval reports that exits 1 on a regression, and 13-gram leakage checks.
+
+### Security
+
+Fixes from a Claude Security scan of the whole repository. The panel's own
+requests are unchanged.
+
+- **The site's Vercel proxy rebuilds the body instead of relaying it.** The
+  model must be on an allowlist (`DOCPILOT_PROXY_CHAT_MODELS`,
+  `DOCPILOT_PROXY_EMBED_MODELS`; the defaults are the site's own models), the
+  output ceiling is clamped (`DOCPILOT_PROXY_MAX_TOKENS`, 4096), routing and
+  billing fields are dropped, and a request with no `Origin` gets 403.
+- **`docpilot serve` no longer stops on one bad request.** An unparsable `Host`
+  gets 400, another method 405, a body cut off mid-upload no longer hangs, and
+  a failure inside the handler answers 500 instead of an unhandled rejection.
+- **`serve --dir` withholds the index by real path.** Another letter case on
+  macOS or Windows, a symlink or an index added after start-up no longer gets
+  past it.
+- **A key goes only to the host it belongs to.** A chain member with no key of
+  its own sends none instead of the head's; the server runtime's embedder gets
+  only its own key; `eval`, `calibrate`, `tune` and `answer-bench` send a key
+  only to its provider's host.
+- **The dev proxy serves this machine only**: same-origin JSON from loopback.
+  `DOCPILOT_DEV_PROXY_LAN=1` opens it to the network.
+- **`dataset sft|kto|dpo` leaves earlier turns out.** They come from the
+  reader's browser, so a forged answer can no longer become a training target.
+- **`import` checks every redirect against `sources.allow`** before it follows
+  it, up to 5 hops.
+- **Remote and reader text is escaped** in the terminal (`import`, `llms lint`,
+  `model`) and in `feedback-latest.md` and the traffic report.
+- **`init` and `update` refuse symlinks and manifest keys outside their
+  directory** (`REFUSED`), instead of writing through them.
+- **Two normaliser regexes no longer backtrack** on long backslash or backtick
+  runs. The output is byte-identical.
+- **`docker/compose.yaml` publishes Ollama on `127.0.0.1` only.**
 
 ### Changed
 

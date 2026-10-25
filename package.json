@@ -47,6 +47,10 @@
       "types": "./types/config.d.ts",
       "default": "./dist/config.js"
     },
+    "./server": {
+      "types": "./types/server.d.ts",
+      "default": "./dist/server/index.js"
+    },
     "./sidebar": {
       "types": "./types/sidebar.d.ts",
       "default": "./dist/sidebar.js"

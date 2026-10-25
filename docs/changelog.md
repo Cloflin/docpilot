@@ -15,16 +15,19 @@ Each release in a few lines. The full notes — every change, every migration st
 
 ## 1.5.0
 
-<div class="cl-date">Oct 24, 2026</div>
+<div class="cl-date">Oct 25, 2026</div>
 
-### A smaller index, and a memory that keeps the last answer
+### The turn on your own server, a smaller index, and a security pass
 
+- **`runtime: 'server'`.** Retrieval, the gate, the prompt and every key run on your server; the panel posts a question and reads a stream. `npx docpilot serve` runs it, `docker/` runs it against local models. See [The server runtime](/guide/server).
+- **The turn log, and four commands that read it**: `traffic`, `dataset`, `model` and `llms`. See [Improving answers](/guide/improving) and [Fine-tuning](/guide/fine-tuning).
+- **Security fixes from a full scan.** A key now goes only to the host it belongs to, the dev proxy serves your machine only, `serve` survives malformed requests and withholds the index by real path, `import` checks every redirect, and reader and remote text is escaped. See [Security](/guide/security).
 - **One bit per dimension.** Chunk vectors are stored as sign bits when the embedder can afford it: this site's vectors went from 2.3 MB to 292 KB with the same recall. `--quantize=int8` keeps the old format.
 - **Conversation memory.** The last answer goes to the model whole; older answers go as one- or two-sentence summaries the model writes itself. See [Conversation memory](/features/memory).
 - **Cross-language retrieval.** A question in one language finds sections written in another more often: the embedder now also sees your vocabulary's terms.
 - **Enter no longer stops a running answer**, and code blocks in the panel get room to breathe.
 
-<a class="cl-more" :href="gh('150--2026-10-24')">Full notes</a>
+<a class="cl-more" :href="gh('150--2026-10-25')">Full notes</a>
 
 ## 1.4.0
 
