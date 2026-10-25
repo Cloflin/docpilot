@@ -58,6 +58,7 @@ The rule this directory exists to enforce:
 | [029](029-the-corpus-every-claim-is-measured-on.md) | Harborline, a documentation site for a product that does not exist, and an `eval` that runs the server turn, a dev/test split, security probes, nDCG, context precision and first-token latency |
 | [030](030-the-terminal-shows-the-numbers.md) | terminal primitives with no dependency; the home screen, `docpilot status` and `docpilot monitor`; progress bars and the eval scorecard |
 | [031](031-the-server-turn-fast-and-watched.md) | stage timings and the ranking in the turn log, `GET {endpoint}/metrics`, warm boot, caches, and `server.turn` — one-shot without reasoning brings the first token from 46.6 s to 10.5 s locally |
+| [032](032-the-reranker-nobody-could-reach.md) | measured, not built: every path to a cross-encoder reranker failed in this environment — what was tried, and what would bring it back |
 | [033](033-the-server-turn-guarded.md) | limits on by default, a turn deadline, a capped body, signed history (F11), a leak guard on the owner's instructions, no dotfiles from `serve --dir` |
 | [034](034-the-static-index-verified.md) | every index file named by its own bytes with its SRI in the manifest; four retrieval and compression levers measured on two corpora, none adopted as a default |
 | [035](035-the-edit-a-report-asks-for.md) | `docpilot improve plan\|compare\|check`; llms.txt as page descriptions measured and not adopted — a vocabulary gap is fixed in the section that answers |
