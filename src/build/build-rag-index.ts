@@ -18,6 +18,7 @@ import { pathToFileURL } from 'node:url'
 
 
 import { chunkMarkdown } from './lib/chunker.js'
+import { descriptionsFromLlms } from '../llms/about.js'
 import { chunkOpenapi, specFiles } from './lib/openapi-chunker.js'
 import { readHtmlDir } from './lib/html-dir.js'
 import { resolveSections, orphanPages, tailFor } from './lib/sections.js'
@@ -151,6 +152,14 @@ const EMBED_CONTEXT = (() => {
   const v = String(process.env.DOCPILOT_EMBED_CONTEXT || 'off')
   return v === 'path' || v === 'path+desc' ? v : 'off'
 })()
+
+/**
+ * llms.txt as page descriptions — engine-spec 035. `DOCPILOT_LLMS_FILE` names
+ * the file while the measurement decides whether reading it is the default; a
+ * page's note there becomes its description wherever the page has none of its
+ * own, and its `about` for the lexical channel.
+ */
+const LLMS_FILE = process.env.DOCPILOT_LLMS_FILE || null
 
 /**
  * Where `auto` stops taking the bit. Measured, not chosen: at 4096 dimensions
@@ -1194,6 +1203,15 @@ async function main() {
   const files = walkMarkdown(DOCS)
   const chunks = []
   const pages = new Map()
+  let llmsAbout = new Map<string, string>()
+  if (LLMS_FILE) {
+    try {
+      llmsAbout = descriptionsFromLlms(fs.readFileSync(path.resolve(ROOT, LLMS_FILE), 'utf8'))
+      console.log(`  llms.txt         ${llmsAbout.size} page description(s) from ${LLMS_FILE}`)
+    } catch (e) {
+      die(`DOCPILOT_LLMS_FILE=${LLMS_FILE} could not be read: ${e?.message || e}`)
+    }
+  }
   let rawBytes = 0
   let imported = 0
 
@@ -1266,11 +1284,12 @@ async function main() {
 
     const src = fs.readFileSync(file, 'utf8')
     rawBytes += src.length
-    const { chunks: c, warnings, title, source } = chunkMarkdown({
+    const { chunks: c, warnings, title, source, description } = chunkMarkdown({
       src,
       path: route,
       kind: kindFor(route),
       embedContext: EMBED_CONTEXT,
+      pageDescription: llmsAbout.get(route) ?? null,
     })
     warnings.forEach(warn)
     if (!c.length) continue
@@ -1278,12 +1297,17 @@ async function main() {
     const origin = source ? originFor(source, route) : null
 
     chunks.push(...c)
+    const about = llmsAbout.get(route) || null
     pages.set(route, {
       path: route,
       title,
       kind: kindFor(route),
       chunks: c.length,
       ...(origin ? { origin } : {}),
+      // The page's own words about itself for the lexical channel: its note in
+      // llms.txt. Only when that file was read, so a default build's pages are
+      // the pages they always were. (`description` is already in the text.)
+      ...(about && about !== description ? { about } : {}),
     })
   }
 

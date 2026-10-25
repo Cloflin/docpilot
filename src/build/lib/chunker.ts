@@ -525,7 +525,8 @@ export function chunkMarkdown({
     // MAX_CHUNK_CHARS, and the assertion at the end of this function turned that
     // into a thrown error — the whole index build failing on a perfectly valid
     // page. Only the first section can carry the lead, so only it pays for it.
-    const leadCost = description && chunks.length === 0 ? description.length + 1 : 0
+    const leadText = description || pageDescription
+    const leadCost = leadText && chunks.length === 0 ? leadText.length + 1 : 0
     const budget = Math.max(1, MAX_CHUNK_CHARS - context.length - 1 - leadCost)
     let parts = estTokens(s.body) > TARGET_MAX_TOKENS ? paragraphSplit(s.body) : [s.body]
     parts = parts.flatMap((p) => hardSplit(p, budget, onSplit))
@@ -536,7 +537,10 @@ export function chunkMarkdown({
       // and a question is phrased as a task, while every heading on the page is
       // phrased as a topic. Repeating it on every chunk would just add the same
       // vector to all of them and flatten the ranking it is meant to sharpen.
-      const lead = description && chunks.length === 0 && i === 0 ? `\n${description}` : ''
+      // A page with no frontmatter description takes the one llms.txt gives it
+      // (engine-spec 035) — the same sentence, written in the same place.
+      const about = description || pageDescription
+      const lead = about && chunks.length === 0 && i === 0 ? `\n${about}` : ''
       const full = `${context}${lead}\n${body}`.trim()
       if (!body.trim()) return
       const record = {
@@ -587,9 +591,9 @@ export function chunkMarkdown({
         const trail = [pageTitle, s.level === 3 ? s.parent : null, s.title && s.title !== pageTitle ? s.title : null]
           .filter(Boolean)
           .join(' › ')
-        const about = embedContext === 'path+desc' ? description || pageDescription || '' : lead ? description : ''
+        const context = embedContext === 'path+desc' ? about || '' : lead ? about : ''
         Object.defineProperty(record, 'embedText', {
-          value: `${trail}${about ? `\n${about}` : ''}\n${body}`.trim(),
+          value: `${trail}${context ? `\n${context}` : ''}\n${body}`.trim(),
           enumerable: false,
         })
       }

@@ -225,6 +225,15 @@ const BOOST_BREADCRUMB = tune('BOOST_BREADCRUMB', 1.5)
  */
 const BOOST_PATH = tune('BOOST_PATH', 1.0)
 const BOOST_ANCHOR = tune('BOOST_ANCHOR', 1.25)
+/**
+ * The page's note in llms.txt, on every chunk of the page — engine-spec 035. It
+ * names what the page is FOR in the words a reader uses, which no single
+ * section's text may; below the title's boost because it is the same sentence
+ * on every section of the page and must not outrank the section that answers.
+ * Absent from every index not built with an llms.txt, so their ranking is
+ * byte-identical.
+ */
+const BOOST_ABOUT = tune('BOOST_ABOUT', 0.5)
 
 /**
  * The allowlist, and the reason `tuning` is not just spread over the defaults.
@@ -424,17 +433,20 @@ const indexTokens = (s) => {
 let miniCache = null
 function miniSearchFor(index) {
   if (miniCache?.hash === index.manifest.hash) return miniCache.ms
+  const about = new Map((index.manifest.pages || []).filter((p) => p.about).map((p) => [p.path, p.about]))
   const ms = new MiniSearch({
-    fields: ['text', 'title', 'breadcrumb', 'path', 'anchor'],
+    fields: about.size ? ['text', 'title', 'breadcrumb', 'path', 'anchor', 'about'] : ['text', 'title', 'breadcrumb', 'path', 'anchor'],
     storeFields: ['path'],
     idField: 'id',
     tokenize: indexTokens,
+    ...(about.size ? { extractField: (doc, field) => (field === 'about' ? about.get(doc.path) || '' : doc[field]) } : {}),
     searchOptions: {
       boost: {
         title: BOOST_TITLE,
         breadcrumb: BOOST_BREADCRUMB,
         path: BOOST_PATH,
         anchor: BOOST_ANCHOR,
+        ...(about.size ? { about: BOOST_ABOUT } : {}),
       },
       bm25: { k: BM25_K, b: BM25_B, d: BM25_D },
       prefix: true,
@@ -653,6 +665,9 @@ export function createRetrieval({
       breadcrumb: T.BOOST_BREADCRUMB,
       path: T.BOOST_PATH,
       anchor: T.BOOST_ANCHOR,
+      // Not a manifest lever (a new name in LEVER_NAMES would move every report's
+      // fingerprint); the module constant, so the field never searches at 1.0.
+      about: BOOST_ABOUT,
     },
     bm25: { k: T.BM25_K, b: T.BM25_B, d: T.BM25_D },
     ...(filter ? { filter } : {}),
