@@ -18,6 +18,10 @@ import {tmpdir} from 'node:os'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
+// `node:sqlite` arrived in Node 22.5; the package supports 20, where the store
+// is unavailable and the receiver says so rather than failing to load.
+const HAS_SQLITE = await import('node:sqlite').then(() => true, () => false)
+
 import {
     createHandler,
     ndjsonStore,
@@ -790,7 +794,7 @@ it('authorise() does not throw on any token length', () => {
 
 /* ═════════════════════════ the three stores agree ═════════════════════════ */
 
-it('ndjson and sqlite produce byte-identical aggregate() output', async () => {
+it.skipIf(!HAS_SQLITE)('ndjson and sqlite produce byte-identical aggregate() output', async () => {
     const dir = tmp()
     const nd = await up({store: ndjsonStore({dir, warn: () => {}})})
     const sq = await up({store: await sqliteStore({file: path.join(tmp(), 'f.sqlite')})})
@@ -824,7 +828,7 @@ it('ndjson and sqlite produce byte-identical aggregate() output', async () => {
     assert.equal(locale.up + locale.down, 1, 'm-3 rev1 down; m-1 rev2 is a retraction and counts as neither')
 })
 
-it('the retraction is only clean because the store REPLACES — coalesce resurrects', async () => {
+it.skipIf(!HAS_SQLITE)('the retraction is only clean because the store REPLACES — coalesce resurrects', async () => {
     // Run production.md:391 against the same three POSTs, in real SQL.
     const {DatabaseSync} = await import('node:sqlite')
     const db = new DatabaseSync(':memory:')
@@ -861,7 +865,7 @@ it('the retraction is only clean because the store REPLACES — coalesce resurre
     db.close()
 })
 
-it('sqlite: the DDL is required, the guard holds, since works', async () => {
+it.skipIf(!HAS_SQLITE)('sqlite: the DDL is required, the guard holds, since works', async () => {
     const {DatabaseSync} = await import('node:sqlite')
     const bare = new DatabaseSync(':memory:')
     assert.throws(() => bare.prepare('select * from docpilot_feedback'), /no such table/)
