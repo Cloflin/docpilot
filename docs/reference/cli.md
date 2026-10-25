@@ -18,6 +18,8 @@ The loop is `index → calibrate → lint → eval → bench`, with `import` ahe
 
 `feedback` sits outside the loop. It reads what your own endpoint collected and **proposes** probes for it; it never writes to the eval sets.
 
+`npx docpilot` with no command, in a terminal, opens [the home screen](#home-screen): the [`status`](#status) picture of the project and a menu of what to run next, the next step first. Piped, or under `CI`, it prints the help instead.
+
 Three things are true of every command and are documented once, at the foot of this page: [help and `--version`](#help), [how `.env.local` is read](#environment), and [what each exit code means](#exit-codes).
 
 ## `index`
@@ -671,6 +673,82 @@ Silent otherwise, which is the expected case. It **reports and never acts**: the
 
 It checks only a half that has a pool *and* a catalogue to check it against. On a provider that publishes neither, the line reads `no catalogue to check them against` rather than reporting every id as retired, and an unreachable catalogue is printed as unreachable rather than turned into a verdict. The exit code stays the readiness one either way — a retired id is news, not a broken configuration. See [`budget`](/reference/config#budget).
 
+## `status`
+
+```bash
+npx docpilot status
+npx docpilot status --json
+npx docpilot status --url=http://localhost:8787/ai/turn
+```
+
+One picture of the project, and the one command to run next. It reads the index, the calibration, the eval sets and the reports on disk, and it re-chunks the docs to tell a fresh index from a stale one, which on a documentation site takes well under a second. **No network** unless `--url` names a server, or the project runs `runtime: 'server'`, whose endpoint it reaches on `http://localhost:8787`, where [`serve`](#serve) puts it.
+
+An illustration — the figures are an example project's, not this site's:
+
+```
+  index       ✔ fresh  1a2b3c4d · 412 chunks · 38 pages
+              bge-m3 · 1024d · int8 · 1.9 MB on disk · ≈ 1.1 MB brotli
+  guard       ● provisional  tau 0.3 · tauLexical 0.3 · source provisional
+              mode off — scored on every turn, refuses nothing
+  …
+  next        ❯ npx docpilot eval --gate-only
+                nothing has measured index 1a2b3c4d yet — a gate-only run calls no model, costs nothing and takes seconds
+```
+
+| block | read from | shows |
+|---|---|---|
+| `project` | the config file and the settings | the runtime, the config path, and where the docs, the index and the eval sets live |
+| `index` | `manifest.json`, and the docs chunked offline | fresh or stale, the hash, chunks, pages, the embedder, dims, quantisation, bytes on disk and an estimate of them over brotli |
+| `guard` | `manifest.guard`, `calibration*.json` | `guard.mode`, the thresholds the index ships and where they came from, and whether the calibration on disk still describes this index |
+| `eval sets` | `golden.jsonl`, `chains.jsonl`, `adversarial.jsonl`, `calibration.jsonl` | counts by `expect`, `split` and `level`, and by `stratum` for the probes |
+| `last eval` | the newest report under `${evalDir}/reports/` | the model, the tier, the age, and a scorecard: each metric, its move since the run `eval` compared it with, and a sparkline of it across earlier comparable runs |
+| `server` | `GET {endpoint}/manifest` and `GET {endpoint}/metrics?format=json` | reachable or not, the round trip, the index the process serves, and its metrics — *metrics unavailable* on a server that has none |
+| `next` | the rules below | the command, and why |
+
+**Fresh is the hash the build would write.** The index version is `sha256` over every chunk's id and text, with no embedding in it, so the docs are chunked here exactly as `index` chunks them and the two hashes compared. Three sources are not re-read — pages under `importDir`, OpenAPI specs, and a site built with `--html-dir` — and an index that holds any of them is reported **unverified** rather than stale, because rebuilding on a false "stale" could drop the pages this check cannot see.
+
+**The delta and the trend use two rules on purpose.** A delta is against the run `eval` itself compared this one with — same index, same model, same tier, same channels, same embedder — so an arrow here is the arrow the report recorded. The trend drops the index: a history that restarted at every rebuild would never be longer than two points. A metric moving the good way is green, whichever way that is: up for recall, down for latency.
+
+The `next` rules, first match wins:
+
+| rule | when | runs |
+|---|---|---|
+| `no-config` | there is no config file | `init` |
+| `no-index` | there is no index | `index` |
+| `stale-index` | the docs changed since the index was built | `index` |
+| `guard-not-inlined` | a calibration measured for this index is not in its manifest yet | `index` |
+| `stale-guard` | `guard.mode` is not `'off'`, and the thresholds are provisional or stale | `calibrate` |
+| `no-golden` | there is no golden set | `init` |
+| `no-report` | no report measures this index | `eval --gate-only`, then `eval` |
+| `gate-only` | only the gate has been measured on it | `eval` |
+| `golden-changed` | the golden set changed since the last report | `eval` |
+| `one-tier` | the reports on it score one tier only | `eval` |
+| `measured` | all of the above is done | `eval --level=low` |
+
+`--json` prints one object on stdout and nothing else, `{"kind": "docpilot.status", "v": 1, …}`, with exactly these keys: `project`, `index`, `guard`, `evalSets`, `lastEval`, `server`, `next`. `next.rule` is the name in the table, so a script can branch on it without reading a sentence, and `next.argv` is the command to run. It is the one object an agent driving this package should read first.
+
+```json
+{
+  "kind": "docpilot.status",
+  "v": 1,
+  "project": { "config": "docs/.vitepress/config.mjs", "runtime": "browser", "docsDir": "docs" },
+  "index": { "exists": true, "hash": "1a2b3c4d", "fresh": true, "chunks": 412, "quant": "int8" },
+  "guard": { "mode": "off", "verdict": "provisional", "tau": 0.3, "source": "provisional" },
+  "evalSets": { "golden": { "records": 40, "byExpect": { "answer": 30 }, "byLevel": { "low": 8 } } },
+  "lastEval": { "model": "qwen3:8b", "level": "ultra", "metrics": [{ "key": "recall8", "value": 0.9, "delta": 0.025 }] },
+  "server": { "configured": false },
+  "next": { "rule": "no-report", "argv": ["eval", "--gate-only"], "command": "npx docpilot eval --gate-only" }
+}
+```
+
+(Abridged: every block carries more fields than shown.)
+
+**It always exits `0` when it ran.** A stale index is a finding, not a failure of this command; [`doctor`](#doctor) is the gate a CI job exits on.
+
+### The home screen {#home-screen}
+
+`npx docpilot` with no command, when stdin and stdout are both a terminal and `CI` is unset, prints the picture above and a menu of the commands that make sense now — the `next` rule's first, so Enter runs it. ↑ and ↓ (or `j` and `k`) move, a digit picks, Esc or `q` backs out, and Ctrl-C or Ctrl-D exits `130`. Each entry runs the real command in your terminal, with its own questions and its own exit code. Anything else — a pipe, CI, `--help` — prints the help, exactly as it always did.
+
 ## `init`
 
 ```bash
@@ -811,6 +889,28 @@ Runs the [server runtime](/guide/server): the turn — openers, embedding, the g
 
 It is a convenience, not a production server: no TLS, no compression, no rate limit. Put it behind the proxy that already serves your site and route `server.endpoint` to it.
 
+## `monitor`
+
+```bash
+npx docpilot monitor
+npx docpilot monitor --url=https://docs.example.com/ai/turn --token=$DOCPILOT_METRICS_TOKEN
+npx docpilot monitor --once
+npx docpilot monitor --interval=10s >> metrics.jsonl
+```
+
+A live view of a running [server runtime](/guide/server). It polls `GET {endpoint}/metrics?format=json` and redraws one block in place: turns per minute with a sparkline of the last thirty minutes, latency p50/p95/p99, first-token time, the time each stage took, a bar per outcome, errors and rate-limited turns, tokens and the share of the prompt served from the provider's cache, and the model and index the server is running. `q` quits.
+
+| flag | |
+|---|---|
+| `--url=<url>` | the server endpoint. An origin alone (`http://host:8787`) takes the configured `server.endpoint`; the default is that endpoint on `http://localhost:8787`, which is where `serve` runs it |
+| `--interval=<duration>` | `500ms`, `2s`, `1m`; default `2s`, and no faster than `250ms` |
+| `--once` | poll once, print the snapshot as one JSON line, and exit `0` — or `1`, with the reason on stderr, when there was none |
+| `--token=<token>` | sent as `Authorization: Bearer <token>`; default `$DOCPILOT_METRICS_TOKEN` |
+
+**Off a terminal it prints one JSON line per poll**, the snapshot exactly as the server sent it, so the same command feeds a log. A poll that fails says why on stderr, and the next one goes on.
+
+The snapshot is a `{"kind": "docpilot.metrics", "v": 1, …}` object: `turns` (with `byOutcome`), `latencyMs` and `ttftMs` percentiles, `stagesMs`, `requests`, `tokens`, `cache`, `limits`, and `perMinute`, the last thirty one-minute buckets, oldest first. Any field may be missing or null — a server that has answered no turn yet has no p95 — and each one is drawn as `—`. A server from before `/metrics` existed answers `404`, and `monitor` says *metrics unavailable* rather than failing; one that wants a token answers `401`, and it says which variable to set.
+
 ## `traffic`
 
 ```bash
@@ -938,7 +1038,10 @@ npx docpilot --help            # every command, and what the loop is
 npx docpilot <command> --help  # that command's flags, what each does, what it costs
 npx docpilot help <command>    # the same thing, spelled the other way
 npx docpilot --version         # the installed version, and nothing else
+npx docpilot                   # in a terminal, the home screen; piped, the help
 ```
+
+The help groups the commands the way a project goes through them — **Set up**, **Build**, **Measure**, **Improve**, **Operate**, **Train** — and on a terminal it is coloured. The words are the same either way; `NO_COLOR` switches the colour off and `FORCE_COLOR` keeps it through a pipe, here and in every command.
 
 Help costs nothing and needs nothing: no config file, no key, no network, no built index. That is deliberate — it used to *run* the command, and on `index`, `eval`, `calibrate` and `vocabulary` that made `--help` a purchase order. Every command's flag list is rendered from the same table that validates the flags, so a flag that exists is a flag the help names, including its short spelling where it has one (`--yes, -y`).
 
@@ -957,10 +1060,10 @@ Every command returns one of four, and a script can act on the difference.
 | `0` | done | — |
 | `1` | the work was attempted and it failed | a provider that would not answer, a config that resolves to nothing usable, a missing index, a breached hard gate, `CALIBRATION FAILED`. Worth a retry when the cause is a service. |
 | `2` | the command line was wrong | an unknown command, flag, mode or value. **Nothing was attempted**, so retrying changes nothing — fix what you typed. |
-| `130` | cancelled at a prompt | Ctrl-C or Ctrl-D while `index` or `init` was asking a question. `128 + SIGINT`, the shell's own convention. Nothing was written. |
+| `130` | cancelled at a prompt | Ctrl-C or Ctrl-D while `index` or `init` was asking a question, or at the [home screen](#home-screen)'s menu. `128 + SIGINT`, the shell's own convention. Nothing was written. |
 
 Two of these are new in 1.1.0 and both used to be `0` or `1`: cancelling a prompt returned `0`, and a typed flag returned the same `1` as an outage. There is no code for "succeeded with warnings" — a warning goes to stderr and the command still returns `0`.
 
-**Diagnostics go to stderr, the product goes to stdout.** That includes the progress counters, which redraw in place only when stderr is a terminal — piped to a file they print whole lines instead of one line holding every value the counter ever had. `docpilot doctor --json | jq .ready` therefore works with the diagnosis still visible on the terminal.
+**Diagnostics go to stderr, the product goes to stdout.** That includes the progress counters, which redraw in place only when stderr is a terminal — there `index`, `eval`, `calibrate` and `tune` draw a bar with a count and an ETA — and piped to a file they print whole lines instead of one line holding every value the counter ever had. `docpilot doctor --json | jq .ready` therefore works with the diagnosis still visible on the terminal.
 
 **Errors are one line, prefixed `[docpilot] `.** Set `DOCPILOT_DEBUG=1` to get the stack trace behind one.
