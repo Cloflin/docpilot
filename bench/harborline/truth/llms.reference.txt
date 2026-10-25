@@ -1,0 +1,62 @@
+# Harborline
+
+> Harborline is a hosted background job queue and cron scheduler for web apps: enqueue jobs over an HTTP API or the Node.js and Python SDKs, let your workers pull them, and get retries with backoff, a DLQ, delayed jobs, schedules, webhooks and Prometheus metrics. These docs cover API v3 (latest 3.4.0); v2 reached end of life on 2026-06-30.
+
+Every page describes v3. Code samples use Node.js (TypeScript) and Python; keys in samples are placeholders such as hl_live_xxx and whsec_xxx.
+
+## Get started
+
+- [Introduction](/index.md): What Harborline is, how a background job travels from enqueue to a worker, and which version to build against (v3, 3.4.0).
+- [Quickstart](/getting-started/quickstart.md): Send your first job and process it with a worker in ten minutes, in Node.js or Python, with a test key in the sandbox.
+- [Core concepts](/getting-started/concepts.md): Workspaces, projects, queues, job states, leases and the visibility timeout, and why delivery is at-least-once (a job can run twice).
+- [Install the CLI](/getting-started/install-cli.md): Install the harbor CLI with npm or Homebrew, log in, use it in CI with an API key, and choose project, region and profile.
+
+## Guides
+
+- [Enqueue jobs](/guides/enqueue.md): Add jobs from Node.js, Python or curl: enqueue options, the 256 KB payload size limit, job ids and enqueue errors.
+- [Write a worker](/guides/workers.md): Process jobs with pull-based workers: concurrency, heartbeats for long-running jobs, graceful shutdown on deploys (SIGTERM, Kubernetes), shell-script workers.
+- [Retries and backoff](/guides/retries.md): Automatic retries of failed jobs: maxAttempts, exponential, linear or fixed backoff, jitter, PermanentError to stop retrying, manual retry.
+- [Dead-letter queue](/guides/dead-letter.md): The DLQ for failed jobs that ran out of retries (poison messages): 14-day retention, inspect, replay or purge them, or turn the DLQ off.
+- [Delayed jobs](/guides/delayed-jobs.md): Run a job later or at an exact time, up to 30 days ahead; cancel or reschedule it; when to use a cron schedule instead.
+- [Schedules](/guides/schedules.md): Cron jobs and recurring tasks: cron syntax, time zones and daylight saving time, overlapping runs, missed runs (no backfill), plan limits.
+- [Idempotency](/guides/idempotency.md): Prevent duplicate jobs: deduplicate retried enqueue requests with idempotency keys (24 h window) and make handlers safe to run twice; there is no exactly-once.
+- [Batches](/guides/batches.md): Bulk enqueue up to 500 jobs or 5 MB per call, handle partial failures (207 Multi-Status), and import large backlogs.
+- [Concurrency and rate limits](/guides/concurrency.md): Limit parallel jobs per queue or per customer (groupKey), throttle job starts, FIFO ordering, no job priorities, and API 429 rate limits.
+- [Pause, drain and purge](/guides/queue-control.md): Stop processing a queue for maintenance (pause), stop accepting jobs but finish the backlog (drain), or clear, flush or empty pending jobs (purge).
+- [Webhooks](/guides/webhooks.md): Get notified about job and queue events: add an endpoint, event types, the 10-second timeout, and delivery retries (8 over 24 hours).
+- [Verify webhook signatures](/guides/webhook-signatures.md): Validate the Harbor-Signature HMAC-SHA256 header with your whsec_ signing secret in Node.js or Python; roll the secret; the old v2 X-Harbor-Sig.
+- [Regions and migration](/guides/regions.md): Data residency: us-east-1, eu-central-1 (EU, Frankfurt) and ap-southeast-2 endpoints, and moving a project to another region with harbor migrate.
+- [Observability](/guides/observability.md): Monitoring and alerting: Prometheus metrics (queue depth, latency, dead jobs), job logs, OpenTelemetry trace propagation, the dashboard.
+- [Client-side encryption](/guides/encryption.md): End-to-end (E2E) encryption of job payloads so Harborline never sees PII or other sensitive data: AES-256-GCM with your own key, key rotation, limits.
+
+## SDKs
+
+- [Node.js SDK](/sdks/node.md): @harborline/sdk for Node.js 18+ and TypeScript: client options, enqueue, workers, HarborError, webhook verification.
+- [Python SDK](/sdks/python.md): The harborline package for Python 3.9+: client, enqueue, decorator workers, asyncio handlers, errors, webhook verification, Django.
+
+## Reference
+
+- [REST API](/reference/api.md): HTTP API v3: base URL per region, Bearer auth, every endpoint with its scope, reserve/ack/nack/touch, pagination, error format.
+- [CLI reference](/reference/cli.md): Every harbor command and flag: queues, jobs, dlq replay and purge, schedules, workers, keys, logs, migrate; global flags and exit codes.
+- [harbor.toml](/reference/config.md): The config file: [project], [queue.defaults], [queues.<name>], [worker], value formats, and precedence of flags, env vars and the file.
+- [Environment variables](/reference/environment.md): HARBOR_API_KEY, HARBOR_REGION, HARBOR_ENDPOINT, HARBOR_PROJECT, HARBOR_PROFILE, HARBOR_LOG_LEVEL, and the variables set for CLI workers.
+- [Error codes](/reference/errors.md): Every HL error code with its HTTP status and whether to retry: payload too large, 429 rate limited, 402 quota exceeded, lease expired, 401 and 403.
+- [Limits](/reference/limits.md): All quotas and limits in one place: max payload size, timeouts, batch size, retention periods, schedules, webhooks, rate limits per plan.
+- [Webhook events](/reference/webhook-events.md): Payload reference for the job.succeeded, job.failed, job.dead, queue.paused, queue.drained and schedule.missed events.
+
+## Account
+
+- [Plans and pricing](/account/plans.md): Free, Team ($49) and Scale ($499): monthly executions, overage cost, what counts as an execution (retries do), API rate limits, billing.
+- [API keys and scopes](/account/api-keys.md): Create, scope, rotate (24 h overlap) and revoke API keys; live vs test (sandbox) keys; API key vs webhook signing secret; no OAuth.
+- [Security](/account/security.md): Encryption at rest and TLS, IP allowlist, SAML SSO for the dashboard, audit log, data retention, and reporting a vulnerability.
+
+## Help
+
+- [Troubleshooting](/help/troubleshooting.md): Fix stuck jobs, jobs running twice, HL3001 lease expired, webhook signature mismatches and 401, 402, 429 or 410 errors; read a failed job's log.
+- [FAQ](/help/faq.md): Job priorities, FIFO ordering, duplicate runs, whether retries are billed, changing regions, v2 end of life, testing, job history.
+- [Glossary](/help/glossary.md): Definitions: attempt, execution, lease, visibility timeout, heartbeat, DLQ, drain, purge, concurrency key, scope, sandbox.
+
+## Releases
+
+- [Migrate from v2](/releases/migrate-v2.md): Upgrade from v2 (410 Gone since 2026-07-01): new packages, renamed options (retries is now maxAttempts, add one), new limits, webhook signatures.
+- [Changelog](/releases/changelog.md): v3 release notes: 3.4.0 schedule.missed, 3.3.0 eu-central-1 and harbor migrate, 3.2.0 concurrency keys, 3.1.0 metrics, 3.0.0.

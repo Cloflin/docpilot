@@ -1,0 +1,5 @@
+# Indexes are rebuilt per arm by bench/run.mjs; reports and logs land in results/.
+docs/public/rag*/
+eval/embed-cache/
+eval/reports/
+eval/improve/
