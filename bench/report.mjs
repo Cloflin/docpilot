@@ -46,8 +46,9 @@ if (arms.length) {
   for (const a of arms) {
     const r = read(`retrieval-${a}-test.json`)
     if (!r) continue
-    json.retrieval[a] = { test: r.summary, dev: read(`retrieval-${a}-dev.json`)?.summary ?? null }
-    out.push(`| ${a} | ${RK.map((k) => fmt(r.summary[k])).join(' | ')} | ${a === 'base' ? '—' : delta(paired(base, r, 'ndcg8'))} | ${a === 'base' ? '—' : delta(paired(base, r, 'mrr'))} |`)
+    const vsBase = a === 'base' ? null : { ndcg8: paired(base, r, 'ndcg8'), mrr: paired(base, r, 'mrr') }
+    json.retrieval[a] = { test: r.summary, dev: read(`retrieval-${a}-dev.json`)?.summary ?? null, vsBase }
+    out.push(`| ${a} | ${RK.map((k) => fmt(r.summary[k])).join(' | ')} | ${vsBase ? delta(vsBase.ndcg8) : '—'} | ${vsBase ? delta(vsBase.mrr) : '—'} |`)
   }
   out.push('', '`*` — the paired 95% bootstrap interval excludes zero.', '')
 }
@@ -64,18 +65,20 @@ if (json.perf?.length) {
 const systems = files.filter((f) => /^answers-.*\.json$/.test(f)).map((f) => f.replace(/^answers-/, '').replace(/\.json$/, ''))
 if (systems.length) {
   out.push('## Answers (golden set, local model)', '')
-  out.push('| system | answer F1 | identifiers | citation P | citation R | negatives caught | over-refusal | p50 | p95 | first token p50 | requests/turn |')
-  out.push('|---|---|---|---|---|---|---|---|---|---|---|')
+  out.push('| system | answer F1 | ΔF1 vs 1.5 | identifiers | citation P | citation R | negatives caught | over-refusal | p50 | p95 | first token p50 | requests/turn |')
+  out.push('|---|---|---|---|---|---|---|---|---|---|---|---|')
+  const v15 = read('answers-v1.5-static.json')
   for (const s of systems) {
     const r = read(`answers-${s}.json`)
     if (!r) continue
     const m = r.summary
-    json.answers[s] = { meta: { model: r.meta?.model, runtime: r.meta?.runtime ?? 'browser', records: r.meta?.records }, summary: m }
+    const vs15 = s === 'v1.5-static' ? null : { answerF1: paired(v15, r, 'answerF1'), citationRecall: paired(v15, r, 'citationRecall') }
+    json.answers[s] = { meta: { model: r.meta?.model, runtime: r.meta?.runtime ?? 'browser', records: r.meta?.records }, summary: m, vs15 }
     out.push(
-      `| ${s} | ${fmt(m.answerF1)} | ${pct(m.identifierRecall)} | ${pct(m.citationPrecision)} | ${pct(m.citationRecall)} | ${pct(m.negativesCaughtRate)} | ${m.answerOverRefusal ?? '—'}/${m.positives} | ${sec(m.latencyP50)} | ${sec(m.latencyP95)} | ${sec(m.ttftP50)} | ${fmt(m.requestsPerTurn, 2)} |`,
+      `| ${s} | ${fmt(m.answerF1)} | ${vs15 ? delta(vs15.answerF1) : '—'} | ${pct(m.identifierRecall)} | ${pct(m.citationPrecision)} | ${pct(m.citationRecall)} | ${pct(m.negativesCaughtRate)} | ${m.answerOverRefusal ?? '—'}/${m.positives} | ${sec(m.latencyP50)} | ${sec(m.latencyP95)} | ${sec(m.ttftP50)} | ${fmt(m.requestsPerTurn, 2)} |`,
     )
   }
-  out.push('')
+  out.push('', 'ΔF1 is paired by record against `v1.5 static`; `*` marks an interval that excludes zero.', '')
 }
 
 // ── security ────────────────────────────────────────────────────────────────
