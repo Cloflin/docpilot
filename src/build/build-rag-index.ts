@@ -13,6 +13,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import zlib from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 
 
@@ -1879,8 +1880,21 @@ async function main() {
     .readdirSync(OUT)
     .reduce((a, f) => a + fs.statSync(path.join(OUT, f)).size, 0)
 
+  /**
+   * WHAT A READER DOWNLOADS, not what the disk holds — engine-spec 034. Static
+   * hosts compress JSON in flight and the vector blob barely compresses at all
+   * (sign bits are noise to brotli), so the raw total overstates the shards and
+   * understates nothing. Brotli at quality 11 is what a CDN serves a modern
+   * browser; computed here once, for the line, in a few milliseconds.
+   */
+  const wire = fs
+    .readdirSync(OUT)
+    .reduce((a, f) => a + zlib.brotliCompressSync(fs.readFileSync(path.join(OUT, f)), {
+      params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
+    }).length, 0)
+
   console.log(
-    `\n  written to ${path.relative(ROOT, OUT)}/  ${(total / 1024).toFixed(0)} KB total`,
+    `\n  written to ${path.relative(ROOT, OUT)}/  ${(total / 1024).toFixed(0)} KB total · ${(wire / 1024).toFixed(0)} KB on the wire (brotli)`,
   )
   console.log(`    manifest.json    ${(manifestJson.length / 1024).toFixed(1)} KB`)
   if (vecName) console.log(`    ${vecName}  ${(flat.length / 1024).toFixed(0)} KB`)
