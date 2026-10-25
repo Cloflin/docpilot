@@ -8,6 +8,7 @@ import { PassThrough } from 'node:stream'
 
 import { DEFAULT_SERVER_ORIGIN, fetchMetrics, parseInterval, renderMetrics, runMonitor, serverEndpoint } from '../src/cli-monitor.js'
 import { palette, stripAnsi, symbols } from '../src/cli-ui.js'
+import { createMetrics } from '../src/server/metrics.js'
 
 /**
  * `docpilot monitor` — engine-spec 030.
@@ -103,6 +104,38 @@ describe('renderMetrics — one snapshot, drawn', () => {
     expect(empty).toContain('answer')
     expect(empty).toContain('model — · embed — · index — · up —')
     expect(renderMetrics({}, { ui: view(false) }).length).toBeGreaterThan(5)
+  })
+
+  /**
+   * THE REAL PRODUCER, not only the fixture: `createMetrics()` is what the
+   * server answers `/metrics?format=json` with, fed the facts the server
+   * passes it. Whatever it emits — a fresh server with no turns, or a busy
+   * one — has to draw.
+   */
+  it('draws what the server\'s own metrics module emits, busy or fresh', () => {
+    let t = Date.parse('2026-10-25T12:00:00Z')
+    const metrics = createMetrics({ now: () => t })
+    const facts = { model: 'qwen3:8b', embedModel: 'bge-m3', index: { hash: 'abcd1234', chunks: 10 } }
+
+    const fresh = renderMetrics(metrics.snapshot(facts), { ui: view(false) }).join('\n')
+    expect(fresh).toContain('turns         0 total · 0 in flight')
+    expect(fresh).toContain('latency       p50 — · p95 — · p99 —  (0 turns)')
+
+    const timing = { totalMs: 1800, firstTokenMs: 400, embedMs: 30, retrieveMs: 10, modelMs: 1500, embedRequests: 1 }
+    metrics.turn({ outcome: 'answer', timing, requests: 2, usage: { promptTokens: 1000, outputTokens: 200, cachedTokens: 500 } })
+    metrics.turn({ outcome: 'refused', timing: { ...timing, totalMs: 20, firstTokenMs: undefined, modelMs: undefined } })
+    metrics.cacheHit('embed')
+    metrics.cacheMiss('embed')
+    metrics.limited('rate')
+    t += 60_000
+    const busy = renderMetrics(metrics.snapshot(facts), { ui: view(false) }).join('\n')
+    expect(busy).toContain('model qwen3:8b · embed bge-m3 · index abcd1234 (10 chunks) · up 1m 00s')
+    expect(busy).toContain('turns         2 total · 0 in flight')
+    expect(busy).toContain('first token   p50 400ms')
+    expect(busy).toMatch(/answer +█+ +1  50\.0%/)
+    expect(busy).toContain('errors        0 errors · 1 rate-limited · 0 rejected')
+    expect(busy).toContain('cache         embed 50.0% hit (1 of 2) · answers —')
+    expect(busy).toContain('tokens        prompt 1.0k · output 200 · cached 500  (50.0% of prompt)')
   })
 
   it('says why there is no snapshot rather than drawing an empty one', () => {

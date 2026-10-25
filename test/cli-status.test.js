@@ -243,6 +243,23 @@ describe('the last eval block', () => {
     expect(l.forIndex).toEqual({ gateOnly: true, full: true, partial: false })
   })
 
+  /**
+   * The drift the restated rule would have shipped: two halves of one set on
+   * one index, which `eval` never compares, read as a delta.
+   */
+  it('never pairs a run with one eval would not compare it with — another split', async () => {
+    const split = project({ 'docpilot/golden.jsonl': GOLDEN })
+    const m = index(split)
+    const reports = path.join(split, 'docpilot/reports')
+    const meta = (over) => ({ ...gateMeta({ indexHash: m.hash }), ...over })
+    writeReport(reports, `report-${m.hash}-_gate_only_-dev.json`, meta({ split: 'dev', ranAt: '2026-10-23T00:00:00Z' }), { recall8: 0.2 })
+    writeReport(reports, `report-${m.hash}-_gate_only_-test.json`, meta({ split: 'test', ranAt: '2026-10-24T00:00:00Z' }), { recall8: 0.9 })
+    const s = await status(split)
+    expect(s.lastEval.previous).toBeNull()
+    expect(s.lastEval.metrics.find((x) => x.key === 'recall8').delta).toBeNull()
+    expect(s.lastEval.runs).toBe(1)
+  })
+
   it('moves next on to the whole set once only the gate has been measured', async () => {
     const only = project({ 'docpilot/golden.jsonl': GOLDEN })
     const m = index(only)
@@ -254,8 +271,10 @@ describe('the last eval block', () => {
 })
 
 /**
- * `previousReport` OWNS the pairing rule and `comparableRuns` restates its
- * four checks. Held here to the same answers, over every axis it checks.
+ * `previousReport` OWNS the pairing rule, and `comparableRuns` asks it rather
+ * than restating it — the rule went from four checks to eight while this was
+ * being written. Held here to the same answers over every axis it checks, so
+ * a copy written later cannot drift unseen.
  */
 describe('comparableRuns agrees with previousReport', () => {
   it('picks the same predecessor for every kind of run', () => {
@@ -269,6 +288,11 @@ describe('comparableRuns agrees with previousReport', () => {
       { ...base, level: 'low' },
       { ...base, embedModel: 'nomic-embed-text' },
       { ...base, embedModel: undefined },
+      { ...base, runtime: 'server' },
+      { ...base, split: 'dev' },
+      { ...base, split: 'test' },
+      { ...base, set: 'adversarial' },
+      { ...base, runtime: 'server', serverTurn: { loop: 'one-shot' } },
     ]
     variants.forEach((meta, i) => {
       const file = path.join(dir, `report-abcd1234-qwen3_8b-${i}.json`)

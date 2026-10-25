@@ -30,6 +30,9 @@ export const SCORECARD = [
   { key: 'retrievalF1', label: 'retrieval F1', fmt: 'ratio' },
   { key: 'recall8', label: 'recall@8', fmt: 'ratio' },
   { key: 'mrr', label: 'MRR', fmt: 'ratio' },
+  // Printed by the summary only when the run scored them, and so here.
+  { key: 'ndcg8', label: 'nDCG@8', fmt: 'ratio' },
+  { key: 'contextPrecision5', label: 'ctx precision@5', fmt: 'ratio' },
   { key: 'answerF1', label: 'answer F1', fmt: 'ratio', answer: true },
   { key: 'identifierRecall', label: 'identifier recall', fmt: 'pct', answer: true },
   { key: 'citationPrecision', label: 'citation precision', fmt: 'pct', answer: true },
@@ -45,6 +48,8 @@ export const SCORECARD = [
   { key: 'cachedShare', label: 'prompt from cache', fmt: 'pct', answer: true },
   { key: 'latencyP50', label: 'latency p50', fmt: 'ms', answer: true },
   { key: 'latencyP95', label: 'latency p95', fmt: 'ms', answer: true },
+  { key: 'ttftP50', label: 'first token p50', fmt: 'ms', answer: true },
+  { key: 'ttftP95', label: 'first token p95', fmt: 'ms', answer: true },
 ]
 
 /** Which way is good for a metric, from the one place that says. */

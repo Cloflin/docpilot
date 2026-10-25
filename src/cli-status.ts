@@ -25,6 +25,7 @@
  * server runtime, whose endpoint `docpilot serve` puts on localhost:8787.
  */
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import zlib from 'node:zlib'
@@ -34,6 +35,7 @@ import { specFiles } from './build/lib/openapi-chunker.js'
 import { routeOf } from './theme/docpilot/route.js'
 import { indexDirOf } from './config.js'
 import { DEFAULT_RUN_LEVEL, LEVELS, recordLevel } from './eval/levels.js'
+import { previousReport } from './eval/report.js'
 import { FAILED, OK, USAGE, printError } from './cli-exit.js'
 import { flagErrors, flagGiven, flagValue, helpFor } from './cli-flags.js'
 import { bytes, count, duration, kv, ui } from './cli-ui.js'
@@ -391,21 +393,44 @@ function readReports(dir) {
 }
 
 /**
- * Do two runs measure the same system on the same population?
+ * Would `eval` compare these two runs? ASKED OF `previousReport`, NOT COPIED.
  *
- * `previousReport` in `src/eval/report.ts` OWNS this rule, and these are its
- * four checks in its order — a lexical diagnostic is not a hybrid run, a
- * vectorless deployment is not a diagnostic, a tier is a different population,
- * and a different embedder is a different vector space (absent reads as
- * unknown and pairs). `test/cli-status.test.js` holds the two to the same
- * answers.
+ * `previousReport` in `src/eval/report.ts` owns the rule — a lexical diagnostic
+ * is not a hybrid run, a tier is a different population, a server runtime is a
+ * different install, a split is a different half of the set — and the rule
+ * keeps growing: it went from four checks to eight while this command was
+ * being written. A restated copy here would have paired runs `eval` refuses to
+ * compare, in silence, from the first check it missed.
+ *
+ * So the candidate's `meta` is written, alone, under the QUERIED run's file
+ * prefix in a private directory, and `previousReport` is asked whether it
+ * pairs. The prefix is the (index, model) half of the rule, matched by
+ * construction; everything `previousReport` checks inside the document decides.
+ * One small file per candidate, and the scan below stops as soon as it has
+ * what it needs.
  */
-export function comparableRuns(a, b) {
-  if (Boolean(a?.lexical) !== Boolean(b?.lexical)) return false
-  if (Boolean(a?.vectorlessIndex) !== Boolean(b?.vectorlessIndex)) return false
-  if ((a?.level ?? DEFAULT_RUN_LEVEL) !== (b?.level ?? DEFAULT_RUN_LEVEL)) return false
-  if (a?.embedModel && b?.embedModel && a.embedModel !== b.embedModel) return false
-  return true
+export function pairing(meta) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-status-'))
+  const file = path.join(dir, `report-${meta.indexHash}-${String(meta.model).replace(/[^\w.-]+/g, '_')}-candidate.json`)
+  return {
+    pairs(candidate) {
+      fs.writeFileSync(file, JSON.stringify({ meta: candidate, summary: {} }))
+      return previousReport(dir, meta) != null
+    },
+    close() {
+      fs.rmSync(dir, { recursive: true, force: true })
+    },
+  }
+}
+
+/** `pairing` for one question. */
+export function comparableRuns(candidate, meta) {
+  const p = pairing(meta)
+  try {
+    return p.pairs(candidate)
+  } finally {
+    p.close()
+  }
 }
 
 /**
@@ -428,9 +453,22 @@ function readLastEval(docPilot, root, manifest, now) {
   const indexHash = manifest?.hash ?? null
   // EARLIER BY POSITION in the sorted list, not by comparing times — the
   // ordering already knows that an unstamped report precedes a stamped one.
-  const earlier = all.slice(0, all.indexOf(newest)).filter((r) => r.meta.model === m.model && comparableRuns(r.meta, m))
-  const prev = earlier.filter((r) => r.meta.indexHash === m.indexHash).at(-1) ?? null
-  const history = [...earlier, newest].slice(-SERIES)
+  // Walked newest first, and only as far as it takes to fill the sparkline
+  // and find the predecessor on this index.
+  const kin = []
+  let prev = null
+  const pair = pairing(m)
+  try {
+    for (const r of all.slice(0, all.indexOf(newest)).reverse()) {
+      if (kin.length >= SERIES - 1 && prev) break
+      if (r.meta.model !== m.model || !pair.pairs(r.meta)) continue
+      if (kin.length < SERIES - 1) kin.unshift(r)
+      if (!prev && r.meta.indexHash === m.indexHash) prev = r
+    }
+  } finally {
+    pair.close()
+  }
+  const history = [...kin, newest]
   const series = Object.fromEntries(
     SCORECARD.map(({ key }) => [key, history.map((r) => (isNum(r.summary[key]) ? r.summary[key] : null))]),
   )
