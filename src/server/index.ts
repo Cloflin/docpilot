@@ -31,6 +31,8 @@ import { createMetrics } from './metrics.js'
 import { clientKey, createLimiter, isLoopback } from './limits.js'
 import { createLru } from './cache.js'
 import { resolveServerOptions } from './options.js'
+import { serverSecret } from './sign.js'
+import { createLeakGuard } from './leak.js'
 
 export { runServerTurn, sourceChunk, startToolProbe } from './turn.js'
 export { parseTurnInput } from './input.js'
@@ -186,6 +188,10 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
   const shell = JSON.stringify(shellManifest(index.manifest))
   const log = createTurnLog(options.log)
   const tools = { fallback: false, known: false, pending: null }
+  const secret = serverSecret(env)
+  // The owner's private instructions, as written — never the package's CORE,
+  // which is public on npm (see leak.ts).
+  const leak = createLeakGuard([options.settings?.prompt?.override, options.settings?.prompt?.extend])
   const metrics = createMetrics()
   const limiter = createLimiter(opts.limits)
   const vectors = opts.cache.embeddings ? createLru(opts.cache.embeddings) : null
@@ -341,6 +347,8 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
             metrics,
             embedTimeoutMs: opts.embedTimeoutMs,
             policy: opts.turn.loop === 'agentic' && opts.turn.finalThink == null ? null : opts.turn,
+            secret,
+            leak,
           })
         } catch (e) {
           if (!abort.signal.aborted) emit('error', { message: 'no model answered', kind: e?.kind || null })

@@ -33,6 +33,8 @@ import { detectLanguage, localeOf, promptHash } from '../theme/docpilot/prompt.j
 import { resultRows } from '../theme/docpilot/results.js'
 import { makeScope } from '../theme/docpilot/scope.js'
 import { answerKey, vectorKey, type Lru } from './cache.js'
+import { signAnswer, verifyAnswer } from './sign.js'
+import type { LeakGuard } from './leak.js'
 
 /** How many result rows a search-only or hybrid settle shows — session.js `RESULTS_K`. */
 const RESULTS_K = 8
@@ -201,6 +203,15 @@ export interface ServerTurnContext {
   answers?: Lru<any> | null
   /** `server.turn` — how the turn spends its model calls. Absent: the browser's turn. */
   policy?: { loop: 'agentic' | 'one-shot' | 'adaptive'; adaptiveG: number; finalThink: boolean | null } | null
+  /**
+   * The key answers are signed with — engine-spec 033. With one, a history
+   * entry the server did not sign reaches the model as quoted text instead of
+   * as its own earlier answer; without one (a caller driving this function
+   * directly) history is trusted as it always was.
+   */
+  secret?: string | null
+  /** The owner's private instructions as a detector — engine-spec 033. */
+  leak?: LeakGuard | null
 }
 
 /**
@@ -249,7 +260,11 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
   const quote = redactSecrets(input.quote || '').clean
   const scope = input.scope?.paths?.length ? makeScope(input.scope.paths, manifest) : { ...ALL_SCOPE }
   const history = input.history || []
+  const trusted = history.map((t) => (ctx.secret ? verifyAnswer(ctx.secret, input.conversationId, t) : true))
   const locale = localeOf(detectLanguage(clean))
+  /** The MAC this turn's answer leaves with, so the next turn can trust it. */
+  const sign = (text, citations) =>
+    ctx.secret ? signAnswer(ctx.secret, { conversationId: input.conversationId, question: input.question, answer: text, citations }) : null
 
   const record: any = {
     kind: 'docpilot.turn',
@@ -262,6 +277,10 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
     lang: locale,
     scope: { kind: scope.kind, paths: scope.paths || [] },
     depth: history.length,
+    // How many of the prior answers carried this server's signature. A
+    // shortfall is a restarted server, a second replica without the shared
+    // secret, or a forged turn — the log is where to tell them apart.
+    historySigned: trusted.filter(Boolean).length,
     outcome: null,
     refusal: null,
     gate: null,
@@ -337,6 +356,7 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
       citations: opener.answer.citations,
       sources: fromIds(opener.answer.citations).map(sourceChunk),
       gate: slimGate(opener.entry.gate),
+      sig: sign(opener.answer.text, opener.answer.citations),
     })
   }
 
@@ -408,7 +428,7 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
       record.summary = hit.summary ?? null
       record.confidence = hit.confidence ?? null
       record.model = config.llm.model || null
-      return settle({ ...hit, cached: true })
+      return settle({ ...hit, cached: true, sig: sign(hit.text, hit.citations) })
     }
     ctx.metrics?.cacheMiss('answer')
   }
@@ -459,6 +479,7 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
           citations: dense.answer.citations,
           sources: fromIds(dense.answer.citations).map(sourceChunk),
           gate: slimGate(dense.entry.gate),
+          sig: sign(dense.answer.text, dense.answer.citations),
         })
       }
       if (dense) {
@@ -562,18 +583,24 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
     }
 
     let lastMessages = null
+    let leakedText = false
+    let leakedThought = false
+    let thoughtSoFar = ''
     const tModel = now()
     const result = await runTurn({
       retrieval,
       gateResult: { ...g, GUnscoped: g.unscopedG ?? g.G },
       question: clean,
       quote,
-      history: history.map((t) => ({
+      history: history.map((t, i) => ({
         question: t.question,
         answer: t.answer,
         summary: t.summary || null,
         quote: t.quote || '',
         citations: t.citations || [],
+        // `prompt.ts` quotes an untrusted answer inside the reader's message
+        // rather than replaying it as the model's own turn.
+        untrusted: !trusted[i],
       })),
       openerHint,
       addendum: input.addendum,
@@ -591,6 +618,18 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
         emit('member', { provider: m.provider, index: i, freePool: Boolean(m.freePool) })
       },
       onStream: (ev) => {
+        // THE OWNER'S TEXT DOES NOT STREAM OUT — engine-spec 033. Every frame is
+        // checked before it leaves; the first one that carries a run of the
+        // private instructions is withheld, and so is every frame after it, on
+        // that channel. The settle below replaces the answer.
+        if (ctx.leak && !ctx.leak.empty) {
+          if (ev?.text != null && !leakedText && ctx.leak.hits(ev.text).length) leakedText = true
+          if (ev?.thinking) {
+            thoughtSoFar += ev.thinking
+            if (!leakedThought && ctx.leak.hits(thoughtSoFar).length) leakedThought = true
+          }
+          if ((ev?.text != null && leakedText) || (ev?.thinking && leakedThought)) return
+        }
         // First reasoning and first ANSWER token, measured where the reader's
         // screen gets them: the frame leaving for the panel.
         if (ev?.thinking && timing.firstThoughtMs == null) timing.firstThoughtMs = now() - started
@@ -602,6 +641,19 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
       signal,
     })
     timing.modelMs = now() - tModel
+
+    // The settle is checked too: a transport that did not stream (an in-loop
+    // tool call on Ollama) produced no frames to withhold.
+    if (ctx.leak && !ctx.leak.empty) {
+      if (!leakedText && ctx.leak.hits(result.text).length) leakedText = true
+      if (!leakedThought && ctx.leak.hits(result.think || '').length) leakedThought = true
+    }
+    if (leakedThought) result.think = ''
+    if (leakedText) {
+      record.leakBlocked = true
+      result.text = ''
+      result.citations = []
+    }
 
     record.emitted = result.emitted
     record.citations = result.citations
@@ -668,6 +720,7 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
       tentative: Boolean(notAnswerable),
       notAnswerable,
       sources: result.sources.map(sourceChunk),
+      sig: sign(result.text, result.citations),
     }
     if (cacheKey && !notAnswerable) ctx.answers.set(cacheKey, answered)
     return settle(answered)

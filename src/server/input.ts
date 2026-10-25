@@ -36,6 +36,9 @@ export function parseTurnInput(body) {
     summary: str(t?.summary, 600) || null,
     quote: str(t?.quote, QUOTE_MAX),
     citations: ids(t?.citations),
+    // The server's MAC over this answer — engine-spec 033. Opaque here; the
+    // turn verifies it and demotes the entry when it does not.
+    sig: typeof t?.sig === 'string' && t.sig.length <= 128 ? t.sig : null,
     gate: {
       channel: t?.gate?.channel === 'composed' ? 'composed' : t?.gate?.channel === 'raw' ? 'raw' : null,
       antecedent: t?.gate?.antecedent === 'question' || t?.gate?.antecedent === 'quote' ? t.gate.antecedent : null,

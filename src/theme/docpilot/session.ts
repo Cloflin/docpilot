@@ -1435,6 +1435,8 @@ export interface Turn {
   citationIds?: string[]
   /** The model's summary of this answer, sent in its place later (spec 026). */
   answerSummary?: string | null
+  /** The server's signature over this answer, sent back with it (spec 033). */
+  answerSig?: string | null
   sources: any[]
   results: any[]
   noStrongMatches: boolean
@@ -2941,6 +2943,9 @@ async function submitRemote(q, frozen, selected) {
           summary: t.answerSummary || null,
           quote: t.quote || '',
           citations: t.citationIds || [],
+          // engine-spec 033: the server's own MAC over this answer. Without it the
+          // server still reads the answer, as a quote rather than as its own turn.
+          sig: t.answerSig || null,
           gate: t.gate ? { channel: t.gate.channel ?? null, antecedent: t.gate.antecedent ?? null } : null,
         })),
         addendum: state.instruction,
@@ -2988,6 +2993,7 @@ async function submitRemote(q, frozen, selected) {
   turn.gate = p.gate || null
   if (p.outcome === 'answer' || p.outcome === 'opener') {
     if (p.opener) turn.opener = p.opener
+    turn.answerSig = typeof p.sig === 'string' ? p.sig : null
     turn.iterations = p.iterations
     turn.rejectedFetches = p.rejectedFetches
     turn.support = p.support
