@@ -82,7 +82,7 @@ export function defineDocPilot(settings = {}, env = process.env) {
     nodeEmbedTarget: () => nodeEmbedTarget(resolved, env),
 
     /** The Vite plugin. See docPilotPlugin below for what it actually does. */
-    plugin: () => docPilotPlugin(resolved, ready, env),
+    plugin: () => docPilotPlugin(resolved, ready, env, settings),
   }
 }
 
@@ -106,7 +106,12 @@ export function defineDocPilot(settings = {}, env = process.env) {
  *    the embedder, the index and the key can disagree is otherwise silent until
  *    a reader hits it.
  */
-export function docPilotPlugin(settings, ready, env = process.env) {
+/**
+ * @param authored the settings as the author wrote them — the dev server's turn
+ *   resolves them itself, and the operator half of `server` (limits, turn policy,
+ *   caches) is not in the resolved object. Engine-spec 031.
+ */
+export function docPilotPlugin(settings, ready, env = process.env, authored = null) {
   return {
     name: '@cloflin/docpilot',
     // `config`, not `configResolved`: the proxy and noExternal have to be
@@ -138,7 +143,7 @@ export function docPilotPlugin(settings, ready, env = process.env) {
         if (!String(req.url || '').startsWith(endpoint)) return next()
         try {
           created ??= import('./server/index.js').then(({ createDocPilotServer }) =>
-            createDocPilotServer({ settings, env, index: indexDirOf(settings) }),
+            createDocPilotServer({ settings: authored ?? settings, env, index: indexDirOf(settings) }),
           )
           const dp = await created
           await dp.node(req, res, next)
