@@ -245,6 +245,9 @@ const RUNTIME = ENDPOINT ? 'server' : String(arg('runtime', 'browser'))
 
 /** The golden questions, or the security probes in `adversarial.jsonl` — spec 033. */
 const SET = String(arg('set', 'golden'))
+
+/** No row per record on screen — the report has them. */
+const QUIET = has('quiet')
 const ADVERSARIAL = path.join(DOCPILOT_DIR, 'adversarial.jsonl')
 
 if (GATE_ONLY && RUNTIME === 'server') {
@@ -1232,6 +1235,10 @@ function turn({
 const expectEff = (r) => (r.scoredAsNegative ? 'refuse:out-of-scope' : r.expect)
 
 function report(row) {
+  // `--quiet`: the summary and the report path only. An agent reading a run
+  // (spec 036) pays for every line it is shown; a row per record is the report
+  // file's job.
+  if (QUIET) return
   const expect = expectEff(row)
   const ok =
     row.observed === expect || (expect.startsWith('refuse') && row.observed.startsWith('refuse'))

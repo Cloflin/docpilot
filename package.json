@@ -129,6 +129,7 @@
     "package.json",
     "LICENSE",
     "README.md",
+    "agents/",
     "bin/",
     "dist/",
     "lib/feedback-receiver.mjs",

@@ -66,8 +66,12 @@ export const TARGETS = {
   claude: {
     id: 'claude',
     label: 'Claude Code',
-    hint: '.claude/skills/ — and /docpilot-* commands in .claude/commands/',
+    hint: '.claude/skills/ — /docpilot-* commands in .claude/commands/, the tuning agents in .claude/agents/',
     skills: { project: '.claude/skills', user: '.claude/skills' },
+    // engine-spec 036: the docpilot-tuner and docpilot-writer subagents. Only
+    // Claude Code reads a subagent definition in this shape, so only this row
+    // has the key.
+    agents: { project: '.claude/agents', user: '.claude/agents' },
     commands: {
       project: '.claude/commands',
       user: '.claude/commands',
@@ -206,6 +210,7 @@ export function resolveSite({
     target: spec.id,
     scope,
     skillsDir: rootedAt(spec.skills[scope], scope, cwd),
+    agentsDir: spec.agents ? rootedAt(spec.agents[scope], scope, cwd) : null,
     commands: commandsRel
       ? {
           dir: rootedAt(commandsRel, scope, cwd),

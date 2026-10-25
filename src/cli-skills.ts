@@ -58,9 +58,26 @@ import {
   TARGETS,
 } from './cli-targets.js'
 
-/** The manifest beside a skill, and the one beside a directory of commands. */
+/** The manifest beside a skill, the one beside a directory of commands, and the agents'. */
 export const SKILL_MANIFEST = '.docpilot.json'
 export const COMMANDS_MANIFEST = '.docpilot-commands.json'
+export const AGENTS_MANIFEST = '.docpilot-agents.json'
+
+/**
+ * The token an agent definition carries where the skills directory goes — the
+ * agent reads `docs-tune/SKILL.md` from wherever this install put the skills.
+ */
+export const SKILLS_DIR_TOKEN = '{{SKILLS_DIR}}'
+
+/** The package's subagent definitions — engine-spec 036 — or [] when not shipped. */
+export function agentFiles(pkgRoot, skillsDirDisplay) {
+  const dir = path.join(pkgRoot, 'agents')
+  if (!existsSync(dir)) return []
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.md'))
+    .sort()
+    .map((rel) => ({ rel, contents: readFileSync(path.join(dir, rel), 'utf8').split(SKILLS_DIR_TOKEN).join(skillsDirDisplay) }))
+}
 
 /**
  * The token the skill sources carry where a path to themselves used to be.
@@ -342,6 +359,33 @@ export function installSite({
             null,
             2,
           )}\n`,
+        )
+      }
+    }
+  }
+
+  /**
+   * THE AGENTS — engine-spec 036. A skill's rule, not a command's: an agent
+   * definition is documentation the reader may tune (its model, its effort, its
+   * turn ceiling), so `init` keeps one it finds and `update` replaces it with a
+   * `.bak` beside it, by the manifest's hashes, exactly as a skill file.
+   */
+  if (site.agentsDir) {
+    const dir = site.agentsDir
+    const manifestPath = path.join(dir, AGENTS_MANIFEST)
+    const manifest = readManifest(manifestPath)
+    if (manifest.docpilot && !outcome.from) outcome.from = manifest.docpilot
+    const files = agentFiles(pkgRoot, site.skillsDir ? displayPath(site.skillsDir, cwd) : '.claude/skills')
+    if (files.length) {
+      const { rows, hashes } = applyFiles({ dir, files, recorded: manifest.files || {}, keepExisting, dry })
+      const gone = retire({ dir, recorded: manifest.files || {}, shipped: new Set(files.map((f) => f.rel)), dry })
+      outcome.files.push(...rows, ...gone)
+      if (isLink(manifestPath)) outcome.files.push({ rel: AGENTS_MANIFEST, path: manifestPath, action: 'refused', backup: null })
+      else if (!dry) {
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(
+          manifestPath,
+          `${JSON.stringify({ kind: 'agents', docpilot: version, target: site.target, scope: site.scope, installedAt: new Date().toISOString(), files: hashes }, null, 2)}\n`,
         )
       }
     }
