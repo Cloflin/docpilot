@@ -150,7 +150,22 @@ npx docpilot eval --models=qwen3:8b,phi4:14b           # the matrix
 npx docpilot eval --limit=3                            # short loop
 npx docpilot eval --level=low                          # the smoke pool, a declared subset
 npx docpilot eval --resume                             # skip models already reported
+npx docpilot eval --split=dev --quiet                  # 2.0: one half — edit from dev, prove on test
+npx docpilot eval --runtime=server                     # 2.0: the server turn itself, in-process
+npx docpilot eval --set=adversarial                    # 2.0: the security probes, attack success rate
 ```
+
+**2.0 (engine-spec 029).** `--split=dev|test` scores one half of the golden set; a
+record without `split` is assigned by a hash of its id, so no command writes
+`golden.jsonl`. **Choose edits from `dev` failures and prove them on `test`** —
+the improvement loop is `docs-tune`'s ({{SKILL_DIR}}/../docs-tune/SKILL.md), and
+`npx docpilot improve plan|compare|check` is its deterministic half.
+`--runtime=server` answers through `runServerTurn` (in-process; `--endpoint=`
+for a running server) and adds first-token time and per-stage timings to each
+row. `--set=adversarial` runs `adversarial.jsonl`. The summary now also prints
+recall@1/3/5, nDCG@8, context precision@5, p99 and first-token p50/p95;
+`noAnswerPrecision` is null under `guard.mode: 'off'`, where no gate can name a
+cause. `--quiet` prints the summary and the report path only.
 
 Reads `<evalDir>/reports/report-<indexHash>-<model>-<promptHash>.{json,md}`. The
 markdown sibling carries the hard gates, the metric table, the change since the
@@ -944,9 +959,13 @@ nothing.
    public docs site. It is the user's decision, so propose it and say what each
    agent does with the access.
 
-Nothing in this section touches the RAG index. `llms.txt` is not read by DocPilot
-and never will be — DocPilot reads its own manifest, and a change here moves no
-metric in any report.
+Nothing in this section touches the RAG index by default. 2.0 measured the one
+way it could: `DOCPILOT_LLMS_FILE=<llms.txt>` at index time turns each page's
+note into its description for retrieval — and on the Harborline benchmark it
+LOWERED nDCG@8 on the very vocabulary-gap records it was written for (the note
+lands on the page's first chunk and lifts the intro above the answering section,
+engine-spec 035). So it stays an experiment: write llms.txt for other people's
+agents, and fix a vocabulary gap in the section that answers.
 
 ## Binding rules
 
