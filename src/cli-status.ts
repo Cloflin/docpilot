@@ -505,6 +505,9 @@ function readLastEval(docPilot, root, manifest, now) {
     indexHash: m.indexHash ?? null,
     forCurrentIndex: Boolean(indexHash) && m.indexHash === indexHash,
     records: m.records ?? null,
+    // How many records ended other than expected — what `improve` would read.
+    misses: Array.isArray(s.misses) ? s.misses.length : null,
+    split: m.split ?? null,
     goldenChanged: Boolean(goldenNow && reference.meta.goldenSha && reference.meta.goldenSha !== goldenNow),
     hardGates: {
       hallucinated: isNum(s.hallucinated) ? s.hallucinated : null,
@@ -626,6 +629,18 @@ export function nextStep(s) {
     return step('golden-changed', ['eval'], 'the golden set changed since the last eval, so its numbers describe a different set')
   }
   if (!fi.full) return step('one-tier', ['eval'], `the reports for index ${s.index.hash} score one tier — the whole set has not run on it`)
+  // engine-spec 035: once everything is measured, the next step is the loop that
+  // moves the numbers — the plan reads the dev half, and the edit is proven on
+  // test. Not for a perfect report, which has nothing to improve.
+  const misses = s.lastEval?.misses ?? 0
+  if (misses > 0) {
+    return step(
+      'improve',
+      ['improve'],
+      `everything is measured for index ${s.index.hash} and ${misses} record(s) still fail — the plan names the edit each failure asks for, and costs nothing`,
+      [[['eval', '--split=dev', '--quiet'], 'the dev half the plan reads, if the last report was not a dev run']],
+    )
+  }
   return step('measured', ['eval', '--level=low'], `everything is measured for index ${s.index.hash} — a smoke run is the cheapest check after the next change`)
 }
 

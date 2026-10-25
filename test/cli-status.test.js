@@ -379,6 +379,8 @@ describe('the next rules, in the order the loop runs', () => {
     expect(rule({ lastEval: { goldenChanged: true } })).toMatchObject({ rule: 'golden-changed', argv: ['eval'] })
     expect(rule({ lastEval: { forIndex: { gateOnly: true, full: false, partial: true } } })).toMatchObject({ rule: 'one-tier', argv: ['eval'] })
     expect(rule({})).toMatchObject({ rule: 'measured', argv: ['eval', '--level=low'] })
+    // engine-spec 035: a measured index with failing records goes to the plan.
+    expect(rule({ lastEval: { misses: 3 } })).toMatchObject({ rule: 'improve', argv: ['improve'] })
   })
 })
 

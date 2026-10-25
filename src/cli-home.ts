@@ -34,6 +34,12 @@ export const HOME_ACTIONS: Record<string, Array<{ argv: string[]; hint: string; 
     { argv: ['eval', '--gate-only'], hint: 'retrieval and the gate only — no model, free' },
     { argv: ['eval'], hint: 'the whole golden set, with the model answering' },
   ],
+  // engine-spec 035: the loop's next step once a report exists — the plan, and
+  // the dev-split run it reads.
+  improve: [
+    { argv: ['eval', '--split=dev', '--quiet'], hint: 'the dev half of the golden set — what improve diagnoses', when: (s) => Boolean(s.evalSets?.golden) },
+    { argv: ['improve'], hint: 'the edits the last report asks for — free, no model', when: (s) => Boolean(s.lastEval) },
+  ],
   doctor: [{ argv: ['doctor'], hint: 'check the configuration without a build' }],
   serve: [{ argv: ['serve'], hint: 'run the turn on this machine', when: (s) => s.project.runtime === 'server' }],
   monitor: [
