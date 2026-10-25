@@ -14,6 +14,14 @@
  * zero, or the McNemar test on the per-record outcome — and nothing moved for
  * the worse past the line. Everything else is `neutral`, and neutral is not a
  * reason to keep an edit nobody can show helped.
+ *
+ * A GATE-ONLY PAIR IS NOT A SAMPLE. It calls no model, so the same corpus ranks
+ * the same records the same way on every run: a record that ranked better is the
+ * edit's effect, not a draw. There an edit is also kept when it is a Pareto
+ * move — some record better on some metric, none worse on any. The interval
+ * rule alone could never keep a targeted fix: two questions fixed out of thirty,
+ * nothing worse, leaves a bootstrap lower bound of exactly zero (measured on
+ * DocPilot's own docs, spec 036).
  */
 
 import { LOW_ANSWER_F1 } from '../eval/metrics.js'
@@ -100,6 +108,15 @@ export function compareRuns(before, after, { maxRegression = 0.02, seed = 1, res
   for (const m of gains) reasons.push(`${m.label} rose ${(100 * m.delta).toFixed(1)} points, 95% interval [${(100 * m.lo).toFixed(1)}, ${(100 * m.hi).toFixed(1)}]`)
   if (p < 0.05 && c > b) reasons.push(`${c} records went from wrong to right and ${b} the other way (McNemar p = ${p.toFixed(3)})`)
 
-  const verdict = reasons.some((r) => /fell/.test(r)) ? 'revert' : gains.length || (p < 0.05 && c > b) ? 'keep' : 'neutral'
-  return { pairs: n, ok, mcnemar: { b, c, p }, worse, better, metrics, verdict, reasons }
+  const deterministic = Boolean(before?.meta?.gateOnly && after?.meta?.gateOnly)
+  const moved = (sign) =>
+    pairs
+      .filter(([x, y]) => COMPARED.some((m) => typeof x[m.key] === 'number' && typeof y[m.key] === 'number' && sign * (y[m.key] - x[m.key]) > 1e-9))
+      .map(([x]) => x.id)
+  const ranked = { better: moved(1), worse: moved(-1) }
+  const pareto = deterministic && ranked.better.length > 0 && ranked.worse.length === 0 && b === 0
+  if (pareto) reasons.push(`${ranked.better.length} record${ranked.better.length === 1 ? '' : 's'} ranked better and none worse — a gate-only run is deterministic, so that is the edit's effect, not noise`)
+
+  const verdict = reasons.some((r) => /fell/.test(r)) ? 'revert' : gains.length || (p < 0.05 && c > b) || pareto ? 'keep' : 'neutral'
+  return { pairs: n, ok, mcnemar: { b, c, p }, worse, better, deterministic, ranked, metrics, verdict, reasons }
 }

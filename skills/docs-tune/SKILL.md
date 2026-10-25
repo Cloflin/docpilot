@@ -63,7 +63,10 @@ status ─► baseline (dev + test) ─► improve plan ─► edit ─► impro
 8. **Decide.** `npx docpilot improve compare --before=<dev baseline> --after=<new dev report> --json`.
    `revert` → `git checkout -- <the files this item changed>` and re-index.
    `neutral` → revert too: an edit nobody can show helped is not kept.
-   `keep` → the new report is the next baseline.
+   `keep` → the new report is the next baseline. On two gate-only reports
+   `keep` also means a Pareto move — some record ranked better, none worse:
+   a gate-only run calls no model, so the same corpus ranks the same way
+   every time and a targeted fix needs no interval to be real.
 9. **Stop** when the plan has no corpus item left, two rounds in a row keep
    nothing, or the budget below is spent.
 10. **Prove.** `npx docpilot eval --split=test --quiet` on the final corpus, then

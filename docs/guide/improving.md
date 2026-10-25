@@ -94,7 +94,7 @@ npx docpilot improve compare --before=before.json --after=after.json
 | verdict | when |
 |---|---|
 | **revert** | Any metric fell by more than two points |
-| **keep** | Something rose beyond noise — a paired bootstrap interval clear of zero, or McNemar on the per-record outcome — and nothing fell past the line |
+| **keep** | Something rose beyond noise — a paired bootstrap interval clear of zero, or McNemar on the per-record outcome — and nothing fell past the line. For two `--gate-only` reports, also a Pareto move: some record ranked better and none worse |
 | **neutral** | Everything else. Neutral is not a reason to keep an edit nobody can show helped |
 
 It does not refuse a changed index hash, because a corpus edit changes the hash by definition. What must match is the population: the same golden set, level and split. [Measure](/guide/measure) explains the metrics it compares.

@@ -85,6 +85,21 @@ describe('compareRuns', () => {
     expect(compareRuns(before, after).verdict).toBe('revert')
   })
 
+  it('keeps a gate-only Pareto move that no interval can show, and only that', () => {
+    const meta = { gateOnly: true }
+    const rows = Array.from({ length: 30 }, (_, i) => ({ id: `r${i}`, expect: 'answer', observed: 'answer', mrr: 0.5, recall8: 1 }))
+    const fixed = rows.map((r, i) => (i < 2 ? { ...r, mrr: 1 } : r))
+    const r = compareRuns({ meta, rows }, { meta, rows: fixed })
+    expect(r.metrics.find((m) => m.key === 'mrr').lo).toBe(0)
+    expect(r.ranked).toEqual({ better: ['r0', 'r1'], worse: [] })
+    expect(r.verdict).toBe('keep')
+    // the same move in a run that called a model is a sample, and stays neutral
+    expect(compareRuns({ rows }, { rows: fixed }).verdict).toBe('neutral')
+    // one record worse anywhere makes it a trade-off, not a Pareto move
+    const traded = fixed.map((x, i) => (i === 5 ? { ...x, mrr: 0.45 } : x))
+    expect(compareRuns({ meta, rows }, { meta, rows: traded }).verdict).toBe('neutral')
+  })
+
   it('counts a negative refused for any cause as right', () => {
     expect(okOf({ expect: 'refuse:no-evidence', observed: 'refuse:not-answerable' })).toBe(true)
     expect(okOf({ expect: 'refuse:no-evidence', observed: 'answer' })).toBe(false)

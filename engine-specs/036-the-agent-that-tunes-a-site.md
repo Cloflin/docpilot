@@ -57,6 +57,19 @@ which model should do which part of it.
    behaviour; no commits, pushes or installs; ask before a metered embedder or
    chat model is spent on.
 
+## Measured
+
+A copy of DocPilot's own docs, headless (`claude -p --agent docpilot-tuner`),
+gate-only, local bge-m3: 3 rounds, 59 turns, 13 minutes, $1.45 at API prices.
+The agent kept nothing, and its rule was the reason. Its best candidate (one
+`<llm-only>` line on each of two pages) moved q-14 from a miss to rank 1 and
+q-16 from rank 7 to 3 and made no record worse — dev nDCG@8 0.534 → 0.569,
+MRR 0.523 → 0.559; test nDCG@8 0.584 → 0.586. With 33 positives a split, two
+fixed records leave the bootstrap lower bound at exactly zero, so `compare`
+said `neutral` three rounds running. A gate-only pair calls no model and is
+deterministic; `compare` now also keeps a Pareto move on it (spec 035,
+Decision 2), and the same candidate is `keep` on dev and on test.
+
 ## Why it fits
 
 Every step the agent takes is a command this package already tests, so the

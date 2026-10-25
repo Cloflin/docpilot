@@ -88,7 +88,7 @@ These rules are never bent. `improve check` enforces the first two in the CLI. T
 
 - **Never touch the measurement.** `golden.jsonl`, `calibration.jsonl`, `chains.jsonl`, `adversarial.jsonl` and everything under the reports directory are read-only for the agents. `improve check` fails when one changes.
 - **Never copy a gold answer.** `improve check` fails when added text repeats a run of eight words from a test-split gold answer.
-- **Keep an edit only when it is shown to help.** `improve compare` returns **keep** only when a metric rose beyond noise and none fell by more than two points. A neutral edit is reverted.
+- **Keep an edit only when it is shown to help.** `improve compare` returns **keep** only when a metric rose beyond noise and none fell by more than two points, or, for gate-only reports, when some record ranked better and none worse. A gate-only run calls no model, so the same corpus always ranks the same way. A neutral edit is reverted.
 - **Prove on test.** The final claim is the test-split comparison.
 - **Never invent product behaviour.** An edit restates what the page already says, in other words or in another place. A question the docs cannot answer is a negative, and the report says so. The agent does not write the answer.
 - **`<llm-only>` text is documentation.** It is indexed, citable and shown to readers. It is never an instruction to a model.

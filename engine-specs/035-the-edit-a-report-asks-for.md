@@ -40,7 +40,11 @@
    metric's mean falls more than 2 points, `keep` when a paired-bootstrap interval
    clears zero or McNemar favours the after, `neutral` otherwise. A negative
    refused for ANY cause is right (the exact-cause rule in `model/compare.ts`
-   marked every guard-off negative wrong).
+   marked every guard-off negative wrong). Two `--gate-only` reports are not a
+   sample — no model is called, so the same corpus ranks the same way every
+   run — and there a Pareto move (some record better on some metric, none worse
+   on any) is also `keep` (added after the run in spec 036 showed the interval
+   rule cannot keep a targeted fix).
 3. **`improve check --since=<ref>`** exits 1 when text added to the docs shares
    an 8-word run with a test-split gold answer, or an eval set changed.
 4. **llms.txt as page descriptions.** `DOCPILOT_LLMS_FILE=<path>` at index time:
