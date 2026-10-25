@@ -601,10 +601,34 @@ export interface I18nSettings {
 /** Where a turn runs — engine-spec 028. */
 export type Runtime = 'browser' | 'server'
 
-/** The server runtime's address, as the panel sees it. */
+/**
+ * The server runtime: its address, as the panel sees it, and — 2.0, engine-specs
+ * 031 and 033 — the operator's settings, which the server reads and the page
+ * never receives.
+ */
 export interface ServerSettings {
   /** A same-origin path. `GET {endpoint}/manifest`, `POST {endpoint}`. Default `'/ai/turn'`. */
   endpoint?: string
+  /** `GET {endpoint}/metrics` — loopback, or `DOCPILOT_METRICS_TOKEN`. `false` removes it. */
+  metrics?: boolean | { token?: string | null }
+  /** Per-client rate and day, concurrency caps. On by default; `false` leaves it to a proxy. */
+  limits?: { perMinute?: number; burst?: number; perDay?: number; concurrent?: number; perClient?: number } | false
+  /** Proxy hops whose `X-Forwarded-For` entry may name the client. Default none. */
+  trustProxy?: boolean | number
+  /** The whole turn, request to settle. Default 300000. */
+  turnTimeoutMs?: number
+  /** One embedding request, retries included. Default 20000. */
+  embedTimeoutMs?: number
+  cache?: {
+    /** Query vectors kept per process. Default 1000; `false` keeps none. */
+    embeddings?: number | false
+    /** Whole first-turn answers. Off unless set. */
+    answers?: false | { ttlMs?: number; max?: number }
+  }
+  /** When set, a POST whose `Origin` is not listed is refused. */
+  allowedOrigins?: string[] | null
+  /** How a server turn spends its model calls. Default: the browser's agentic loop. */
+  turn?: { loop?: 'agentic' | 'one-shot' | 'adaptive'; adaptiveG?: number; finalThink?: boolean }
 }
 
 /** What you pass to `defineDocPilot`, and export by name for the CLI to read. */

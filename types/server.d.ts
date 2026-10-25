@@ -2,8 +2,9 @@
  * `@cloflin/docpilot/server` — the turn on the owner's server (engine-spec 028).
  *
  * Use with `runtime: 'server'` in the `docPilot` settings. The handler answers
- * `GET {server.endpoint}/manifest` and `POST {server.endpoint}`; every other
- * path is a 404 from `handle` and a `next()` from `node`.
+ * `GET {server.endpoint}/manifest`, `GET {server.endpoint}/metrics` (2.0) and
+ * `POST {server.endpoint}`; every other path is a 404 from `handle` and a
+ * `next()` from `node`.
  */
 import type { DocPilotSettings } from './config.js'
 
@@ -69,8 +70,50 @@ export interface TurnRecord {
   embedModel: string | null
   indexHash: string | null
   promptHash: string | null
+  /** 2.0 — the ranking the turn ran on, top eight, on the channel it won. */
+  rankedIds?: string[]
+  /** 2.0 — where the time went; `null` is "this stage did not run". */
+  timing?: {
+    embedMs: number | null
+    embedRequests: number
+    retrieveMs: number | null
+    probeMs: number | null
+    probeWaitMs: number | null
+    loop: 'agentic' | 'one-shot' | null
+    modelMs: number | null
+    firstThoughtMs: number | null
+    firstTokenMs: number | null
+    totalMs: number
+  }
+  /** 2.0 — prior answers in the request that carried this server's signature. */
+  historySigned?: number
+  /** 2.0 — the answer quoted the owner's private instructions and was withheld. */
+  leakBlocked?: boolean
+  /** 2.0 — served from `server.cache.answers`. */
+  cached?: boolean
   messages?: Array<{ role: string; content: unknown }>
   error: string | null
+}
+
+/** `GET {endpoint}/metrics?format=json` — engine-spec 031. */
+export interface MetricsSnapshot {
+  kind: 'docpilot.metrics'
+  v: 1
+  startedAt: string
+  now: string
+  uptimeS: number
+  model: string | null
+  embedModel: string | null
+  index: { hash: string | null; chunks: number | null }
+  turns: { total: number; inFlight: number; byOutcome: Record<TurnRecord['outcome'], number> }
+  latencyMs: { p50: number | null; p95: number | null; p99: number | null; count: number }
+  ttftMs: { p50: number | null; p95: number | null; p99: number | null; count: number }
+  stagesMs: Record<'embed' | 'retrieve' | 'rerank' | 'model', { p50: number | null; p95: number | null }>
+  requests: { chat: number; embed: number; rerank: number }
+  tokens: { prompt: number; output: number; cached: number }
+  cache: { embedHits: number; embedMisses: number; answerHits: number; answerMisses: number }
+  limits: { rateLimited: number; rejected: number }
+  perMinute: number[]
 }
 
 export interface DocPilotServerOptions {
@@ -84,11 +127,17 @@ export interface DocPilotServerOptions {
 }
 
 export interface DocPilotServer {
-  /** Web-standard handler: Node 20+, Bun, Deno, Workers, edge functions. */
-  handle(request: Request): Promise<Response>
+  /**
+   * Web-standard handler: Node 20+, Bun, Deno, Workers, edge functions. `info`
+   * carries what a `Request` cannot: the client's address, for the limiter and
+   * for loopback-only metrics. Without it every request is one client.
+   */
+  handle(request: Request, info?: { remoteAddress?: string | null } | null): Promise<Response>
   /** `node:http` / Express / Connect middleware. */
   node(req: any, res: any, next?: (err?: unknown) => void): Promise<void>
   endpoint: string
+  /** The in-memory counters behind `/metrics`. */
+  metrics: { snapshot(extra?: Record<string, unknown>): MetricsSnapshot; prometheus(extra?: Record<string, unknown>): string }
   /** The shell the panel receives: pages and sections, no thresholds or corpus. */
   manifest(): { version: number; hash: string; chunkCount: number; pages: unknown[]; sections: unknown[]; orphanPages: string[] }
 }
