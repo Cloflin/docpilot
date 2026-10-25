@@ -700,7 +700,7 @@ An illustration — the figures are an example project's, not this site's:
 | `project` | the config file and the settings | the runtime, the config path, and where the docs, the index and the eval sets live |
 | `index` | `manifest.json`, and the docs chunked offline | fresh or stale, the hash, chunks, pages, the embedder, dims, quantisation, bytes on disk and an estimate of them over brotli |
 | `guard` | `manifest.guard`, `calibration*.json` | `guard.mode`, the thresholds the index ships and where they came from, and whether the calibration on disk still describes this index |
-| `eval sets` | `golden.jsonl`, `chains.jsonl`, `adversarial.jsonl`, `calibration.jsonl` | counts by `expect`, `split` and `level`, and by `stratum` for the probes |
+| `eval sets` | `golden.jsonl`, `chains.jsonl`, `adversarial.jsonl`, `calibration.jsonl` | counts by `expect`, `split` and `level` — where `eval` scores each record, so an absent level counts at `high` and an absent split where its id assigns it — and by `stratum` for the probes |
 | `last eval` | the newest report under `${evalDir}/reports/` | the model, the tier, the age, and a scorecard: each metric, its move since the run `eval` compared it with, and a sparkline of it across earlier comparable runs |
 | `server` | `GET {endpoint}/manifest` and `GET {endpoint}/metrics?format=json` | reachable or not, the round trip, the index the process serves, and its metrics — *metrics unavailable* on a server that has none |
 | `next` | the rules below | the command, and why |

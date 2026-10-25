@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process'
 import { collectStatus, comparableRuns, corpusOf, nextStep, renderStatus } from '../src/cli-status.js'
 import { HOME_ACTIONS, homeChoices } from '../src/cli-home.js'
 import { previousReport } from '../src/eval/report.js'
+import { splitOf } from '../src/eval/levels.js'
 import { resolveDocPilot } from '../src/config.js'
 import { palette, stripAnsi, symbols } from '../src/cli-ui.js'
 import { COMMANDS } from '../src/cli-flags.js'
@@ -147,7 +148,14 @@ describe('the index block', () => {
 })
 
 describe('the eval sets block', () => {
-  it('counts each set by expect, split and level — and an absent level as high', async () => {
+  /**
+   * Counted where `eval` scores a record: an absent level at `high`, and an
+   * absent split where `splitOf` assigns it by id — so the two halves printed
+   * are the two halves `--split=dev` and `--split=test` will run.
+   */
+  it('counts each set by expect, split and level — where eval scores each record', async () => {
+    const effective = {}
+    for (const r of GOLDEN.trim().split('\n').map((l) => JSON.parse(l))) effective[splitOf(r)] = (effective[splitOf(r)] ?? 0) + 1
     const dir = project({
       'docpilot/golden.jsonl': GOLDEN + '{not json\n',
       'docpilot/chains.jsonl': jsonl([{ id: 'c-01', turns: [{ kind: 'base' }, { kind: 'relate' }] }, { id: 'c-02', turns: [{ kind: 'base' }] }]),
@@ -164,7 +172,7 @@ describe('the eval sets block', () => {
       records: 4,
       invalid: 1,
       byExpect: { answer: 3, 'refuse:no-evidence': 1 },
-      bySplit: { dev: 1, test: 1, '(none)': 2 },
+      bySplit: effective,
       byLevel: { low: 2, medium: 1, high: 1 },
     })
     expect(evalSets.chains).toMatchObject({ exists: true, records: 2, turns: 3, byKind: { base: 2, relate: 1 } })

@@ -34,7 +34,7 @@ import { chunkMarkdown } from './build/lib/chunker.js'
 import { specFiles } from './build/lib/openapi-chunker.js'
 import { routeOf } from './theme/docpilot/route.js'
 import { indexDirOf } from './config.js'
-import { DEFAULT_RUN_LEVEL, LEVELS, recordLevel } from './eval/levels.js'
+import { DEFAULT_RUN_LEVEL, LEVELS, recordLevel, splitOf } from './eval/levels.js'
 import { previousReport } from './eval/report.js'
 import { FAILED, OK, USAGE, printError } from './cli-exit.js'
 import { flagErrors, flagGiven, flagValue, helpFor } from './cli-flags.js'
@@ -304,8 +304,13 @@ const histogram = (records, of) => {
  * Counts by the three axes a set is cut along — `expect`, `split`, `level` —
  * plus `stratum` for the calibration probes. An axis no record carries is
  * null rather than `{ "(none)": 96 }`.
+ *
+ * `level` and `split` are counted where `eval` SCORES a record, not where the
+ * file states one: an absent level runs at `high` (`recordLevel`), and an
+ * absent split is assigned by the record's id (`splitOf`), so the counts are
+ * the halves `--split=dev` and `--split=test` will actually run.
  */
-function setSummary(file, rel, { level = false, stratum = false } = {}) {
+function setSummary(file, rel, { level = false, split = false, stratum = false } = {}) {
   const { exists, records, invalid } = readJsonl(file)
   const carries = (k) => records.some((r) => r?.[k] != null)
   const levelOrder = (h) => {
@@ -319,8 +324,12 @@ function setSummary(file, rel, { level = false, stratum = false } = {}) {
     records: records.length,
     invalid,
     byExpect: carries('expect') ? histogram(records, (r) => r.expect ?? '(none)') : null,
-    bySplit: carries('split') ? histogram(records, (r) => r.split ?? '(none)') : null,
-    // `recordLevel`, so an absent level counts where `eval` scores it — at `high`.
+    bySplit:
+      split && records.length
+        ? histogram(records, (r) => splitOf(r))
+        : carries('split')
+          ? histogram(records, (r) => r.split ?? '(none)')
+          : null,
     byLevel: level && records.length ? levelOrder(histogram(records, (r) => recordLevel(r))) : null,
     ...(stratum ? { byStratum: carries('stratum') ? histogram(records, (r) => r.stratum ?? '(none)') : null } : {}),
   }
@@ -332,7 +341,7 @@ function readEvalSets(docPilot, root) {
   const chainsFile = path.join(dir, 'chains.jsonl')
   const chains = readJsonl(chainsFile)
   return {
-    golden: setSummary(path.join(dir, 'golden.jsonl'), rel, { level: true }),
+    golden: setSummary(path.join(dir, 'golden.jsonl'), rel, { level: true, split: true }),
     chains: {
       file: rel(chainsFile),
       exists: chains.exists,
@@ -341,7 +350,8 @@ function readEvalSets(docPilot, root) {
       turns: chains.records.reduce((a, r) => a + (Array.isArray(r?.turns) ? r.turns.length : 0), 0),
       byKind: chains.records.length ? histogram(chains.records.flatMap((r) => (Array.isArray(r?.turns) ? r.turns : [])), (t) => t?.kind ?? '(none)') : null,
     },
-    adversarial: setSummary(path.join(dir, 'adversarial.jsonl'), rel, { level: true }),
+    // `eval --set=adversarial` filters its probes through the same `splitOf`.
+    adversarial: setSummary(path.join(dir, 'adversarial.jsonl'), rel, { level: true, split: true }),
     calibration: setSummary(path.join(dir, 'calibration.jsonl'), rel, { stratum: true }),
   }
 }
