@@ -34,14 +34,16 @@ first.
    `bench/harborline` for both.
 3. The 2.0 defaults per install are the measured ones: the static install keeps
    1.x retrieval (no lever beat it on two corpora — spec 034); the server install
-   ships limits and a deadline on (spec 033) and keeps the agentic loop until the
-   Harborline matrix decides `server.turn` (spec 031).
+   ships limits and a deadline on (spec 033) and a one-shot turn without
+   reasoning (spec 031: first token 25.0 s → 8.3 s on Harborline, quality inside
+   the noise). The static install was checked against 1.5 on the same 65
+   questions: all 65 answers byte-identical.
 
 ## Why it is 2.0
 
 Behaviour a deployment relied on changes without its config changing: a server
-install now refuses past its limits and its deadline, unsigned history is
-demoted, and every index file name changes. Each is listed in the changelog's
+install now refuses past its limits and its deadline, answers in one shot,
+demotes unsigned history, and every index file name changes. Each is listed in the changelog's
 **Breaking** block with the one setting that restores 1.x.
 
 ## What this does not do

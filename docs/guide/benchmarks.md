@@ -39,8 +39,8 @@ An **arm** is an index build: how the corpus is chunked, embedded and stored. A 
 |---|---|---|
 | `v1.5 static` | `v1.5` | the released 1.5 CLI, from a checkout of `main` |
 | `v2.0 static` | `base` | `runtime: 'browser'` |
-| `v2.0 server` | `base` | `runtime: 'server'` |
-| `v2.0 server one-shot` | `base` | `runtime: 'server'` with `turn.loop: 'one-shot'` and no final reasoning |
+| `v2.0 server` | `base` | `runtime: 'server'`, the 2.0 default turn: one-shot, no reasoning before the answer |
+| `v2.0 server agentic` | `base` | `runtime: 'server'` with `turn.loop: 'agentic'`, the 1.x server turn |
 
 The 1.5 baseline is the code that shipped, run from a built checkout, not a model of it.
 

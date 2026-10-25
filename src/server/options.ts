@@ -38,12 +38,17 @@ export interface ServerOperatorSettings {
   /**
    * How a server turn spends its model calls — engine-spec 031.
    *
-   *   · `loop: 'agentic'` — the tool loop the browser runs (default);
-   *     `'one-shot'` — straight to the answer call with the evidence the gate
-   *     retrieved; `'adaptive'` — one-shot when that evidence is strong
-   *     (`G >= adaptiveG`), the loop otherwise.
-   *   · `finalThink: false` — no reasoning before the answer. On a local model
-   *     that is most of the wait for the first token.
+   *   · `loop: 'one-shot'` (default) — straight to the answer call with the
+   *     evidence the gate retrieved; `'agentic'` — the tool loop the browser
+   *     runs, which is the 1.x server turn; `'adaptive'` — one-shot when that
+   *     evidence is strong (`G >= adaptiveG`), the loop otherwise.
+   *   · `finalThink` — reasoning before the answer. Off by default for
+   *     one-shot: on a local model it is most of the wait for the first token.
+   *     The loops keep the model's own default, as 1.x did.
+   *
+   * Measured on Harborline (65 questions, local qwen3:8b): one-shot without
+   * reasoning brings the first token from 25.0 s to 8.3 s at the median with
+   * answer F1 and citations inside the noise of the agentic loop.
    */
   turn?: { loop?: 'agentic' | 'one-shot' | 'adaptive'; adaptiveG?: number; finalThink?: boolean }
 }
@@ -56,8 +61,10 @@ export const SERVER_DEFAULTS = {
   embedTimeoutMs: 20000,
   cache: { embeddings: 1000, answers: false as false | { ttlMs: number; max: number } },
   allowedOrigins: null as string[] | null,
-  turn: { loop: 'agentic', adaptiveG: 0.6, finalThink: null },
+  turn: { loop: 'one-shot' as 'agentic' | 'one-shot' | 'adaptive', adaptiveG: 0.6, finalThink: false as boolean | null },
 }
+
+const LOOPS = ['one-shot', 'agentic', 'adaptive']
 
 const positive = (v, dflt) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : dflt)
 
@@ -83,6 +90,7 @@ export function resolveServerOptions(
       ? false
       : { ...SERVER_DEFAULTS.limits, ...(typeof s.limits === 'object' ? s.limits : {}) }
   const answers = s.cache?.answers
+  const loop = LOOPS.includes(s.turn?.loop) ? s.turn.loop : SERVER_DEFAULTS.turn.loop
   return {
     metrics: s.metrics === false ? false : { token },
     limits,
@@ -98,9 +106,10 @@ export function resolveServerOptions(
     },
     allowedOrigins: Array.isArray(s.allowedOrigins) ? s.allowedOrigins.map(String) : null,
     turn: {
-      loop: s.turn?.loop === 'one-shot' || s.turn?.loop === 'adaptive' ? s.turn.loop : 'agentic',
-      adaptiveG: positive(s.turn?.adaptiveG, 0.6),
-      finalThink: typeof s.turn?.finalThink === 'boolean' ? s.turn.finalThink : null,
+      loop,
+      adaptiveG: positive(s.turn?.adaptiveG, SERVER_DEFAULTS.turn.adaptiveG),
+      finalThink:
+        typeof s.turn?.finalThink === 'boolean' ? s.turn.finalThink : loop === 'one-shot' ? SERVER_DEFAULTS.turn.finalThink : null,
     },
   }
 }

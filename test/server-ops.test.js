@@ -362,12 +362,23 @@ describe('the server turn policy', () => {
     expect(rec.iterations).toBe(0)
   })
 
-  it('without a policy the turn is the browser’s, call for call', async () => {
+  it('the 2.0 default is one-shot without reasoning, and `loop: agentic` is the browser’s turn, call for call', async () => {
+    const { resolveServerOptions } = await import('../src/server/options.js')
+    expect(resolveServerOptions().turn).toEqual({ loop: 'one-shot', adaptiveG: 0.6, finalThink: false })
+    expect(resolveServerOptions({ turn: { loop: 'agentic' } }).turn.finalThink).toBe(null)
     const base = await stub.ready
     const records = []
-    const dp = await createDocPilotServer({ settings: chatOf(base), env: { CUSTOM_BASE_URL: base }, index: INDEX, log: { write: (r) => records.push(r) } })
-    await (await dp.handle(post({ question: 'How do I build the index?', messageId: 'pol-2' }))).text()
-    expect(records.find((r) => r.messageId === 'pol-2').timing.loop).toBe(null)
+    const dflt = await createDocPilotServer({ settings: chatOf(base), env: { CUSTOM_BASE_URL: base }, index: INDEX, log: { write: (r) => records.push(r) } })
+    await (await dflt.handle(post({ question: 'How do I build the index?', messageId: 'pol-2' }))).text()
+    expect(records.find((r) => r.messageId === 'pol-2').timing.loop).toBe('one-shot')
+    const agentic = await createDocPilotServer({
+      settings: { ...chatOf(base), server: { turn: { loop: 'agentic' } } },
+      env: { CUSTOM_BASE_URL: base },
+      index: INDEX,
+      log: { write: (r) => records.push(r) },
+    })
+    await (await agentic.handle(post({ question: 'How do I build the index?', messageId: 'pol-3' }))).text()
+    expect(records.find((r) => r.messageId === 'pol-3').timing.loop).toBe(null)
   })
 })
 

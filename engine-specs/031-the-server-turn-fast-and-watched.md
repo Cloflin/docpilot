@@ -55,10 +55,12 @@ Measured on this repository's docs with the server runtime and a local qwen3:8b
 4. **Caches** — query vectors per process (`server.cache.embeddings`, 1000); whole
    first-turn answers, opt-in (`server.cache.answers: {ttlMs, max}`), keyed by
    index hash, prompt hash, model, language and the normalised question.
-5. **`server.turn`** — `loop: 'agentic'` (default: the browser's loop),
-   `'one-shot'` (straight to the answer call with the gate's evidence),
-   `'adaptive'` (one-shot when `G >= adaptiveG`, 0.6); `finalThink: false` (no
-   reasoning before the answer). The browser runtime never reads it.
+5. **`server.turn`** — `loop: 'one-shot'` (straight to the answer call with
+   the gate's evidence), `'agentic'` (the browser's loop, the 1.x server turn),
+   `'adaptive'` (one-shot when `G >= adaptiveG`, 0.6); `finalThink` (reasoning
+   before the answer). The browser runtime never reads it. The default, decided
+   by the Harborline run below, is one-shot with `finalThink: false`; an
+   `'agentic'` or `'adaptive'` turn keeps the model's own reasoning default.
 
 ## Measured
 
@@ -71,8 +73,23 @@ DocPilot's own docs, server runtime in-process, qwen3:8b on Ollama, bge-m3, the
 | one-shot, `finalThink: false` | 0.363 | 0.38 / 0.44 | 2 / 6 | 25.9 s / 78.2 s | 10.5 s / 19.3 s | 1.00 | 2,244 |
 
 The first token arrives 4.4× sooner and the median turn ends a third sooner, at
-a cost inside the noise of 22 records. Harborline (65 records,
-`bench/harborline/results/RESULTS.md`) decides whether it becomes the default.
+a cost inside the noise of 22 records.
+
+Harborline, the same model, 65 records at `--level=high` (50 positives, 15
+negatives), `bench/harborline/results/RESULTS.md`:
+
+| `server.turn` | answer F1 | citation P / R | negatives caught | latency p50 / p95 | first token p50 / p95 | requests / turn | prompt tokens |
+|---|---|---|---|---|---|---|---|
+| agentic, reasoning (1.x) | 0.407 | 0.56 / 0.78 | 6 / 15 | 25.0 s / 40.2 s | 25.0 s / 40.2 s | 1.11 | 2,757 |
+| one-shot, `finalThink: false` | 0.414 | 0.60 / 0.74 | 6 / 15 | 19.5 s / 39.3 s | 8.3 s / 9.8 s | 0.98 | 2,004 |
+
+Paired against the loop, one-shot moved answer F1 by +0.009 [−0.015, 0.031],
+citation precision by +0.036 [−0.054, 0.126] and recall by −0.036 [−0.128,
+0.056]: no quality change either corpus can show, a first token three times
+sooner on both. **Decision: one-shot without reasoning is the 2.0 default**;
+`turn: {loop: 'agentic'}` restores the 1.x turn. Its one failure in 65 was a
+generation that ran into the 120 s step timeout — an Ollama model has no
+output ceiling unless `chat.maxTokens` sets one.
 
 ## Why it fits
 

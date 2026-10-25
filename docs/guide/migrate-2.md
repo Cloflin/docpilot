@@ -45,6 +45,7 @@ Skip this section if you run the static install.
 
 | change | what you do |
 |---|---|
+| **The turn is one-shot.** A server turn goes straight to the answer call with the gate's evidence and no reasoning before it. On a local model the first token comes about three times sooner, with answer quality inside the noise of 1.x | To keep the 1.x tool loop, set `server: { turn: { loop: 'agentic' } }` |
 | **Limits are on.** Each client gets 10 turns a minute (burst 10) and 500 a day, 3 at once, and the server runs 16 at once. A refused turn is `429` with `Retry-After`, or `503` when the server is full | If a proxy already limits, set `server: { limits: false }`. Otherwise check the numbers against your traffic and raise them in `server.limits` |
 | **The client is the socket's address.** Behind a proxy, every reader looks like the proxy | Set `server.trustProxy` to the number of hops in front of the server |
 | **A turn has a deadline**, 300 seconds | Change `server.turnTimeoutMs` if your model is slower or you want it shorter |

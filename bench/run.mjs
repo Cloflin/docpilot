@@ -46,8 +46,10 @@ export const ARMS = {
 export const SYSTEMS = {
   'v1.5 static': { arm: 'v1.5', cli: 'v1.5', runtime: 'browser', env: {} },
   'v2.0 static': { arm: 'base', cli: 'v2', runtime: 'browser', env: {} },
+  // The 2.0 server default: one-shot, no reasoning before the answer (engine-spec 031).
   'v2.0 server': { arm: 'base', cli: 'v2', runtime: 'server', env: {} },
-  'v2.0 server one-shot': { arm: 'base', cli: 'v2', runtime: 'server', env: { DOCPILOT_SERVER_LOOP: 'one-shot', DOCPILOT_SERVER_FINAL_THINK: '0' } },
+  // The 1.x server turn, kept as the measured alternative.
+  'v2.0 server agentic': { arm: 'base', cli: 'v2', runtime: 'server', env: { DOCPILOT_SERVER_LOOP: 'agentic' } },
 }
 
 const binOf = (cli) => {

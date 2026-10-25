@@ -39,9 +39,9 @@ export const docPilot = {
 | `cache.answers` | `false` | `{ttlMs, max}` caches whole first-turn answers. `ttlMs` defaults to `3600000` and `max` to `500` once you give the object. See [Caches](#caches) |
 | `metrics` | `true` | `false` removes the route. A token comes from `DOCPILOT_METRICS_TOKEN`, or from `metrics: {token}`. See [The metrics endpoint](#metrics) |
 | `allowedOrigins` | `null` | When set, a `POST` that carries any other `Origin` gets `403` |
-| `turn.loop` | `'agentic'` | `'one-shot'` skips the tool loop. `'adaptive'` skips it when `G >= turn.adaptiveG`. See [The turn policy](#turn-policy) |
+| `turn.loop` | `'one-shot'` | `'agentic'` runs the tool loop, the 1.x server turn. `'adaptive'` skips the loop when `G >= turn.adaptiveG`. See [The turn policy](#turn-policy) |
 | `turn.adaptiveG` | `0.6` | The evidence strength at which `'adaptive'` goes one-shot |
-| `turn.finalThink` | unset | `false` removes the reasoning before the answer. Unset leaves it on |
+| `turn.finalThink` | `false` with one-shot | `true` keeps the reasoning before the answer. With `'agentic'` or `'adaptive'` an unset value leaves the model's own default, as 1.x did |
 
 A timeout, a cache size or `turn.adaptiveG` that is not a positive number falls back to its default. `docpilot status` shows the server your project would reach, and `docpilot monitor` shows what it is doing — see [The terminal](/features/terminal).
 
@@ -89,14 +89,16 @@ Only a turn with no history, no quote, no addendum and no narrowed scope is cach
 
 ## The turn policy {#turn-policy}
 
-By default a server turn runs the same tool loop the browser runs: the model searches, reads sections and then answers.
+By default a server turn goes straight to the answer call with the evidence the gate retrieved, and the model does not reason before it answers. The browser's turn, and the 1.x server turn, run a tool loop instead: the model searches, reads sections and then answers.
 
 | setting | effect |
 |---|---|
-| `turn.loop: 'agentic'` | The tool loop. The default |
-| `turn.loop: 'one-shot'` | Straight to the answer call, with the evidence the gate retrieved. Fewer model calls |
+| `turn.loop: 'one-shot'` | Straight to the answer call, with the evidence the gate retrieved. The default |
+| `turn.loop: 'agentic'` | The tool loop, call for call the browser's turn. Restores the 1.x server turn |
 | `turn.loop: 'adaptive'` | One-shot when `G >= turn.adaptiveG` (`0.6`), the loop otherwise |
-| `turn.finalThink: false` | No reasoning before the answer. On a local model, reasoning is most of the wait for the first token |
+| `turn.finalThink: true` | Reasoning before the answer. On a local model, reasoning is most of the wait for the first token |
+
+On Harborline with a local `qwen3:8b`, the default brings the first token from 25.0 s to 8.3 s at the median and the whole answer from 25.0 s to 19.5 s, with answer F1 and citations inside the noise of the loop — see the [benchmark page](/guide/benchmarks). The cost is that the model cannot search again inside a turn. A long local generation is bounded only by the step timeout, so set `chat.maxTokens` on a server that answers with a local model.
 
 Measure a policy before you adopt it. `eval --runtime=server` scores the golden set through the server turn, so you compare answer quality and latency between policies on your own questions — see [Measure](/guide/measure). The [benchmark page](/guide/benchmarks) shows the policies compared on the Harborline corpus.
 

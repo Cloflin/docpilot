@@ -627,7 +627,7 @@ export interface ServerSettings {
   }
   /** When set, a POST whose `Origin` is not listed is refused. */
   allowedOrigins?: string[] | null
-  /** How a server turn spends its model calls. Default: the browser's agentic loop. */
+  /** How a server turn spends its model calls. Default: `'one-shot'` without reasoning; `loop: 'agentic'` is the 1.x turn. */
   turn?: { loop?: 'agentic' | 'one-shot' | 'adaptive'; adaptiveG?: number; finalThink?: boolean }
 }
 
