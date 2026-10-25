@@ -588,9 +588,24 @@ it('concurrent appends: 200 simultaneous POSTs, every line intact', async () => 
     const r = await up()
     onTestFinished(() => r.close())
     const N = 200
+    // macOS caps the listen backlog at kern.ipc.somaxconn (128 by default), so
+    // some of 200 simultaneous connects are reset before the server sees them.
+    // A reset at `connect` sent no request, so retrying it cannot duplicate a
+    // line; anything later is a real failure and is not retried.
+    const post = async (body, tries = 5) => {
+        try {
+            return await r.post(body)
+        } catch (err) {
+            if (tries > 1 && err?.cause?.syscall === 'connect' && err.cause.code === 'ECONNRESET') {
+                await new Promise((res) => setTimeout(res, 25 * (6 - tries) + Math.random() * 25))
+                return post(body, tries - 1)
+            }
+            throw err
+        }
+    }
     const results = await Promise.all(
         Array.from({length: N}, (_, i) =>
-            r.post(ROW({messageId: `m-${i}`, revision: 1, comment: `${i}:` + 'z'.repeat(400)})),
+            post(ROW({messageId: `m-${i}`, revision: 1, comment: `${i}:` + 'z'.repeat(400)})),
         ),
     )
     assert.deepEqual([...new Set(results.map((x) => x.status))], [204])
