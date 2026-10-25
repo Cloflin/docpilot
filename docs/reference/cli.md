@@ -909,7 +909,7 @@ A live view of a running [server runtime](/guide/server). It polls `GET {endpoin
 
 **Off a terminal it prints one JSON line per poll**, the snapshot exactly as the server sent it, so the same command feeds a log. A poll that fails says why on stderr, and the next one goes on.
 
-The snapshot is a `{"kind": "docpilot.metrics", "v": 1, …}` object: `turns` (with `byOutcome`), `latencyMs` and `ttftMs` percentiles, `stagesMs`, `requests`, `tokens`, `cache`, `limits`, and `perMinute`, the last thirty one-minute buckets, oldest first. Any field may be missing or null — a server that has answered no turn yet has no p95 — and each one is drawn as `—`. A server from before `/metrics` existed answers `404`, and `monitor` says *metrics unavailable* rather than failing; one that wants a token answers `401`, and it says which variable to set.
+The snapshot is a `{"kind": "docpilot.metrics", "v": 1, …}` object: `turns` (with `byOutcome`), `latencyMs` and `ttftMs` percentiles, `stagesMs`, `requests`, `tokens`, `cache`, `limits`, and `perMinute`, the last thirty one-minute buckets, oldest first. Any field may be missing or null — a server that has answered no turn yet has no p95 — and each one is drawn as `—`. A server with no `/metrics` route — `server.metrics: false`, or a version from before the route existed — answers `404`, and `monitor` says *metrics unavailable* rather than failing; one that wants a token answers `401`, and off loopback without one `403`, and for both it says which variable to set.
 
 ## `traffic`
 

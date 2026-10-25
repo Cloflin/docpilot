@@ -100,7 +100,7 @@ export async function fetchMetrics(
   if (!res.ok) {
     const error =
       res.status === 404
-        ? 'metrics unavailable — this server has no /metrics (it predates engine-spec 031)'
+        ? 'metrics unavailable — this server has no /metrics: server.metrics is false, or it predates them'
         : res.status === 401 || res.status === 403
           ? `metrics refused (HTTP ${res.status}) — pass --token, or set DOCPILOT_METRICS_TOKEN`
           : `metrics answered HTTP ${res.status}`
