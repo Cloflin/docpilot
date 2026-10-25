@@ -72,7 +72,8 @@ import { evalEmbedKey, nodeEmbedTarget } from '../config.js'
 import { applyFileEnv } from '../cli-env.js'
 import { prefetchEmbeddings } from './prefetch.js'
 import { flagErrors, flagValue, flagGiven } from '../cli-flags.js'
-import { printError, codeFor, tick, tock, FAILED, USAGE } from '../cli-exit.js'
+import { printError, codeFor, FAILED, USAGE } from '../cli-exit.js'
+import { meter } from '../cli-ui.js'
 
 import {
   ROOT,
@@ -477,6 +478,8 @@ async function embed(text, index) {
  */
 async function probeRecords(index, guard, records, lexical) {
   if (!lexical) {
+    // A bar with an ETA under a terminal (engine-spec 030); the same lines in a log.
+    const queries = meter('queries')
     const { vectors, requests } = await prefetchEmbeddings(
       // `chainTexts` and not a hand-written pair: the enumeration has to be the
       // one `resolveChain` will ask for, and a prior turn's own question is a
@@ -488,14 +491,17 @@ async function probeRecords(index, guard, records, lexical) {
         apiKey: EMBED_KEY,
         model: index.manifest.embedModel,
       },
-      { onTick: (done, total) => tick(`embedded ${done}/${total} queries…`) },
+      { onTick: (done, total) => queries.tick(done, total, `embedded ${done}/${total} queries…`) },
     )
     for (const [t, v] of vectors) PREFETCHED.set(t, v)
-    if (vectors.size) tock(`embedded ${vectors.size} queries in ${requests} request(s)`)
+    if (vectors.size) queries.tock(`embedded ${vectors.size} queries in ${requests} request(s)`)
+    else queries.end()
   }
 
   const probes = []
   let embedded = 0
+  // Counted in records, the loop's own unit; the log keeps counting vectors.
+  const vectorsLine = meter('records')
   for (const rec of records) {
     const scope = rec.scope || ALL_SCOPE
     // The retrieval the cascade's prior turns are gated by. Not memoised per
@@ -568,9 +574,10 @@ async function probeRecords(index, guard, records, lexical) {
     // Not "embedded": the purchase happened above, in one pass. This counts the
     // vectors the sweep NEEDS, which is the number the line has always meant and
     // which the batch above may have served entirely from one request.
-    if (embedded && embedded % 20 === 0) tick(`vectors ${embedded}…`)
+    vectorsLine.tick(probes.length, records.length, `vectors ${embedded}…`, Boolean(embedded && embedded % 20 === 0))
   }
-  if (embedded) tock(`${embedded} query vectors for ${probes.length} records`)
+  if (embedded) vectorsLine.tock(`${embedded} query vectors for ${probes.length} records`)
+  else vectorsLine.end({ keep: false })
   return probes
 }
 

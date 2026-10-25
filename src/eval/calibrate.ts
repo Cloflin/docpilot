@@ -43,7 +43,8 @@ import { chainTexts, resolveChain } from './conversation.js'
 import { evalEmbedKey, nodeEmbedTarget } from '../config.js'
 import { applyFileEnv } from '../cli-env.js'
 import { entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
-import { printError, tick, tock, FAILED, USAGE } from '../cli-exit.js'
+import { printError, FAILED, USAGE } from '../cli-exit.js'
+import { meter } from '../cli-ui.js'
 
 import {
   ROOT,
@@ -615,6 +616,8 @@ const probeSha = () => {
 }
 
 async function prefetch(texts, index) {
+  // A bar with an ETA under a terminal (engine-spec 030); the same lines in a log.
+  const fetched = meter('probe texts')
   const { vectors, requests } = await prefetchEmbeddings(
     texts,
     {
@@ -623,13 +626,13 @@ async function prefetch(texts, index) {
       apiKey: EMBED_KEY,
       model: index.manifest.embedModel,
     },
-    { onTick: (done, total) => tick(`embedded ${done}/${total} probe texts…`) },
+    { onTick: (done, total) => fetched.tick(done, total, `embedded ${done}/${total} probe texts…`) },
   )
   EMBED_REQUESTS.count += requests
   for (const [t, v] of vectors) PREFETCHED.set(t, v)
   if (vectors.size) {
-    tock(`embedded ${vectors.size} probe texts in ${requests} request(s), ${BATCH} at a time`)
-  }
+    fetched.tock(`embedded ${vectors.size} probe texts in ${requests} request(s), ${BATCH} at a time`)
+  } else fetched.end()
 }
 
 async function embed(text, index) {
@@ -1362,6 +1365,9 @@ async function main() {
   const rows = []
   let embedded = 0
   const ladderPages = index.manifest.pages
+  // Counted over the whole set, cached rows included: that is the number that
+  // says how far through the probes this is. The log keeps its own count.
+  const probing = meter('probes')
   for (const rec of probes) {
     const sig = sigOf(rec, hash, lev, embedIdentity)
     const hit = cache.get(sig)
@@ -1393,9 +1399,9 @@ async function main() {
     row.sig = sig
     rows.push(row)
     embedded++
-    if (embedded % 20 === 0) tick(`probed ${embedded} new…`)
+    probing.tick(rows.length, probes.length, `probed ${embedded} new…`, embedded % 20 === 0)
   }
-  if (embedded) tock(`probed ${embedded} new, ${rows.length - embedded} cached`)
+  if (embedded) probing.tock(`probed ${embedded} new, ${rows.length - embedded} cached`)
   else console.log(`  all ${rows.length} probes served from the cache`)
 
   // Rewrite the cache with every row currently known, so a partial run still

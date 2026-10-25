@@ -49,7 +49,8 @@ import { promptHash } from '../theme/docpilot/prompt.js'
 import { nodeChatTarget } from '../config.js'
 import { applyFileEnv } from '../cli-env.js'
 import { entryFlagError, flagValue } from '../cli-flags.js'
-import { printError, tick, FAILED, USAGE } from '../cli-exit.js'
+import { printError, FAILED, USAGE } from '../cli-exit.js'
+import { meter } from '../cli-ui.js'
 import {
   terms,
   estTokens,
@@ -233,8 +234,28 @@ const embedder = providerFor(EMBED.provider)
 
 const EXCLUDE = new Set(['/index', '/new-file'])
 
-const warn = (m) => console.warn(`  warn  ${m}`)
+/**
+ * A WARNING IS SAID ONCE — engine-spec 030.
+ *
+ * `index --dry` on this repository printed each of four `sections collapsed as
+ * set-equal` warnings four times, and a table split three times over: sixteen
+ * lines carrying four facts, in the column where the stale-guard line has to
+ * be read. So `warn` COLLECTS, and `flushWarnings` prints each distinct
+ * message once, in the order it was first said, with `×N` when it repeated.
+ *
+ * Flushed at every boundary a reader would expect the warning by: before the
+ * corpus figures, when the embedder is skipped or restarted, after the guard
+ * and the levers are decided, after the openers, at the end — and in `die`, so
+ * a fatal error is never printed without the warnings that led up to it.
+ */
+const warned = new Map<string, number>()
+const warn = (m) => warned.set(String(m), (warned.get(String(m)) ?? 0) + 1)
+const flushWarnings = () => {
+  for (const [m, n] of warned) console.warn(`  warn  ${m}${n > 1 ? `  ×${n}` : ''}`)
+  warned.clear()
+}
 const die = (m) => {
+  flushWarnings()
   printError(m)
   process.exit(FAILED)
 }
@@ -601,6 +622,10 @@ async function embedCandidatesFor() {
 
 async function embedAll(texts) {
   const { model, pool } = await embedCandidatesFor()
+  // A bar with an ETA under a terminal, the old tenth-of-the-way lines in a
+  // log — and it owns the end of its own line, which the three bare
+  // `process.stdout.write('\n')` calls here used to do on the wrong stream.
+  const progress = meter('embedding')
   const run = createEmbedder({
     model,
     pool,
@@ -612,8 +637,8 @@ async function embedAll(texts) {
      * here, because `createEmbedder` was built with exactly one exit.
      */
     fail: (m) => {
+      progress.end()
       if (!EMBED_FALLBACK_LEXICAL) die(m)
-      process.stdout.write('\n')
       console.log(
         `\n  FELL BACK  no embedder answered, and embed.fallback is "lexical".\n` +
           `             ${m.split('\n')[0]}\n` +
@@ -631,18 +656,29 @@ async function embedAll(texts) {
     // build log gets quoted for.
     onChoose: (model, dims, size) =>
       console.log(`  embedder  ${model} · ${dims}d — chosen from ${size} candidate(s)`),
-    onSkip: (model, why) => warn(`${model} is not answering (${why}); trying the next embedder`),
+    onSkip: (model, why) => {
+      warn(`${model} is not answering (${why}); trying the next embedder`)
+      flushWarnings()
+    },
     onRestart: (from, to, why) => {
-      process.stdout.write('\n')
+      // The bar is for the vectors being DISCARDED, so it goes; the next pass
+      // draws its own from zero.
+      progress.end({ keep: false })
       warn(
         `"${from}" stopped answering mid-pass (${why}) — restarting on "${to}". ` +
           'Vectors already collected are discarded: one index, one vector space.',
       )
+      flushWarnings()
     },
     // The one caller that does NOT throttle itself: `createEmbedder` reports
     // per batch, and a log wants a tenth of that.
     onProgress: (done, total) =>
-      tick(`embedding ${done}/${total}`, done === total || done % Math.max(1, Math.ceil(total / 10)) === 0),
+      progress.tick(
+        done,
+        total,
+        `embedding ${done}/${total}`,
+        done === total || done % Math.max(1, Math.ceil(total / 10)) === 0,
+      ),
     onCache: (hits, total) => {
       if (hits) console.log(`  cache     ${hits}/${total} vectors already bought`)
     },
@@ -675,7 +711,7 @@ async function embedAll(texts) {
   // The manifest, the guard and the nomic prefix all read this, and until now it
   // was a guess made in the config file rather than the answer the pool gave.
   EMBED_MODEL = out.model
-  process.stdout.write('\n')
+  progress.end()
   return out.vectors
 }
 
@@ -1549,6 +1585,8 @@ async function main() {
   const pct = (q) => lens[Math.floor(lens.length * q)] || 0
   const normBytes = chunks.reduce((a, c) => a + c.text.length, 0)
 
+  // Everything the corpus pass had to say, once each, above its figures.
+  flushWarnings()
   console.log(
     `  pages            ${pageList.length}` +
       (imported ? ` (${imported} imported, ${external} of them external)` : ''),
@@ -1734,6 +1772,7 @@ async function main() {
    */
   const guard = guardFor(hash)
   const tuning = tuningFor(hash)
+  flushWarnings()
 
   const manifest = {
     version: 3,
@@ -1877,6 +1916,7 @@ async function main() {
       previous: previousOpeners,
       warn,
     })
+    flushWarnings()
     if (bundle) {
       const bytes = Buffer.from(json)
       manifest.openers = write(named('openers', '.json', bytes), bytes)
@@ -1934,6 +1974,7 @@ async function main() {
 
   if (total > FAIL_BYTES) die(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB, over the 5 MB ceiling`)
   if (total > WARN_BYTES) warn(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB — Plan B applies (RAG-SPEC 2.4)`)
+  flushWarnings()
   console.log('')
 }
 
@@ -1942,6 +1983,7 @@ async function main() {
 // deliberate.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((e) => {
+    flushWarnings()
     printError(e.message || String(e), e)
     process.exit(FAILED)
   })

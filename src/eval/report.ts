@@ -32,8 +32,15 @@ import { TAXONOMY_ORDER } from './metrics.js'
  */
 const levelOf = (m) => m?.level ?? DEFAULT_RUN_LEVEL
 
-/** Metrics where a larger number is better. Everything else reads the other way. */
-const HIGHER_IS_BETTER = new Set([
+/**
+ * Metrics where a larger number is better. Everything else reads the other way.
+ *
+ * EXPORTED for engine-spec 030: the scorecard at the end of `eval` and the one
+ * in `docpilot status` colour a delta by whether the move is good, and that
+ * judgement is made HERE and nowhere else — a second list in the renderer
+ * would be a second opinion about which way recall is supposed to go.
+ */
+export const HIGHER_IS_BETTER = new Set([
   'retrievalF1',
   'recall8',
   'mrr',
@@ -58,8 +65,8 @@ const HIGHER_IS_BETTER = new Set([
   'cachedShare',
 ])
 
-/** Metrics reported as a count or a cost: lower is better, or neutral. */
-const LOWER_IS_BETTER = new Set([
+/** Metrics reported as a count or a cost: lower is better, or neutral. Exported with the set above. */
+export const LOWER_IS_BETTER = new Set([
   'unsupportedAnswerRate',
   'hallucinated',
   'gateOverRefusal',
@@ -665,4 +672,8 @@ export function writeReport({ dir, name, meta, summary, rows }) {
   }
   // The directory the caller passed, not a literal: `evalDir` moves it.
   console.log(`  report written to ${path.relative(process.cwd(), path.join(dir, name))}\n`)
+  // What was paired, handed back for the scorecard `eval` draws on a terminal
+  // (engine-spec 030) — the same `prev` and the same `diff` this file just
+  // wrote, so the colours and the report cannot disagree about a delta.
+  return { prev, diff, incomparable }
 }

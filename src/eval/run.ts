@@ -78,7 +78,9 @@ import { ROOT, RAG, REPORTS, GOLDEN, DOCS, DOCPILOT_DIR, CONFIG, settings as doc
 import { applyFileEnv } from '../cli-env.js'
 import { prefetchEmbeddings } from './prefetch.js'
 import { COMMANDS, entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
-import { printError, codeFor, tick, tock, FAILED, USAGE } from '../cli-exit.js'
+import { printError, codeFor, redraws, FAILED, USAGE } from '../cli-exit.js'
+import { meter, progress, rule, ui } from '../cli-ui.js'
+import { renderScorecard, scorecardRows } from '../cli-scorecard.js'
 
 /**
  * The hash of the instruction THIS project sends, not of the shipped default.
@@ -609,6 +611,7 @@ async function probeRecords(index, guard, records) {
    */
   if (!LEXICAL) {
     const wanted = records.flatMap((rec) => chainTexts(rec))
+    const queries = meter('queries')
     const { vectors, requests } = await prefetchEmbeddings(
       wanted,
       {
@@ -617,10 +620,11 @@ async function probeRecords(index, guard, records) {
         apiKey: EMBED_KEY,
         model: index.manifest.embedModel,
       },
-      { onTick: (done, total) => tick(`embedded ${done}/${total} queries…`) },
+      { onTick: (done, total) => queries.tick(done, total, `embedded ${done}/${total} queries…`) },
     )
     for (const [t, v] of vectors) PREFETCHED.set(t, v)
-    if (vectors.size) tock(`embedded ${vectors.size} queries in ${requests} request(s)`)
+    if (vectors.size) queries.tock(`embedded ${vectors.size} queries in ${requests} request(s)`)
+    else queries.end()
   }
 
   const probes = []
@@ -835,7 +839,20 @@ export function primingProbe(probe, hop) {
 
 async function runModel({ model, probes, guard, fallback, thinkSupported }) {
   const rows = []
+  // The bar under the record lines — a terminal only; see `recordsBar`.
+  recordsBar = redraws() ? progress({ label: model, total: probes.length }) : null
+  recordsBar?.update(0)
+  try {
+    await runRecords({ model, probes, guard, fallback, thinkSupported, rows })
+  } finally {
+    // Taken down rather than left: the record lines above it are the record.
+    recordsBar?.finish(null)
+    recordsBar = null
+  }
+  return rows
+}
 
+async function runRecords({ model, probes, guard, fallback, thinkSupported, rows }) {
   for (const probe of probes) {
     const { rec, g } = probe
     const wantRefusal = rec.expect.startsWith('refuse')
@@ -1234,6 +1251,16 @@ function turn({
  */
 const expectEff = (r) => (r.scoredAsNegative ? 'refuse:out-of-scope' : r.expect)
 
+/**
+ * THE BAR UNDER THE RECORD LINES — engine-spec 030.
+ *
+ * A model run is minutes of one line per record, and none of them says how
+ * many are left. Under a terminal a progress bar with an ETA sits below the
+ * lines, and every line is printed ABOVE it. In a log it is null and nothing
+ * changes: the one line per record already is the progress there.
+ */
+let recordsBar: ReturnType<typeof progress> | null = null
+
 function report(row) {
   // `--quiet`: the summary and the report path only. An agent reading a run
   // (spec 036) pays for every line it is shown; a row per record is the report
@@ -1242,12 +1269,40 @@ function report(row) {
   const expect = expectEff(row)
   const ok =
     row.observed === expect || (expect.startsWith('refuse') && row.observed.startsWith('refuse'))
-  console.log(
+  const line =
     `${ok ? ' ok ' : 'MISS'} ${pad(row.id, 6)} G=${num(row.G)} ` +
-      `ret=${row.retrieval ? num(row.retrieval.f1) : ' — '} ` +
-      `ans=${num(row.answerF1)} lang=${row.language == null ? '—' : row.language ? 'ok' : 'WRONG'} ` +
-      `${((row.latencyMs || 0) / 1000).toFixed(0)}s  ${row.question.slice(0, 42)}`,
+    `ret=${row.retrieval ? num(row.retrieval.f1) : ' — '} ` +
+    `ans=${num(row.answerF1)} lang=${row.language == null ? '—' : row.language ? 'ok' : 'WRONG'} ` +
+    `${((row.latencyMs || 0) / 1000).toFixed(0)}s  ${row.question.slice(0, 42)}`
+  if (!recordsBar) return console.log(line)
+  recordsBar.above(() => console.log(line), { advance: 1 })
+}
+
+/**
+ * THE SCORECARD — engine-spec 030.
+ *
+ * The summary above it, again, as one coloured block with the move since the
+ * previous comparable report: the `prev` `writeReport` just paired this run
+ * with, so the arrows here are the deltas the report file records. A terminal
+ * only — piped, `eval` prints what it printed in 1.x, and every number in the
+ * block is already in the summary.
+ */
+function printScorecard(meta, s, prev) {
+  if (!process.stdout.isTTY) return
+  const view = ui(process.stdout)
+  const rows = scorecardRows(s, { prev: prev?.summary ?? null, gateOnly: Boolean(meta.gateOnly) })
+  if (!rows.length) return
+  const { c } = view
+  console.log(`  ${c.bold(rule(`scorecard · ${meta.model} · ${meta.level} · ${meta.records} records`, 64, { unicode: view.unicode }))}`)
+  for (const line of renderScorecard(rows, { ui: view, summary: s })) console.log(line)
+  console.log(
+    c.muted(
+      prev
+        ? `  Δ against the previous run of ${meta.model} on index ${meta.indexHash}${prev.meta?.ranAt ? `, ${prev.meta.ranAt}` : ''}`
+        : `  Δ — the first comparable run of ${meta.model} on index ${meta.indexHash}`,
+    ),
   )
+  console.log('')
 }
 
 /** Every aggregate the summary and the markdown report share. */
@@ -1978,7 +2033,8 @@ async function main() {
       ...abKnobs(),
       ...provenance(),
     }
-    writeReport({ dir: REPORTS, name: reportName(meta), meta, summary: s, rows })
+    const paired = writeReport({ dir: REPORTS, name: reportName(meta), meta, summary: s, rows })
+    printScorecard(meta, s, paired?.prev ?? null)
     runs.push({ meta, summary: s })
   }
 
