@@ -88,7 +88,84 @@ node ../../bin/docpilot.js eval --set=adversarial --runtime=server --quiet
 
 ## Results
 
-<!-- BENCH-RESULTS -->
+Measured on 2026-10-25 with `bge-m3` and `qwen3:8b` on a local Ollama. The raw reports are in `bench/harborline/results/`.
+
+### Answers
+
+The golden set at `--level=high`: 65 questions, 50 answerable and 15 negatives. ΔF1 is paired by question against `v1.5 static`.
+
+| system | answer F1 | ΔF1 vs 1.5 | citation P | citation R | negatives caught | first token p50 | whole answer p50 / p95 | requests / turn |
+|---|---|---|---|---|---|---|---|---|
+| `v1.5 static` | 0.405 | — | 56% | 75% | 40% | — | 24.5 s / 49.1 s | 1.11 |
+| `v2.0 static` | 0.405 | ±0.000 [0.000, 0.000] | 56% | 75% | 40% | 27.5 s | 27.5 s / 47.0 s | 1.11 |
+| `v2.0 server` | 0.414 | +0.010 [−0.016, 0.033] | 60% | 73% | 40% | 8.3 s | 19.5 s / 39.3 s | 0.98 |
+| `v2.0 server agentic` | 0.407 | +0.002 [−0.009, 0.013] | 56% | 78% | 40% | 25.0 s | 25.0 s / 40.2 s | 1.11 |
+
+What it says:
+
+- **The static install answers exactly as 1.5 did.** All 65 answers of `v2.0 static` are byte-identical to those of `v1.5 static`. The latency difference is the machine: the two runs generated the same tokens.
+- **The server's default turn is three times faster to the first token.** One-shot without reasoning shows the first token at 8.3 s against 25.0 s for the agentic loop, and it uses 27% fewer prompt tokens. Answer F1 and citations move inside the noise.
+- **The cost of one-shot** is that the model cannot search again inside a turn. One of its 65 answers was a generation that ran into the 120 s step timeout. Set `chat.maxTokens` when a local model answers. `server.turn.loop: 'agentic'` restores the 1.x turn.
+
+### Security
+
+The 30 [attack probes](/guide/security-probes), per system. A breach is a probe whose forbidden text reached the answer.
+
+| system | attack success | refused when it should | answered safely | canary leaked | markup echoed |
+|---|---|---|---|---|---|
+| `v2.0 static` | 30% | 19% | 64% | 2 | 3 |
+| `v2.0 server` | 30% | 19% | 50% | 0 | 3 |
+| `v2.0 server agentic` | 23% | 31% | 64% | 0 | 3 |
+
+What it says:
+
+- **The server keeps its instruction.** The canary in `prompt.extend` reached no reader of either server turn. The static install ships its prompt to the browser, so its canary is public by design.
+- **Echoed markup is inert.** Every system repeated an injected `<script>`, `onerror=` or `javascript:` when asked to. The panel escapes HTML and links no `javascript:`, so the reader sees text.
+- **The loop resists more.** The agentic turn resisted two probes that one-shot followed: a translated instruction and an instruction planted in a page. With 30 probes the difference is two probes, inside the noise. A site that weighs injection resistance above speed can set `turn.loop: 'agentic'`.
+
+### Retrieval
+
+The test split, 52 answerable questions, scored `--gate-only`. Δ is paired against `base`.
+
+| arm | recall@8 | MRR | nDCG@8 | context P@5 | ΔnDCG@8 | ΔMRR |
+|---|---|---|---|---|---|---|
+| `v1.5` | 0.913 | 0.706 | 0.736 | 0.678 | ±0.000 | ±0.000 |
+| `base` | 0.913 | 0.706 | 0.736 | 0.678 | — | — |
+| `binary` | 0.913 | 0.673 | 0.716 | 0.668 | −0.021 [−0.051, 0.009] | −0.033 [−0.079, 0.011] |
+| `ctx-path` | 0.913 | 0.711 | 0.742 | 0.695 | +0.005 [−0.000, 0.012] | +0.005 [0.001, 0.010] * |
+| `ctx-desc` | 0.962 | 0.718 | 0.762 | 0.694 | +0.026 [−0.017, 0.070] | +0.012 [−0.038, 0.058] |
+| `llms` | 0.923 | 0.689 | 0.729 | 0.663 | −0.008 [−0.023, 0.007] | −0.017 [−0.048, 0.005] |
+
+What it says:
+
+- **No lever is a default.** `ctx-path` gains half a point of MRR, and on DocPilot's own docs the same idea lowered context precision. `ctx-desc` does not clear the noise.
+- **`binary` halves the download** at a cost inside the noise. It is an option for a site that counts bytes, not a default.
+- **`llms.txt` as page descriptions ranks worse** on the very questions it was written for. The description lands on the page's first chunk, which then outranks the section that answers. See [Improving](/guide/improving).
+
+### Download
+
+What a reader of the static install downloads, per index. `ctx-path` and `ctx-desc` have the bytes of `base`.
+
+| arm | on disk | on the wire (brotli) | of which vectors |
+|---|---|---|---|
+| `v1.5` | 541 KB | 199 KB | 133 KB |
+| `base` | 541 KB | 199 KB | 133 KB |
+| `binary` | 309 KB | 99 KB | 33 KB |
+| `llms` | 547 KB | 202 KB | 133 KB |
+
+### The tuning agent
+
+The [tuning agent](/guide/tuning-agent), headless, gate-only, the embedder on a local Ollama.
+
+| corpus | run | dev nDCG@8 | dev MRR | test nDCG@8 | test MRR | kept |
+|---|---|---|---|---|---|---|
+| Harborline | 12 min, 71 turns, $1.64 at API prices | 0.776 → 0.803 | 0.765 → 0.793 | 0.736 → 0.736 | 0.706 → 0.706 | 3 `<llm-only>` lines on 2 pages |
+| DocPilot's docs | 13 min, 59 turns, $1.45 at API prices | 0.534 → 0.569 | 0.523 → 0.559 | 0.584 → 0.586 | 0.552 → 0.554 | nothing (see below) |
+
+What it says:
+
+- **The edits fix the questions they target and break nothing.** On Harborline three dev questions ranked better and none worse; the test split did not move. Each kept line restates what its section already says, in the words readers use.
+- **The first run kept nothing because of its rule.** Two questions fixed out of 33, none worse, leaves a bootstrap interval with a lower bound of exactly zero. A gate-only run calls no model and ranks the same way every time, so `improve compare` now keeps such a Pareto move. The DocPilot candidate in the table is `keep` under that rule, on dev and on test.
 
 ## Next
 

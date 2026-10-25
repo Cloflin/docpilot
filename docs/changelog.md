@@ -13,6 +13,22 @@ Each release in a few lines. The full notes — every change, every migration st
 
 <div class="cl">
 
+## 2.0.0
+
+<div class="cl-date">Oct 25, 2026</div>
+
+### Two installs, measured, and an agent that tunes your docs
+
+- **Choose your install first.** `npx docpilot init` asks where a question is answered: in the reader's browser (static) or on your server. See [Choose your install](/install/choose). Upgrading from 1.x: [Migrate to 2.0](/guide/migrate-2).
+- **A faster server turn.** One-shot by default: on a local model the first token comes three times sooner, with answer quality inside the noise. A metrics endpoint, stage timings in the turn log, and limits and a deadline on by default. See [Server operations](/guide/server-operations).
+- **A guarded server.** Signed history, a leak guard on your own instructions, a capped body. See [Security](/guide/security).
+- **A verified static index.** Every file is named by its own bytes and checked with Subresource Integrity. Its answers are byte-identical to 1.5's.
+- **Measure and improve.** `eval` scores the server turn, a dev and test split and attack probes; `docpilot improve` turns failing questions into edits and judges them; the `docpilot-tuner` agent runs that loop for you. See [Measure](/guide/measure) and [The tuning agent](/guide/tuning-agent).
+- **A terminal that shows the numbers.** `docpilot status`, `docpilot monitor` and an eval scorecard. See [The terminal](/features/terminal).
+- **Every claim is on a benchmark** you can rerun: [Harborline](/guide/benchmarks).
+
+<a class="cl-more" :href="gh('200--2026-10-25')">Full notes</a>
+
 ## 1.5.0
 
 <div class="cl-date">Oct 25, 2026</div>
