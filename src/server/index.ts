@@ -22,14 +22,22 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { assembleIndex } from '../theme/docpilot/store.js'
+import { createRetrieval } from '../theme/docpilot/retriever.js'
 import { resolveDocPilot, serverTurnConfig } from '../config.js'
 import { createTurnLog, type TurnLogOptions } from './log.js'
 import { parseTurnInput } from './input.js'
-import { runServerTurn } from './turn.js'
+import { runServerTurn, startToolProbe } from './turn.js'
+import { createMetrics } from './metrics.js'
+import { clientKey, createLimiter, isLoopback } from './limits.js'
+import { createLru } from './cache.js'
+import { resolveServerOptions } from './options.js'
 
-export { runServerTurn, sourceChunk } from './turn.js'
+export { runServerTurn, sourceChunk, startToolProbe } from './turn.js'
 export { parseTurnInput } from './input.js'
 export { createTurnLog, prune } from './log.js'
+export { createMetrics } from './metrics.js'
+export { createLimiter, clientKey } from './limits.js'
+export { resolveServerOptions, SERVER_DEFAULTS } from './options.js'
 
 export interface DocPilotServerOptions {
   /** The `docPilot` settings — the same object the site's config exports. */
@@ -42,9 +50,58 @@ export interface DocPilotServerOptions {
   log?: TurnLogOptions | null
   /**
    * Say no before any work: return a Response to refuse, or nothing to allow.
-   * The hook for auth and rate limits, which this package does not ship.
+   * The hook for auth. Rate limits now ship — `server.limits`, engine-spec 033 —
+   * and run after this hook, so an authenticated caller is still counted.
    */
   authorize?: ((request: Request) => Response | null | undefined | Promise<Response | null | undefined>) | null
+}
+
+/** What a runtime knows about the connection that a `Request` does not carry. */
+export interface ConnectionInfo {
+  remoteAddress?: string | null
+}
+
+/** The largest turn body `handle` reads. Field limits in `input.ts` are far below it. */
+const MAX_BODY = 256 * 1024
+
+/**
+ * The body, read no further than `limit` bytes — or null past it.
+ *
+ * `request.text()` read every byte a client sent before the size was checked,
+ * so on a runtime with no `node()` adapter in front (an edge `fetch` handler)
+ * a 2 GB body was 2 GB of memory before the 413. Counting while reading makes
+ * the ceiling a ceiling.
+ */
+export async function readCapped(request: Request, limit = MAX_BODY): Promise<string | null> {
+  if (!request.body) return ''
+  const reader = request.body.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > limit) {
+      reader.cancel().catch(() => {})
+      return null
+    }
+    parts.push(value)
+  }
+  const all = new Uint8Array(size)
+  let at = 0
+  for (const p of parts) {
+    all.set(p, at)
+    at += p.byteLength
+  }
+  return new TextDecoder().decode(all)
+}
+
+/** Constant-time string equality, so a token is not guessed one byte at a time. */
+function sameSecret(a: string, b: string) {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
 }
 
 /** Read an index directory into the object `createRetrieval` takes. */
@@ -121,15 +178,66 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
   const settings = resolveDocPilot({ ...(options.settings || {}), runtime: 'server' }, env)
   const endpoint = settings.server.endpoint.replace(/\/+$/, '')
   const config = serverTurnConfig(settings, env)
+  // The operator's half of `server` — limits, caches, metrics, deadlines. Read
+  // off the settings as the author wrote them: `resolveDocPilot` keeps only the
+  // endpoint, because only the endpoint may cross into a reader's page.
+  const opts = resolveServerOptions(options.settings?.server, env)
   const index = /^https?:\/\//.test(options.index) ? await fetchIndex(options.index) : readIndexDir(options.index)
   const shell = JSON.stringify(shellManifest(index.manifest))
   const log = createTurnLog(options.log)
-  const tools = { fallback: false, known: false }
+  const tools = { fallback: false, known: false, pending: null }
+  const metrics = createMetrics()
+  const limiter = createLimiter(opts.limits)
+  const vectors = opts.cache.embeddings ? createLru(opts.cache.embeddings) : null
+  const answers = opts.cache.answers ? createLru(opts.cache.answers.max, { ttlMs: opts.cache.answers.ttlMs }) : null
+  const facts = () => ({
+    model: config.llm?.model ?? null,
+    embedModel: index.manifest.embedModel ?? null,
+    index: { hash: index.manifest.hash ?? null, chunks: index.manifest.chunkCount ?? null },
+  })
 
-  async function handle(request: Request): Promise<Response> {
+  /**
+   * WARM AT BOOT, NOT ON THE FIRST READER — engine-spec 031.
+   *
+   * Two things every process used to do inside its first turn: build the BM25
+   * index (`retriever.ts` memoises it on the manifest hash, lazily) and ask the
+   * model whether it calls tools. Both are the same work whoever asks first, so
+   * the first reader paid for every reader after them. The search below is the
+   * cheapest call that builds the lexical index; the probe lands on `tools`,
+   * where the first turn finds it settled or still running — never started
+   * twice.
+   */
+  try {
+    createRetrieval({ index, scope: { kind: 'all', paths: [], label: 'All docs' }, guard: index.manifest.guard, tuning: index.manifest.tuning }).search({ query: 'warm', k: 1 })
+  } catch {
+    /* a corpus that cannot be searched will say so on the first turn, loudly */
+  }
+  startToolProbe(config, tools)
+
+  function metricsResponse(request: Request, url: URL, info: ConnectionInfo | null) {
+    if (!opts.metrics) return json(404, { error: 'not found' })
+    if (request.method !== 'GET' && request.method !== 'HEAD') return json(405, { error: 'GET only' })
+    const token = opts.metrics.token
+    if (token) {
+      if (!sameSecret(request.headers.get('authorization') || '', `Bearer ${token}`)) {
+        return json(401, { error: 'metrics need the bearer token' })
+      }
+    } else if (!isLoopback(info?.remoteAddress)) {
+      // No token means no reader but this machine: the numbers name the model,
+      // the index and the traffic, which is an operator's business.
+      return json(403, { error: 'metrics are served to loopback only; set DOCPILOT_METRICS_TOKEN to read them remotely' })
+    }
+    if (url.searchParams.get('format') === 'json') return json(200, metrics.snapshot(facts()))
+    return new Response(request.method === 'HEAD' ? null : metrics.prometheus(facts()), {
+      headers: { 'content-type': 'text/plain; version=0.0.4; charset=utf-8', 'cache-control': 'no-store' },
+    })
+  }
+
+  async function handle(request: Request, info: ConnectionInfo | null = null): Promise<Response> {
     const url = new URL(request.url)
     const route = url.pathname.replace(/\/+$/, '')
-    if (route !== endpoint && route !== `${endpoint}/manifest`) return json(404, { error: 'not found' })
+    const metricsRoute = route === `${endpoint}/metrics`
+    if (route !== endpoint && route !== `${endpoint}/manifest` && !metricsRoute) return json(404, { error: 'not found' })
 
     if (options.authorize) {
       const refused = await options.authorize(request)
@@ -142,25 +250,60 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
         headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache', etag: `"${index.manifest.hash}"` },
       })
     }
+    if (metricsRoute) return metricsResponse(request, url, info)
 
     if (request.method !== 'POST') return json(405, { error: 'POST only' })
     if (!/^application\/json\b/i.test(request.headers.get('content-type') || '')) {
       return json(415, { error: 'content-type must be application/json' })
     }
+    // An allowlist only when the owner wrote one. Without it a cross-site page
+    // is already stopped by CORS — this endpoint sends no CORS headers and a JSON
+    // body forces a preflight — and a script is the limiter's to slow down.
+    const origin = request.headers.get('origin')
+    if (opts.allowedOrigins && origin && !opts.allowedOrigins.includes(origin)) {
+      metrics.limited('rejected')
+      return json(403, { error: 'origin not allowed' })
+    }
+
+    const admission = limiter.admit(clientKey(request, info, opts.trustProxy))
+    if (!admission.ok) {
+      metrics.limited(admission.reason === 'busy' ? 'rejected' : 'rate')
+      // The body is the panel's rate-limited state verbatim (`remote.ts`), so a
+      // reader is told when answers resume rather than that nothing answered.
+      return new Response(
+        JSON.stringify({
+          error: admission.reason === 'busy' ? 'server busy' : 'rate limited',
+          rateLimit: admission.reason === 'busy' ? null : { resetAt: Date.now() + admission.retryAfterS * 1000, limit: null },
+        }),
+        {
+          status: admission.status,
+          headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'retry-after': String(admission.retryAfterS) },
+        },
+      )
+    }
+
     let body
     try {
-      const text = await request.text()
-      if (text.length > 256 * 1024) return json(413, { error: 'body over 256 KB' })
+      const text = await readCapped(request)
+      if (text === null) {
+        admission.release()
+        return json(413, { error: 'body over 256 KB' })
+      }
       body = JSON.parse(text)
     } catch {
+      admission.release()
       return json(400, { error: 'body is not JSON' })
     }
     const parsed = parseTurnInput(body)
-    if (!parsed.ok) return json(400, { error: parsed.error })
+    if (!parsed.ok) {
+      admission.release()
+      return json(400, { error: parsed.error })
+    }
 
     const encoder = new TextEncoder()
     const abort = new AbortController()
     request.signal?.addEventListener?.('abort', () => abort.abort(), { once: true })
+    const ended = metrics.begin()
     let closed = false
     const stream = new ReadableStream({
       async start(controller) {
@@ -175,20 +318,35 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
         // A comment line, so a proxy that closes idle connections sees bytes
         // while the embedder and the first model step are still thinking.
         const ping = setInterval(() => !closed && controller.enqueue(encoder.encode(': ping\n\n')), 15000)
+        // THE WHOLE TURN HAS A DEADLINE — engine-spec 033. The step timeout
+        // bounds one model call, and a turn is up to eight of them plus an
+        // embedding and a probe, none of which had a ceiling; the pings above
+        // kept such a turn's connection alive indefinitely.
+        const deadline = AbortSignal.timeout(opts.turnTimeoutMs)
         try {
           await runServerTurn(parsed.input, {
             index,
             config,
-            signal: abort.signal,
+            signal: AbortSignal.any([abort.signal, deadline]),
+            deadline,
             emit,
-            record: log ? (r) => log.record(r) : null,
+            record: (r) => {
+              metrics.turn(r)
+              log?.record(r)
+            },
             keepMessages: Boolean(log?.prompts),
             tools,
+            vectors,
+            answers,
+            metrics,
+            embedTimeoutMs: opts.embedTimeoutMs,
           })
         } catch (e) {
           if (!abort.signal.aborted) emit('error', { message: 'no model answered', kind: e?.kind || null })
         } finally {
           clearInterval(ping)
+          ended()
+          admission.release()
           if (!closed) {
             closed = true
             controller.close()
@@ -228,7 +386,7 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
       return fail(400)
     }
     const route = url.pathname.replace(/\/+$/, '')
-    if (route !== endpoint && route !== `${endpoint}/manifest`) {
+    if (route !== endpoint && route !== `${endpoint}/manifest` && route !== `${endpoint}/metrics`) {
       if (next) return next()
       res.statusCode = 404
       return res.end()
@@ -265,7 +423,7 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
       // client's request, not this server, is what is wrong.
       throw Object.assign(new Error('bad request', { cause: e }), { badRequest: true })
     }
-    const response = await handle(request)
+    const response = await handle(request, { remoteAddress: req.socket?.remoteAddress ?? null })
     res.writeHead(response.status, Object.fromEntries(response.headers))
     if (!response.body) return res.end()
     const reader = response.body.getReader()
@@ -281,7 +439,7 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
     res.end()
   }
 
-  return { handle, node, endpoint, index, config, manifest: () => JSON.parse(shell) }
+  return { handle, node, endpoint, index, config, metrics, manifest: () => JSON.parse(shell) }
 }
 
 function readBody(req): Promise<Uint8Array> {

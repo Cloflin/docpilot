@@ -73,12 +73,20 @@ export async function postTurn(
   })
   if (!res.ok || !res.body) {
     let detail = ''
+    let rateLimit = null
     try {
-      detail = (await res.json())?.error || ''
+      const doc = await res.json()
+      detail = doc?.error || ''
+      rateLimit = doc?.rateLimit ?? null
     } catch {
       /* a proxy's HTML error page is not worth parsing */
     }
-    throw new Error(`${endpoint} → ${res.status}${detail ? ` (${detail})` : ''}`)
+    const e = new Error(`${endpoint} → ${res.status}${detail ? ` (${detail})` : ''}`)
+    // The server's limiter (engine-spec 033) answers 429 with the panel's own
+    // rate-limited shape, so the reader sees when answers resume — the state a
+    // spent daily allowance already lands on — instead of "didn't respond".
+    if (res.status === 429 && rateLimit) Object.assign(e, { rateLimit })
+    throw e
   }
   const feed = sseParser(on)
   const reader = res.body.getReader()
