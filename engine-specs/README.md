@@ -55,6 +55,13 @@ The rule this directory exists to enforce:
 | [026](026-the-last-answer-and-the-summaries.md) | the last answer travels whole and each older one as the model's own one-line `summary` — five transcript shapes A/B-tested on five-turn chains; none beat the skeleton outright, this one wins on clarifications and loses on rewrites |
 | [027](027-one-bit-a-dimension.md) | chunk vectors as one sign bit per dimension against a float question, scaled back onto the cosine by one fitted number — 2.3 MB → 291 KB on a 4096-dimension embedder with recall@8 unchanged; `auto` keeps int8 where the bit's error says it cannot afford it |
 | [028](028-the-turn-on-the-owners-server.md) | `runtime: 'server'` — the turn runs in `@cloflin/docpilot/server` and streams to the panel; a turn log, and `traffic`, `dataset`, `llms` and `model` that read it |
+| [029](029-the-corpus-every-claim-is-measured-on.md) | Harborline, a documentation site for a product that does not exist, and an `eval` that runs the server turn, a dev/test split, security probes, nDCG, context precision and first-token latency |
+| [030](030-the-terminal-shows-the-numbers.md) | terminal primitives with no dependency; the home screen, `docpilot status` and `docpilot monitor`; progress bars and the eval scorecard |
+| [031](031-the-server-turn-fast-and-watched.md) | stage timings and the ranking in the turn log, `GET {endpoint}/metrics`, warm boot, caches, and `server.turn` — one-shot without reasoning brings the first token from 46.6 s to 10.5 s locally |
+| [033](033-the-server-turn-guarded.md) | limits on by default, a turn deadline, a capped body, signed history (F11), a leak guard on the owner's instructions, no dotfiles from `serve --dir` |
+| [034](034-the-static-index-verified.md) | every index file named by its own bytes with its SRI in the manifest; four retrieval and compression levers measured on two corpora, none adopted as a default |
+| [035](035-the-edit-a-report-asks-for.md) | `docpilot improve plan\|compare\|check`; llms.txt as page descriptions measured and not adopted — a vocabulary gap is fixed in the section that answers |
+| [036](036-the-agent-that-tunes-a-site.md) | the `docpilot-tuner` and `docpilot-writer` agents and the `docs-tune` skill, with a model and an effort per task |
 
 ## Shape of a spec
 
