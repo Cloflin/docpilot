@@ -454,7 +454,10 @@ if (cmd === 'doctor') {
 // writes. Same `run*` contract as `feedback`: flags of their own, a verdict.
 if (cmd === 'serve') {
   const { runServe } = await import('../dist/cli-serve.js')
-  process.exit(await runServe({ docPilot: resolved, argv: rest, env }))
+  // `settings` too: the server resolves the author's object itself, and the
+  // operator half of `server` (limits, turn policy, caches) is not in the
+  // resolved one — engine-spec 031.
+  process.exit(await runServe({ docPilot: resolved, settings, argv: rest, env }))
 }
 if (cmd === 'llms') {
   const { runLlms } = await import('../dist/llms/cli.js')

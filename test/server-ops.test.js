@@ -451,3 +451,24 @@ describe('the leak guard — engine-spec 033', async () => {
     }
   })
 })
+
+describe('docpilot serve — dotfiles', async () => {
+  const { staticFile } = await import('../src/cli-serve.js')
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+
+  it('never serves a dot-file or a dot-directory, except .well-known', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-dot-'))
+    fs.writeFileSync(path.join(root, '.env.local'), 'OPENROUTER_API_KEY=x')
+    fs.mkdirSync(path.join(root, '.git'))
+    fs.writeFileSync(path.join(root, '.git', 'config'), '[core]')
+    fs.mkdirSync(path.join(root, '.well-known'))
+    fs.writeFileSync(path.join(root, '.well-known', 'security.txt'), 'Contact: x')
+    fs.writeFileSync(path.join(root, 'index.html'), '<p>hi')
+    expect(staticFile(root, '/.env.local')).toBe(null)
+    expect(staticFile(root, '/%2Eenv.local')).toBe(null)
+    expect(staticFile(root, '/.git/config')).toBe(null)
+    expect(staticFile(root, '/.well-known/security.txt')).toBe(path.join(root, '.well-known', 'security.txt'))
+    expect(staticFile(root, '/')).toBe(path.join(root, 'index.html'))
+  })
+})

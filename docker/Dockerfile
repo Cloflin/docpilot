@@ -29,8 +29,12 @@ ENV DOCPILOT_EMBED_LOCAL=1 \
 
 RUN npm run docs:build
 
-# The turn log, one docpilot.turn/1 file per UTC day.
+# The turn log, one docpilot.turn/1 file per UTC day — owned by the user the
+# process runs as, which is not root (engine-spec 033): a turn that found a way
+# to write a file should find nothing it could overwrite.
+RUN mkdir -p /data && chown node:node /data
 VOLUME ["/data"]
+USER node
 EXPOSE 8787
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \

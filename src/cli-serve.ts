@@ -48,6 +48,10 @@ export function staticFile(root, pathname) {
   } catch {
     return null
   }
+  // NO DOTFILES — engine-spec 033. `serve --dir .` published `.env.local`, `.git`
+  // and every other file a project keeps out of sight by its name. Only
+  // `.well-known/` is public by convention (security.txt, the ACME challenge).
+  if (rel.split('/').some((seg) => seg.startsWith('.') && seg !== '.well-known')) return null
   const base = path.resolve(root)
   for (const candidate of [rel, `${rel}.html`, path.posix.join(rel, 'index.html')]) {
     const full = path.resolve(base, `.${path.posix.normalize(`/${candidate}`)}`)
@@ -128,7 +132,7 @@ export function inIndex(root, file) {
   }
 }
 
-export async function runServe({ docPilot, argv = [], env = process.env }) {
+export async function runServe({ docPilot, settings = null, argv = [], env = process.env }) {
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(helpFor('serve'))
     return 0
@@ -157,7 +161,9 @@ export async function runServe({ docPilot, argv = [], env = process.env }) {
   let dp
   try {
     dp = await createDocPilotServer({
-      settings: docPilot,
+      // The author's settings when the launcher has them: the server resolves
+      // them itself, and the resolved object carries `server.endpoint` alone.
+      settings: settings ?? docPilot,
       env,
       index,
       log: logDir
@@ -181,6 +187,10 @@ export async function runServe({ docPilot, argv = [], env = process.env }) {
           return res.end('not found')
         }
         res.setHeader('content-type', TYPES[path.extname(file)] || 'application/octet-stream')
+        // The two headers that cost nothing and break nothing: no MIME sniffing
+        // of an uploaded `.txt` into HTML, no full URL leaked to other origins.
+        res.setHeader('x-content-type-options', 'nosniff')
+        res.setHeader('referrer-policy', 'strict-origin-when-cross-origin')
         // A file gone between `stat` and `open` emits `error`, and an
         // unhandled `error` event stops the process.
         fs.createReadStream(file)

@@ -15,6 +15,13 @@ services:
     environment:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       DOCPILOT_CHAT_MODEL: ${DOCPILOT_CHAT_MODEL:-qwen3:8b}
+      # engine-spec 031: GET /ai/turn/metrics from outside the container needs
+      # a token — the host is not loopback to the process inside. Set it, then
+      #   npx docpilot monitor --url=http://localhost:8787/ai/turn --token=…
+      DOCPILOT_METRICS_TOKEN: ${DOCPILOT_METRICS_TOKEN:-}
+      # engine-spec 033: the key answers are signed with. Unset, each start
+      # picks a new one and the previous process's answers come back demoted.
+      DOCPILOT_SERVER_SECRET: ${DOCPILOT_SERVER_SECRET:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

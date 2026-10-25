@@ -164,6 +164,7 @@ export function shellManifest(manifest) {
 const SSE_HEADERS = {
   'content-type': 'text/event-stream; charset=utf-8',
   'cache-control': 'no-cache, no-transform',
+  'x-content-type-options': 'nosniff',
   // nginx buffers proxied responses by default, which turns a stream into one
   // late blob. This header is the one switch that reaches it from upstream.
   'x-accel-buffering': 'no',
@@ -172,7 +173,7 @@ const SSE_HEADERS = {
 const json = (status, body) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
   })
 
 export async function createDocPilotServer(options: DocPilotServerOptions) {
