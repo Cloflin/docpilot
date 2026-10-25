@@ -37,6 +37,7 @@ const COMMANDS = [
   'model',
   'traffic',
   'dataset',
+  'improve',
 ]
 
 let [, , cmd, ...rest] = process.argv
@@ -106,6 +107,8 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
     llms        lint llms.txt against llmstxt.org and your index, or build one
     model       fingerprint weights, verify them, compare two checkpoints'
                 eval reports, check a training set for eval leakage
+    improve     turn a report's failures into the edits worth making (plan),
+                judge an edit before/after (compare), guard it (check)
 
   The loop is  index → calibrate → lint → eval → bench,  with tune where it is
   retrieval that has to move — and then index again, because that is the step
@@ -458,6 +461,11 @@ if (cmd === 'serve') {
   // operator half of `server` (limits, turn policy, caches) is not in the
   // resolved one — engine-spec 031.
   process.exit(await runServe({ docPilot: resolved, settings, argv: rest, env }))
+}
+// engine-spec 035 — the improvement loop's deterministic half: diagnose, judge, guard.
+if (cmd === 'improve') {
+  const { runImprove } = await import('../dist/improve/cli.js')
+  process.exit(await runImprove({ docPilot: resolved, argv: rest, env }))
 }
 if (cmd === 'llms') {
   const { runLlms } = await import('../dist/llms/cli.js')

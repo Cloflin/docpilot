@@ -487,6 +487,7 @@ const READERS = {
   model: ['src/model/cli.ts'],
   traffic: ['src/traffic/cli.ts'],
   dataset: ['src/dataset/cli.ts'],
+  improve: ['src/improve/cli.ts'],
 }
 
 /** The `## \`command\`` section of the CLI reference, up to the next `## `. */

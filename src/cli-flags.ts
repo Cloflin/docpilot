@@ -366,6 +366,18 @@ export const COMMANDS = {
     ],
   },
 
+  improve: {
+    summary: 'turn a report\'s failures into the edits worth making, then say whether one helped',
+    positional: { name: 'mode', values: ['plan', 'compare', 'check'], help: 'plan diagnoses a report; compare judges before/after; check guards the edit' },
+    flags: [
+      { name: 'report', kind: 'value', example: 'docpilot/reports/report-….json', help: 'plan: the report to diagnose; default the newest dev-split report' },
+      { name: 'before', kind: 'value', example: 'before.json', help: 'compare: the report before the edit' },
+      { name: 'after', kind: 'value', example: 'after.json', help: 'compare: the same records after it' },
+      { name: 'since', kind: 'value', example: 'HEAD', help: 'check: the git ref the edit is measured from' },
+      { name: 'json', kind: 'bool', help: 'the plan, the verdict or the check as JSON' },
+    ],
+  },
+
   model: {
     summary: 'fingerprint weights, verify them, compare two checkpoints, check a training set for eval leakage',
     grammar: 'both',

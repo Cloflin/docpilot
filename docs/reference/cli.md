@@ -424,7 +424,7 @@ The **embedder** is not this flag. It is resolved from `docPilot.embed` by the s
 
 ### The split {#eval-split}
 
-A golden record may carry `"split": "dev"` or `"split": "test"`. `--split=dev` scores only the first half and `--split=test` only the second; a record without the field belongs to neither and runs only when no split is asked for. Propose documentation edits from `dev` failures — that is what `docpilot improve` reads — and prove them on `test`: an edit written against the questions it is scored on measures how well it was fitted to them. The split is part of the report's name and metadata, so a `dev` run never diffs against a `test` one.
+A golden record may carry `"split": "dev"` or `"split": "test"`. `--split=dev` scores only the first half and `--split=test` only the second; a record without the field belongs to neither and runs only when no split is asked for. Propose documentation edits from `dev` failures — that is what [`improve`](#improve) reads — and prove them on `test`: an edit written against the questions it is scored on measures how well it was fitted to them. The split is part of the report's name and metadata, so a `dev` run never diffs against a `test` one.
 
 ### The server runtime {#eval-runtime}
 
@@ -872,6 +872,31 @@ npx docpilot llms build --site=https://docs.example.com/ --md
 | `--summary <text>` | build: the blockquote |
 | `--md` | build: link `<path>.md` |
 | `--force` | build: overwrite an existing file |
+
+## `improve`
+
+```bash
+npx docpilot improve
+npx docpilot improve plan --report=docpilot/reports/report-….json
+npx docpilot improve compare --before=before.json --after=after.json
+npx docpilot improve check --since=HEAD
+```
+
+The improvement loop's deterministic half: it reads what `eval` wrote, never calls a model and never edits a page.
+
+`plan` (the default) diagnoses every failing record of a report — the newest `dev`-split report unless `--report=` names one — and names ONE cause for each, in the order a turn spends its evidence: a **vocabulary gap** (the gold is not in the ranked eight and most of the question's words never occur in the gold text), **ranking** (the words are there, another page wins), **not primed** (in the eight, not in the five the model reads), **structure** (the answer is split across chunks the turn did not all see), **generation**, **false refusal** or an **answered negative**. Failures are grouped into one item per cause and page — five questions that miss a page for want of one word are one edit — with the file to change and the records that will prove it, written to `${evalDir}/improve/plan.md` and `plan.json`. The levers it proposes are the page's description in `llms.txt` and its frontmatter, `vocabulary.json` aliases, a heading that names what the section answers, an `<llm-only>` summary, and `docpilot tune`. Generation, refusals and answered negatives are marked *investigate*: they are the prompt's, the model's or the guard's, not the corpus's. It never proposes product behaviour the docs do not already state.
+
+`compare` pairs two reports of the same records by id — before and after an edit — and gives the verdict the skill has always stated: **revert** when any metric falls more than two points, **keep** when something rose beyond noise (a paired bootstrap interval clear of zero, or McNemar on the per-record outcome), **neutral** otherwise. It does not refuse a changed index hash, because a corpus edit changes it by definition; what must match is the population — the same golden set, level and split.
+
+`check` guards the edit against the two ways a loop cheats: text added to the docs since `--since=` (default `HEAD`) that copies a run of eight words from a `test`-split gold answer, and any change to `golden.jsonl`, `calibration.jsonl`, `chains.jsonl` or `adversarial.jsonl`. It exits `1` on either.
+
+| flag | |
+|---|---|
+| `--report=<path>` | `plan`: the report to diagnose |
+| `--before=<path>` | `compare`: the report before the edit |
+| `--after=<path>` | `compare`: the same records after it |
+| `--since=<ref>` | `check`: the git ref the edit is measured from; default `HEAD` |
+| `--json` | the plan, the verdict or the check as JSON |
 
 ## `model`
 
