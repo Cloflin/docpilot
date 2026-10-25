@@ -41,10 +41,15 @@ status ─► baseline (dev + test) ─► improve plan ─► edit ─► impro
    `summarise-section`) in order; `investigate` items are not corpus edits —
    list them in the report and leave them.
 5. **Edit one item** (or a few items on DIFFERENT pages, which do not interact).
-   - `describe-page` — rewrite the page's line in `llms.txt` and its
-     frontmatter `description`: one sentence, what the page is FOR, in the
-     words readers used (`terms`). For `languages` other than English, run
-     `npx docpilot vocabulary --languages=<langs>` instead.
+   - `describe-page` — the readers' words (`terms`) go into the SECTION that
+     answers: hand it to the writer as a `summarise-section` (one `<llm-only>`
+     line naming what the section is, in the readers' words) or a
+     `retitle-section`. A page description alone does not do it: measured on
+     the Harborline benchmark, a description on the page's first chunk lifted
+     the intro above the answering section and LOWERED nDCG@8 on exactly these
+     records. Updating `llms.txt` too is fine — it is for other people's agents
+     and does not move DocPilot's retrieval. For `languages` other than English,
+     run `npx docpilot vocabulary --languages=<langs>` instead.
    - `alias` — add `reader term → page term` to `vocabulary.json` only where the
      page term is on the page.
    - `retitle-section` / `summarise-section` — hand the page and the item to
@@ -77,7 +82,7 @@ Spend tokens where judgement is needed and nowhere else.
 |---|---|---|---|
 | index, eval, improve plan/check/compare, status | the CLI | none | — |
 | read a plan, choose items, run the loop | docpilot-tuner | sonnet | medium |
-| a page description, an alias | docpilot-tuner | sonnet | medium |
+| an alias, an llms.txt line | docpilot-tuner | sonnet | medium |
 | a heading rewrite, an `<llm-only>` summary | docpilot-writer | sonnet | high |
 | an advisory answer check, if one is wanted | `claude -p --model haiku --effort low --tools ''` | haiku | low |
 | the final report | docpilot-tuner | sonnet | low |

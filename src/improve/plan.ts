@@ -8,9 +8,14 @@
  *
  * THE LEVERS, and which cause each answers:
  *
- *   describe-page      vocabulary-gap → the page's description in llms.txt and
- *                      its frontmatter, written in the readers' words; for a
- *                      question in another language, `docpilot vocabulary`
+ *   describe-page      vocabulary-gap → the readers' words, in the SECTION
+ *                      that answers: its heading, or one `<llm-only>` line at
+ *                      its top. Not the page description alone — measured on
+ *                      Harborline, a description on the page's first chunk
+ *                      lifted that intro chunk above the answering section
+ *                      (nDCG@8 −0.145 on the dead-letter records), because the
+ *                      fused pool is ordered by dense cosine. For a question in
+ *                      another language, `docpilot vocabulary`
  *   alias              vocabulary-gap → a `vocabulary.json` entry mapping the
  *                      reader's term to the page's
  *   retitle-section    ranking → the heading says what the section answers
@@ -85,9 +90,9 @@ export function planOf(findings: Finding[], { docsDir = 'docs', llmsFile = null 
       item.terms = [...counts].sort((a, b) => b[1] - a[1]).map(([t]) => t).slice(0, 12)
       item.languages = languages
       item.action = foreign
-        ? `Readers ask about ${page} in ${languages.join(', ')}; propose aliases with \`docpilot vocabulary --languages=${languages.join(',')}\`, and add the English words they translate to the page's description.`
-        : `Rewrite ${page}'s description in the readers' words — they ask with "${item.terms.slice(0, 5).join('", "')}", which the page never uses.`
-      item.files = [llmsFile, sourceOf(docsDir, page)].filter(Boolean)
+        ? `Readers ask about ${page} in ${languages.join(', ')}; propose aliases with \`docpilot vocabulary --languages=${languages.join(',')}\`.`
+        : `Put the readers' words — "${item.terms.slice(0, 5).join('", "')}" — into the section of ${page} that answers: its heading, or one <llm-only> line at its top. A page description alone lifts the intro chunk, not the answer.`
+      item.files = [sourceOf(docsDir, page), ...(llmsFile ? [llmsFile] : [])]
     } else if (f0.cause === 'ranking') {
       item.outranking = [...new Set(fs.flatMap((f) => f.outranking || []))].slice(0, 4)
       item.action = `${page} has the words but ${item.outranking.join(', ') || 'other pages'} rank above it; make the answering section's heading name what it answers, and its first sentence state it.`

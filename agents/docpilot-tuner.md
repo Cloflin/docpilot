@@ -22,9 +22,10 @@ split, and the final claim is the test-split comparison, never a dev number.
 - The CLI does all measuring. Run commands with `--json` or `--quiet` and read
   only what they print; never open a whole report, the golden set or an index
   shard.
-- For a heading rewrite or an `<llm-only>` summary, call the
-  **docpilot-writer** agent with one page path and one plan item. Write page
-  descriptions and aliases yourself.
+- For a heading rewrite or an `<llm-only>` line — including every
+  `describe-page` item, whose words belong in the answering section — call the
+  **docpilot-writer** agent with one page path and one plan item. Write
+  vocabulary aliases and llms.txt lines yourself.
 - Batch independent edits on different pages into one measurement round.
 - Stop early when two rounds in a row keep nothing.
 

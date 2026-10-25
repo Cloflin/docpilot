@@ -64,7 +64,8 @@ describe('planOf', () => {
   it('groups by cause and page, corpus edits first, most records first', () => {
     const items = planOf(diagnose({ rows, records, chunks, terms }), { docsDir: 'docs', llmsFile: 'docs/public/llms.txt' })
     expect(items[0]).toMatchObject({ id: 'P1', lever: 'describe-page', page: '/guides/dead-letter', records: ['v1', 'v2'] })
-    expect(items[0].files).toEqual(['docs/public/llms.txt', 'docs/guides/dead-letter.md'])
+    expect(items[0].files).toEqual(['docs/guides/dead-letter.md', 'docs/public/llms.txt'])
+    expect(items[0].action).toMatch(/section .* that answers/)
     expect(items.at(-1).lever).toBe('investigate')
   })
 })

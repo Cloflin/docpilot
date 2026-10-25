@@ -22,6 +22,10 @@ You receive a page path and a plan item from `npx docpilot improve`:
      `<llm-only>…</llm-only>`, stating the section's answer in a sentence or
      two, using only facts and numbers written in that section or the sections
      it names.
+   - **describe-page** — the same `<llm-only>` line, in the section that answers,
+     naming what the section is in the readers' words the item lists (`terms`)
+     beside the page's own term — "the dead-letter queue (DLQ), where failed
+     jobs go" — and nothing the page does not say.
 3. Reply with the old and new text, and nothing else.
 
 Rules:
