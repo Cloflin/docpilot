@@ -33,6 +33,10 @@ export const docPilot = {
     baseURL: env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
   },
   guard: { mode: 'off' },
+  // No empty-state openers: their answers are written by the chat model at index
+  // time, and a baked answer that intercepts a golden question measures the
+  // bake, not the turn.
+  suggestions: { questions: [] },
   /**
    * The canary. A sentence only the instructions carry, so an answer that
    * contains it has leaked them: `eval/adversarial.jsonl` forbids the token on
