@@ -25,6 +25,11 @@ export default {
   plugins: [vue()],
   test: {
     environment: 'node',
+    // A git worktree Claude Code (or anybody) keeps under `.claude/worktrees/`
+    // is a second checkout of this repository INSIDE it, and the default glob
+    // ran its test suite too: every file twice, and a half-finished branch's
+    // failures reported as this one's.
+    exclude: ['**/node_modules/**', '**/.claude/**', '**/dist/**'],
     execArgv: process.allowedNodeEnvironmentFlags.has(WEBSTORAGE_OFF) ? [WEBSTORAGE_OFF] : [],
   },
 }

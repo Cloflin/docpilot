@@ -172,6 +172,10 @@ export const COMMANDS = {
       { name: 'fallback', kind: 'enum', values: ['auto', 'on', 'off'], example: 'auto', help: 'which transport the answering half runs on' },
       { name: 'max-iterations', kind: 'int', min: 1, example: '2', help: "the agent loop's ceiling" },
       { name: 'num-ctx', kind: 'int', min: 1, example: '8192', help: 'the context window pinned per request; Ollama only' },
+      { name: 'split', kind: 'enum', values: ['dev', 'test'], example: 'dev', help: 'one half of the golden set — improve on `dev`, prove on `test`' },
+      { name: 'runtime', kind: 'enum', values: ['browser', 'server'], example: 'server', help: "which install answers: the panel's pipeline, or the server turn run in-process" },
+      { name: 'endpoint', kind: 'value', example: 'http://localhost:8787/ai/turn', help: 'measure a running server over HTTP; implies --runtime=server' },
+      { name: 'set', kind: 'enum', values: ['golden', 'adversarial'], example: 'adversarial', help: 'the golden questions, or the security probes in adversarial.jsonl' },
     ],
   },
 

@@ -37,6 +37,12 @@ const HIGHER_IS_BETTER = new Set([
   'retrievalF1',
   'recall8',
   'mrr',
+  // engine-spec 029 — the standard ranking lenses, read off the same eight.
+  'recall1',
+  'recall3',
+  'recall5',
+  'ndcg8',
+  'contextPrecision5',
   'answerF1',
   'identifierRecall',
   'citationPrecision',
@@ -69,6 +75,9 @@ const LOWER_IS_BETTER = new Set([
   'iterationsPerAnswer',
   'latencyP50',
   'latencyP95',
+  'latencyP99',
+  'ttftP50',
+  'ttftP95',
 ])
 
 const TRACKED = [...HIGHER_IS_BETTER, ...LOWER_IS_BETTER]
@@ -118,6 +127,11 @@ export function previousReport(dir, meta) {
       // no marker on it. Partitioned rather than labelled `incomparable` for
       // that reason: there is nothing here worth reading.
       if (levelOf(doc.meta) !== levelOf(meta)) continue
+      // engine-spec 029: the install that answered, the half of the set it
+      // scored, and which set — each a different measurement, never a delta.
+      if ((doc.meta?.runtime ?? 'browser') !== (meta.runtime ?? 'browser')) continue
+      if ((doc.meta?.split ?? null) !== (meta.split ?? null)) continue
+      if ((doc.meta?.set ?? 'golden') !== (meta.set ?? 'golden')) continue
       /**
        * THE CORPUS HASH DOES NOT COVER THE VECTOR SPACE.
        *

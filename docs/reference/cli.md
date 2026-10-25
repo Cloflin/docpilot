@@ -372,6 +372,10 @@ npx docpilot eval --gate-only --lexical
 npx docpilot eval --models=qwen3:8b,phi4:14b
 npx docpilot eval --level=medium --limit=5
 npx docpilot eval --resume
+npx docpilot eval --split=dev
+npx docpilot eval --runtime=server
+npx docpilot eval --endpoint=http://localhost:8787/ai/turn
+npx docpilot eval --set=adversarial --runtime=server
 DOCPILOT_BASE_URL=https://api.openai.com npx docpilot eval --provider=openai --models=gpt-4o-mini
 ```
 
@@ -399,6 +403,10 @@ Reports are named by index hash, model and **prompt hash**. Two reports built fr
 | `--fallback=auto\|on\|off` | which transport the answering half runs on; default `auto` |
 | `--max-iterations=N` | the agent loop's ceiling; default `2` |
 | `--num-ctx=N` | the context window pinned per request; default `8192`, Ollama only |
+| `--split=dev\|test` | score one half of the golden set; default both — see [the split](#eval-split) |
+| `--runtime=browser\|server` | which install answers; default `browser` — see [the server runtime](#eval-runtime) |
+| `--endpoint=<url>` | a running server's turn endpoint, measured over HTTP; implies `--runtime=server` |
+| `--set=golden\|adversarial` | the golden questions, or the security probes; default `golden` — see [security probes](#eval-adversarial) |
 
 `--provider=` names the same three **wire adapters** the panel runs on, so an eval measures the transport your readers will actually get. It is not the fourteen provider names the config takes: every OpenAI-compatible service — OpenRouter, Groq, DeepSeek — is `openai` here, with `DOCPILOT_BASE_URL` pointing at it and the key in the environment. **A key goes only to the host that owns it:** `DOCPILOT_API_KEY` is sent as given; without it, eval sends the key of the provider whose own address `DOCPILOT_BASE_URL` is — `OPENAI_API_KEY` only to api.openai.com, `OPENROUTER_API_KEY` only to openrouter.ai, and so on for every provider. A LAN vLLM box, a local Ollama or another gateway gets no key unless you set `DOCPILOT_API_KEY`. Nothing is stored, and no report carries a credential. Spell it carefully: an unrecognised id falls back to the Ollama adapter rather than being refused, and the header line each model prints names the transport but not the adapter. The report records the string you typed as `meta.provider`, which is where a typo shows up — after the run.
 
@@ -413,6 +421,18 @@ The **embedder** is not this flag. It is resolved from `docPilot.embed` by the s
 `--resume` is what makes a matrix restartable. For each model it looks for the report **this** run would write — index hash, model, `-lexical`, `-novec`, tier and prompt hash all have to match — and loads that instead of calling the model again; a model with no such report still runs. Because the name carries all six, a resumed run can never pick up a report of a different measurement: `--level=low` will not read the full-set file, and a re-indexed corpus resumes nothing. It does nothing under `--gate-only`, which calls no model and has nothing to skip.
 
 **Every value-taking flag here refuses a bare form.** `--level low`, `--limit 5` and `--num-ctx 4096` are all read as absent by a parser that matches `--name=` and nothing else, so the run would use the default and report it as fact — see [`--level=`](#level).
+
+### The split {#eval-split}
+
+A golden record may carry `"split": "dev"` or `"split": "test"`. `--split=dev` scores only the first half and `--split=test` only the second; a record without the field belongs to neither and runs only when no split is asked for. Propose documentation edits from `dev` failures — that is what `docpilot improve` reads — and prove them on `test`: an edit written against the questions it is scored on measures how well it was fitted to them. The split is part of the report's name and metadata, so a `dev` run never diffs against a `test` one.
+
+### The server runtime {#eval-runtime}
+
+`--runtime=server` answers every record through the server turn — `@cloflin/docpilot/server`, created in-process over this project's index and settings and driven through its own HTTP handler, so the bytes scored are the bytes a panel would read. A conversation is replayed the way the panel holds one: each prior question is asked first and its answer travels back in `history`. The chat model is the one your config resolves, as the deployed server's is; `--model=` overrides it. The rows add what only the server measures: time to the first answer token, and where the time went (`embed`, `retrieve`, `model`). `--endpoint=` measures a server that is already running, over real HTTP; only what the wire carries is scored, so the retrieval columns are blank there. `--gate-only` has no server form — the server turn always ends in a model call — and is refused.
+
+### Security probes {#eval-adversarial}
+
+`--set=adversarial` runs `${evalDir}/adversarial.jsonl` instead of the golden set — prompt injection, attempts to extract the instructions, requests for keys, off-topic tasks, markup to echo back. Each probe names what must not appear in the reply (`forbid`, `forbid_regex`) and whether the right outcome is a refusal (`expect: "refuse"`) or a safe answer (`"answer-safely"`). The report's security block gives the **attack success rate** — lower is better — beside refusal accuracy and the safe-answer rate, per kind. The reasoning is read as well as the answer, because the panel shows both.
 
 ## `bench`
 

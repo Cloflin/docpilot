@@ -47,6 +47,8 @@ import {
   retrievalF1Loose,
   recallAtK,
   mrr,
+  ndcgAtK,
+  contextPrecisionAtK,
   scopeContainment,
   tokenF1,
   identifierRecall,
@@ -69,8 +71,10 @@ import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 import { chainTexts, resolveChain } from './conversation.js'
 import { keyForBase, nodeEmbedTarget } from '../config.js'
+import { serverRows } from './server-eval.js'
+import { adversarialSummary, asRecord, loadProbes } from './adversarial.js'
 
-import { ROOT, RAG, REPORTS, GOLDEN, DOCS, settings as docPilot } from '../cli-context.js'
+import { ROOT, RAG, REPORTS, GOLDEN, DOCS, DOCPILOT_DIR, settings as docPilot } from '../cli-context.js'
 import { applyFileEnv } from '../cli-env.js'
 import { prefetchEmbeddings } from './prefetch.js'
 import { COMMANDS, entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
@@ -216,6 +220,39 @@ try {
 }
 const BASE = process.env.DOCPILOT_BASE_URL || 'http://localhost:11434'
 const GATE_ONLY = has('gate-only')
+
+/**
+ * THE HALF OF THE GOLDEN SET THIS RUN IS ABOUT — engine-spec 029.
+ *
+ * A corpus edit proposed from failing questions and then scored on the SAME
+ * questions measures how well the edit was fitted to them, not whether it
+ * helped. `split` on a record (`dev` / `test`) is the authoring-time partition:
+ * `docpilot improve` and the tuning agent read `dev` failures only, and an edit
+ * is proven on `test`. A record with no `split` belongs to neither half and to
+ * every unsplit run, so a set that predates the field scores as it always did.
+ */
+const SPLIT = arg('split') ?? null
+
+/**
+ * WHICH INSTALL ANSWERS — engine-spec 029. `browser` is the pipeline this file
+ * has always restated; `server` is `runServerTurn` itself, in-process, or a
+ * running server at `--endpoint`. The server half resolves its chat model from
+ * the project's config, as the deployed server does; `--model` overrides it.
+ */
+const ENDPOINT = arg('endpoint') ?? null
+const RUNTIME = ENDPOINT ? 'server' : String(arg('runtime', 'browser'))
+
+/** The golden questions, or the security probes in `adversarial.jsonl` — spec 033. */
+const SET = String(arg('set', 'golden'))
+const ADVERSARIAL = path.join(DOCPILOT_DIR, 'adversarial.jsonl')
+
+if (GATE_ONLY && RUNTIME === 'server') {
+  printError(
+    '--gate-only runs no model, and the server turn always ends in one\n' +
+      '        measure retrieval with --gate-only on the browser runtime',
+  )
+  process.exit(USAGE)
+}
 /**
  * The flag is one of two routes into the same measurement; a vectorless index is
  * the other, and `main()` raises this once the manifest has been read.
@@ -746,6 +783,14 @@ async function probeRecords(index, guard, records) {
       retrieval_f1: goldInScope.length ? retrievalF1Loose(retrievedIds, goldInScope) : null,
       recall8: goldInScope.length ? recallAtK(rankedIds, goldInScope, 8) : null,
       mrr: goldInScope.length ? mrr(rankedIds, goldInScope) : null,
+      // The standard lenses beside the two this report always printed — engine-
+      // spec 029. Read off the same ranked eight, so every number in one row
+      // describes one ranking.
+      recall1: goldInScope.length ? recallAtK(rankedIds, goldInScope, 1) : null,
+      recall3: goldInScope.length ? recallAtK(rankedIds, goldInScope, 3) : null,
+      recall5: goldInScope.length ? recallAtK(rankedIds, goldInScope, 5) : null,
+      ndcg8: goldInScope.length ? ndcgAtK(rankedIds, goldInScope, 8) : null,
+      contextPrecision5: goldInScope.length ? contextPrecisionAtK(rankedIds, goldInScope, 5) : null,
       scopeContainment: scopeContainment(retrievedIds, scope),
     })
   }
@@ -821,8 +866,17 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
       retrieval: probe.retrieval_f1,
       recall8: probe.recall8,
       mrr: probe.mrr,
+      recall1: probe.recall1,
+      recall3: probe.recall3,
+      recall5: probe.recall5,
+      ndcg8: probe.ndcg8,
+      contextPrecision5: probe.contextPrecision5,
       scopeContainment: probe.scopeContainment,
       scoredAsNegative: probe.scoredAsNegative,
+      runtime: 'browser',
+      // Whether a failing verdict would have ended this turn before the model —
+      // the condition under which a refusal's CAUSE is a measurement at all.
+      gateEnforced: enforces(docPilot.guard.mode, g.mode),
     }
 
     /**
@@ -928,6 +982,13 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
         history,
         composedQuery: probe.composedQuery,
         composedVec: probe.composedVec,
+        // First answer token — the number a reader feels, engine-spec 029. The
+        // harness emits the answer-so-far on every frame; the first non-empty
+        // one is when the panel would have started painting.
+        onStream: (ev) => {
+          if (ev?.text && row.ttftMs == null) row.ttftMs = Date.now() - t0
+          if (ev?.thinking && row.firstThoughtMs == null) row.firstThoughtMs = Date.now() - t0
+        },
       })
     } catch (e) {
       row.observed = 'error'
@@ -986,8 +1047,14 @@ async function runModel({ model, probes, guard, fallback, thinkSupported }) {
 
     const answered = res.text.trim() && res.citations.length && res.confidence >= 0.4
     row.observed = answered ? 'answer' : 'refuse:not-answerable'
+    // The reasoning rides beside the answer for the security probes, which read
+    // both: the panel shows the reasoning box, so a leak there is a leak.
+    row.think = res.think || ''
+    row.citations = res.citations
 
-    if (answered && !wantRefusal) {
+    // `gold_answer` is required on every golden positive (lint), and absent on
+    // an answer-safely security probe, which has nothing to be scored against.
+    if (answered && !wantRefusal && rec.gold_answer) {
       row.answerF1 = tokenF1(res.text, rec.gold_answer)
       row.identifierRecall = identifierRecall(res.text, rec.identifiers)
       row.language = languageMatch(rec.question, res.text)
@@ -1079,9 +1146,11 @@ function turn({
   history,
   composedQuery = null,
   composedVec = null,
+  onStream = null,
 }) {
   return runTurn({
     embedQuery: EMBED_MODEL_QUERY ? (text) => embed(text, probe.embedModel) : null,
+    onStream,
     retrieval: probe.retrieval,
     gateResult: probe.g,
     question,
@@ -1202,6 +1271,11 @@ export function summarise(rows) {
     retrievalF1: mean(positives.map((r) => r.retrieval?.f1)),
     recall8: mean(positives.map((r) => r.recall8)),
     mrr: mean(positives.map((r) => r.mrr)),
+    recall1: mean(positives.map((r) => r.recall1)),
+    recall3: mean(positives.map((r) => r.recall3)),
+    recall5: mean(positives.map((r) => r.recall5)),
+    ndcg8: mean(positives.map((r) => r.ndcg8)),
+    contextPrecision5: mean(positives.map((r) => r.contextPrecision5)),
     answerF1: mean(positives.map((r) => r.answerF1)),
     identifierRecall: mean(positives.map((r) => r.identifierRecall)),
     citationPrecision: mean(positives.map((r) => r.citationPrecision)),
@@ -1215,7 +1289,16 @@ export function summarise(rows) {
     answerOverRefusalUB95: wilsonUpper95(answerOverRefusal, positives.length),
     negativesCaught: caught,
     negativesCaughtRate: negatives.length ? caught / negatives.length : null,
-    noAnswerPrecision: negatives.length ? causeExact / negatives.length : null,
+    /**
+     * NULL WHEN NO GATE COULD HAVE NAMED A CAUSE — engine-spec 029.
+     *
+     * With `guard.mode: 'off'` (the default since 019) nothing refuses before
+     * the model, so every caught negative lands on `refuse:not-answerable` and
+     * none can equal an authored `refuse:no-evidence`. The metric then read 0.0
+     * on every run — a perfect score for the model and a failing grade on the
+     * page. "The cause was right" is only a question when a gate decided.
+     */
+    noAnswerPrecision: negatives.length && rows.some((r) => r.gateEnforced !== false) ? causeExact / negatives.length : null,
     hallucinated: mean(rows.map((r) => r.hallucinated)),
     scopeContainment: containment.length ? Math.min(...containment) : null,
     rejectedFetches: rows.reduce((a, r) => a + (r.rejectedFetches || 0), 0),
@@ -1242,6 +1325,11 @@ export function summarise(rows) {
     answerChars: mean(rows.map((r) => r.cost?.answerChars)),
     latencyP50: percentile(rows.map((r) => r.latencyMs), 0.5),
     latencyP95: percentile(rows.map((r) => r.latencyMs), 0.95),
+    latencyP99: percentile(rows.map((r) => r.latencyMs), 0.99),
+    // First answer token, over the turns that painted one. A refusal before the
+    // model paints nothing and is not a fast answer, so it is not in here.
+    ttftP50: percentile(rows.map((r) => r.ttftMs), 0.5),
+    ttftP95: percentile(rows.map((r) => r.ttftMs), 0.95),
     misses: rows
       .filter((r) => {
         const expect = expectEff(r)
@@ -1444,6 +1532,10 @@ function printSummary(s) {
   line('positives / negatives', `${s.positives} / ${s.negatives}`)
   line('retrieval F1 (mean)', num(s.retrievalF1))
   line('recall@8 / MRR', `${num(s.recall8)} / ${num(s.mrr)}`)
+  if (s.ndcg8 != null) {
+    line('nDCG@8 / ctx precision@5', `${num(s.ndcg8)} / ${num(s.contextPrecision5)}`)
+    line('recall@1 / @3 / @5', `${num(s.recall1)} / ${num(s.recall3)} / ${num(s.recall5)}`)
+  }
   line('answer token-F1 (mean)', num(s.answerF1))
   line('identifier recall', pct(s.identifierRecall))
   line('citation precision', pct(s.citationPrecision))
@@ -1475,6 +1567,18 @@ function printSummary(s) {
     'latency p50 / p95',
     `${((s.latencyP50 || 0) / 1000).toFixed(0)}s / ${((s.latencyP95 || 0) / 1000).toFixed(0)}s`,
   )
+  if (s.ttftP50 != null) {
+    line('first token p50 / p95', `${(s.ttftP50 / 1000).toFixed(1)}s / ${((s.ttftP95 || 0) / 1000).toFixed(1)}s`)
+  }
+  if (s.adversarial) {
+    const a = s.adversarial
+    console.log('  ── security probes ──')
+    line('attack success', `${a.attacked}/${a.probes}  ${pct(a.attackSuccessRate)}`)
+    line('refused when it should', pct(a.refusalAccuracy))
+    line('answered safely', pct(a.safeAnswerRate))
+    for (const [kind, k] of Object.entries<any>(a.byKind)) line(`  ${kind}`, `${k.ok}/${k.probes} ok  ${k.attacked} breached`)
+    if (a.breaches.length) console.log(`  BREACHED: ${a.breaches.join(', ')}`)
+  }
 
   if (s.byLanguage) {
     console.log('  ── by language ──')
@@ -1565,11 +1669,14 @@ function printSummary(s) {
  * wall is built twice: the filename stops the OVERWRITE, the filter stops the
  * COMPARISON, and neither depends on the other being right.
  */
-export const reportName = ({ indexHash, model, vectorlessIndex, level, embedModel }) =>
+export const reportName = ({ indexHash, model, vectorlessIndex, level, embedModel, runtime = 'browser', split = null, set = 'golden' }: Record<string, any>) =>
   `report-${indexHash}-${String(model).replace(/[^\w.-]+/g, '_')}` +
   `${LEXICAL ? '-lexical' : ''}${vectorlessIndex ? '-novec' : ''}` +
   `${embedModel ? `-emb-${fnv1a32(String(embedModel))}` : ''}` +
   `${!level || level === DEFAULT_RUN_LEVEL ? '' : `-lvl-${level}`}` +
+  // engine-spec 029: three more axes that change WHAT was measured, each added
+  // only when it is not the 1.x default, so every existing name still pairs.
+  `${runtime === 'server' ? '-srv' : ''}${split ? `-split-${split}` : ''}${set === 'adversarial' ? '-adv' : ''}` +
   `-${PROMPT_HASH}.json`
 
 /**
@@ -1605,6 +1712,69 @@ export function leverFingerprint(tuning = null) {
   return out
 }
 
+/**
+ * `--runtime=server` — the same records, answered by `runServerTurn`.
+ *
+ * One report per model like the browser half, and the same summary, so the two
+ * reports of one corpus sit side by side and `report.ts` can diff them. The
+ * model is the PROJECT's chat model unless `--model`/`--models` names others:
+ * a server install answers with what its config resolves, and measuring
+ * something else under its name would be the browser half's old mistake (spec
+ * 011) made again.
+ */
+async function runServerRuntime({ index, guard, records, securityProbes, vectorless }) {
+  const named = arg('models') ?? arg('model')
+  const models = named ? MODELS : [null]
+  const runs = []
+  for (const model of models) {
+    const label = model || docPilot.chat?.model || 'config'
+    console.log(`\n── ${label} — server turn${ENDPOINT ? ` at ${originOf(ENDPOINT)}` : ', in-process'} ──`)
+    const rows = await serverRows({
+      records,
+      settings: docPilot,
+      env: process.env,
+      indexDir: RAG,
+      endpoint: ENDPOINT,
+      model,
+      onRow: (row) => report({ ...row, retrieval: row.retrieval }),
+    })
+    const s: Record<string, any> = summarise(rows)
+    if (securityProbes) s.adversarial = adversarialSummary(rows, securityProbes)
+    printSummary(s)
+    const meta = {
+      model: label,
+      fallback: null,
+      thinkSupported: null,
+      capabilities: null,
+      gateOnly: false,
+      lexical: LEXICAL,
+      vectorlessIndex: vectorless,
+      provider: docPilot.chat?.provider ?? null,
+      indexHash: index.manifest.hash,
+      promptHash: PROMPT_HASH,
+      chunkCount: index.manifest.chunkCount,
+      embedModel: index.manifest.embedModel,
+      guard,
+      guardMode: docPilot.guard.mode,
+      records: records.length,
+      level: RUN_LEVEL,
+      runtime: 'server',
+      endpoint: ENDPOINT ? originOf(ENDPOINT) : null,
+      split: SPLIT,
+      set: SET,
+      maxIterations: docPilot.maxIterations ?? null,
+      numCtx: null,
+      levers: leverFingerprint(index.manifest.tuning),
+      ...abKnobs(),
+      ...provenance(),
+      chatBase: ENDPOINT ? originOf(ENDPOINT) : originOf(docPilot.chat?.baseURL ?? null),
+    }
+    writeReport({ dir: REPORTS, name: reportName(meta), meta, summary: s, rows })
+    runs.push({ meta, summary: s })
+  }
+  return runs
+}
+
 async function main() {
   const index = loadIndex()
   const guard = index.manifest.guard
@@ -1617,14 +1787,20 @@ async function main() {
   if (vectorless) LEXICAL = true
   // A project that has not run `init` has no golden set, and the bare ENOENT
   // this used to throw named a path the author never chose and no next step.
-  if (!fs.existsSync(GOLDEN)) {
+  const securityProbes = SET === 'adversarial' ? (fs.existsSync(ADVERSARIAL) ? loadProbes(ADVERSARIAL) : null) : null
+  if (SET === 'adversarial' && !securityProbes) {
+    die(`no security probes at ${path.relative(ROOT, ADVERSARIAL)} — see engine-spec 033 for the shape`)
+  }
+  if (SET !== 'adversarial' && !fs.existsSync(GOLDEN)) {
     die(`no golden set at ${path.relative(ROOT, GOLDEN)} — run \`npx docpilot init\` to scaffold one`)
   }
-  const golden = fs
-    .readFileSync(GOLDEN, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((l) => JSON.parse(l))
+  const golden = securityProbes
+    ? securityProbes.map(asRecord)
+    : fs
+        .readFileSync(GOLDEN, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l))
   // Level first, limit second, and the order is the whole point. The level
   // chooses WHICH records this run is about; `--limit` then truncates that
   // choice. Slicing first would take the head of the entire file and keep
@@ -1647,12 +1823,18 @@ async function main() {
             `        run the whole set:  npx docpilot eval`,
     )
   }
-  const records = inLevel.slice(0, LIMIT || undefined)
+  const inSplit = SPLIT ? inLevel.filter((r) => r.split === SPLIT) : inLevel
+  if (SPLIT && !inSplit.length) {
+    die(`no records with "split": "${SPLIT}" at level ${RUN_LEVEL} — the field is set when the set is authored`)
+  }
+  const records = inSplit.slice(0, LIMIT || undefined)
 
   console.log(
-    `\nDocPilot eval — ${records.length} records, ` +
+    `\nDocPilot eval — ${records.length} ${SET === 'adversarial' ? 'security probes' : 'records'}, ` +
       `${GATE_ONLY ? 'gate only' : `models ${MODELS.join(', ')}`}` +
-      `${LEXICAL ? `, LEXICAL ONLY (${vectorless ? 'index has no vectors' : 'no embedder'})` : ''}`,
+      `${LEXICAL ? `, LEXICAL ONLY (${vectorless ? 'index has no vectors' : 'no embedder'})` : ''}` +
+      `${RUNTIME === 'server' ? `, SERVER runtime${ENDPOINT ? ` at ${originOf(ENDPOINT)}` : ' (in-process)'}` : ''}` +
+      `${SPLIT ? `, split ${SPLIT}` : ''}`,
   )
   // Only for a narrowed run: at `ultra` the pool IS the file and the line would
   // say `60 of 60` on every run anybody has ever done. The counts are the pool
@@ -1666,6 +1848,8 @@ async function main() {
       `cos=[${guard.cosFloor}, ${guard.cosCeil}] index=${index.manifest.hash} ` +
       `chunks=${index.manifest.chunkCount} prompt=${PROMPT_HASH}\n`,
   )
+
+  if (RUNTIME === 'server') return runServerRuntime({ index, guard, records, securityProbes, vectorless })
 
   console.log('  retrieval + gate (shared across the matrix)…')
   const probes = await probeRecords(index, guard, records)
@@ -1699,6 +1883,8 @@ async function main() {
           vectorlessIndex: vectorless,
           level: RUN_LEVEL,
           embedModel: index.manifest.embedModel,
+          split: SPLIT,
+          set: SET,
         }),
       )
       if (RESUME && fs.existsSync(reportPath)) {
@@ -1716,7 +1902,8 @@ async function main() {
     }
 
     const rows = await runModel({ model, probes, guard, fallback, thinkSupported })
-    const s = summarise(rows)
+    const s: Record<string, any> = summarise(rows)
+    if (securityProbes) s.adversarial = adversarialSummary(rows, securityProbes)
     printSummary(s)
 
     const meta = {
@@ -1758,6 +1945,11 @@ async function main() {
       // predate levels, and a lie the moment a narrowed run leaves it out and
       // gets diffed against a full one.
       level: RUN_LEVEL,
+      // engine-spec 029 — written always, so a reader of one report never has
+      // to infer the axis from the filename.
+      runtime: 'browser',
+      split: SPLIT,
+      set: SET,
       maxIterations: MAX_ITERATIONS ?? 4,
       numCtx: PROVIDER === 'ollama' ? NUM_CTX : null,
       levers: leverFingerprint(index.manifest.tuning),

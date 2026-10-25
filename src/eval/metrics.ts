@@ -137,6 +137,59 @@ export function mrr(rankedIds, gold) {
   return 0
 }
 
+/**
+ * nDCG@k with binary relevance — the BEIR headline number, engine-spec 029.
+ *
+ * Spec 011 declined it while recall@8 and MRR were the only lenses anybody read.
+ * It is here because the 2.0 claims are comparisons with OTHER systems' numbers,
+ * and nDCG@10 is the one every retrieval paper and leaderboard prints; a report
+ * that cannot state it cannot be compared with anything outside this package.
+ *
+ * EACH GOLD ENTRY EARNS ONCE, at the first rank that covers it. Ids are matched
+ * through `matchesGold`, so a page pin covered by three of its sections is one
+ * gain, not three — otherwise a page that fills the list would score above a
+ * list that found every pinned section once. The ideal list places one hit per
+ * gold entry at the top, so a record pinning one chunk scores 1 for rank 1 and
+ * 1/log2(3) = 0.63 for rank 2.
+ */
+export function ndcgAtK(rankedIds, gold, k = 10) {
+  if (!gold.length) return null
+  const covered = new Set()
+  let dcg = 0
+  const top = rankedIds.slice(0, k)
+  for (let i = 0; i < top.length; i++) {
+    const g = gold.findIndex((entry, j) => !covered.has(j) && matchesGold(top[i], [entry]))
+    if (g < 0) continue
+    covered.add(g)
+    dcg += 1 / Math.log2(i + 2)
+  }
+  let ideal = 0
+  for (let i = 0; i < Math.min(gold.length, k); i++) ideal += 1 / Math.log2(i + 2)
+  return ideal ? dcg / ideal : 0
+}
+
+/**
+ * Context precision@k, rank-weighted — the RAGAS definition, engine-spec 029.
+ *
+ * The mean of precision@i over the positions i that hold a relevant chunk, so a
+ * relevant chunk at rank 1 is worth more than the same chunk at rank 5 and a
+ * list padded with noise ABOVE its hit is punished for it. `retrievalF1` cannot
+ * see order at all; this is the number that moves when ranking improves and the
+ * set does not. Zero when nothing in the top k is relevant.
+ */
+export function contextPrecisionAtK(rankedIds, gold, k = 5) {
+  if (!gold.length) return null
+  const top = rankedIds.slice(0, k)
+  let hits = 0
+  let sum = 0
+  for (let i = 0; i < top.length; i++) {
+    if (!matchesGold(top[i], gold)) continue
+    hits++
+    sum += hits / (i + 1)
+  }
+  return hits ? sum / hits : 0
+}
+
 /** A chunk id's page: ids are `<path-without-leading-slash>#<anchor>`. */
 export function pageOf(id) {
   return `/${String(id).split('#')[0]}`
