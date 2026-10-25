@@ -285,7 +285,8 @@ export async function serverRows(o: ServerEvalOptions) {
       scopeContainment: hasRanking ? scopeContainment(retrievedIds, scope) : null,
       observed: observedOf(s, r.failure),
       latencyMs: r.ms,
-      ttftMs: r.firstText,
+      // Not streamed is not instant: the answer appeared with the settle.
+      ttftMs: r.firstText ?? (s && (s.outcome === 'answer' || s.outcome === 'opener') && s.text ? r.ms : null),
       firstThoughtMs: r.firstThought,
       timing: record?.timing ?? null,
       iterations: s?.iterations ?? record?.iterations ?? null,

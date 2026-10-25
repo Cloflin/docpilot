@@ -328,6 +328,13 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
     record.refusal = payload.refusal?.cause ?? null
     record.latencyMs = now() - started
     timing.totalMs = record.latencyMs
+    // An answer that never streamed — an opener, a cached answer, an in-loop
+    // tool call on Ollama — reaches the screen whole, with the settle: its first
+    // token IS its last. Leaving it null dropped exactly the turns that made the
+    // reader wait longest from the first-token percentiles.
+    if (timing.firstTokenMs == null && (payload.outcome === 'answer' || payload.outcome === 'opener') && payload.text) {
+      timing.firstTokenMs = timing.totalMs
+    }
     emit('settle', payload)
     ctx.record?.(record)
     return payload

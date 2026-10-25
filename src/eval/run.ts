@@ -1021,6 +1021,8 @@ async function runRecords({ model, probes, guard, fallback, thinkSupported, rows
     }
 
     row.latencyMs = Date.now() - t0
+    // An answer that never streamed reached the screen whole, at the end.
+    if (row.ttftMs == null && res.text?.trim()) row.ttftMs = row.latencyMs
     row.iterations = res.iterations
     // Not `cost.steps`, which counts the chat() calls the harness made. This is
     // what the transport actually posted — rotation, retries and continuations
