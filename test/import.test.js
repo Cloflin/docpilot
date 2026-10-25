@@ -10,6 +10,8 @@ import {
   proseLength,
 } from '../src/build/lib/html-extract.js'
 import { toMarkdown } from '../src/build/lib/html-to-md.js'
+import { fetchWithin, MAX_HOPS } from '../src/build/lib/redirects.js'
+import { printable } from '../src/build/lib/terminal.js'
 import { annotate, stripAnnotations, verifyAnnotation } from '../src/build/lib/annotate.js'
 import { applyLlmTags } from '../src/build/lib/normalise.js'
 import {
@@ -476,6 +478,72 @@ describe('import — the command', () => {
           u.startsWith('https://acme.test/') ? { href: u } : { error: 'outside the allowlist' },
       }),
     ).rejects.toThrow(/redirected to http:\/\/169\.254\.169\.254/)
+  })
+
+  it('never requests a redirect target outside the allowlist', async () => {
+    // The fetch is told not to follow, and every Location is checked first.
+    const requested = []
+    const fetchImpl = async (url, init) => {
+      requested.push(url)
+      expect(init.redirect).toBe('manual')
+      if (url === 'https://acme.test/help/rate-limits') {
+        return { ok: false, status: 301, url, headers: { get: (h) => (h === 'location' ? '/help/limits' : null) } }
+      }
+      return { ok: false, status: 302, url, headers: { get: (h) => (h === 'location' ? 'http://10.0.0.5/admin?op=delete' : null) } }
+    }
+    const allow = (u) => (u.startsWith('https://acme.test/') ? { href: u } : { error: 'outside the allowlist' })
+    await expect(readHtml({ url: 'https://acme.test/help/rate-limits', fetchImpl, allow })).rejects.toThrow(
+      /redirected to http:\/\/10\.0\.0\.5/,
+    )
+    expect(requested).toEqual(['https://acme.test/help/rate-limits', 'https://acme.test/help/limits'])
+  })
+
+  it('follows an allowed redirect chain, and stops a loop', async () => {
+    const pages = {
+      'https://acme.test/a': { status: 302, location: 'https://acme.test/b' },
+      'https://acme.test/b': { status: 200, body: '<html>ok</html>' },
+    }
+    const fetchImpl = async (url) => {
+      const a = pages[url]
+      return {
+        ok: a.status === 200,
+        status: a.status,
+        url,
+        headers: { get: (h) => (h === 'location' ? a.location : null) },
+        text: async () => a.body,
+      }
+    }
+    const allow = (u) => ({ href: u })
+    expect(await readHtml({ url: 'https://acme.test/a', fetchImpl, allow })).toBe('<html>ok</html>')
+
+    let calls = 0
+    const loop = async (url) => {
+      calls++
+      return { status: 302, url, headers: { get: () => url } }
+    }
+    await expect(fetchWithin('https://acme.test/a', { allow, fetchImpl: loop })).rejects.toThrow(/more than/)
+    expect(calls).toBe(MAX_HOPS + 1)
+  })
+
+  it('checks a markdown candidate`s redirect before requesting it', async () => {
+    const requested = []
+    const found = await findMarkdown({
+      urls: ['https://acme.test/x.md'],
+      allow: (u) => (u.startsWith('https://acme.test/') ? { href: u } : { error: 'outside' }),
+      fetchImpl: async (url) => {
+        requested.push(url)
+        return { status: 302, url, headers: { get: () => 'http://169.254.169.254/latest/' } }
+      },
+    })
+    expect(found.url).toBe(null)
+    expect(found.tried[0].why).toMatch(/redirected outside the allowlist \(http:\/\/169\.254\.169\.254/)
+    expect(requested).toEqual(['https://acme.test/x.md'])
+  })
+
+  it('escapes control bytes before remote text reaches the terminal', () => {
+    expect(printable('Rate limits\u001b]52;c;Y3VybA==\u0007\u001b[8m')).toBe('Rate limits\\x1b]52;c;Y3VybA==\\x07\\x1b[8m')
+    expect(printable('a\nb\rc\td\u009b')).toBe('a\\x0ab\\x0dc\td\\x9b')
+    expect(printable(undefined)).toBe('')
   })
 
   it('does not run the model unless asked, and reports what it added when it does', async () => {

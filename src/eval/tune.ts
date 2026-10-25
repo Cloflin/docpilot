@@ -68,7 +68,7 @@ import { createRetrieval, resolveLevers, envPin, LEVER_NAMES } from '../theme/do
 import { chainTexts, resolveChain } from './conversation.js'
 import { retrievalF1Loose, recallAtK, mrr, underPath, mean } from './metrics.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
-import { nodeEmbedTarget } from '../config.js'
+import { evalEmbedKey, nodeEmbedTarget } from '../config.js'
 import { applyFileEnv } from '../cli-env.js'
 import { prefetchEmbeddings } from './prefetch.js'
 import { flagErrors, flagValue, flagGiven } from '../cli-flags.js'
@@ -185,7 +185,7 @@ const reportPath = (level) => path.join(DOCPILOT_DIR, `tuning${narrowSuffix(leve
 const EMBED_TARGET = nodeEmbedTarget(docPilot, process.env)
 const EMBED_PROVIDER = process.env.DOCPILOT_EMBED_PROVIDER || EMBED_TARGET.provider
 const EMBED_BASE = process.env.DOCPILOT_EMBED_URL || EMBED_TARGET.baseURL
-const EMBED_KEY = process.env.DOCPILOT_EMBED_KEY || EMBED_TARGET.apiKey || null
+const EMBED_KEY = evalEmbedKey(process.env, EMBED_TARGET, EMBED_PROVIDER, EMBED_BASE)
 
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 

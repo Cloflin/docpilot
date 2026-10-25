@@ -41,7 +41,7 @@ import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { excerptWindow, TRUNCATED_NOTE } from '../theme/docpilot/excerpt.js'
 import { buildMessages, finalNote, OBS_NOTE, promptHash } from '../theme/docpilot/prompt.js'
 import { computeSupport } from '../theme/docpilot/support.js'
-import { nodeEmbedTarget } from '../config.js'
+import { evalEmbedKey, nodeEmbedTarget } from '../config.js'
 import {
   tokenF1,
   identifierRecall,
@@ -142,7 +142,7 @@ const SEARCH_CHARS = Number(process.env.DOCPILOT_SEARCH_CHARS || '') || 1200
 const EMBED_TARGET = nodeEmbedTarget(docPilot, process.env)
 const EMBED_BASE = process.env.DOCPILOT_EMBED_URL || EMBED_TARGET.baseURL
 const EMBED_PROVIDER = process.env.DOCPILOT_EMBED_PROVIDER || EMBED_TARGET.provider
-const EMBED_KEY = EMBED_TARGET.apiKey
+const EMBED_KEY = evalEmbedKey(process.env, EMBED_TARGET, EMBED_PROVIDER, EMBED_BASE)
 
 const die = (m) => {
   printError(m)

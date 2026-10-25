@@ -46,6 +46,9 @@ const localRagIndex = new URL(
 
 export const docPilot = {
   enabled: existsSync(LOCAL_EMBED ? localRagIndex : ragIndex),
+  // engine-spec 028 — `DOCPILOT_RUNTIME=server` builds the panel as a thin
+  // client and runs the turn in `docpilot serve` (see docker/).
+  runtime: env.DOCPILOT_RUNTIME === 'server' ? 'server' : 'browser',
   product: 'DocPilot',
   quote: { fromAnswer: true, fromDocs: true },
   citations: { passage: true, inCopy: true, pagesRead: true },
@@ -124,8 +127,14 @@ export const docPilot = {
          */
         chat:
           env.DOCPILOT_CHAT_ADAPTER === 'custom'
-            ? { provider: 'custom', model: 'qwen3:8b' }
-            : { provider: 'ollama', model: 'qwen3:8b' },
+            ? { provider: 'custom', model: env.DOCPILOT_CHAT_MODEL || 'qwen3:8b' }
+            : {
+                provider: 'ollama',
+                model: env.DOCPILOT_CHAT_MODEL || 'qwen3:8b',
+                // A named Ollama is reached at its own baseURL, never through
+                // OLLAMA_BASE_URL alone — inside a container that is the host.
+                ...(env.OLLAMA_BASE_URL ? { baseURL: env.OLLAMA_BASE_URL } : {}),
+              },
         /**
          * `baseURL` is stated rather than left to the environment, because for a
          * NON-HOSTED provider `nodeEmbedTarget` reads `embed.baseURL ||
@@ -223,6 +232,9 @@ const groups = [
       { text: 'Calibration and evaluation', link: '/guide/evaluation' },
       { text: 'Imported pages', link: '/guide/imported-pages' },
       { text: 'Production', link: '/guide/production' },
+      { text: 'The server runtime', link: '/guide/server' },
+      { text: 'Improving answers from traffic', link: '/guide/improving' },
+      { text: 'Fine-tuning', link: '/guide/fine-tuning' },
       { text: 'A host of your own', link: '/guide/other-sites' },
       { text: 'Appearance', link: '/guide/appearance' },
       { text: 'Translating the panel', link: '/guide/i18n' },

@@ -482,6 +482,11 @@ const READERS = {
   // that knows what `--target=cursor` MEANS is not the thing that scaffolds.
   init: ['src/cli-init.ts', 'src/cli-skills.ts'],
   update: ['src/cli-skills.ts'],
+  serve: ['src/cli-serve.ts'],
+  llms: ['src/llms/cli.ts'],
+  model: ['src/model/cli.ts'],
+  traffic: ['src/traffic/cli.ts'],
+  dataset: ['src/dataset/cli.ts'],
 }
 
 /** The `## \`command\`` section of the CLI reference, up to the next `## `. */

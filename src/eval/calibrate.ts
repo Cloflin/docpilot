@@ -40,7 +40,7 @@ import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { wilsonUpper95 } from './metrics.js'
 import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 import { chainTexts, resolveChain } from './conversation.js'
-import { nodeEmbedTarget } from '../config.js'
+import { evalEmbedKey, nodeEmbedTarget } from '../config.js'
 import { applyFileEnv } from '../cli-env.js'
 import { entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
 import { printError, tick, tock, FAILED, USAGE } from '../cli-exit.js'
@@ -173,7 +173,7 @@ const EMBED_PROVIDER = process.env.DOCPILOT_EMBED_PROVIDER || EMBED_TARGET.provi
 const EMBED_BASE = process.env.DOCPILOT_EMBED_URL || EMBED_TARGET.baseURL
 // Read but never printed. The report and every log line below carry thresholds
 // and probe ids, never a credential.
-const EMBED_KEY = process.env.DOCPILOT_EMBED_KEY || EMBED_TARGET.apiKey || null
+const EMBED_KEY = evalEmbedKey(process.env, EMBED_TARGET, EMBED_PROVIDER, EMBED_BASE)
 
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 

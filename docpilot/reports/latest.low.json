@@ -12,58 +12,26 @@
   "lexical": false,
   "vectorlessIndex": false,
   "provider": "ollama",
-  "indexHash": "bc7c0d85",
-  "promptHash": "e3508f1a",
-  "chunkCount": 452,
+  "indexHash": "8ff42dee",
+  "promptHash": "3279e1dd",
+  "chunkCount": 668,
   "embedModel": "bge-m3",
   "guard": {
-   "tau": 0.69,
-   "tauLexical": 0.51,
+   "tau": 0.3,
+   "tauLexical": 0.3,
    "wDense": 0.75,
    "wLexical": 0.25,
    "denseMode": "cosine",
-   "cosFloor": 0.2,
-   "cosCeil": 0.6,
-   "source": "calibrated-reduced",
-   "calibratedAt": "bc7c0d85",
-   "zexp": [
-    {
-     "n": 7,
-     "z": 1.1823
-    },
-    {
-     "n": 11,
-     "z": 1.3327
-    },
-    {
-     "n": 25,
-     "z": 1.8207
-    },
-    {
-     "n": 49,
-     "z": 2.2701
-    },
-    {
-     "n": 110,
-     "z": 2.8776
-    },
-    {
-     "n": 310,
-     "z": 4.0534
-    },
-    {
-     "n": 452,
-     "z": 4.7226
-    },
-    {
-     "n": 452,
-     "z": 4.7226
-    }
-   ],
-   "zexpSource": "measured",
-   "overRefusalUB95": 0.015757753370292518,
-   "gatePrecision": 0.5416666666666666
+   "cosFloor": 0.44,
+   "cosCeil": 0.64,
+   "source": "provisional",
+   "calibratedAt": null,
+   "zexp": null,
+   "zexpSource": "closed-form",
+   "overRefusalUB95": null,
+   "gatePrecision": null
   },
+  "guardMode": "off",
   "records": 10,
   "level": "low",
   "maxIterations": 2,
@@ -87,18 +55,30 @@
    "W_LEXICAL_RRF": 1,
    "maxIterations": 2,
    "numCtx": 8192
-  }
+  },
+  "historyCondense": true,
+  "lastAnswerFull": true,
+  "antecedentHops": 2,
+  "ranAt": "2026-10-24T16:45:00.117Z",
+  "chatBase": "http://localhost:11434",
+  "embedBase": "http://localhost:11434",
+  "node": "v26.8.1",
+  "package": "1.5.0",
+  "goldenSha": "f52b55763c41130f",
+  "temperature": 0.2,
+  "seed": 1
  },
  "summary": {
   "positives": 7,
   "negatives": 3,
-  "retrievalF1": 0.40197897340754485,
-  "recall8": 0.9285714285714286,
-  "mrr": 0.6870748299319728,
-  "answerF1": 0.33539967169589413,
-  "identifierRecall": 0.4,
-  "citationPrecision": 0.4714285714285714,
-  "supportPrecision": 0.9682539682539683,
+  "retrievalF1": 0.3177179962894249,
+  "recall8": 0.6428571428571429,
+  "mrr": 0.4333333333333333,
+  "answerF1": 0.38179551072931206,
+  "identifierRecall": 0.3333333333333333,
+  "citationPrecision": 0.5,
+  "citationRecall": 0.4166666666666667,
+  "supportPrecision": 0.9648148148148148,
   "unsupportedAnswerRate": 0,
   "language": 1,
   "gateOverRefusal": 0,
@@ -107,88 +87,68 @@
   "answerOverRefusalUB95": 0.2787740319923744,
   "negativesCaught": 2,
   "negativesCaughtRate": 0.6666666666666666,
-  "noAnswerPrecision": 0.3333333333333333,
+  "noAnswerPrecision": 0,
   "hallucinated": 0,
   "scopeContainment": 1,
   "rejectedFetches": 0,
-  "iterationsPerAnswer": 1.5714285714285714,
-  "requestsPerTurn": 2.111111111111111,
-  "promptTokens": 5237.888888888889,
-  "outputTokens": 490.44444444444446,
-  "tokensPerAcceptedAnswer": 7365,
-  "promptChars": 17883,
-  "promptCharsPeak": 8699.666666666666,
-  "observationChars": 6556.333333333333,
-  "answerChars": 836.1111111111111,
-  "latencyP50": 9306,
-  "latencyP95": 32164,
+  "iterationsPerAnswer": 1.1666666666666667,
+  "requestsPerTurn": 1.3333333333333333,
+  "promptTokens": 3881.222222222222,
+  "outputTokens": 291.8888888888889,
+  "cachedTokens": null,
+  "cachedShare": null,
+  "tokensPerAcceptedAnswer": 6259.666666666667,
+  "promptChars": 12949.555555555555,
+  "promptCharsPeak": 9500.333333333334,
+  "observationChars": 6938.333333333333,
+  "answerChars": 601.7777777777778,
+  "latencyP50": 30206,
+  "latencyP95": 373191,
   "misses": [
+   "q-07(error)",
    "n-02(answer)"
   ],
-  "languageFailures": []
- },
- "incomparable": [
-  "Levers changed",
-  "num_ctx changed: null → 8192"
- ],
- "diff": [
-  {
-   "key": "answerF1",
-   "from": 0.37411312360227417,
-   "to": 0.33539967169589413,
-   "delta": -0.038713451906380036,
-   "better": false
+  "languageFailures": [],
+  "byLanguage": null,
+  "byDepth": null,
+  "taxonomy": {
+   "ok": [
+    "q-01",
+    "q-02",
+    "q-04",
+    "q-05"
+   ],
+   "retrieval-miss": [
+    "q-03",
+    "q-06"
+   ],
+   "error": [
+    "q-07"
+   ],
+   "neg-caught": [
+    "n-01",
+    "n-03"
+   ],
+   "neg-answered:refuse:no-evidence": [
+    "n-02"
+   ]
   },
-  {
-   "key": "citationPrecision",
-   "from": 0.5476190476190477,
-   "to": 0.4714285714285714,
-   "delta": -0.07619047619047625,
-   "better": false
-  },
-  {
-   "key": "supportPrecision",
-   "from": 0.9603174603174605,
-   "to": 0.9682539682539683,
-   "delta": 0.007936507936507797,
-   "better": true
-  },
-  {
-   "key": "promptTokens",
-   "from": 5248.222222222223,
-   "to": 5237.888888888889,
-   "delta": -10.33333333333394,
-   "better": true
-  },
-  {
-   "key": "outputTokens",
-   "from": 502.22222222222223,
-   "to": 490.44444444444446,
-   "delta": -11.777777777777771,
-   "better": true
-  },
-  {
-   "key": "tokensPerAcceptedAnswer",
-   "from": 7393.428571428572,
-   "to": 7365,
-   "delta": -28.42857142857156,
-   "better": true
-  },
-  {
-   "key": "latencyP50",
-   "from": 9109,
-   "to": 9306,
-   "delta": 197,
-   "better": false
-  },
-  {
-   "key": "latencyP95",
-   "from": 30260,
-   "to": 32164,
-   "delta": 1904,
-   "better": false
+  "reSearch": null,
+  "missPages": {
+   "undescribed": [
+    {
+     "page": "/guide/providers",
+     "described": false,
+     "records": [
+      "q-06"
+     ]
+    }
+   ],
+   "checked": 1
   }
- ],
+ },
+ "incomparable": [],
+ "diff": [],
  "rows": [
   {
    "id": "q-01",
@@ -197,6 +157,7 @@
    "expect": "answer",
    "scoped": false,
    "followUp": false,
+   "depth": 0,
    "G": 1,
    "D": 1,
    "L": 1,
@@ -204,43 +165,63 @@
    "gatePass": true,
    "retrievedIds": [
     "concepts/the-gate#",
-    "guide/philosophy#refuse-before-the-model-is-called",
-    "guide/why#why-the-gate-sits-on-the-retrieval-side",
     "concepts/the-gate#five-settled-turns-five-causes",
     "concepts/the-gate#follow-ups",
-    "concepts/the-gate#it-is-a-relevance-floor-not-an-entailment-check"
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "guide/why#why-the-gate-sits-on-the-retrieval-side-and-why-it-is-opt-in"
+   ],
+   "rankedIds": [
+    "concepts/the-gate#",
+    "concepts/the-gate#five-settled-turns-five-causes",
+    "concepts/the-gate#follow-ups",
+    "guide/troubleshooting#a-follow-up-is-refused",
+    "guide/why#why-the-gate-sits-on-the-retrieval-side-and-why-it-is-opt-in",
+    "changelog#the-relevance-gate-is-opt-in",
+    "concepts/the-gate#follow-ups~2",
+    "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted~2",
+    "changelog#120"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-gate",
+    "/guide/philosophy"
    ],
    "retrieval": {
-    "p": 0.8333333333333334,
-    "r": 1,
-    "f1": 0.9090909090909091
+    "p": 0.6,
+    "r": 0.5,
+    "f1": 0.5454545454545454
    },
    "recall8": 1,
    "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 28709,
-   "iterations": 2,
-   "requests": 3,
+   "latencyMs": 38485,
+   "iterations": 1,
+   "requests": 1,
    "rejectedFetches": 0,
    "support": 1,
    "cost": {
-    "promptTokens": 6805,
-    "outputTokens": 888,
-    "promptChars": 23845,
-    "promptCharsPeak": 8185,
-    "observationChars": 5911,
-    "answerChars": 1186,
-    "steps": 3
+    "promptTokens": 2736,
+    "outputTokens": 338,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 9466,
+    "promptCharsPeak": 9466,
+    "observationChars": 6965,
+    "answerChars": 1078,
+    "steps": 1
    },
+   "reSearch": [],
+   "reSearchLang": [],
    "hallucinated": 0,
    "emittedContainment": 1,
    "observed": "answer",
-   "answerF1": 0.30662020905923343,
+   "answerF1": 0.40740740740740744,
    "identifierRecall": 0,
    "language": 1,
-   "citationPrecision": 0.8,
-   "text": "The refusal gate is a retrieval-side floor that **refuses queries before the model is called**. It ensures questions with no support in the corpus cost zero model calls and produce no generated text. This mechanism prevents paying for refusals and makes off-topic questions free, allowing the system to offer closest pages instead of an apology. The gate operates as a **relevance floor**, not an entailment check, and does not explain refusals with scores, thresholds, or labels like \"low confidence\". Instead, it measures how often retrieved text overlaps with the query's subject. Key causes for refusal include:\n\n- `no-evidence`: Below threshold, and widening scope would not help.\n- `out-of-scope`: Below threshold but requires corpus-wide search (only claimed after computation).\n- `not-answerable`: The model was called but returned no citable result.\n\nAdmissibility rules require at least one content word from the query's \"tail\" to appear in retrieved evidence. The gate also avoids length-based continuation classifiers, focusing on lexical overlap rather than word count. For example, \"and for backend calls?\" passes, while \"and for AWS S3 buckets?\" does not. [1][2][3][4][5]"
+   "citationPrecision": 1,
+   "citationRecall": 0.5,
+   "text": "The refusal gate is a retrieval-side floor that can refuse a question before the model is called. If a question has no support, it costs zero model calls and produces no generated text. The gate's behavior is controlled by `guard.mode`, which defaults to `'off'` since version 1.3. In this mode, the gate is always scored and recorded, but the model decides whether to refuse based on a threshold calibrated per corpus and language. Setting `guard.mode: 'calibrated'` turns the gate into a decision-maker for a single-language corpus with a calibrated probe set.\n\nThe refusal gate can issue a verdict of `no-answer`, which has five causes. Three of these are the gate's decisions, while the other two are resolved before the gate runs. These include `credential` (when the question contains a live key), `social` (when the input is a greeting), `no-evidence` (when the question is below threshold and widening the scope won't help), `out-of-scope` (when the question is below threshold but spans the entire corpus), and `not-answerable` (when the model returns nothing citable)."
   },
   {
    "id": "q-02",
@@ -249,49 +230,71 @@
    "expect": "answer",
    "scoped": false,
    "followUp": false,
-   "G": 1,
-   "D": 1,
+   "depth": 0,
+   "G": 0.9610726562632743,
+   "D": 0.948096875017699,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "concepts/a-turn#3-retrieval-and-the-gate",
+    "changelog#the-relevance-gate-is-opt-in",
     "concepts/the-gate#two-channels",
-    "reference/config#it-rewrites-it-never-adds",
     "concepts/the-gate#follow-ups",
-    "concepts/the-gate#follow-ups~3"
+    "reference/config#it-rewrites-it-never-adds",
+    "changelog#120"
+   ],
+   "rankedIds": [
+    "concepts/a-turn#3-retrieval-and-the-gate",
+    "changelog#the-relevance-gate-is-opt-in",
+    "concepts/the-gate#two-channels",
+    "concepts/the-gate#follow-ups",
+    "reference/config#it-rewrites-it-never-adds",
+    "features/gate#",
+    "concepts/the-gate#follow-ups~4",
+    "concepts/the-gate#",
+    "changelog#120"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-gate"
    ],
    "retrieval": {
-    "p": 0.2,
+    "p": 0.16666666666666666,
     "r": 1,
-    "f1": 0.33333333333333337
+    "f1": 0.2857142857142857
    },
    "recall8": 1,
-   "mrr": 0.5,
+   "mrr": 0.3333333333333333,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 3677,
+   "latencyMs": 22467,
    "iterations": 1,
    "requests": 1,
    "rejectedFetches": 0,
    "support": 1,
    "cost": {
-    "promptTokens": 2507,
-    "outputTokens": 148,
-    "promptChars": 9106,
-    "promptCharsPeak": 9106,
-    "observationChars": 7129,
-    "answerChars": 484,
+    "promptTokens": 2601,
+    "outputTokens": 218,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 8850,
+    "promptCharsPeak": 8850,
+    "observationChars": 6318,
+    "answerChars": 617,
     "steps": 1
    },
+   "reSearch": [],
+   "reSearchLang": [],
    "hallucinated": 0,
    "emittedContainment": 1,
    "observed": "answer",
-   "answerF1": 0.5212765957446809,
+   "answerF1": 0.6470588235294117,
    "identifierRecall": null,
    "language": 1,
    "citationPrecision": 1,
-   "text": "The gate scores a question on two channels: **dense** and **lexical**.\n\n1. **Dense**: This measures how far the best in-scope chunk stands out. It uses cosine similarity with embeddings to determine relevance.\n2. **Lexical**: This evaluates the share of the question's rarest terms that appear in the retrieved text. It is length-invariant due to a term count cap.\n\nThese two channels are combined with weights, and the lexical weight is asserted to be below the threshold at startup."
+   "citationRecall": 1,
+   "text": "The gate scores a question on two channels: **dense** and **lexical**.\n\n- **Dense**: This channel measures how far the best in-scope chunk stands out. It uses a cosine-trained embedding model to calibrate the absolute value, which can be thresholded directly. If the model is anisotropic, a shift-free statistic is used instead.\n\n- **Lexical**: This channel evaluates what share of the question's rarest terms appear in the retrieved text. The term count is capped to make the measure length-invariant. An unlisted term is treated as maximally rare, and the default is set to avoid saturation by off-domain questions."
   },
   {
    "id": "q-03",
@@ -300,49 +303,69 @@
    "expect": "answer",
    "scoped": false,
    "followUp": false,
-   "G": 0.95,
-   "D": 1,
+   "depth": 0,
+   "G": 0.7859672885014133,
+   "D": 0.7812897180018843,
    "L": 0.8,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
-    "guide/free-tier#the-constraint-is-requests-not-tokens",
     "reference/config#budget",
-    "guide/free-tier#",
-    "guide/free-tier#one-key-ten-models",
-    "concepts/the-ladder#2-the-free-pool"
+    "concepts/the-ladder#2-the-free-pool",
+    "guide/providers#asking-for-the-pool",
+    "reference/config#budget~2",
+    "reference/config#chatmodels"
+   ],
+   "rankedIds": [
+    "reference/config#budget",
+    "concepts/the-ladder#2-the-free-pool",
+    "guide/providers#asking-for-the-pool",
+    "reference/config#budget~2",
+    "reference/config#chatmodels",
+    "guide/comparison#and-what-0-does-not-cover",
+    "concepts/the-ladder#what-costs-a-provider-its-turn",
+    "concepts/the-ladder#1-paid-providers-in-priority-order"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/free-tier"
    ],
    "retrieval": {
-    "p": 0.2,
-    "r": 1,
-    "f1": 0.33333333333333337
+    "p": 0,
+    "r": 0,
+    "f1": 0
    },
-   "recall8": 1,
-   "mrr": 1,
+   "recall8": 0,
+   "mrr": 0,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 19815,
-   "iterations": 2,
-   "requests": 3,
+   "latencyMs": 22739,
+   "iterations": 1,
+   "requests": 1,
    "rejectedFetches": 0,
    "support": 1,
    "cost": {
-    "promptTokens": 7702,
-    "outputTokens": 675,
-    "promptChars": 27352,
-    "promptCharsPeak": 9354,
-    "observationChars": 7055,
-    "answerChars": 661,
-    "steps": 3
+    "promptTokens": 2774,
+    "outputTokens": 201,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 9220,
+    "promptCharsPeak": 9220,
+    "observationChars": 6694,
+    "answerChars": 476,
+    "steps": 1
    },
+   "reSearch": [],
+   "reSearchLang": [],
    "hallucinated": 0,
    "emittedContainment": 1,
    "observed": "answer",
-   "answerF1": 0.4125560538116592,
-   "identifierRecall": 1,
+   "answerF1": 0.31313131313131315,
+   "identifierRecall": 0,
    "language": 1,
-   "citationPrecision": 0.5,
-   "text": "The free tier is limited by **requests per day**, not tokens. The daily cap applies to **requests**, while tokens (context length) are not restricted. For example:\n\n- **50 free-model requests per day** (under 10 credits lifetime)\n- **1000 per day** (10+ credits lifetime)\n- **20 requests per minute** (always)\n\nThe daily counter applies to models ending in `:free`, but `openrouter/free` (the router) is not exempt. Once the daily limit is reached, further requests are denied. This differs from token-based limits, which govern how much context a model can process per request. The free tier’s constraint is strictly on request volume, not token usage. [1] [2]"
+   "citationPrecision": 0,
+   "citationRecall": 0,
+   "text": "The free tier is limited by requests per day, not by tokens. The free tier caps at 50 requests a day, while the models behind it offer 128k–512k of context. A turn costing three or four of them — the capability probe, the loop, the forced final call — is about fourteen questions before the panel starts reporting an outage that is not one. The two rotations are the same argument at two levels, and both are metered by the thing that catches people out: **requests per day**."
   },
   {
    "id": "q-04",
@@ -351,6 +374,7 @@
    "expect": "answer",
    "scoped": false,
    "followUp": false,
+   "depth": 0,
    "G": 1,
    "D": 1,
    "L": 1,
@@ -358,42 +382,65 @@
    "gatePass": true,
    "retrievedIds": [
     "install/web#the-index",
+    "reference/cli#",
     "guide#overview",
-    "guide/where-it-goes#the-two-halves-again",
-    "install/docusaurus#the-settings",
-    "guide/why#why-not-a-vector-database"
+    "guide/faq#the-commands~2",
+    "reference/cli#index",
+    "guide/faq#doctor-what-ci-gates-on",
+    "reference/cli#embedder-question"
+   ],
+   "rankedIds": [
+    "install/web#the-index",
+    "reference/cli#",
+    "guide#overview",
+    "guide/faq#the-commands~2",
+    "reference/cli#index",
+    "install#2-the-index",
+    "guide/other-sites#the-index-does-not-need-a-site",
+    "reference/cli#slash-commands",
+    "guide/faq#doctor-what-ci-gates-on",
+    "reference/cli#embedder-question"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/reference/cli"
    ],
    "retrieval": {
-    "p": 0,
-    "r": 0,
-    "f1": 0
+    "p": 0.14285714285714285,
+    "r": 1,
+    "f1": 0.25
    },
    "recall8": 1,
-   "mrr": 0.16666666666666666,
+   "mrr": 0.2,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 15227,
+   "latencyMs": 75695,
    "iterations": 2,
    "requests": 3,
    "rejectedFetches": 0,
-   "support": 1,
+   "support": 0.8888888888888888,
    "cost": {
-    "promptTokens": 6518,
-    "outputTokens": 532,
-    "promptChars": 21469,
-    "promptCharsPeak": 7393,
-    "observationChars": 5104,
-    "answerChars": 658,
+    "promptTokens": 9451,
+    "outputTokens": 785,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 33710,
+    "promptCharsPeak": 11725,
+    "observationChars": 8881,
+    "answerChars": 718,
     "steps": 3
    },
+   "reSearch": [],
+   "reSearchLang": [],
    "hallucinated": 0,
    "emittedContainment": 1,
    "observed": "answer",
-   "answerF1": 0.22222222222222224,
-   "identifierRecall": 0.3333333333333333,
+   "answerF1": 0.3286384976525822,
+   "identifierRecall": 1,
    "language": 1,
-   "citationPrecision": 0,
-   "text": "The `docpilot index` command builds a static retrieval index from your markdown documentation. It reads the `docpilot.config.mjs` file to determine settings like `docsDir` (source markdown location) and `indexDir` (output directory for the index). This index is used by the DocPilot panel to answer questions by matching them to document content. The index does not require a live site to function, as it is a build artifact served statically. For example, `npx docpilot index` would process markdown under `docsDir` and output the index to `indexDir` by default. **A page's route must match the URL your site actually serves** to avoid 404 errors. [1][2][3]"
+   "citationPrecision": 1,
+   "citationRecall": 1,
+   "text": "The `docpilot index` command builds a retrieval index from markdown files in `docsDir` and outputs it to `indexDir` (default: `docs/public/rag/`). It prepares the data structure used by the AI assistant to answer queries. Key behaviors:\n\n- **Primary function**: Creates the static index for the assistant panel [1]\n- **Dry run**: `--dry` chunks content without embeddings (for tuning chunking) [2]\n- **Embedding control**: `--no-embed` skips embeddings; `--refresh-embeddings` rebuilds them\n- **Output location**: Specified by `indexDir` in config or `--html-dir` flag\n- **Idempotent**: Identical input produces identical output\n\nThe index is served at `/rag/` by default, matching the route defined in `indexDir` [1]."
   },
   {
    "id": "q-05",
@@ -402,17 +449,33 @@
    "expect": "answer",
    "scoped": false,
    "followUp": false,
+   "depth": 0,
    "G": 1,
    "D": 1,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
+    "guide/other-sites#the-index-does-not-need-a-site",
     "guide#overview~2",
-    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
     "install#",
     "install/vitepress#the-config",
-    "install/vitepress#the-theme"
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not"
+   ],
+   "rankedIds": [
+    "guide/other-sites#the-index-does-not-need-a-site",
+    "guide#overview~2",
+    "install#",
+    "install/vitepress#the-config",
+    "guide/llms-txt#the-generator-plugin-is-vitepresss-docpilot-is-not",
+    "install/vitepress#the-theme",
+    "guide/faq#how-do-i-get-started",
+    "install/vitepress#"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide",
+    "/install"
    ],
    "retrieval": {
     "p": 0.4,
@@ -420,31 +483,36 @@
     "f1": 0.5714285714285715
    },
    "recall8": 1,
-   "mrr": 1,
+   "mrr": 0.5,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 9306,
+   "latencyMs": 31964,
    "iterations": 1,
    "requests": 1,
    "rejectedFetches": 0,
-   "support": 1,
+   "support": 0.9,
    "cost": {
-    "promptTokens": 2702,
-    "outputTokens": 453,
-    "promptChars": 8485,
-    "promptCharsPeak": 8485,
-    "observationChars": 6518,
-    "answerChars": 1310,
+    "promptTokens": 2757,
+    "outputTokens": 332,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 8706,
+    "promptCharsPeak": 8706,
+    "observationChars": 6184,
+    "answerChars": 845,
     "steps": 1
    },
+   "reSearch": [],
+   "reSearchLang": [],
    "hallucinated": 0,
    "emittedContainment": 1,
    "observed": "answer",
-   "answerF1": 0.3493150684931507,
-   "identifierRecall": 0.6666666666666666,
+   "answerF1": 0.34854771784232363,
+   "identifierRecall": 0.3333333333333333,
    "language": 1,
    "citationPrecision": 0,
-   "text": "To install DocPilot in a VitePress site, follow these steps:\n\n1. **Configure VitePress**: Update your `docs/.vitepress/config.mjs` file to include DocPilot. Here is a complete configuration example:\n\n```js\nimport { defineConfig, loadEnv } from 'vitepress'\nimport { defineDocPilot } from '@cloflin/docpilot'\n\nconst ai = defineDocPilot({}, loadEnv('', process.cwd(), ''))\n\nexport default defineConfig({\n  vite: { plugins: [ai.plugin()] },\n  themeConfig: { docPilot: ai.themeConfig },\n})\n```\n\nIf you need to customize the configuration, you can add a `docPilot` export to the same file:\n\n```js\nexport const docPilot = {\n  product: 'Acme Editor',\n  chat: { provider: 'openai', model: 'gpt-4o-mini' },\n  embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },\n}\n\nconst ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))\n```\n\n2. **Set up the Theme**: Modify your VitePress theme to include DocPilot. If you are using the default theme, update your `docs/.vitepress/theme/index.js` file as follows:\n\n```js\nimport DefaultTheme from 'vitepress/theme'\nimport { withDocPilot } from '@cloflin/docpilot/theme'\n\nexport default withDocPilot(DefaultTheme)\n```\n\nIf you have a custom theme, ensure that `withDocPilot` wraps your theme. This will integrate DocPilot into your VitePress site."
+   "citationRecall": 0,
+   "text": "To install DocPilot in a VitePress site, you need to configure the `docPilot` export in your VitePress config file. The CLI `npx docpilot index` walks markdown and writes static files, including `manifest.json`, chunk shards, vectors, and document frequencies. The config file is searched in six places, in order, with the VitePress paths coming first. The file must export `docPilot` by name, and the settings include `product`, `docsDir`, `chat`, and `embed`. For example:\n\n```js [docs/.vitepress/config.mjs]\nexport const docPilot = {\n  product: 'Acme Editor',\n  docsDir: 'docs',\n  chat: { provider: 'openai', model: 'gpt-4o-mini' },\n  embed: 'auto',\n}\n```\n\nAdditionally, you can use the `vitepress-plugin-llms` plugin to integrate DocPilot with VitePress. The full configuration is detailed in the VitePress section of the installation guide."
   },
   {
    "id": "q-06",
@@ -453,51 +521,74 @@
    "expect": "answer",
    "scoped": false,
    "followUp": false,
-   "G": 1,
-   "D": 1,
+   "depth": 0,
+   "G": 0.8828529394395608,
+   "D": 0.8438039192527477,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/production#docker~2",
+    "guide/security#where-the-key-is",
+    "guide/security#docker",
+    "guide/credentials#",
+    "guide/panel#a-question-with-a-key-in-it",
+    "guide/credentials#what-happens",
+    "guide/panel#hello"
+   ],
+   "rankedIds": [
+    "guide/production#docker~2",
+    "guide/security#where-the-key-is",
+    "guide/security#docker",
     "guide/credentials#",
     "guide/panel#a-question-with-a-key-in-it",
     "guide/production#ask-what-the-contract-is",
-    "guide/history#where",
+    "reference/config#openapi",
+    "features/credentials#",
     "guide/credentials#what-happens",
-    "guide/panel#hello"
+    "guide/panel#hello",
+    "features/credentials#what-it-catches"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/guide/providers"
    ],
    "retrieval": {
     "p": 0,
     "r": 0,
     "f1": 0
    },
-   "recall8": 1,
-   "mrr": 0.14285714285714285,
+   "recall8": 0,
+   "mrr": 0,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 5534,
+   "latencyMs": 24154,
    "iterations": 1,
    "requests": 1,
    "rejectedFetches": 0,
    "support": 1,
    "cost": {
-    "promptTokens": 2484,
-    "outputTokens": 253,
-    "promptChars": 8734,
-    "promptCharsPeak": 8734,
-    "observationChars": 6783,
-    "answerChars": 769,
+    "promptTokens": 2686,
+    "outputTokens": 227,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 8848,
+    "promptCharsPeak": 8848,
+    "observationChars": 6342,
+    "answerChars": 567,
     "steps": 1
    },
+   "reSearch": [],
+   "reSearchLang": [],
    "hallucinated": 0,
    "emittedContainment": 1,
    "observed": "answer",
-   "answerF1": 0.2559241706161138,
-   "identifierRecall": 0,
+   "answerF1": 0.2459893048128342,
+   "identifierRecall": 0.3333333333333333,
    "language": 1,
    "citationPrecision": 0,
-   "text": "The API key should not be placed in a Dockerfile or in a `Dockerfile` because it is readable by anyone who can pull the image. Instead, it should be stored in an environment variable and referenced in the configuration file. For example, in a `compose.yaml` file, you can set the key as follows:\n\n```yaml\n# compose.yaml\nservices:\n  docs:\n    build: .\n    ports: ['8080:80']\n    environment:\n      OPENAI_API: ${OPENAI_API_KEY:?set OPENAI_API_KEY in .env or the shell}\n```\n\nThis ensures the key is not exposed in the image. Additionally, if a question contains an API key, it is handled locally in the browser and never sent over the network. The key is replaced with a placeholder, and the user is warned not to paste it. This is a habit guard, not a security boundary."
+   "citationRecall": 0,
+   "text": "The API key should not be placed in a Dockerfile or in the image, as it becomes readable by anyone who can pull the image. Instead, it should be passed to the running container at runtime. This ensures the key is not exposed in the image layers. The key should be kept in a secure environment, such as `.env.local` (which is typically ignored by version control) or a host's secret store. It is also recommended to use environment variables in the container's configuration, such as in a `compose.yaml` file, to pass the key securely to the running container. [1] [2]"
   },
   {
    "id": "q-07",
@@ -506,8 +597,9 @@
    "expect": "answer",
    "scoped": false,
    "followUp": false,
-   "G": 0.9650470225180159,
-   "D": 0.9533960300240212,
+   "depth": 0,
+   "G": 0.779388802288342,
+   "D": 0.705851736384456,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
@@ -516,39 +608,36 @@
     "concepts/the-ladder#1-paid-providers-in-priority-order~2",
     "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
     "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
-    "concepts/the-ladder#what-never-happens"
+    "changelog#the-answer-ladder",
+    "changelog#033"
+   ],
+   "rankedIds": [
+    "concepts/the-ladder#",
+    "concepts/the-ladder#1-paid-providers-in-priority-order~2",
+    "concepts/the-ladder#3-retrieval-degrades-the-answer-does-not",
+    "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
+    "changelog#the-answer-ladder",
+    "concepts/the-ladder#what-never-happens",
+    "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+    "concepts/the-ladder#1-paid-providers-in-priority-order",
+    "changelog#033"
+   ],
+   "lang": "English",
+   "goldPages": [
+    "/concepts/the-ladder"
    ],
    "retrieval": {
-    "p": 1,
+    "p": 0.6666666666666666,
     "r": 0.5,
-    "f1": 0.6666666666666666
+    "f1": 0.5714285714285715
    },
    "recall8": 0.5,
    "mrr": 1,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 32164,
-   "iterations": 2,
-   "requests": 3,
-   "rejectedFetches": 0,
-   "support": 0.7777777777777778,
-   "cost": {
-    "promptTokens": 7744,
-    "outputTokens": 1155,
-    "promptChars": 26488,
-    "promptCharsPeak": 9066,
-    "observationChars": 6791,
-    "answerChars": 1550,
-    "steps": 3
-   },
-   "hallucinated": 0,
-   "emittedContainment": 1,
-   "observed": "answer",
-   "answerF1": 0.27988338192419826,
-   "identifierRecall": null,
-   "language": 1,
-   "citationPrecision": 1,
-   "text": "The answer ladder is a structured process in DocPilot that defines the order of operations when handling a query. It ensures that each step (rung) is attempted before moving to the next, with specific outcomes for failures. Here's how it works:\n\n1. **Paid Providers (Priority Order)**: The system prioritizes paid providers like `openrouter` and `ollama` (which answers last). If a provider fails (e.g., 429, 5xx errors), the next in line is used. Naming a model explicitly (e.g., `chat: {model: 'anthropic/claude-sonnet-4'}`) locks it to a specific provider, bypassing the default priority order [1].\n\n2. **Retrieval Degradation**: If the embedder (vector model) is unreachable, retrieval falls back to lexical-only evidence using BM25 over text chunks, titles, and paths. This is a degradation mode, not a failure, and significantly reduces search accuracy (e.g., recall@8 drops from 0.97 to 0.41 on a 1191-chunk corpus) [3].\n\n3. **Reader Feedback**: The user sees specific messages based on the rung that resolved the query:\n   - `complete`: No error, answer delivered.\n   - `no-answer`: AI unreachable; shows closest passages.\n   - `rate-limited`: Free daily limit exhausted; resumes at 18:40.\n   - `error`: AI service failed to respond [4].\n\n4. **What Never Happens**: Providers cannot rotate once a response is generated, keys are never exposed to the browser, and the embedder half of the process is fixed after indexing [5].\n\nThis ladder ensures systematic handling of queries while minimizing errors and maintaining structured user feedback."
+   "observed": "error",
+   "error": "The operation was aborted due to timeout",
+   "latencyMs": 373191
   },
   {
    "id": "n-01",
@@ -557,41 +646,59 @@
    "expect": "refuse:no-evidence",
    "scoped": false,
    "followUp": false,
-   "G": 0.7907289295959108,
-   "D": 0.7209719061278811,
+   "depth": 0,
+   "G": 0.43157698530338157,
+   "D": 0.2421026470711754,
    "L": 1,
    "channel": "raw",
    "gatePass": true,
    "retrievedIds": [
     "guide/evaluation#the-golden-set",
     "reference/theme#the-whole-set~2",
-    "reference/config#parameters~4",
-    "guide/appearance#five-entry-points",
-    "reference/cli#init"
+    "reference/config#ui",
+    "reference/config#parameters~5",
+    "features/i18n#what-ships-and-what-you-supply"
    ],
+   "rankedIds": [
+    "guide/evaluation#the-golden-set",
+    "reference/theme#the-whole-set~2",
+    "reference/config#ui",
+    "reference/config#parameters~5",
+    "features/i18n#what-ships-and-what-you-supply",
+    "reference/cli#init",
+    "reference/config#parameters~6",
+    "guide/appearance#the-tokens~4",
+    "reference/config#parameters~7"
+   ],
+   "lang": "English",
+   "goldPages": [],
    "retrieval": null,
    "recall8": null,
    "mrr": null,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 8081,
+   "latencyMs": 24916,
    "iterations": 2,
-   "requests": 3,
+   "requests": 2,
    "rejectedFetches": 0,
    "support": 1,
    "cost": {
-    "promptTokens": 7990,
-    "outputTokens": 87,
-    "promptChars": 26596,
-    "promptCharsPeak": 9102,
-    "observationChars": 6823,
-    "answerChars": 223,
-    "steps": 3
+    "promptTokens": 5794,
+    "outputTokens": 103,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 18170,
+    "promptCharsPeak": 9112,
+    "observationChars": 6606,
+    "answerChars": 135,
+    "steps": 2
    },
+   "reSearch": [],
+   "reSearchLang": [],
    "hallucinated": 0,
    "emittedContainment": 1,
    "observed": "refuse:not-answerable",
-   "text": "The excerpts do not provide the capital of France. The documentation mentions a question about France's capital in the golden set but does not answer it. No other section contains this information. Answer with confidence 0."
+   "text": "The capital of France is Paris. This information is not directly provided in the documentation excerpts, but it is a well-known fact.\n\n"
   },
   {
    "id": "n-02",
@@ -600,8 +707,9 @@
    "expect": "refuse:no-evidence",
    "scoped": false,
    "followUp": false,
-   "G": 0.95,
-   "D": 1,
+   "depth": 0,
+   "G": 0.8457978704336611,
+   "D": 0.8610638272448814,
    "L": 0.8,
    "channel": "raw",
    "gatePass": true,
@@ -613,29 +721,46 @@
     "guide/comparison#how-the-money-is-arranged",
     "install/docusaurus#syntax-highlighting"
    ],
+   "rankedIds": [
+    "install/docusaurus#options",
+    "guide/comparison#choosing",
+    "guide/comparison#sources",
+    "guide/comparison#architecture",
+    "guide/comparison#how-the-money-is-arranged",
+    "guide/llms-txt#robotstxt",
+    "install/web#the-index",
+    "guide/production#content-security-policy",
+    "install/docusaurus#syntax-highlighting"
+   ],
+   "lang": "English",
+   "goldPages": [],
    "retrieval": null,
    "recall8": null,
    "mrr": null,
    "scopeContainment": 1,
    "scoredAsNegative": false,
-   "latencyMs": 5308,
+   "latencyMs": 30206,
    "iterations": 1,
    "requests": 1,
    "rejectedFetches": 0,
    "support": 1,
    "cost": {
-    "promptTokens": 2689,
-    "outputTokens": 223,
-    "promptChars": 8872,
-    "promptCharsPeak": 8872,
-    "observationChars": 6893,
-    "answerChars": 684,
+    "promptTokens": 3114,
+    "outputTokens": 260,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 10222,
+    "promptCharsPeak": 10222,
+    "observationChars": 7688,
+    "answerChars": 670,
     "steps": 1
    },
+   "reSearch": [],
+   "reSearchLang": [],
    "hallucinated": 0,
    "emittedContainment": 1,
    "observed": "answer",
-   "text": "To configure Algolia DocSearch crawling for your site, you need to set up the Docusaurus plugin with the appropriate options. Here is the configuration you can use:\n\n```js\n['@cloflin/docpilot/docusaurus', {\n  config: ai.themeConfig,\n  highlighter: 'shiki',      // or 'none'\n  ragBase: '/rag',           // where the index is served from\n  styles: true,              // include the two stylesheets\n  selectors: { search: '.DocSearch-Button' },\n}]\n```\n\nDefaults for the three selectors are `.theme-doc-markdown, main` for the article, `.DocSearch-Button, .navbar__search-input` for search, and `main` for focus return. `base` is read from your `siteConfig.baseUrl` — you do not set it."
+   "text": "To configure Algolia DocSearch crawling for your site, you need to set up the `ragBase` option in your Docusaurus configuration. This option specifies the base path where the index is served from. Here is an example configuration:\n\n```js\n['@cloflin/docpilot/docusaurus', {\n  config: ai.themeConfig,\n  highlighter: 'shiki',      // or 'none'\n  ragBase: '/rag',           // where the index is served from\n  styles: true,              // include the two stylesheets\n  selectors: { search: '.DocSearch-Button' },\n}]\n```\n\nThe `ragBase` value should be set to the path where your index is hosted. This ensures that the crawling process can locate and use the index correctly."
   },
   {
    "id": "n-03",
@@ -644,26 +769,57 @@
    "expect": "refuse:out-of-scope",
    "scoped": true,
    "followUp": false,
-   "G": 0.5976147024162307,
-   "D": 0.7968196032216409,
+   "depth": 0,
+   "G": 0.24610544136334866,
+   "D": 0.32814058848446487,
    "L": 0,
    "channel": "raw",
    "gatePass": false,
    "retrievedIds": [
     "reference/theme#overriding",
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-dark-set",
+    "reference/theme#two-tokens-the-stylesheet-moves-for-you",
+    "reference/theme#the-whole-set~2"
+   ],
+   "rankedIds": [
+    "reference/theme#overriding",
+    "reference/theme#the-dark-set~2",
+    "reference/theme#the-dark-set",
     "reference/theme#two-tokens-the-stylesheet-moves-for-you",
     "reference/theme#the-whole-set~2",
-    "reference/theme#the-dark-set",
     "reference/theme#",
     "reference/theme#the-whole-set"
    ],
+   "lang": "English",
+   "goldPages": [],
    "retrieval": null,
    "recall8": null,
    "mrr": null,
    "scopeContainment": 1,
    "scoredAsNegative": true,
-   "observed": "refuse:out-of-scope",
-   "latencyMs": 0
+   "latencyMs": 24769,
+   "iterations": 1,
+   "requests": 1,
+   "rejectedFetches": 0,
+   "support": 1,
+   "cost": {
+    "promptTokens": 3018,
+    "outputTokens": 163,
+    "cachedTokens": null,
+    "embedRequests": 0,
+    "promptChars": 9354,
+    "promptCharsPeak": 9354,
+    "observationChars": 6767,
+    "answerChars": 310,
+    "steps": 1
+   },
+   "reSearch": [],
+   "reSearchLang": [],
+   "hallucinated": 0,
+   "emittedContainment": 1,
+   "observed": "refuse:not-answerable",
+   "text": "The `docpilot index` command is not directly described in the provided excerpts. The documentation focuses on theme tokens, overriding, and styling for DocPilot, but does not mention the `index` command. The answer is based on the available information, and the command is not covered in the provided excerpts."
   }
  ]
 }

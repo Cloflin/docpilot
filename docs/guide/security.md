@@ -27,6 +27,10 @@ The browser talks to your own origin only: `POST /ai/v1/embeddings` and `POST /a
 | `npx docpilot index` | the CLI, for the embedding calls | `process.env`, in Node |
 | Production | your reverse proxy | the server's environment |
 
+**The dev proxy serves this machine only.** It forwards a request only when it is same-origin, `application/json`, and comes from a loopback address. A cross-site request (`Sec-Fetch-Site` other than `same-origin`/`none`, or an `Origin` whose host is not the `Host` header) and a request from another machine get 403, and the key is not attached. To test the panel from another device with `vitepress dev --host`, or to run the dev server in a container behind port mapping, set `DOCPILOT_DEV_PROXY_LAN=1`. With that set, anyone on your network can spend your key through the dev server.
+
+**A key goes only to the host it belongs to.** In a chat [chain](/reference/config#chat-chain), each member sends its own key (`apiKeyEnv`, or its provider's variable). A member that resolves no key — Ollama, a keyless `custom` or `llamacpp`, or a member whose variable is not exported — sends no `Authorization` header; it never reuses the first member's key. `docpilot eval`, `calibrate`, `tune` and `answer-bench` follow the same rule: see [`eval`](/reference/cli#eval).
+
 The provider decides the variable name — `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` and so on. Keep it in `.env.local`, which is in `.gitignore`, or in your host's secret store. Ask the CLI what your configuration needs:
 
 ```bash
@@ -107,7 +111,19 @@ This site runs on Vercel. Two rewrites send the panel's routes to two functions,
 }
 ```
 
-The shared handler builds the outgoing headers from nothing — `Authorization: Bearer $OPENROUTER_API_KEY` (this site uses OpenRouter), `content-type`, `accept` — so no client header can ride along. It answers 405 to anything but POST, 403 to another origin, 413 above 256 KB, and 429 above 10 requests a minute or 20 a day from one IP. The response goes back as a stream, without `set-cookie` and without any `access-control-allow-*` header.
+The shared handler builds the outgoing headers from nothing — `Authorization: Bearer $OPENROUTER_API_KEY` (this site uses OpenRouter), `content-type`, `accept` — so no client header can ride along. It answers 405 to anything but POST, 403 to another origin **or to a request with no `Origin` header**, 413 above 256 KB, and 429 above 10 requests a minute or 20 a day from one IP. The response goes back as a stream, without `set-cookie` and without any `access-control-allow-*` header.
+
+**The body is rebuilt, not relayed.** The handler parses the request and forwards only the fields the panel sends. The model must be on an allowlist, the output ceiling is clamped, and every routing or billing field — `models`, `plugins`, `transforms`, `route`, `n`, other `provider` keys — is dropped. A body that is not JSON, names a model off the list, has no `messages`, or carries more than 8 embedding inputs gets 400 and is never forwarded.
+
+| Variable | Default | What it sets |
+|---|---|---|
+| `DOCPILOT_PROXY_CHAT_MODELS` | `deepseek/deepseek-v4-flash` | the chat models the proxy accepts, comma-separated |
+| `DOCPILOT_PROXY_EMBED_MODELS` | `qwen/qwen3-embedding-8b` | the embedding models the proxy accepts |
+| `DOCPILOT_PROXY_MAX_TOKENS` | `4096` | the clamp for `max_tokens`, `max_completion_tokens` and `reasoning.max_tokens`; a body with none gets this value |
+
+If you change `chat.model` or `embed.model` in the site config, or add fallback models with [`chat.models`](/features/fallback), list every one of them in these variables. A model the proxy refuses gets 400 `model not allowed here`: with no fallback the question fails, and a fallback model off the list never answers, so a 429 on the first model ends in a search answer. A script that calls the deployed proxy must send `Origin: https://<your site>`.
+
+The limiter counts in the memory of one function instance, so a cold start or a parallel instance resets it. **Set a hard credit limit on the key in the OpenRouter dashboard** — that is the only ceiling that holds.
 
 ## What every proxy must do
 
@@ -131,6 +147,6 @@ With Ollama for both chat and embeddings there is no key at all, and nothing to 
 
 Say these out loud to whoever owns the budget:
 
-- **The `/ai/*` routes are public.** Anyone who can open your site can send questions through them. The rate limit and the body cap bound the cost; they do not make the route private.
+- **The `/ai/*` routes are public.** Anyone who can open your site can send questions through them, and a non-browser client can forge the `Origin` header. The model allowlist, the token clamp, the rate limit and the body cap bound the cost of each call; they do not make the route private. The credit limit on the key bounds the total.
 - **A key you write into the page yourself is published.** DocPilot never puts one there, but a hand-written `window.__DOCPILOT__` or `themeConfig` with an `apiKey` would be sent from the browser. Do not do that.
 - **This is not a defence against the reader.** The corpus is your public website and the panel runs in the reader's browser. The guarantees are about the answers — [What it guarantees](/concepts/guarantees) lists them.

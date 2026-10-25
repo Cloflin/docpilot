@@ -68,7 +68,7 @@ import { writeReport } from './report.js'
 import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 import { chainTexts, resolveChain } from './conversation.js'
-import { nodeEmbedTarget } from '../config.js'
+import { keyForBase, nodeEmbedTarget } from '../config.js'
 
 import { ROOT, RAG, REPORTS, GOLDEN, DOCS, settings as docPilot } from '../cli-context.js'
 import { applyFileEnv } from '../cli-env.js'
@@ -401,11 +401,19 @@ const originOf = (url) => {
 // Same three adapters the panel uses, so an eval run measures the transport the
 // readers will actually get. Keys come from the environment; nothing is stored.
 const PROVIDER = arg('provider', process.env.DOCPILOT_PROVIDER || 'ollama')
+/**
+ * A KEY GOES ONLY TO THE HOST IT BELONGS TO.
+ *
+ * This used to be the first of four hosted keys that happened to be set, sent
+ * to whatever `DOCPILOT_BASE_URL` named — so `OPENAI_API_KEY` from `.env.local`
+ * went in cleartext to a LAN vLLM box, or to whatever listened on
+ * localhost:11434. `DOCPILOT_API_KEY` is the explicit key for BASE and is sent
+ * as given; without it, only the key of the provider whose own address BASE is.
+ * The Ollama adapter gets no implicit key at all.
+ */
 const API_KEY =
   process.env.DOCPILOT_API_KEY ||
-  process.env.OPENAI_API_KEY ||
-  process.env.ANTHROPIC_API_KEY ||
-  process.env.OPENROUTER_API_KEY ||
+  (PROVIDER === 'ollama' ? null : keyForBase(process.env, BASE)) ||
   null
 /**
  * The embedder comes from `docPilot.embed`, not from the CHAT provider.
@@ -421,7 +429,16 @@ const API_KEY =
 const EMBED_TARGET = nodeEmbedTarget(docPilot, process.env)
 const EMBED_PROVIDER = process.env.DOCPILOT_EMBED_PROVIDER || EMBED_TARGET.provider
 const EMBED_BASE = process.env.DOCPILOT_EMBED_URL || EMBED_TARGET.baseURL
-const EMBED_KEY = process.env.DOCPILOT_EMBED_KEY || EMBED_TARGET.apiKey || null
+// The configured target's key belongs to the configured target. Moved by
+// DOCPILOT_EMBED_URL or DOCPILOT_EMBED_PROVIDER, it goes only where its own
+// provider lives (see `keyForBase`) unless DOCPILOT_EMBED_KEY names one.
+const EMBED_MOVED =
+  EMBED_PROVIDER !== EMBED_TARGET.provider ||
+  originOf(EMBED_BASE) !== originOf(EMBED_TARGET.baseURL)
+const EMBED_KEY =
+  process.env.DOCPILOT_EMBED_KEY ||
+  (EMBED_MOVED ? (EMBED_PROVIDER === 'ollama' ? null : keyForBase(process.env, EMBED_BASE)) : EMBED_TARGET.apiKey) ||
+  null
 
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 

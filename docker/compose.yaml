@@ -1,0 +1,39 @@
+# docker compose -f docker/compose.yaml up --build
+#
+# Ollama runs on the HOST (on a Mac that is where the GPU is); the container
+# reaches it through host.docker.internal. To run it in a container instead:
+#   docker compose -f docker/compose.yaml --profile ollama up --build
+# and set OLLAMA_BASE_URL=http://ollama:11434.
+services:
+  docpilot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: docpilot-server:local
+    ports:
+      - "8787:8787"
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      DOCPILOT_CHAT_MODEL: ${DOCPILOT_CHAT_MODEL:-qwen3:8b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - turns:/data
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.12.6
+    profiles: ["ollama"]
+    volumes:
+      - ollama:/root/.ollama
+    # Loopback only. Ollama has no authentication, and docpilot reaches it over
+    # the compose network (`http://ollama:11434`), so the host publish is only
+    # for `ollama pull` from this machine. On 0.0.0.0 anyone who can reach the
+    # host could delete, replace or pull models — and Docker-published ports
+    # bypass ufw/iptables INPUT rules on Linux.
+    ports:
+      - "127.0.0.1:11434:11434"
+
+volumes:
+  turns:
+  ollama:

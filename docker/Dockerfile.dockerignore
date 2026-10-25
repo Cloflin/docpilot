@@ -1,0 +1,15 @@
+# Keys live in these. They must never reach a layer.
+.env
+.env.*
+!.env.example
+
+.git
+node_modules
+dist
+docs/.vitepress/dist
+docs/.vitepress/cache
+docpilot/embed-cache
+docpilot/reports
+docpilot/turns
+**/.DS_Store
+.claude

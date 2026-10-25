@@ -58,7 +58,7 @@ Because steps 1 and 2 run without a server, the only thing your server does is f
 
 ## How small the index is
 
-An embedding model returns 4,096 numbers per chunk, each a 32-bit float. DocPilot keeps one bit of each: its sign. This site's own index is 323 KB for 646 chunks at 4096 dimensions — the whole documentation you are reading.
+An embedding model returns 4,096 numbers per chunk, each a 32-bit float. DocPilot keeps one bit of each: its sign. This site's own index is 336 KB for 672 chunks at 4096 dimensions — the whole documentation you are reading.
 
 <Compression />
 

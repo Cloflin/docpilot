@@ -20,6 +20,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { parseAllowlist, checkSource } from './lib/sources.js'
+import { fetchWithin } from './lib/redirects.js'
+import { printable, printableLines } from './lib/terminal.js'
 import { pickMain, prune, metadata } from './lib/html-extract.js'
 import { toMarkdown } from './lib/html-to-md.js'
 import { parseDocument } from './lib/dom.js'
@@ -151,28 +153,27 @@ export async function readHtml({
   }
   if (htmlFile) return fs.readFileSync(htmlFile, 'utf8')
 
-  const res = await fetchImpl(url, {
-    headers: {
-      'user-agent': UA,
-      accept: 'text/html,application/xhtml+xml',
-      'accept-language': `${lang};q=1.0, *;q=0.1`,
+  // The allowlist checked the URL the user typed. An allowed origin that
+  // redirects — to plain http, to another host, or to something on the internal
+  // network of whatever machine is running the import — must not get that
+  // request sent at all, so every hop is checked BEFORE it is requested, not
+  // after the runtime has followed it.
+  const { res, refused } = await fetchWithin(url, {
+    allow,
+    fetchImpl,
+    init: {
+      headers: {
+        'user-agent': UA,
+        accept: 'text/html,application/xhtml+xml',
+        'accept-language': `${lang};q=1.0, *;q=0.1`,
+      },
     },
-    redirect: 'follow',
   })
-  // The allowlist checked the URL the user typed. Redirects are followed, so
-  // without this it checked only the FIRST hop: an allowed origin that redirects
-  // — to plain http, to another host, or to something on the internal network of
-  // whatever machine is running the import — delivers that response's body into
-  // the corpus, filed under the allowed URL. Re-checking the URL the response
-  // actually came from is what makes the list the boundary it claims to be.
-  if (allow && res.url && res.url !== url) {
-    const verdict = allow(res.url)
-    if ('error' in verdict) {
-      throw new Error(
-        `${url} redirected to ${res.url}, which is outside docPilot.sources.allow.\n` +
-          '      Add that origin deliberately, or import the final URL directly.',
-      )
-    }
+  if (refused) {
+    throw new Error(
+      `${url} redirected to ${refused}, which is outside docPilot.sources.allow.\n` +
+        '      Add that origin deliberately, or import the final URL directly.',
+    )
   }
   if (!res.ok) {
     throw new Error(
@@ -396,7 +397,7 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
       allow: (u) => checkSource(u, entries),
     })
   } catch (e) {
-    log.error(`[docpilot] ${e.message}`)
+    log.error(`[docpilot] ${printableLines(e.message)}`)
     return 1
   }
 
@@ -429,7 +430,7 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
       expectLang: flags.lang,
     })
   } catch (e) {
-    log.error(`[docpilot] ${e.message}`)
+    log.error(`[docpilot] ${printableLines(e.message)}`)
     return 1
   }
 
@@ -478,22 +479,25 @@ const originOf = (url) => {
  */
 function report(log, { built, file, flags }) {
   const { dropped, annotation } = built
+  // Every field below except the counts came off the remote page or out of the
+  // model, so each one goes through `printable` — see lib/terminal.ts.
+  const p = printable
   log.log(`\n[docpilot] import ${file}`)
-  log.log(`  title        ${built.title}`)
+  log.log(`  title        ${p(built.title)}`)
   log.log(
-    `  description  ${built.description || 'NONE — the page publishes no meta description. Write one: it is the strongest dense lever the corpus has.'}`,
+    `  description  ${p(built.description) || 'NONE — the page publishes no meta description. Write one: it is the strongest dense lever the corpus has.'}`,
   )
   log.log(`  body         ${built.file.split('\n').length} lines · ${built.links.length} links`)
   if (built.from.kind === 'markdown') {
-    log.log(`  read         ${built.from.url}`)
+    log.log(`  read         ${p(built.from.url)}`)
     log.log('               the page\'s OWN markdown — nothing was converted or dropped')
   } else {
     log.log(`  read         <${built.scope}> — nothing outside it was read`)
-    for (const t of built.from.tried || []) log.log(`               no .md at ${t.url} (${t.why})`)
+    for (const t of built.from.tried || []) log.log(`               no .md at ${p(t.url)} (${p(t.why)})`)
   }
   if (built.langMismatch) {
     log.log(
-      `  LANGUAGE     the page came back in "${built.pageLang}", not "${flags.lang}".\n` +
+      `  LANGUAGE     the page came back in "${p(built.pageLang)}", not "${p(flags.lang)}".\n` +
         '               Many sites negotiate on geography, not on the header. A page in\n' +
         "               the wrong language retrieves for nothing — open the site's own\n" +
         '               URL for your language, or pass the DOM with --html <file>.',
@@ -503,7 +507,7 @@ function report(log, { built, file, flags }) {
   if (dropped.length) {
     log.log(`  dropped      ${dropped.length} blocks:`)
     for (const d of dropped.slice(0, 5)) {
-      log.log(`               ${d.reason.padEnd(22)} "${d.text.slice(0, 60)}${d.text.length > 60 ? '…' : ''}"`)
+      log.log(`               ${d.reason.padEnd(22)} "${p(d.text.slice(0, 60))}${d.text.length > 60 ? '…' : ''}"`)
     }
     if (dropped.length > 5) log.log(`               …and ${dropped.length - 5} more`)
   }
@@ -513,17 +517,17 @@ function report(log, { built, file, flags }) {
     return
   }
   if (annotation.rejected) {
-    log.log(`  annotation   REJECTED — ${annotation.rejected}`)
+    log.log(`  annotation   REJECTED — ${printableLines(annotation.rejected)}`)
     if (annotation.detail?.was) {
-      log.log(`               line ${annotation.detail.line}: "${annotation.detail.was}"`)
-      log.log(`               became  "${annotation.detail.now}"`)
+      log.log(`               line ${annotation.detail.line}: "${p(annotation.detail.was)}"`)
+      log.log(`               became  "${p(annotation.detail.now)}"`)
     }
     log.log('               the page was written exactly as converted.')
     return
   }
   log.log(`  annotation   ${annotation.only} <llm-only> · ${annotation.exclude} <llm-exclude>`)
   for (const added of annotation.added) {
-    log.log(`               + ${added.replace(/\s+/g, ' ').slice(0, 90)}`)
+    log.log(`               + ${p(added.replace(/\s+/g, ' ').slice(0, 90))}`)
   }
   if (annotation.added.length) {
     log.log('               ^ shown to readers and cited as documentation — check it.')

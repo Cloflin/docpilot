@@ -598,9 +598,25 @@ export interface I18nSettings {
   locales?: Record<string, { translations?: Record<string, unknown> }>
 }
 
+/** Where a turn runs — engine-spec 028. */
+export type Runtime = 'browser' | 'server'
+
+/** The server runtime's address, as the panel sees it. */
+export interface ServerSettings {
+  /** A same-origin path. `GET {endpoint}/manifest`, `POST {endpoint}`. Default `'/ai/turn'`. */
+  endpoint?: string
+}
+
 /** What you pass to `defineDocPilot`, and export by name for the CLI to read. */
 export interface DocPilotSettings {
   enabled?: boolean
+  /**
+   * `'browser'` (default) runs retrieval, the gate and the tool loop in the
+   * reader's browser. `'server'` runs them in `@cloflin/docpilot/server`; the
+   * page receives no prompt, threshold, transport or corpus.
+   */
+  runtime?: Runtime
+  server?: ServerSettings
   product?: string | null
   docsDir?: string
   indexDir?: string | null
@@ -718,6 +734,8 @@ export interface DocPilotThemeConfig {
   feedbackEndpoint?: string | null
   feedback?: FeedbackSettings
   guard?: GuardSettings
+  runtime?: Runtime
+  server?: ServerSettings
   /**
    * REMOVED at 1.0.0 — it was declared here and `themeDocPilot` never
    * emitted it. `vocabulary` is SERVER_ONLY: the map is folded into the
@@ -839,6 +857,27 @@ export declare function themeDocPilot(
 export declare function providerKey(
   env: Record<string, string | undefined>,
   provider: ProviderId,
+): string | null
+/**
+ * The credential for whichever provider lives at `baseURL`, compared by
+ * origin. Null when no provider owns that address (a local Ollama, a LAN
+ * server, another gateway) or its key is not set — a key is only ever returned
+ * for its own host.
+ */
+export declare function keyForBase(
+  env: Record<string, string | undefined>,
+  baseURL: string | null | undefined,
+): string | null
+/**
+ * The key an eval tool sends to its embedder: `DOCPILOT_EMBED_KEY`, else the
+ * configured target's own key while the target is unmoved, else the key of
+ * the provider that owns the moved-to host (`keyForBase`), else null.
+ */
+export declare function evalEmbedKey(
+  env: Record<string, string | undefined>,
+  target: { provider: string | null; baseURL: string | null; apiKey: string | null },
+  provider: string | null | undefined,
+  baseURL: string | null | undefined,
 ): string | null
 /**
  * The embed target as the INDEXER sees it: no proxy, so the real host, and the

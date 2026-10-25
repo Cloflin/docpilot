@@ -794,6 +794,45 @@ describe('the configuration a free pool resolves from', () => {
     expect(seen.set).toEqual({})
   })
 
+  /**
+   * WHO ASKED. The route spends the owner's key, so only the panel's own call —
+   * same-origin, JSON, from this machine — is forwarded. A cross-site page's
+   * `no-cors` text/plain POST and a LAN peer under `--host` are refused before
+   * the proxy runs.
+   */
+  it('refuses cross-site, non-JSON and LAN requests before forwarding', () => {
+    const env = { ANTHROPIC_API_KEY: 'sk-ant', ...ENV }
+    const route = devProxy(cfg({ chat: { provider: 'anthropic', model: 'c' } }), env)['^/ai/v1/messages(?:\\?.*)?$']
+    const req = (headers = {}, peer = '127.0.0.1') => ({
+      headers: { host: 'localhost:5173', 'content-type': 'application/json', ...headers },
+      socket: { remoteAddress: peer },
+    })
+    const res = () => {
+      const r = { statusCode: 200, headersSent: false, body: null, setHeader() {}, end(b) { r.body = b; r.headersSent = true } }
+      return r
+    }
+
+    // The panel: same-origin fetch, or a header-less local tool.
+    expect(route.bypass(req({ origin: 'http://localhost:5173', 'sec-fetch-site': 'same-origin' }), res())).toBeUndefined()
+    expect(route.bypass(req({ 'content-type': 'application/json; charset=utf-8' }), res())).toBeUndefined()
+    expect(route.bypass(req({}, '::1'), res())).toBeUndefined()
+
+    for (const [headers, peer] of [
+      [{ origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }],
+      [{ 'sec-fetch-site': 'same-site' }],
+      [{ origin: 'https://evil.example' }],
+      [{ 'content-type': 'text/plain' }],
+      [{}, '192.168.1.20'],
+    ]) {
+      const r = res()
+      expect(route.bypass(req(headers, peer), r)).toBe(false)
+      expect(r.statusCode).toBe(403)
+    }
+
+    const lan = devProxy(cfg({ chat: { provider: 'anthropic', model: 'c' } }), { ...env, DOCPILOT_DEV_PROXY_LAN: '1' })
+    expect(lan['^/ai/v1/messages(?:\\?.*)?$'].bypass(req({}, '192.168.1.20'), res())).toBeUndefined()
+  })
+
   /** Borrowing is for the UNNAMED case only. An explicit embedder is a sentence. */
   it('still stops the build for an explicitly named provider that cannot embed', () => {
     expect(() =>

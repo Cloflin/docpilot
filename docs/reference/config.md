@@ -37,6 +37,8 @@ sections below say what each one means and why it is what it is.
 ```js [every default, written out]
 export const docPilot = {
   enabled: true,
+  runtime: 'browser',
+  server: { endpoint: '/ai/turn' },
   product: null,
   docsDir: 'docs',
   indexDir: null,
@@ -111,6 +113,8 @@ written by hand; only the values are mechanical.
 | Name | Type | Default | Description |
 |---|---|---|---|
 | [`enabled`](#enabled) | `boolean` | `true` | `false` mounts nothing — the site builds exactly as if the package were not installed |
+| [`runtime`](#runtime) | `'browser' \| 'server'` | `'browser'` | Where a turn runs: the reader's browser, or your server through `@cloflin/docpilot/server` — *under `'server'` no prompt, threshold, transport or corpus reaches the page* |
+| [`server.endpoint`](#server-endpoint) | `string` | `'/ai/turn'` | The same-origin path the panel posts a turn to and reads `{endpoint}/manifest` from; read only under `runtime: 'server'` |
 | [`product`](#product) | `string \| null` | `null` | Names what the corpus is about in the system prompt, composer placeholder and greeting; `null` reads as "this documentation" — *reaches the system prompt, so changing it moves `promptHash` and refiles every eval report* |
 | [`docsDir`](#docsdir) | `string` | `'docs'` | Where the VitePress site lives, relative to the project root, and the root `indexDir` defaults under — *server-only — the CLI and the build read it, the browser never receives it* |
 | [`indexDir`](#indexdir) | `string \| null` | `null` | Overrides where the built index is written and read — set it only if you moved it out of `${docsDir}/public/rag` — *server-only, and a moved index also needs `host.ragBase` so the browser can fetch it* |
@@ -215,6 +219,26 @@ and in each key's own section.
 - **Default:** `true`
 
 `false` mounts nothing. The site builds as if the package were absent.
+
+## runtime
+
+- **Type:** `'browser' | 'server'`
+- **Default:** `'browser'`
+- **Related:** [`server.endpoint`](#server-endpoint), [The server runtime](/guide/server)
+
+Where a turn runs.
+
+- `'browser'` — the reader's browser downloads the index and runs retrieval, the gate, the tool loop and the prompt. Your server only attaches the key (`/ai/v1/*`).
+- `'server'` — all of that runs in `@cloflin/docpilot/server` on your machine. The page receives a stream. The prompt, the thresholds, the transports and the corpus are not in the bundle; the browser holds the page list for the scope picker and the text of the chunks an answer cited.
+
+Anything other than these two stops the build.
+
+## server.endpoint
+
+- **Type:** `string`
+- **Default:** `'/ai/turn'`
+
+The path the panel posts a turn to under `runtime: 'server'`, and the base of `GET {endpoint}/manifest`. It must start with `/`: a cross-origin endpoint would need CORS, and CORS on an endpoint that spends your model allowance lets any page spend it.
 
 ## product
 
@@ -706,7 +730,10 @@ chat: {
   a repeat stops the build rather than being deduped in silence.
 - **`apiKeyEnv`** is the NAME of an environment variable, never the value: a key
   written in a config file is a key compiled into the browser bundle. Omitted, it
-  takes the provider's own variable from the table.
+  takes the provider's own variable from the table. Each member sends only its
+  own key: a member that resolves none sends no `Authorization` header and never
+  reuses another member's key, so export every member's variable before you rely
+  on falling back to it.
 - **`baseURL`** works for `ollama`, `llamacpp` and `custom` — see
   [`chat.baseURL`](#chat-baseurl) — and stops the build beside a branded
   provider, which has an address of its own.

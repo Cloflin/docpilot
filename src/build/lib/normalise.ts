@@ -132,12 +132,88 @@ function unfencedRuns(src) {
  * one still excludes to end of file, and only the backticks are read as quoting.
  */
 const SPAN = '\uE000'
-const CODE_SPAN = /(`+)(?:(?!\1)[\s\S])*?\1/g
+
+/**
+ * Every code span in `line`, each one replaced by `fn(span, ticks)`.
+ *
+ * This is a scanner, not the regex it replaces, and it returns exactly what
+ * `line.replace(/(`+)(?:(?!\1)[\s\S])*?\1/g, fn)` returned. That regex
+ * backtracked cubically on a long run of backticks: a corpus line holding
+ * thirty thousand of them, from an imported page, stalled `docpilot index` for
+ * hours. The regex semantics, which this keeps quirk for quirk:
+ *
+ *   · from a backtick at `i`, the opener is the whole run from `i` (M ticks),
+ *     and the span closes at the FIRST later place M ticks in a row occur —
+ *     inside a longer run too;
+ *   · if there is none, the opener gives up one tick and tries again, down to
+ *     one. A shorter opener of k ≤ M/2 ticks always closes inside its own run,
+ *     so a lone run of three becomes a span of two and one tick left over;
+ *   · no span from `i` at all, and the search moves on one character.
+ *
+ * The scan that finds a closing run consumes everything up to it, so the cost
+ * is near-linear — see the loop below.
+ */
+function replaceCodeSpans(line, fn) {
+  const s = String(line)
+  let out = ''
+  let from = 0
+  let i = s.indexOf('`')
+  while (i >= 0) {
+    let runEnd = i
+    while (s.charCodeAt(runEnd) === 96) runEnd++
+    const m = runEnd - i
+    // The longest later run decides the longest opener that can close outside
+    // its own run; anything at most m/2 closes inside it.
+    let close = -1
+    let k = 0
+    let j = runEnd
+    let best = 0
+    let bestAt = -1
+    // Stops at the first run of m or more; otherwise reads to the end. A full
+    // read only happens when m is over twice every later run, so the runs that
+    // cause one halve each time: O(n log n) on the worst line, not O(n³).
+    for (;;) {
+      j = s.indexOf('`', j)
+      if (j < 0) break
+      let e = j
+      while (s.charCodeAt(e) === 96) e++
+      const len = e - j
+      if (len >= m) {
+        best = m
+        bestAt = j
+        break
+      }
+      if (len > best) {
+        best = len
+        bestAt = j
+      }
+      j = e
+    }
+    if (best > m / 2) {
+      // `bestAt` is the first later run of `best` ticks (or of at least m), so
+      // it is where the first `best`-tick occurrence after the opener starts.
+      k = best
+      close = bestAt
+    } else if (m >= 2) {
+      k = Math.floor(m / 2)
+      close = i + k
+    }
+    if (close < 0) {
+      i = s.indexOf('`', i + 1)
+      continue
+    }
+    const end = close + k
+    out += s.slice(from, i) + fn(s.slice(i, end), s.slice(i, i + k))
+    from = end
+    i = s.indexOf('`', end)
+  }
+  return out + s.slice(from)
+}
 
 /** Backticked runs out, placeholders in — see `applyLlmTags`. */
 function maskCode(line) {
   const spans = []
-  const masked = line.replace(CODE_SPAN, (m) => {
+  const masked = replaceCodeSpans(line, (m) => {
     spans.push(m)
     return `${SPAN}${spans.length - 1}${SPAN}`
   })
@@ -355,6 +431,59 @@ export function unwrapContainers(src) {
  * DOCUMENTING an MDX import writes one in a sample, and deleting a sample's
  * first line is content loss with nothing on screen to show for it.
  */
+/**
+ * `line` with its string literals removed, exactly as
+ * `line.replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '')` removed them.
+ *
+ * That regex backtracked exponentially: both alternatives match a backslash, so
+ * a quote followed by sixty backslashes and no closing quote tried every way to
+ * split the run, and one such line in an imported page hung `docpilot index`.
+ * A simpler regex with disjoint alternatives is fast but not the same — it stops
+ * matching `'C:\'`, whose only closing quote follows a backslash.
+ *
+ * So this computes the regex's own answer. From position p inside a string
+ * opened by quote q, the regex's first success depends on p alone: a q at p
+ * closes; otherwise it tries an escape (`\` and any character) first, then one
+ * character that is not q. That makes it a right-to-left table, one per quote
+ * character, O(n) in total.
+ */
+function stripStrings(line) {
+  const s = String(line)
+  const n = s.length
+  // What `.` refuses without the `s` flag.
+  const term = (c) => c === '\n' || c === '\r' || c === '\u2028' || c === '\u2029'
+  const tables = {}
+  const table = (q) => {
+    if (tables[q]) return tables[q]
+    // first[p]: where the closing q is, reading from p; -1 when there is none.
+    const first = new Int32Array(n + 2).fill(-1)
+    for (let p = n - 1; p >= 0; p--) {
+      const c = s[p]
+      if (c === q) {
+        first[p] = p
+        continue
+      }
+      let r = -1
+      if (c === '\\' && p + 1 < n && !term(s[p + 1])) r = first[p + 2]
+      if (r < 0 && !term(c)) r = first[p + 1]
+      first[p] = r
+    }
+    return (tables[q] = first)
+  }
+  let out = ''
+  let from = 0
+  for (let i = 0; i < n; i++) {
+    const c = s[i]
+    if (c !== "'" && c !== '"' && c !== '`') continue
+    const close = table(c)[i + 1]
+    if (close < 0) continue
+    out += s.slice(from, i)
+    from = close + 1
+    i = close
+  }
+  return out + s.slice(from)
+}
+
 export function stripMdx(src) {
   const START =
     /^import\s+(?:['"]|[^'"\n]*\bfrom\s+['"]|[^'"\n]*\{\s*$|[^'"\n]*,\s*$)|^export\s+(?:default|const|let|var|function|async|class|\*|\{)\b/
@@ -378,7 +507,7 @@ export function stripMdx(src) {
     }
 
     open = true
-    for (const ch of line.replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '')) {
+    for (const ch of stripStrings(line)) {
       if (ch === '{' || ch === '[' || ch === '(') depth++
       else if (ch === '}' || ch === ']' || ch === ')') depth--
     }
@@ -464,10 +593,10 @@ export function stripVue(src) {
  * here needs the match's INDEX into the original line — `l.slice(0, open.index)`
  * cuts there. Placeholders change the length and every offset with it; spaces of
  * the same length keep the two strings in step while making the span
- * unmatchable. `CODE_SPAN` decides what a span is, so both passes agree.
+ * unmatchable. `replaceCodeSpans` decides what a span is, so both passes agree.
  */
 function blankCode(line) {
-  return String(line).replace(CODE_SPAN, (m, ticks) =>
+  return replaceCodeSpans(line, (m, ticks) =>
     m.length >= ticks.length * 2 ? ticks + ' '.repeat(m.length - ticks.length * 2) + ticks : m,
   )
 }

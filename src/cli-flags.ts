@@ -297,6 +297,95 @@ export const COMMANDS = {
       'A file you edited is replaced and your version is kept beside it as `.bak`,\n' +
       'named in the report. A file you did not edit is replaced in silence.',
   },
+  // ── engine-spec 028 ─────────────────────────────────────────────────────────
+  traffic: {
+    summary: 'read the turn log: content gaps, vocabulary misses, candidates for the golden set',
+    grammar: 'both',
+    positional: { name: 'mode', values: ['report', 'candidates'], help: 'report summarises; candidates proposes golden records for review' },
+    flags: [
+      { name: 'from', kind: 'value', example: 'docpilot/turns', help: 'the turn log: a file, a directory of day files, or a URL' },
+      { name: 'feedback', kind: 'value', example: './votes.jsonl', help: 'a feedback export, joined to turns by messageId' },
+      { name: 'since', kind: 'value', example: '2026-10-01', help: 'only turns on or after this UTC date' },
+      { name: 'out', kind: 'value', example: 'docpilot/reports/traffic.md', help: 'where to write; candidates default ${evalDir}/traffic-candidates.jsonl' },
+      { name: 'json', kind: 'bool', help: 'the numbers, or the summary, as JSON' },
+      { name: 'limit', kind: 'int', min: 1, example: '15', help: 'rows per table, or new candidates at most' },
+    ],
+    epilogue: 'It never writes golden.jsonl: every candidate arrives with needsReview: true.',
+  },
+
+  dataset: {
+    summary: 'turn the turn log and readers\' votes into SFT, KTO or DPO training sets',
+    grammar: 'both',
+    positional: { name: 'mode', values: ['sft', 'kto', 'dpo'], help: 'the training format' },
+    flags: [
+      { name: 'from', kind: 'value', example: 'docpilot/turns', help: 'the turn log: a file, a directory of day files, or a URL' },
+      { name: 'feedback', kind: 'value', example: './votes.jsonl', help: 'the votes every mode learns from' },
+      { name: 'out', kind: 'value', example: 'docpilot/dataset-kto.jsonl', help: 'the JSONL to write; the holdout goes beside it' },
+      { name: 'golden', kind: 'value', example: 'docpilot/golden.jsonl', help: 'questions to keep out of training' },
+      { name: 'include-unvoted', kind: 'bool', help: 'sft: also take cited, supported, unhedged answers nobody voted on' },
+      { name: 'holdout', kind: 'value', example: '0.1', help: 'share of conversations held out; 0 disables it' },
+      { name: 'system', kind: 'value', example: './system.txt', help: 'a file whose text replaces the system message' },
+      { name: 'json', kind: 'bool', help: 'the summary as JSON' },
+    ],
+    epilogue: 'Golden questions are always excluded, and the count is printed.',
+  },
+
+  serve: {
+    summary: "run the server runtime — the turn on your server, not the reader's browser",
+    flags: [
+      { name: 'port', kind: 'int', min: 1, example: '8787', help: 'the port to listen on; default 8787' },
+      { name: 'host', kind: 'value', example: '0.0.0.0', help: 'the interface to bind; default 127.0.0.1' },
+      { name: 'dir', kind: 'value', example: 'docs/.vitepress/dist', help: 'also serve this built site, so the endpoint is same-origin' },
+      { name: 'index', kind: 'value', example: 'docs/public/rag', help: 'the index directory or URL; default the configured indexDir' },
+      { name: 'log', kind: 'value', example: 'docpilot/turns', help: 'write the turn log (docpilot.turn/1, one file per day) here' },
+      { name: 'log-prompts', kind: 'bool', help: 'keep the final prompt on each record — what docpilot dataset sft trains on' },
+      { name: 'retention-days', kind: 'int', min: 1, example: '30', help: 'delete turn-log day files older than this' },
+    ],
+    epilogue:
+      "Needs runtime: 'server' in the docPilot settings. No TLS, no compression, no\n" +
+      'rate limit: in production put it behind the proxy that serves your site.',
+  },
+
+  llms: {
+    summary: 'lint llms.txt against llmstxt.org and your index, or build one from it',
+    grammar: 'both',
+    positional: { name: 'mode', values: ['lint', 'build'], help: 'lint checks a file; build writes one from the manifest' },
+    flags: [
+      { name: 'file', kind: 'value', example: 'docs/public/llms.txt', help: 'lint: the llms.txt to check, a path or an http(s) URL' },
+      { name: 'site', kind: 'value', example: 'https://docs.example.com/', help: 'the published origin and base; links are made or read against it' },
+      { name: 'json', kind: 'bool', help: 'lint: the findings as JSON' },
+      { name: 'out', kind: 'value', example: 'docs/public/llms.txt', help: 'build: where to write' },
+      { name: 'title', kind: 'value', example: 'Acme Docs', help: 'build: the H1; default product, then the intro page' },
+      { name: 'summary', kind: 'value', example: 'Docs for Acme', help: 'build: the blockquote under the H1' },
+      { name: 'md', kind: 'bool', help: 'build: link each page as <path>.md' },
+      { name: 'force', kind: 'bool', help: 'build: overwrite an existing file' },
+    ],
+  },
+
+  model: {
+    summary: 'fingerprint weights, verify them, compare two checkpoints, check a training set for eval leakage',
+    grammar: 'both',
+    positional: { name: 'mode', values: ['fingerprint', 'verify', 'compare', 'contamination'], help: 'what to do' },
+    flags: [
+      { name: 'out', kind: 'value', example: 'model-manifest.json', help: 'fingerprint: write the manifest here; compare: the markdown report' },
+      { name: 'format', kind: 'enum', values: ['json', 'sha256sum'], example: 'sha256sum', help: 'fingerprint: json, or lines `sha256sum -c` accepts' },
+      { name: 'manifest', kind: 'value', example: 'model-manifest.json', help: 'verify: the manifest fingerprint wrote' },
+      { name: 'base', kind: 'value', example: 'base.json', help: 'compare: the eval report for the current weights' },
+      { name: 'candidate', kind: 'value', example: 'cand.json', help: 'compare: the eval report for the new weights' },
+      { name: 'base-manifest', kind: 'value', example: 'base-manifest.json', help: 'compare: the fingerprint of the current weights' },
+      { name: 'candidate-manifest', kind: 'value', example: 'cand-manifest.json', help: 'compare: the fingerprint of the new weights' },
+      { name: 'alpha', kind: 'value', example: '0.05', help: 'compare: McNemar significance level' },
+      { name: 'max-regression', kind: 'value', example: '0.02', help: 'compare: the ok-rate drop that counts as a regression' },
+      { name: 'seed', kind: 'int', min: 1, example: '1', help: 'compare: the bootstrap seed' },
+      { name: 'allow-incomparable', kind: 'bool', help: 'compare: go on when the index, prompt or golden set differ' },
+      { name: 'train', kind: 'value', example: 'train.jsonl', help: 'contamination: the training set (chat, TRL or {text} JSONL)' },
+      { name: 'golden', kind: 'value', example: 'docpilot/golden.jsonl', help: 'contamination: the eval set; default ${evalDir}/golden.jsonl' },
+      { name: 'n', kind: 'int', min: 1, example: '13', help: 'contamination: the n-gram length' },
+      { name: 'json', kind: 'bool', help: 'the result as JSON' },
+    ],
+    epilogue:
+      'compare and contamination exit 1 on a regression or a leak, so either can gate CI.',
+  },
 }
 
 /** Every spelling that names this flag — its own, plus an alias if it has one. */

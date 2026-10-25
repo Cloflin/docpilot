@@ -399,7 +399,10 @@ function classifyRefusal(status, payload, text) {
   if (step === 'Filter by Parameters') return 'params'
   if (step === 'Filter by Guardrails') return 'policy'
   if (/no endpoints found that can handle the requested parameters/i.test(blob)) return 'params'
-  if (/unsupported[_ ]parameter|unrecognized request argument|is not supported with this model|unknown (?:field|parameter)/i.test(blob)) {
+  // `does not support thinking` is Ollama's sentence for a `think` it cannot
+  // honour (llama3.2, phi4). Unmatched, the 400 skipped the reasoning rung below
+  // and every turn on such a model failed where one concession would answer.
+  if (/unsupported[_ ]parameter|unrecognized request argument|is not supported with this model|unknown (?:field|parameter)|does not support thinking/i.test(blob)) {
     return 'params'
   }
   if (/zdr|data policy|guardrail|ineligibility/i.test(blob)) return 'policy'
@@ -951,11 +954,20 @@ export async function chat(options: ChatOptions) {
           baseURL: m.baseURL,
           model: m.model,
           models: m.models,
-          // A member may carry its own credential where one exists at all. In a
-          // browser none does — every hosted member is reached through a
-          // same-origin path and the reverse proxy attaches the key — so this
-          // falls to the call's own, which is what a Node caller passes.
-          apiKey: m.apiKey ?? apiKey,
+          // A key goes only to the host it belongs to. A member that carries the
+          // field at all — the server runtime sets it on every member, null when
+          // `keyOf` found none — sends exactly that, and null means NO header:
+          // falling back here sent the head's paid key to a keyless Ollama or to
+          // a gateway whose own variable was not exported yet. A member without
+          // the field (the browser, where the proxy attaches keys) inherits the
+          // call's key only when it IS the call's own service at the call's own
+          // address.
+          apiKey:
+            'apiKey' in m
+              ? (m.apiKey ?? null)
+              : m.provider === provider && m.baseURL === baseURL
+                ? apiKey
+                : null,
           extraBody: m.extraBody ?? null,
           tuning: m.tuning ?? null,
           // Carried rather than used here: nothing in this file rations, and the
@@ -1575,7 +1587,15 @@ export async function detectTools({
         signal,
       })
       reportHeaders(onHeaders, res)
-      if (!res.ok) continue
+      if (!res.ok) {
+        // A refusal OF TOOLS is an answer, not an absence: Ollama says
+        // `gemma3:4b does not support tools` with a 400, and reading that as
+        // "nobody was home" kept the native path — and failed every turn on a
+        // model the fallback parser serves.
+        const text = await res.text().catch(() => '')
+        if (/does not support tools/i.test(text)) answered = true
+        continue
+      }
       answered = true
       if (p.probeHasToolCall(await res.json())) return true
     } catch {

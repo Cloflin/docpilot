@@ -12,6 +12,7 @@ import {
   themeDocPilot,
   nodeChatTarget,
   readiness,
+  keyForBase,
 } from '../src/config.js'
 import { FREE_ROUTER } from '../src/theme/docpilot/openrouter.js'
 
@@ -1037,5 +1038,33 @@ describe('preferring a server of your own', () => {
   it('does not cross into the page', () => {
     const emitted = themeDocPilot(cfg({chat: {preferLocal: true}, embed: false}, LOCAL), LOCAL)
     expect(JSON.stringify(emitted)).not.toContain('preferLocal')
+  })
+})
+
+/**
+ * A KEY GOES ONLY TO THE HOST IT BELONGS TO — the by-URL half of `keyOf`, which
+ * `docpilot eval` uses for `DOCPILOT_BASE_URL`.
+ */
+describe('a key bound to its host', () => {
+  const env = { OPENAI_API_KEY: 'oa', OPENROUTER_API_KEY: 'or', ANTHROPIC_API_KEY: 'an', CUSTOM_API_KEY: 'cu' }
+
+  it('returns the key of the provider whose own address it is', () => {
+    expect(keyForBase(env, 'https://api.openai.com')).toBe('oa')
+    expect(keyForBase(env, 'https://openrouter.ai/api')).toBe('or')
+    expect(keyForBase(env, 'https://api.anthropic.com/')).toBe('an')
+  })
+
+  it('sends no hosted key to a LAN box, a local Ollama or another gateway', () => {
+    expect(keyForBase(env, 'http://gpu:8000')).toBeNull()
+    expect(keyForBase(env, 'http://localhost:11434')).toBeNull()
+    expect(keyForBase(env, 'https://gw.example')).toBeNull()
+    expect(keyForBase(env, 'not a url')).toBeNull()
+    expect(keyForBase(env, null)).toBeNull()
+  })
+
+  it('gives a self-hosted row its own key only at its own address', () => {
+    expect(keyForBase(env, 'http://localhost:8000')).toBe('cu')
+    const moved = { ...env, CUSTOM_BASE_URL: 'http://gpu:8000' }
+    expect(keyForBase(moved, 'http://gpu:8000')).toBe('cu')
   })
 })

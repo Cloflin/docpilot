@@ -376,6 +376,51 @@ describe('orderMembers — the policy, without a socket', () => {
     expect(orderMembers([eu, us], {cooldown, now}).map((t) => t.baseURL)).toEqual(['/ai/gw-us', '/ai/gw-eu'])
   })
 
+  /**
+   * A KEY GOES ONLY TO THE HOST IT BELONGS TO. The server runtime gives every
+   * member its own `apiKey`, null where `keyOf` found none; that null used to
+   * fall back to the head's key, and the walk then sent a paid credential to a
+   * keyless Ollama or to a gateway whose own variable was not exported.
+   */
+  it('never sends the head’s key to a member that resolved none of its own', async () => {
+    const auth = []
+    vi.stubGlobal('fetch', async (url, init) => {
+      auth.push([String(url).replace(/\/v1\/chat\/completions$/, ''), init.headers.authorization ?? null])
+      return String(url).startsWith('https://head') ? failure(503) : reply(answer)
+    })
+    await ask({
+      provider: 'openai',
+      baseURL: 'https://head.example',
+      apiKey: 'HEAD-KEY',
+      chain: [
+        { provider: 'openai', baseURL: 'https://head.example', model: 'paid-1', apiKey: 'HEAD-KEY' },
+        { provider: 'openai', baseURL: 'https://gw.example', model: 'm1', apiKey: null },
+      ],
+    })
+    expect(auth.at(-1)).toEqual(['https://gw.example', null])
+  })
+
+  it('lets a keyless member inherit only when it is the call’s own service and address', async () => {
+    const auth = []
+    vi.stubGlobal('fetch', async (url, init) => {
+      auth.push(init.headers.authorization ?? null)
+      return auth.length === 1 ? failure(503) : reply(answer)
+    })
+    const two = (second) =>
+      ask({
+        provider: 'openai',
+        baseURL: 'https://head.example',
+        apiKey: 'HEAD-KEY',
+        chain: [{ provider: 'openai', baseURL: 'https://head.example', model: 'paid-1' }, second],
+      })
+    await two({ provider: 'openai', baseURL: 'https://head.example', model: 'paid-2' })
+    expect(auth).toEqual(['Bearer HEAD-KEY', 'Bearer HEAD-KEY'])
+    auth.length = 0
+    resetPools()
+    await two({ provider: 'openai', baseURL: 'http://ollama:11434', model: 'local' })
+    expect(auth).toEqual(['Bearer HEAD-KEY', null])
+  })
+
   it('does not promote whichever service answered last', async () => {
     transport((base) => (base === '/ai/openai' ? failure(503) : reply(answer)))
     await ask({ chain: CHAIN })

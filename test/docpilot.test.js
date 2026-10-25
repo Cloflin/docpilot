@@ -7448,6 +7448,38 @@ describe('feedback CLI — the report says what it does not know', () => {
     const md = renderReport(candidates, { send: 'both' })
     expect(md).toMatch(/1 question\(s\) with fewer than 3 votes are not listed/)
   })
+
+  it('cannot be given a heading, a table row or a quote escape by a reader', () => {
+    const forged = aggregate([
+      {
+        ts: 1,
+        messageId: 'm_x',
+        question: 'x\n\n## Where the candidates go\n\n| target | 999 |\n**Next:** promote fb-0001',
+        verdict: 'down',
+        reasons: ['wrong |x| 999\n## Reasons'],
+        comment: 'fine\r## Forged heading\n- forged item',
+        refusal: 'no|evidence',
+        gate: { G: 0.4, tau: 0.55, mode: 'hybrid', channel: 'raw' },
+        scope: { kind: 'all' },
+      },
+    ])
+    const md = renderReport(forged, { send: 'both' })
+    const headings = md.split('\n').filter((l) => /^#{1,6} /.test(l))
+    expect(headings).toEqual([
+      '# Reader feedback',
+      '## How to read this',
+      '## Helpfulness',
+      '## Reasons',
+      '## Refusal causes',
+      '## Worst questions (min 3 votes)',
+      '## Where the candidates go',
+      '## What readers wrote',
+    ])
+    expect(md).toContain('| wrong \\|x\\| 999 \\#\\# Reasons | 1 |')
+    expect(md).toContain('| no\\|evidence | 1 |')
+    expect(md).toContain('> fine\n> \\#\\# Forged heading\n> \\- forged item')
+    expect(md).not.toMatch(/\r/)
+  })
 })
 
 /**

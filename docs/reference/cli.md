@@ -400,9 +400,9 @@ Reports are named by index hash, model and **prompt hash**. Two reports built fr
 | `--max-iterations=N` | the agent loop's ceiling; default `2` |
 | `--num-ctx=N` | the context window pinned per request; default `8192`, Ollama only |
 
-`--provider=` names the same three **wire adapters** the panel runs on, so an eval measures the transport your readers will actually get. It is not the fourteen provider names the config takes: every OpenAI-compatible service — OpenRouter, Groq, DeepSeek — is `openai` here, with `DOCPILOT_BASE_URL` pointing at it and the key in the environment (`DOCPILOT_API_KEY`, or `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY`). Nothing is stored, and no report carries a credential. Spell it carefully: an unrecognised id falls back to the Ollama adapter rather than being refused, and the header line each model prints names the transport but not the adapter. The report records the string you typed as `meta.provider`, which is where a typo shows up — after the run.
+`--provider=` names the same three **wire adapters** the panel runs on, so an eval measures the transport your readers will actually get. It is not the fourteen provider names the config takes: every OpenAI-compatible service — OpenRouter, Groq, DeepSeek — is `openai` here, with `DOCPILOT_BASE_URL` pointing at it and the key in the environment. **A key goes only to the host that owns it:** `DOCPILOT_API_KEY` is sent as given; without it, eval sends the key of the provider whose own address `DOCPILOT_BASE_URL` is — `OPENAI_API_KEY` only to api.openai.com, `OPENROUTER_API_KEY` only to openrouter.ai, and so on for every provider. A LAN vLLM box, a local Ollama or another gateway gets no key unless you set `DOCPILOT_API_KEY`. Nothing is stored, and no report carries a credential. Spell it carefully: an unrecognised id falls back to the Ollama adapter rather than being refused, and the header line each model prints names the transport but not the adapter. The report records the string you typed as `meta.provider`, which is where a typo shows up — after the run.
 
-The **embedder** is not this flag. It is resolved from `docPilot.embed` by the same resolver `index` uses, because the two halves are configured separately — Anthropic answers and cannot embed — and deriving one from the other embedded a hosted corpus's queries against a local Ollama, scoring them in a foreign vector space and reporting the result as this corpus's retrieval quality. `DOCPILOT_EMBED_PROVIDER`, `DOCPILOT_EMBED_URL` and `DOCPILOT_EMBED_KEY` override it; a reply of the wrong dimensionality stops the run.
+The **embedder** is not this flag. It is resolved from `docPilot.embed` by the same resolver `index` uses, because the two halves are configured separately — Anthropic answers and cannot embed — and deriving one from the other embedded a hosted corpus's queries against a local Ollama, scoring them in a foreign vector space and reporting the result as this corpus's retrieval quality. `DOCPILOT_EMBED_PROVIDER`, `DOCPILOT_EMBED_URL` and `DOCPILOT_EMBED_KEY` override it; a reply of the wrong dimensionality stops the run. When either of the first two moves the embedder, the configured key stays behind: the run sends `DOCPILOT_EMBED_KEY`, or the key of the provider that owns the new host, or none. `calibrate`, `tune` and `answer-bench` use the same rule.
 
 `--fallback=` decides whether the run uses native tool calling or the no-tools transport. `auto` asks each model what it supports — the server's capability list where there is one, a behavioural probe where there is not — which is the only way a model advertised as a tool caller and shipped without tool support is measured on the transport it will actually run on. `on` and `off` force it, which is how you measure the same model both ways.
 
@@ -768,6 +768,122 @@ The manifest records `null` — *unknown provenance* — for every file `init` f
 An install made before manifests existed is still found, by the skill directory alone, and every file in it is treated as unknown provenance. So the first `update` after upgrading past this release backs up everything it replaces, which is the conservative half of the trade.
 
 `--check` is the CI form: same report, no writes, exit `1` when anything would change. It is how a repository holds itself to shipping the skills its installed DocPilot actually carries.
+
+## `serve`
+
+```bash
+npx docpilot serve --log=docpilot/turns
+npx docpilot serve --dir=docs/.vitepress/dist --port=8787 --log=docpilot/turns --retention-days=30
+```
+
+Runs the [server runtime](/guide/server): the turn — openers, embedding, the gate, the tool loop and the prompt — on your machine instead of the reader's browser. Needs `runtime: 'server'` in the settings and refuses to start without it.
+
+| flag | |
+|---|---|
+| `--port <n>` | default `8787` |
+| `--host <addr>` | default `127.0.0.1` |
+| `--dir <path>` | also serve this built site, so `server.endpoint` is same-origin |
+| `--index <path\|url>` | default the configured `indexDir` |
+| `--log <dir>` | write the turn log, one `turns-YYYY-MM-DD.jsonl` per UTC day |
+| `--log-prompts` | keep the final prompt on each record; what `dataset sft` trains on |
+| `--retention-days <n>` | delete day files older than this |
+
+It is a convenience, not a production server: no TLS, no compression, no rate limit. Put it behind the proxy that already serves your site and route `server.endpoint` to it.
+
+## `traffic`
+
+```bash
+npx docpilot traffic report --from=docpilot/turns --feedback=./votes.jsonl
+npx docpilot traffic candidates --from=docpilot/turns --since=2026-10-01 --limit=20
+```
+
+Reads the [turn log](/guide/server#the-turn-log) the server runtime writes. `report` finds content gaps, vocabulary misses, pages retrieved and never cited, pages never retrieved, failure by language, and outcomes per prompt and index hash — each with the command that acts on it. `candidates` writes `${evalDir}/traffic-candidates.jsonl`: failed real questions in the golden record's shape, `needsReview: true`, capped per cluster, never a `gold_answer`, never into `golden.jsonl`. See [Improving answers from traffic](/guide/improving).
+
+| flag | |
+|---|---|
+| `--from <path\|url>` | a file, a directory of `turns-YYYY-MM-DD.jsonl`, or a URL; default `${evalDir}/turns` |
+| `--feedback <path\|url>` | a feedback export, joined by `messageId` |
+| `--since <YYYY-MM-DD>` | only turns on or after this UTC date |
+| `--out <path>` | report: instead of stdout; candidates: the JSONL |
+| `--json` | the numbers as JSON |
+| `--limit <n>` | rows per table, or new candidates at most |
+
+A malformed line is counted and named, never dropped in silence.
+
+## `dataset`
+
+```bash
+npx docpilot dataset kto --from=docpilot/turns --feedback=./votes.jsonl
+npx docpilot dataset sft --from=docpilot/turns --feedback=./votes.jsonl --include-unvoted --holdout=0.1
+```
+
+Training sets from your readers' turns: `sft` (chat `messages`), `kto` (TRL `prompt`/`completion`/`label` — one thumb, one row) and `dpo` (TRL `prompt`/`chosen`/`rejected`, where one question has both a liked and a disliked answer). See [Fine-tuning](/guide/fine-tuning#datasets).
+
+| flag | |
+|---|---|
+| `--from <path\|url>` | the turn log; default `${evalDir}/turns` |
+| `--feedback <path\|url>` | required, except `sft --include-unvoted` |
+| `--out <path>` | default `${evalDir}/dataset-<mode>.jsonl` |
+| `--golden <path>` | default `${evalDir}/golden.jsonl`; always excluded from training |
+| `--include-unvoted` | sft only |
+| `--holdout <ratio>` | default `0.1`, split by conversation |
+| `--system <path>` | replaces the system message |
+| `--json` | the summary only |
+
+## `llms`
+
+```bash
+npx docpilot llms lint --site=https://docs.example.com/
+npx docpilot llms lint --file=https://docs.example.com/llms.txt --json
+npx docpilot llms build --site=https://docs.example.com/ --md
+```
+
+`lint` checks an llms.txt against the [llmstxt.org](https://llmstxt.org/) format and against your index: one H1 first, a blockquote summary, H2 sections of `- [name](url): notes`, no duplicate or relative links — and which indexed pages it never links, and which links point at no indexed page. Exits `1` on an error.
+
+`build` writes one from the manifest: pages grouped by their sidebar group, notes from each page's `description`, the changelog under `## Optional`. On VitePress prefer `vitepress-plugin-llms` ([llms.txt](/guide/llms-txt)); `build` says so when it finds it and writes anyway.
+
+| flag | |
+|---|---|
+| `--file <path\|url>` | lint: default `<docsDir>/public/llms.txt`, then the built site's |
+| `--site <url>` | the published origin and base |
+| `--json` | lint: the findings as JSON |
+| `--out <path>` | build: default `<docsDir>/public/llms.txt` |
+| `--title <text>` | build: the H1 |
+| `--summary <text>` | build: the blockquote |
+| `--md` | build: link `<path>.md` |
+| `--force` | build: overwrite an existing file |
+
+## `model`
+
+```bash
+npx docpilot model fingerprint ./checkpoints/step-2000 --out=cand-manifest.json
+npx docpilot model verify --manifest=cand-manifest.json
+npx docpilot model compare --base=base.json --candidate=cand.json --candidate-manifest=cand-manifest.json
+npx docpilot model contamination --train=train.jsonl
+```
+
+For a model you train. Nothing here loads weights or trains anything — see [Fine-tuning](/guide/fine-tuning).
+
+- `fingerprint` hashes every weight, adapter, config and tokenizer file (sha256, streamed) and reads the safetensors and GGUF headers without loading tensors: tensor count, dtypes, parameter count, `general.*` metadata, a LoRA adapter's base model.
+- `verify` re-hashes against a manifest and exits `1` on any missing, changed or extra file.
+- `compare` reads two `docpilot eval` reports — the base and the candidate, each run against an endpoint serving those weights — pairs them record by record and tests the difference: McNemar exact on pass/fail, a paired bootstrap on answer F1, citation precision and recall, recall@8, latency and tokens. It refuses when the index, prompt or golden set differ, and exits `1` on a regression.
+- `contamination` finds golden records whose 13-grams appear in a training set — an eval that measures memory. Exits `1` on any.
+
+| flag | |
+|---|---|
+| `--out <path>` | fingerprint: the manifest; compare: the markdown report |
+| `--format <json\|sha256sum>` | fingerprint |
+| `--manifest <path>` | verify |
+| `--base <path>`, `--candidate <path>` | compare: two eval reports |
+| `--base-manifest <path>`, `--candidate-manifest <path>` | compare: which weights each report measured |
+| `--alpha <p>` | compare: default `0.05` |
+| `--max-regression <r>` | compare: default `0.02` |
+| `--seed <n>` | compare: default `1` |
+| `--allow-incomparable` | compare: go on, loudly, across index/prompt/golden changes |
+| `--train <path>` | contamination: chat, TRL or `{text}` JSONL |
+| `--golden <path>` | contamination: default `${evalDir}/golden.jsonl` |
+| `--n <n>` | contamination: default `13` |
+| `--json` | the result as JSON |
 
 ## Help, and the version {#help}
 

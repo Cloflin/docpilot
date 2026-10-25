@@ -9,6 +9,7 @@
  * be a test nobody could run twice.
  */
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -318,6 +319,52 @@ describe('installing and refreshing, on a real disk', () => {
     const out = installSite({ site: resolveSite({ target: 'claude', cwd: dir }), pkgRoot: PKG, cwd: dir, dry: true })
     expect(out.files.length).toBeGreaterThan(0)
     expect(fs.existsSync(path.join(dir, '.claude'))).toBe(false)
+  })
+
+  it('refuses a manifest key that leaves the skill directory, and deletes nothing outside it', () => {
+    install('claude')
+    const victim = path.join(dir, 'victim.txt')
+    fs.writeFileSync(victim, 'predictable')
+    const hash = createHash('sha256').update('predictable').digest('hex')
+    const manifestPath = path.join(dir, '.claude/skills/docs-rag', SKILL_MANIFEST)
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    manifest.files['../../../victim.txt'] = hash
+    manifest.files['./../.././../victim.txt'] = hash
+    manifest.files[victim] = hash
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest))
+
+    const out = install('claude')
+    expect(fs.readFileSync(victim, 'utf8')).toBe('predictable')
+    const refused = out.files.filter((f) => f.action === 'refused')
+    expect(refused.map((f) => f.rel).sort()).toEqual(['../../../victim.txt', './../.././../victim.txt', victim].sort())
+  })
+
+  it('never writes through, reads through or deletes a symlink it finds', () => {
+    install('claude')
+    const outside = path.join(home, 'outside.txt')
+    fs.writeFileSync(outside, 'secret')
+    const skillDir = path.join(dir, '.claude/skills/docs-rag')
+    const linked = path.join(skillDir, 'SKILL.md')
+    fs.rmSync(linked)
+    fs.symlinkSync(outside, linked)
+    // A dangling link where a backup would go, and one in place of the manifest.
+    fs.symlinkSync(path.join(home, 'created-by-link'), path.join(skillDir, 'judge-protocol.md.bak'))
+    const manifestPath = path.join(skillDir, SKILL_MANIFEST)
+    fs.rmSync(manifestPath)
+    fs.symlinkSync(path.join(home, 'manifest-target'), manifestPath)
+    fs.appendFileSync(path.join(skillDir, 'judge-protocol.md'), '\nMY NOTE\n')
+
+    const out = install('claude')
+    expect(fs.readFileSync(outside, 'utf8')).toBe('secret')
+    expect(fs.existsSync(`${linked}.bak`)).toBe(false)
+    expect(fs.existsSync(path.join(home, 'created-by-link'))).toBe(false)
+    expect(fs.existsSync(path.join(home, 'manifest-target'))).toBe(false)
+    const rows = out.files.filter((f) => f.path.startsWith(skillDir))
+    expect(rows.find((f) => f.rel === 'SKILL.md').action).toBe('refused')
+    expect(rows.find((f) => f.rel === SKILL_MANIFEST).action).toBe('refused')
+    const judge = rows.find((f) => f.rel === 'judge-protocol.md')
+    expect(judge.action).toBe('overwrote')
+    expect(judge.backup).toBe(path.join(skillDir, 'judge-protocol.md.bak.2'))
   })
 
   it('renders the skill`s own directory into the lines an agent runs', () => {

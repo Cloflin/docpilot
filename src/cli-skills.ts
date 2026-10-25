@@ -32,8 +32,10 @@
  */
 import { createHash } from 'node:crypto'
 import {
+  constants as fsConstants,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -152,7 +154,7 @@ export function planFile({ onDisk = null, recorded = null, incoming, keepExistin
  * that preserves an edit into one that preserves only the most recent
  * overwrite, which is the failure this whole mechanism exists to avoid.
  */
-export function backupPath(target, exists = existsSync) {
+export function backupPath(target, exists = present) {
   const first = `${target}.bak`
   if (!exists(first)) return first
   for (let n = 2; n < 1000; n++) {
@@ -162,8 +164,40 @@ export function backupPath(target, exists = existsSync) {
   return `${target}.bak.${Date.now()}`
 }
 
+/**
+ * True when anything is at `abs`, a dangling symlink included. `existsSync`
+ * follows links, so a committed link to a missing file reads as "nothing here"
+ * and the next write would create the link's target, wherever it points.
+ */
+function present(abs) {
+  return Boolean(lstatSync(abs, { throwIfNoEntry: false }))
+}
+
+/** True when `abs` is itself a symlink. Never written through, never deleted. */
+function isLink(abs) {
+  return Boolean(lstatSync(abs, { throwIfNoEntry: false })?.isSymbolicLink())
+}
+
+/**
+ * `dir` joined to a manifest key, or null when the key leaves `dir`.
+ *
+ * The keys come from a `.docpilot.json` in the checkout, which whoever wrote
+ * the repository controls, so `../../.bashrc` or an absolute path is a key a
+ * hostile manifest can hold. A file this package ships is always a plain
+ * relative path under its own directory; anything else is refused.
+ */
+export function inside(dir, rel) {
+  if (typeof rel !== 'string' || !rel || path.isAbsolute(rel)) return null
+  const base = path.resolve(dir)
+  const abs = path.resolve(base, rel)
+  const back = path.relative(base, abs)
+  if (!back || back.startsWith('..') || path.isAbsolute(back)) return null
+  return abs
+}
+
 /** The manifest at `file`, or an empty one. Unreadable is the same as absent. */
 function readManifest(file) {
+  if (isLink(file)) return {}
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8'))
     return parsed && typeof parsed === 'object' ? parsed : {}
@@ -185,6 +219,14 @@ function applyFiles({ dir, files, recorded, keepExisting, dry }) {
 
   for (const { rel, contents } of files) {
     const abs = path.join(dir, rel)
+    // A symlink here was committed by somebody, not written by us: reading it
+    // would copy its target into a `.bak` in the repository, and writing it
+    // would overwrite whatever it points at. Refuse it and say so.
+    if (isLink(abs)) {
+      rows.push({ rel, path: abs, action: 'refused', backup: null })
+      hashes[rel] = null
+      continue
+    }
     const onDisk = existsSync(abs) ? readFileSync(abs, 'utf8') : null
     const action = planFile({ onDisk, recorded: recorded[rel] ?? null, incoming: contents, keepExisting })
 
@@ -195,7 +237,7 @@ function applyFiles({ dir, files, recorded, keepExisting, dry }) {
       mkdirSync(path.dirname(abs), { recursive: true })
       if (action === 'overwrote') {
         row.backup = backupPath(abs)
-        copyFileSync(abs, row.backup)
+        copyFileSync(abs, row.backup, fsConstants.COPYFILE_EXCL)
       }
       writeFileSync(abs, contents)
     } else if (action === 'overwrote' && dry) {
@@ -219,7 +261,15 @@ function retire({ dir, recorded, shipped, dry }) {
   const rows = []
   for (const [rel, hash] of Object.entries(recorded)) {
     if (shipped.has(rel)) continue
-    const abs = path.join(dir, rel)
+    const abs = inside(dir, rel)
+    if (!abs) {
+      rows.push({ rel, path: path.resolve(dir, String(rel)), action: 'refused', backup: null })
+      continue
+    }
+    if (isLink(abs)) {
+      rows.push({ rel, path: abs, action: 'refused', backup: null })
+      continue
+    }
     if (!existsSync(abs)) continue
     const ours = hash && hash === sha256(readFileSync(abs, 'utf8'))
     if (ours && !dry) rmSync(abs)
@@ -275,7 +325,8 @@ export function installSite({
       })
 
       outcome.files.push(...rows, ...gone)
-      if (!dry) {
+      if (isLink(manifestPath)) outcome.files.push({ rel: SKILL_MANIFEST, path: manifestPath, action: 'refused', backup: null })
+      else if (!dry) {
         writeFileSync(
           manifestPath,
           `${JSON.stringify(
@@ -311,7 +362,8 @@ export function installSite({
     const gone = retire({ dir, recorded: manifest.files || {}, shipped: new Set(files.map((f) => f.rel)), dry })
 
     outcome.files.push(...rows, ...gone)
-    if (!dry) {
+    if (isLink(manifestPath)) outcome.files.push({ rel: COMMANDS_MANIFEST, path: manifestPath, action: 'refused', backup: null })
+    else if (!dry) {
       mkdirSync(dir, { recursive: true })
       writeFileSync(
         manifestPath,
@@ -456,6 +508,7 @@ const VERB = {
   overwrote: 'REPLACED',
   removed: 'removed ',
   orphan: 'left    ',
+  refused: 'REFUSED ',
 }
 
 /**
@@ -480,7 +533,9 @@ export function report(outcomes, cwd = process.cwd()) {
           ? `   (your copy kept as ${path.basename(f.backup)})`
           : f.action === 'orphan'
             ? '   (no longer shipped; you had edited it, so it stays)'
-            : ''
+            : f.action === 'refused'
+              ? '   (a symlink, or a manifest entry outside the skill directory; not touched)'
+              : ''
       lines.push(`[docpilot] ${VERB[f.action]} ${displayPath(f.path, cwd)}${note}`)
       if (f.backup) backups.push(displayPath(f.backup, cwd))
     }
@@ -502,7 +557,7 @@ export function report(outcomes, cwd = process.cwd()) {
 
 /** True when anything would change on disk. What `--check` reports. */
 const stale = (outcomes) =>
-  outcomes.some((s) => s.files.some((f) => f.action !== 'kept' && f.action !== 'orphan'))
+  outcomes.some((s) => s.files.some((f) => f.action !== 'kept' && f.action !== 'orphan' && f.action !== 'refused'))
 
 /**
  * `npx docpilot update` — refresh what is installed, from the installed package.

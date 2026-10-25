@@ -32,6 +32,11 @@ const COMMANDS = [
   'doctor',
   'init',
   'update',
+  'serve',
+  'llms',
+  'model',
+  'traffic',
+  'dataset',
 ]
 
 let [, , cmd, ...rest] = process.argv
@@ -93,6 +98,14 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
     update      refresh those copied skills, and the /docpilot-* slash commands,
                 after upgrading the package. A file you edited is replaced and
                 kept beside it as .bak; --dry shows the whole report first
+    serve       run the turn on your server (runtime: 'server') and write the
+                turn log the next four read
+    traffic     read the turn log: content gaps, vocabulary misses, and
+                candidates for the golden set
+    dataset     turn the turn log and votes into SFT, KTO or DPO training sets
+    llms        lint llms.txt against llmstxt.org and your index, or build one
+    model       fingerprint weights, verify them, compare two checkpoints'
+                eval reports, check a training set for eval leakage
 
   The loop is  index → calibrate → lint → eval → bench,  with tune where it is
   retrieval that has to move — and then index again, because that is the step
@@ -435,6 +448,29 @@ if (cmd === 'vocabulary') {
 if (cmd === 'doctor') {
   const { runDoctor } = await import('../dist/cli-doctor.js')
   process.exit(await runDoctor({ docPilot: resolved, settings, argv: rest, env, configPath }))
+}
+
+// engine-spec 028 — the server runtime and the four tools that read what it
+// writes. Same `run*` contract as `feedback`: flags of their own, a verdict.
+if (cmd === 'serve') {
+  const { runServe } = await import('../dist/cli-serve.js')
+  process.exit(await runServe({ docPilot: resolved, argv: rest, env }))
+}
+if (cmd === 'llms') {
+  const { runLlms } = await import('../dist/llms/cli.js')
+  process.exit(await runLlms({ docPilot: resolved, argv: rest, env }))
+}
+if (cmd === 'traffic') {
+  const { runTraffic } = await import('../dist/traffic/cli.js')
+  process.exit(await runTraffic({ docPilot: resolved, argv: rest, env }))
+}
+if (cmd === 'dataset') {
+  const { runDataset } = await import('../dist/dataset/cli.js')
+  process.exit(await runDataset({ docPilot: resolved, argv: rest, env }))
+}
+if (cmd === 'model') {
+  const { runModel } = await import('../dist/model/cli.js')
+  process.exit(await runModel({ docPilot: resolved, argv: rest, env }))
 }
 
 /**

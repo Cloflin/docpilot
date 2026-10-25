@@ -134,7 +134,7 @@ const ollama = {
     extraBody: true,
   },
 
-  body({ model, messages, temperature, streaming, tools, schemaBody, enableThink, numCtx, maxTokens, tuning, extraBody }) {
+  body({ model, messages, temperature, streaming, tools, schemaBody, enableThink, numCtx, maxTokens, tuning, extraBody, degrade }) {
     // `extraBody` reaches this adapter too, which it did not for as long as this
     // function existed — only the openai adapter destructured it, so `chat.extraBody`
     // was a documented setting that an Ollama site could write and never send.
@@ -183,7 +183,10 @@ const ollama = {
      * measured, leaving it on across four steps put p50 at 215s — so a level
      * only ever deepens a step that was already going to think.
      */
-    if (tuning?.off) body.think = false
+    // A model that already refused `think` (`"llama3.2:3b" does not support
+    // thinking`) is asked again with it off — llm.ts's reasoning rung. Ollama
+    // accepts `false` from every model; it is `true` that it refuses.
+    if (tuning?.off || degrade?.reasoning) body.think = false
     else if (tuning?.effort && enableThink) body.think = tuning.effort
     else if (enableThink !== undefined) body.think = enableThink
     if (schemaBody) body.format = schemaBody

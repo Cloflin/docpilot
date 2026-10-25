@@ -6,14 +6,21 @@
  * function that would, `proxy()`, is exercised only along the paths that return
  * before its `fetch`.
  */
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import { proxyContract } from '../src/config.js'
 import { classifyLimit, readLimitHeaders, DAILY_WINDOW_MS } from '../src/theme/docpilot/budget.js'
 import {
   BODY_LIMIT,
   BURST,
+  CHAT_MODELS_ENV,
   DAILY,
+  DEFAULT_CHAT_MODELS,
+  DEFAULT_EMBED_MODELS,
+  DEFAULT_MAX_TOKENS,
+  EMBED_INPUTS,
+  EMBED_MODELS_ENV,
+  MAX_TOKENS_ENV,
   KEY_ENV,
   UPSTREAM,
   clientIp,
@@ -22,6 +29,8 @@ import {
   proxy,
   readBody,
   sameOrigin,
+  shapeChat,
+  shapeEmbed,
   sweep,
   take,
   upstreamHeaders,
@@ -147,6 +156,11 @@ describe('vercel /ai proxy', () => {
       expect(res.headers.get('allow')).toBe('POST')
     })
 
+    it('refuses a request with no origin with 403', async () => {
+      const res = await proxy(post(), '/v1/chat/completions', { [KEY_ENV]: 'k' })
+      expect(res.status).toBe(403)
+    })
+
     it('refuses a foreign origin with 403', async () => {
       const res = await proxy(post({ headers: { origin: 'https://evil.example' } }), '/v1/chat/completions', {
         [KEY_ENV]: 'k',
@@ -160,12 +174,11 @@ describe('vercel /ai proxy', () => {
       expect((await res.json()).error.message).toContain(KEY_ENV)
     })
 
-    it('accepts this deployment’s own origin, and a request that sent none', () => {
+    it('accepts this deployment’s own origin, and refuses a request that sent none', () => {
       expect(sameOrigin(post({ headers: { origin: 'https://docpilot-nine.vercel.app' } }))).toBe(true)
-      // A browser that omits Origin on a same-origin POST must not 403 every
-      // question; the cross-origin case is stopped by the absence of any
-      // access-control-allow-* header on the way out.
-      expect(sameOrigin(post())).toBe(true)
+      // A browser sends Origin on every POST, same-origin included, so a request
+      // without one is a script spending the operator's key.
+      expect(sameOrigin(post())).toBe(false)
       expect(sameOrigin(post({ headers: { origin: 'https://evil.example' } }))).toBe(false)
       // A preview deployment is on its own generated hostname and there is no
       // allowlist to extend: the origin is compared to this request's own host.
@@ -177,6 +190,112 @@ describe('vercel /ai proxy', () => {
           }),
         ),
       ).toBe(true)
+    })
+  })
+
+  /**
+   * The body is rebuilt, not forwarded: a caller cannot pick the model, the
+   * token ceiling or a routing/billing parameter on the operator's key.
+   */
+  describe('the body it forwards', () => {
+    const CHAT = DEFAULT_CHAT_MODELS[0]
+    const EMBED = DEFAULT_EMBED_MODELS[0]
+    const messages = [{ role: 'user', content: 'hi' }]
+
+    // Every model the panel can fall back to must be on the list too: a pool
+    // member the proxy refuses turns a 429 on the first model into a search
+    // answer instead of an answer from the second.
+    it('defaults to every model this site configures, fallbacks included', async () => {
+      const { docPilot } = await import('../docs/.vitepress/config.mjs')
+      const chain = Array.isArray(docPilot.chat.chain) ? docPilot.chat.chain : []
+      const chat = [
+        docPilot.chat.model,
+        ...(docPilot.chat.models ?? []),
+        ...chain.filter((m) => (m.provider ?? docPilot.chat.provider) === 'openrouter').flatMap((m) => [m.model, ...(m.models ?? [])]),
+      ].filter(Boolean)
+      for (const model of chat) expect(DEFAULT_CHAT_MODELS).toContain(model)
+      expect(DEFAULT_EMBED_MODELS).toContain(docPilot.embed.model)
+    })
+
+    it('refuses a model off the allowlist, and reads the allowlist from the environment', () => {
+      expect(shapeChat({ model: 'openai/o1-pro', messages }, {}).error).toMatch(/not allowed/)
+      expect(shapeChat({ model: 'x/y', messages }, { [CHAT_MODELS_ENV]: 'a/b, x/y' }).body.model).toBe('x/y')
+      expect(shapeEmbed({ model: 'x/y', input: 'q' }, {}).error).toMatch(/not allowed/)
+      expect(shapeEmbed({ model: 'x/y', input: 'q' }, { [EMBED_MODELS_ENV]: 'x/y' }).body.model).toBe('x/y')
+    })
+
+    it('keeps what the panel sends and drops routing and billing parameters', () => {
+      const { body } = shapeChat(
+        {
+          model: CHAT,
+          messages,
+          stream: true,
+          stream_options: { include_usage: true },
+          temperature: 0.2,
+          max_tokens: 2048,
+          response_format: { type: 'json_object' },
+          provider: { require_parameters: true, order: ['x'], allow_fallbacks: true },
+          models: ['openai/o1-pro'],
+          plugins: [{ id: 'web' }],
+          transforms: ['middle-out'],
+          route: 'fallback',
+          n: 8,
+        },
+        {},
+      )
+      expect(body).toEqual({
+        model: CHAT,
+        messages,
+        stream: true,
+        stream_options: { include_usage: true },
+        temperature: 0.2,
+        max_tokens: 2048,
+        response_format: { type: 'json_object' },
+        provider: { require_parameters: true },
+      })
+    })
+
+    it('clamps the output and reasoning ceilings, and sets one when none is named', () => {
+      expect(shapeChat({ model: CHAT, messages, max_tokens: 1e9 }, {}).body.max_tokens).toBe(DEFAULT_MAX_TOKENS)
+      expect(shapeChat({ model: CHAT, messages }, {}).body.max_tokens).toBe(DEFAULT_MAX_TOKENS)
+      expect(shapeChat({ model: CHAT, messages, max_completion_tokens: 1e9 }, {}).body).toMatchObject({
+        max_completion_tokens: DEFAULT_MAX_TOKENS,
+      })
+      const r = shapeChat({ model: CHAT, messages, reasoning: { max_tokens: 1e9, exclude: true, x: 1 } }, {}).body.reasoning
+      expect(r).toEqual({ max_tokens: DEFAULT_MAX_TOKENS, exclude: true })
+      expect(shapeChat({ model: CHAT, messages, max_tokens: 9000 }, { [MAX_TOKENS_ENV]: '8192' }).body.max_tokens).toBe(8192)
+    })
+
+    it('caps the embedding batch', () => {
+      expect(shapeEmbed({ model: EMBED, input: ['a', 'b'] }, {}).body).toEqual({ model: EMBED, input: ['a', 'b'] })
+      expect(shapeEmbed({ model: EMBED, input: Array(EMBED_INPUTS + 1).fill('a') }, {}).error).toBeTruthy()
+      expect(shapeEmbed({ model: EMBED, input: 'q', dimensions: 4096 }, {}).body).toEqual({ model: EMBED, input: 'q' })
+    })
+
+    it('posts the shaped body upstream and answers 400 before any fetch on a bad one', async () => {
+      const seen = []
+      vi.stubGlobal('fetch', async (url, init) => {
+        seen.push({ url, body: JSON.parse(init.body) })
+        return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
+      })
+      try {
+        const send = (body) =>
+          proxy(
+            post({
+              headers: { origin: 'https://docpilot-nine.vercel.app', 'x-real-ip': '203.0.113.77' },
+              body: JSON.stringify(body),
+            }),
+            '/v1/chat/completions',
+            { [KEY_ENV]: 'k' },
+          )
+        expect((await send({ model: 'openai/o1-pro', messages })).status).toBe(400)
+        expect(seen).toHaveLength(0)
+        expect((await send({ model: CHAT, messages, plugins: [{ id: 'web' }] })).status).toBe(200)
+        expect(seen[0].url).toBe(`${UPSTREAM}/v1/chat/completions`)
+        expect(seen[0].body).toEqual({ model: CHAT, messages, max_tokens: DEFAULT_MAX_TOKENS })
+      } finally {
+        vi.unstubAllGlobals()
+      }
     })
   })
 

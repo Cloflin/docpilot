@@ -29,6 +29,8 @@
  * `looksLikeMarkdown` is what decides, and it defaults to no.
  */
 
+import { fetchWithin } from './redirects.js'
+
 /** `<link rel="alternate">` types that mean markdown. */
 const MARKDOWN_TYPES = ['text/markdown', 'text/x-markdown', 'application/markdown']
 
@@ -229,16 +231,16 @@ export async function findMarkdown({ urls, allow, fetchImpl, headers = {} }) {
     }
     let res
     try {
-      res = await fetchImpl(url, { headers, redirect: 'follow' })
+      // Same reason as `readHtml`: the per-candidate check above covers the URL
+      // requested, and every redirect target is checked before it is requested.
+      const walked = await fetchWithin(url, { allow, fetchImpl, init: { headers } })
+      if (walked.refused) {
+        tried.push({ url, why: `redirected outside the allowlist (${walked.refused})` })
+        continue
+      }
+      res = walked.res
     } catch (e) {
       tried.push({ url, why: String(e?.message || e) })
-      continue
-    }
-    // Same reason as `readHtml`: the per-candidate check above covers the URL
-    // requested, and redirects are followed, so the response can have come from
-    // somewhere the list never approved.
-    if (res.url && res.url !== url && 'error' in allow(res.url)) {
-      tried.push({ url, why: `redirected outside the allowlist (${res.url})` })
       continue
     }
     if (!res.ok) {

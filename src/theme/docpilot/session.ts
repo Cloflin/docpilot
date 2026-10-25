@@ -7,6 +7,7 @@
 
 import { reactive, computed } from 'vue'
 import { loadIndex } from './store.js'
+import { loadShell, postTurn } from './remote.js'
 import { createRetrieval } from './retriever.js'
 import { chainAntecedent, composeQuery, enforces } from './gate.js'
 import { resultRows } from './results.js'
@@ -800,13 +801,21 @@ function mayPrefetch() {
  */
 export function prefetchIndex() {
   if (state.index || state.degraded || !mayPrefetch()) return
+  // A server runtime has no corpus to prefetch, and its shell is one small GET
+  // that `open()` makes anyway — engine-spec 028.
+  if (serverRuntime()) return
   loadIndex(hostConfig(state.config).ragBase).catch(() => {})
 }
+
+/** engine-spec 028: the turn runs on the owner's server, not here. */
+const serverRuntime = () => state.config?.runtime === 'server'
 
 export async function ensureIndex() {
   if (state.index || state.degraded) return
   try {
-    const index = await loadIndex(hostConfig(state.config).ragBase)
+    const index = serverRuntime()
+      ? await loadShell(state.config.server.endpoint)
+      : await loadIndex(hostConfig(state.config).ragBase)
     // Two calls can both pass the guard above before either resolves — an open
     // racing a prefetch, now that there are two callers. The restore below is
     // not idempotent (it announces), so the loser stops here.
@@ -1829,6 +1838,13 @@ export async function submit(question, { quote = '' } = {}) {
     finishTurn(turn, performance.now())
     return
   }
+
+  // ── engine-spec 028: everything past this line runs on the owner's server ──
+  //
+  // The two settlements above stay HERE, and the first of them is why: a pasted
+  // key has to be caught before the question leaves the browser, and the only
+  // way to keep that promise under a server runtime is to keep it in the panel.
+  if (serverRuntime()) return submitRemote(q, frozen, selected)
 
   /**
    * ── an opener this build already resolved — engine-specs/009 ──────────────
@@ -2880,6 +2896,154 @@ export async function submit(question, { quote = '' } = {}) {
     }
     finishTurn(turn, started)
   }
+}
+
+/**
+ * A turn the owner's server runs — engine-spec 028.
+ *
+ * THE SAME TERMINAL STATES, REACHED FROM A STREAM. Every branch below lands a
+ * turn exactly where its local twin in `submit` lands it — the same
+ * `settleAnswer`, the same refusal shape, the same hybrid rows on a failed
+ * transport — so nothing that renders a turn, archives it or files a vote on it
+ * can tell which runtime produced it. What it cannot reproduce is what it was
+ * never sent: the gate arrives as its verdict, not its scores, and a source row
+ * carries the one chunk it cites rather than the corpus around it.
+ */
+async function submitRemote(q, frozen, selected) {
+  stop()
+  controller = new AbortController()
+  const signal = controller.signal
+  const turn = makeTurn(q, frozen, selected)
+  state.turns.push(turn)
+  state.busy = true
+  state.status = { phase: 'searching' }
+  const started = performance.now()
+  let settled = null
+  let failure = null
+
+  const adopt = (chunks) => {
+    for (const c of chunks || []) if (c?.id) state.index.byId.set(c.id, c)
+    return chunks || []
+  }
+
+  try {
+    await postTurn(
+      state.config.server.endpoint,
+      {
+        messageId: turn.id,
+        conversationId: state.conversationId || state.turns[0]?.id || turn.id,
+        question: q,
+        quote: selected,
+        scope: { paths: frozen.kind === 'all' ? [] : frozen.paths || [] },
+        history: state.turns.slice(0, -1).map((t) => ({
+          question: t.question,
+          answer: t.answerText,
+          summary: t.answerSummary || null,
+          quote: t.quote || '',
+          citations: t.citationIds || [],
+          gate: t.gate ? { channel: t.gate.channel ?? null, antecedent: t.gate.antecedent ?? null } : null,
+        })),
+        addendum: state.instruction,
+        lang: state.lang,
+      },
+      {
+        signal,
+        on: (event, data) => {
+          if (event === 'phase') state.status = data
+          else if (event === 'model') turn.model = data
+          else if (event === 'member') turn.ladder = data
+          else if (event === 'stream') onStream(turn, data, started)
+          else if (event === 'settle') settled = data
+          else if (event === 'error') failure = data
+        },
+      },
+    )
+    if (!settled) throw Object.assign(new Error(failure?.message || 'the server ended the turn without an answer'), failure || {})
+  } catch (e) {
+    if (signal.aborted) {
+      if (turn.answerText) turn.answerHtml = renderAnswer(turn.answerText, knownPaths.value).html
+      turn.state = turn.answerHtml ? 'aborted' : 'no-answer'
+      if (!turn.answerHtml) {
+        turn.refusal = { cause: 'not-answerable', scopeLabel: frozen.label, scopeKind: frozen.kind, pagesRead: 0, closest: [], closestAreOutside: false }
+      }
+    } else if (e?.rateLimit) {
+      turn.state = 'rate-limited'
+      turn.rateLimit = { resetAt: e.rateLimit.resetAt, limit: e.rateLimit.limit }
+      if (e.results?.length && !turn.answerText) turn.results = e.results
+    } else if (e?.results?.length && !turn.answerText) {
+      turn.state = 'results'
+      turn.hybrid = true
+      turn.error = String(e.message || e)
+      turn.results = e.results
+    } else {
+      turn.state = 'error'
+      turn.error = String(e?.message || e)
+      if (state.debug) console.error('[docpilot] server turn failed', e)
+    }
+    finishTurn(turn, started)
+    return
+  }
+
+  const p = settled
+  turn.gate = p.gate || null
+  if (p.outcome === 'answer' || p.outcome === 'opener') {
+    if (p.opener) turn.opener = p.opener
+    turn.iterations = p.iterations
+    turn.rejectedFetches = p.rejectedFetches
+    turn.support = p.support
+    turn.thought = p.think || ''
+    turn.thoughtSeconds = turn.thought ? Math.max(1, Math.round((performance.now() - started) / 1000)) : 0
+    if (!turn.thought) autoThought(turn, false)
+    if (p.notAnswerable) turn.notAnswerable = p.notAnswerable
+    if (p.tentative) turn.tentative = true
+    const sources = adopt(p.sources)
+    const baked = p.outcome === 'opener'
+    if (baked) {
+      state.busy = false
+      state.status = null
+    }
+    await settleAnswer(
+      turn,
+      { text: p.text, summary: p.summary, citations: p.citations || [], sources },
+      started,
+      baked ? signal : null,
+    )
+    return
+  }
+  if (p.outcome === 'results') {
+    turn.results = p.results || []
+    turn.noStrongMatches = Boolean(p.noStrongMatches)
+    turn.state = 'results'
+    finishTurn(turn, started)
+    return
+  }
+  turn.state = 'no-answer'
+  if (p.outcome === 'social' || p.outcome === 'credential') {
+    // The panel caught both before sending; a server that catches one anyway
+    // answers with the same template the local branch uses.
+    const locale = localeOf(detectLanguage(q))
+    if (p.outcome === 'social') {
+      turn.social = {
+        kind: p.social?.kind,
+        copy: replyT(locale, `reply.social.${p.social?.kind}`, { product: state.config.product || 'this documentation' }),
+      }
+    } else {
+      turn.credential = { kinds: [], count: 1, copy: replyT(locale, 'reply.credential') }
+    }
+  }
+  if (p.notAnswerable) turn.notAnswerable = p.notAnswerable
+  const r = p.refusal || {}
+  turn.refusal = {
+    cause: r.cause || 'not-answerable',
+    scopeLabel: frozen.label,
+    scopeKind: frozen.kind,
+    pagesRead: r.pagesRead || 0,
+    pages: state.config.citations.pagesRead ? pagesReadFrom(r.emittedPaths || []) : undefined,
+    degraded: Boolean(r.degraded),
+    closest: r.closest || [],
+    closestAreOutside: Boolean(r.closestAreOutside),
+  }
+  finishTurn(turn, started)
 }
 
 /**

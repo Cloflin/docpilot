@@ -74,6 +74,36 @@ describe('stripMdx — module syntax is not prose', () => {
   })
 })
 
+describe('the normaliser on hostile lines finishes', () => {
+  // Both used to backtrack: the string-literal regex in stripMdx exponentially
+  // on a quote followed by backslashes, the code-span regex cubically on a long
+  // backtick run. Either line hung `docpilot index` with nothing named.
+  it('an unclosed string of backslashes in an export', () => {
+    const src = `export const x = '${'\\'.repeat(5000)}\n\nReal prose.`
+    const t0 = Date.now()
+    const out = normaliseMarkdown(src).text
+    expect(Date.now() - t0).toBeLessThan(2000)
+    // No bracket opened, so the statement ends on its own line.
+    expect(out).toContain('Real prose.')
+  })
+
+  it('a line of thirty thousand backticks', () => {
+    const src = `Intro.\n\na ${'`'.repeat(30000)}\n\nAfter.`
+    const t0 = Date.now()
+    const out = normaliseMarkdown(src).text
+    expect(Date.now() - t0).toBeLessThan(2000)
+    expect(out).toContain('After.')
+  })
+
+  it('still reads a string whose only closing quote follows a backslash, as before', () => {
+    // `'(\'` is one string to the old regex, so its bracket opens nothing and
+    // the statement ends on its line. A regex that stopped matching it would
+    // count the `(` and swallow the prose after it.
+    const src = ["export const p = '(\\'", 'Real prose.'].join('\n')
+    expect(stripMdx(src).trim()).toBe('Real prose.')
+  })
+})
+
 describe('routeOf — .mdx is a page like any other', () => {
   it('maps an mdx file to the same route its md twin would take', () => {
     expect(routeOf('guide/install.mdx')).toBe('/guide/install')

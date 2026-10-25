@@ -14,6 +14,42 @@
 const MIN_VOTES = 3
 
 const pct = (n) => `${Math.round(n * 100)}%`
+
+/** Longest reader string the report prints. The JSONL keeps the whole one. */
+const MAX_READER_CHARS = 500
+
+/**
+ * A reader-supplied string, made inert as ONE LINE of markdown.
+ *
+ * Questions, comments, reasons and refusal keys arrive in anonymous POSTs. Raw,
+ * a question holding `\n\n## Where the candidates go\n| … |` printed a heading
+ * and a table indistinguishable from this report's own, and a `|` in a reason
+ * split its table row. Every line break (CR, LF, U+2028/9) becomes a space,
+ * control bytes are dropped, and the characters markdown reads as structure
+ * are backslash-escaped, so what renders is what the reader typed.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g
+export function inline(v) {
+  let t = String(v ?? '')
+    .replace(/\r\n|[\r\n\u2028\u2029]/g, ' ')
+    .replace(CONTROL, '')
+  if (t.length > MAX_READER_CHARS) t = `${t.slice(0, MAX_READER_CHARS - 1)}…`
+  return t.replace(/[\\`*_[\]<>|#~]/g, (c) => `\\${c}`)
+}
+
+/** Reader text over several lines, each one escaped, for a blockquote. */
+function quoted(v) {
+  return String(v ?? '')
+    .split(/\r\n|\r|\n|\u2028|\u2029/)
+    .map((line) => {
+      const l = inline(line)
+      // A line that starts like a list item, a setext rule or an ordered item
+      // would still open one inside the quote.
+      return l.replace(/^(\s*)([-+=]|\d+[.)])/, '$1\\$2')
+    })
+    .join('\n> ')
+}
 const fmt = (v) => (v == null || v === '' ? '—' : String(v))
 
 function table(headers, rows) {
@@ -85,10 +121,11 @@ export function renderReport(
   )
 
   out.push('\n## Reasons\n')
-  out.push(table(['reason', 'count'], counts(candidates, (c) => c.reasons)))
+  const reader = ([k, n]) => [inline(k), n]
+  out.push(table(['reason', 'count'], counts(candidates, (c) => c.reasons).map(reader)))
 
   out.push('\n## Refusal causes\n')
-  out.push(table(['cause', 'count'], counts(candidates, (c) => c.refusals)))
+  out.push(table(['cause', 'count'], counts(candidates, (c) => c.refusals).map(reader)))
 
   out.push(`\n## Worst questions (min ${MIN_VOTES} votes)\n`)
   const worst = candidates
@@ -97,7 +134,7 @@ export function renderReport(
     .slice(0, 25)
     .map((c) => [
       c.id,
-      c.question.length > 70 ? `${c.question.slice(0, 67)}…` : c.question,
+      inline(c.question.length > 70 ? `${c.question.slice(0, 67)}…` : c.question),
       c.voted,
       pct(c.downRate),
       c.gate?.marginP50 ?? null,
@@ -128,8 +165,8 @@ export function renderReport(
   if (!comments.length) out.push('_No comments._\n')
   else {
     for (const c of comments.slice(0, 40)) {
-      out.push(`\n**${c.id}** — ${c.question}\n`)
-      for (const text of c.comments) out.push(`> ${text.replace(/\n/g, '\n> ')}\n`)
+      out.push(`\n**${inline(c.id)}** — ${inline(c.question)}\n`)
+      for (const text of c.comments) out.push(`> ${quoted(text)}\n`)
     }
   }
 

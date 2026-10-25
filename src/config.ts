@@ -1507,6 +1507,48 @@ export function providerKey(env, id) {
     return keyOf(env, id)
 }
 
+const originOfUrl = (url) => {
+    try {
+        return new URL(url).origin
+    } catch {
+        return null
+    }
+}
+
+/**
+ * The key a Node tool may send to `baseURL` when nobody named one for it: the
+ * environment key of the provider whose OWN address that is, compared by
+ * origin. `keyOf` binds a key to a provider by name; a tool that only has a URL
+ * (`DOCPILOT_BASE_URL`) needs the same binding by host, or the first hosted key
+ * in the environment goes to a LAN vLLM box, a local Ollama or another gateway.
+ * A self-hosted row (`custom`, `llamacpp`) owns its default port or the address
+ * in its `*_BASE_URL` variable. Null when no provider lives at that origin.
+ */
+export function keyForBase(env, baseURL) {
+    const origin = originOfUrl(baseURL)
+    if (!origin) return null
+    for (const [id, hosted] of Object.entries(PROVIDERS)) {
+        const homes = [upstreamOf(hosted, env), directBaseOf(hosted, env)]
+        if (!homes.some((h) => h && originOfUrl(h) === origin)) continue
+        const key = keyOf(env, id)
+        if (key) return key
+    }
+    return null
+}
+
+/**
+ * The key an eval tool sends to its embedder. The configured target's key
+ * belongs to the configured target: moved by `DOCPILOT_EMBED_URL` or
+ * `DOCPILOT_EMBED_PROVIDER`, the run gets `DOCPILOT_EMBED_KEY`, or the key of
+ * whichever provider owns the new host (`keyForBase`), or nothing.
+ */
+export function evalEmbedKey(env, target, provider, baseURL) {
+    if (env.DOCPILOT_EMBED_KEY) return env.DOCPILOT_EMBED_KEY
+    const moved = provider !== target.provider || originOfUrl(baseURL) !== originOfUrl(target.baseURL)
+    if (!moved) return target.apiKey || null
+    return provider === 'ollama' ? null : keyForBase(env, baseURL)
+}
+
 /**
  * The embed target as the INDEXER sees it: no proxy, so the real host, and the
  * key in hand. `baseURL` comes back null for a provider the adapters cannot
@@ -1739,8 +1781,12 @@ export function themeDocPilot(docPilot, env = {}) {
     // localhost:11434 — a deployment that declared no embedder would spend every
     // question on a connection refused to a service nobody installed.
     const embed = embedCfg.lexicalOnly ? null : targetOf(embedCfg)
-    return {
+    const client = {
         enabled: docPilot.enabled,
+        // engine-spec 028. Both cross on every runtime: the panel reads them to
+        // choose its transport, and rule 11a holds every read to an emitted key.
+        runtime: docPilot.runtime ?? 'browser',
+        server: {endpoint: docPilot.server?.endpoint ?? DEFAULTS.server.endpoint},
         /**
          * SEARCH-ONLY — no model is ever called, and the panel answers with the
          * passages themselves.
@@ -1947,6 +1993,89 @@ export function themeDocPilot(docPilot, env = {}) {
         // reply copy — on every page. Only the delta crosses.
         i18n: validateI18n(docPilot.i18n),
     }
+    return client.runtime === 'server' ? serverShell(client, docPilot) : client
+}
+
+/**
+ * THE BROWSER HALF OF A SERVER RUNTIME — engine-spec 028.
+ *
+ * Everything the owner wrote FOR THE MODEL is withheld: the instruction
+ * (`prompt`), the thresholds (`guard`), the transports (`llm`, `embed`) and the
+ * budget the transports ration. Those keys still exist, because the panel
+ * dereferences them on paths a server turn never reaches, and an absent group is
+ * a `TypeError` in a branch nobody tests; each is the inert shape search-only
+ * already emits. What the reader SEES — `ui`, `i18n`, `suggestions`, the
+ * switches, `product` as a display name — crosses unchanged.
+ */
+function serverShell(client, docPilot) {
+    return {
+        ...client,
+        // `show` is a reader-visible switch — the instruction editor — and the
+        // instruction itself travels to the server with each turn. Everything
+        // else in `prompt` is the owner's text for the model.
+        prompt: {show: client.prompt?.show},
+        guard: {mode: 'off'},
+        llm: {
+            provider: null,
+            baseURL: null,
+            model: null,
+            models: null,
+            temperature: null,
+            maxTokens: null,
+            numCtx: null,
+            reasoning: client.llm?.reasoning ?? null,
+            verbosity: null,
+            topP: null,
+            seed: null,
+            tuning: null,
+            extraBody: null,
+            rateLimited: false,
+            freePool: false,
+            chain: [],
+        },
+        embed: {provider: null, baseURL: null, model: null, lexicalOnly: false},
+        budget: resolveBudget({...docPilot, budget: false}),
+    }
+}
+
+/**
+ * THE SAME CONFIGURATION, AS THE SERVER RUNTIME USES IT — engine-spec 028.
+ *
+ * The browser object first, because it is the one every module of the turn was
+ * written against: `harness`, `retriever`, `openers` and `llm` read `config.*`
+ * in exactly that shape. Then the three things only Node may hold: each chat
+ * member's REAL host and key in place of its same-origin `/ai` path, the embed
+ * target the same way, and the budget off — a server answering every reader
+ * from one key has no per-reader allowance to ration.
+ */
+export function serverTurnConfig(docPilot, env = {}) {
+    const client = themeDocPilot({...docPilot, runtime: 'browser'}, env)
+    if (client.searchOnly) return {...client, runtime: 'server'}
+    const head = nodeChatTarget(docPilot, env)
+    const members = resolveChatChain(docPilot, env)
+    const embed = nodeEmbedTarget(docPilot, env)
+    return {
+        ...client,
+        runtime: 'server',
+        llm: {
+            ...client.llm,
+            baseURL: head.baseURL,
+            apiKey: head.apiKey,
+            chain: client.llm.chain.map((m, i) => {
+                const spec = members[i]
+                const hosted = spec ? hostedOf(spec.id) : null
+                return {
+                    ...m,
+                    baseURL: hosted ? spec.upstream || directBaseOf(hosted, env) : m.baseURL,
+                    apiKey: spec ? keyOf(env, spec.id, spec.keyEnv) : null,
+                }
+            }),
+        },
+        embed: embed.lexicalOnly
+            ? client.embed
+            : {...client.embed, baseURL: embed.baseURL, apiKey: embed.apiKey},
+        budget: resolveBudget({...docPilot, budget: false}),
+    }
 }
 
 /**
@@ -2015,6 +2144,39 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  * being proxied. `proxyContract` asks production for the same thing in words
  * ("match these paths EXACTLY").
  */
+const LOOPBACK = /^(?:127\.|::1$|::ffff:127\.)/
+
+/**
+ * Why the dev proxy refuses this request, or null to forward it.
+ *
+ * The panel calls `/ai/*` same-origin, with a JSON body, from the machine that
+ * runs `vitepress dev`. Anything else is somebody spending the owner's key:
+ *
+ *   · a cross-site page posting `text/plain` with `mode: 'no-cors'` — a simple
+ *     request, so no preflight stops it and Vite's CORS layer blocks nothing;
+ *   · a LAN peer under `vitepress dev --host`, which sends no Origin at all.
+ *     `DOCPILOT_DEV_PROXY_LAN=1` lets those through, for testing on a phone.
+ */
+function devProxyRefusal(req, env: Record<string, string | undefined> = {}) {
+    const h = req.headers || {}
+    const site = h['sec-fetch-site']
+    if (site && site !== 'same-origin' && site !== 'none') return `cross-site request refused (Sec-Fetch-Site: ${site})`
+    if (h.origin) {
+        let host = null
+        try {
+            host = new URL(h.origin).host
+        } catch {}
+        if (!host || host !== h.host) return `cross-origin request refused (Origin: ${h.origin})`
+    }
+    const type = String(h['content-type'] || '').split(';')[0].trim().toLowerCase()
+    if (type !== 'application/json') return 'only application/json requests are proxied'
+    const peer = req.socket?.remoteAddress || ''
+    if (!LOOPBACK.test(peer) && env.DOCPILOT_DEV_PROXY_LAN !== '1') {
+        return `request from ${peer || 'an unknown address'} refused: the key is attached for this machine only (set DOCPILOT_DEV_PROXY_LAN=1 to allow the LAN)`
+    }
+    return null
+}
+
 /**
  * @param {Record<string, any>} routes
  * @param {string} path
@@ -2037,6 +2199,19 @@ function route(routes, path, m, env, base = '/ai') {
         // mounted at `/ai/<id>` and hand the upstream a path with a brand still
         // on the front of it.
         rewrite: (p) => hosted.rewrite(p, base),
+        // WHO ASKED, checked before anything is forwarded: this route spends the
+        // owner's key on every request it passes. Vite runs `bypass` ahead of
+        // the proxy, and `false` ends the request there.
+        bypass(req, res) {
+            const refused = devProxyRefusal(req, env)
+            if (!refused) return undefined
+            if (res && !res.headersSent) {
+                res.statusCode = 403
+                res.setHeader('content-type', 'text/plain; charset=utf-8')
+                res.end(`docpilot dev proxy: ${refused}\n`)
+            }
+            return false
+        },
         configure(proxy) {
             proxy.on('proxyReq', (proxyReq) => {
                 // Exactly what `proxyContract` requires of a production proxy,
@@ -2317,6 +2492,29 @@ function assertProviders(docPilot) {
     assertVocabulary(docPilot)
     assertGuard(docPilot)
     assertChatTypes(docPilot)
+    assertRuntime(docPilot)
+}
+
+/** Where a turn runs — engine-spec 028. A third value would silently mean `'browser'`. */
+export const RUNTIMES = ['browser', 'server']
+
+export function assertRuntime(docPilot) {
+    const runtime = docPilot.runtime
+    if (runtime !== undefined && !RUNTIMES.includes(runtime)) {
+        throw new Error(
+            `[docpilot] runtime is ${JSON.stringify(runtime)}, which is not one of 'browser', 'server'.\n` +
+                "  'browser' runs the turn in the reader's browser — the default. 'server' runs it in\n" +
+                '  @cloflin/docpilot/server and ships no prompt, threshold or index to the page.',
+        )
+    }
+    const endpoint = docPilot.server?.endpoint
+    if (runtime === 'server' && (typeof endpoint !== 'string' || !endpoint.startsWith('/'))) {
+        throw new Error(
+            `[docpilot] server.endpoint is ${JSON.stringify(endpoint)} — runtime 'server' needs a\n` +
+                "  same-origin path such as '/ai/turn'. A cross-origin URL would need CORS, and CORS on\n" +
+                '  an endpoint that spends the owner\'s model allowance is an open relay.',
+        )
+    }
 }
 
 /** The three values `gate.enforces` knows. A fourth silently meant `'calibrated'`. */
@@ -2987,6 +3185,22 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
  */
 export const DEFAULTS = {
     enabled: true,
+    /**
+     * WHERE A TURN RUNS — engine-spec 028.
+     *
+     * `'browser'`: the reader's browser holds the index, the prompt and the
+     * thresholds, and the owner's server only attaches a key. `'server'`: all of
+     * that runs in `@cloflin/docpilot/server`, the page receives a stream, and
+     * nothing the owner wrote for the model reaches the bundle. A mode, stated,
+     * rather than inferred from `server.endpoint` being set — a mode read off the
+     * presence of a value turns itself on the day somebody copies a config.
+     */
+    runtime: 'browser',
+    /**
+     * The server half, read only under `runtime: 'server'`. `endpoint` is
+     * same-origin on purpose: see `assertRuntime`.
+     */
+    server: {endpoint: '/ai/turn'},
     /**
      * What this documentation is about, in the reader's words — "Acme Editor".
      *
@@ -3813,6 +4027,7 @@ export function resolveDocPilot(
         // that decides which origins may become a link in the answer panel.
         sources: settings.sources ?? DEFAULTS.sources,
         guard: {...DEFAULTS.guard, ...(settings.guard || {})},
+        server: {...DEFAULTS.server, ...(settings.server || {})},
         // Assigned whole, never merged, for `sources`' reason one block up: a
         // half-merged vocabulary is a vocabulary nobody wrote, and deleting an
         // alias has to be able to delete it. `null` is preserved as null so the

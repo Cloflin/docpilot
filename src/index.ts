@@ -17,6 +17,7 @@ import {
   nodeEmbedTarget,
   devProxy,
   logDocPilot,
+  indexDirOf,
 } from './config.js'
 
 export {
@@ -114,11 +115,38 @@ export function docPilotPlugin(settings, ready, env = process.env) {
       const out: { ssr: { noExternal: string[] }; server?: { proxy: unknown } } = {
         ssr: { noExternal: [PKG] },
       }
-      if (ready.ok) out.server = { proxy: devProxy(settings, env) }
+      // A server runtime never sends the browser to `/ai/v1/*`, so it gets no
+      // key-attaching route to expose on `--host` either — engine-spec 028.
+      if (ready.ok && settings.runtime !== 'server') out.server = { proxy: devProxy(settings, env) }
       return out
     },
     configResolved() {
       logDocPilot(settings, env, ready)
+    },
+    /**
+     * 4. **The server runtime, in dev** — engine-spec 028. Under `runtime:
+     *    'server'` the turn endpoint is mounted into Vite's own server, so
+     *    `docs:dev` needs no second process. Created on the first request, not
+     *    at startup: the index it reads may be the one `docpilot index` is about
+     *    to write.
+     */
+    configureServer(server) {
+      if (!ready.ok || settings.runtime !== 'server') return
+      let created = null
+      server.middlewares.use(async (req, res, next) => {
+        const endpoint = settings.server?.endpoint || '/ai/turn'
+        if (!String(req.url || '').startsWith(endpoint)) return next()
+        try {
+          created ??= import('./server/index.js').then(({ createDocPilotServer }) =>
+            createDocPilotServer({ settings, env, index: indexDirOf(settings) }),
+          )
+          const dp = await created
+          await dp.node(req, res, next)
+        } catch (e) {
+          created = null
+          next(e)
+        }
+      })
     },
   }
 }

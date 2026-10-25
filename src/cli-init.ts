@@ -7,7 +7,7 @@
  * config is, what the flags said, what the snippet the reader pastes looks
  * like) and `runInit` at the foot of the file, which writes.
  */
-import { existsSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
+import { existsSync, lstatSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -383,11 +383,22 @@ export async function runInit({ argv = [], configPath = null } = {}) {
     }
   }
 
+  const isLink = (p) => {
+    try {
+      return lstatSync(p).isSymbolicLink()
+    } catch {
+      return false
+    }
+  }
+
   const put = (rel, contents) => {
     const target = path.resolve(rel)
-    if (existsSync(target)) return skipped.push(rel)
+    // lstat, not existsSync: a dangling symlink "does not exist" and the write
+    // would create its target wherever it points. `wx` refuses one that
+    // appears between the check and the write.
+    if (existsSync(target) || isLink(target)) return skipped.push(rel)
     mkdirSync(path.dirname(target), { recursive: true })
-    writeFileSync(target, contents)
+    writeFileSync(target, contents, { flag: 'wx' })
     wrote.push(rel)
   }
 

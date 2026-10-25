@@ -7,7 +7,7 @@ A grounded **AI assistant** for **any page of any site** — VitePress, Docusaur
 
 It is a chat, not a search box with better typography: scope a question to one section, ask about a passage you selected, follow up, edit what you asked, keep the thread. It mounts wherever a page can load a stylesheet and a script: a docs site, a landing page, a pricing page, a help centre, an app you already ship. What it answers **from** is the corpus you built — `npx docpilot index` walks your markdown and OpenAPI files, and `npx docpilot import <url>` pulls in an allowlisted page that lives in neither. A panel on your pricing page answers from that corpus, not from the pricing page.
 
-Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **one sign bit per dimension** — 323 KB for this project's own 646-chunk index, where int8 would be 2.5 MB and float32 10.1 MB — scored against the question's full-precision vector, and the build measures the error and refuses to ship above `0.03` mean |Δcos|. A relevance floor on retrieval is scored on every turn and, opt-in (`guard.mode: 'calibrated'`), refuses **before the model is called** so an off-topic question costs zero tokens — off by default, because that threshold has to be calibrated per corpus **and per language**, and a reader's language is not something a threshold can see; the model's own citation contract is what handles it otherwise. Every citation the reader sees is checked against what the host actually retrieved during that turn.
+Retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **one sign bit per dimension** — 336 KB for this project's own 672-chunk index, where int8 would be 2.6 MB and float32 10.5 MB — scored against the question's full-precision vector, and the build measures the error and refuses to ship above `0.03` mean |Δcos|. A relevance floor on retrieval is scored on every turn and, opt-in (`guard.mode: 'calibrated'`), refuses **before the model is called** so an off-topic question costs zero tokens — off by default, because that threshold has to be calibrated per corpus **and per language**, and a reader's language is not something a threshold can see; the model's own citation contract is what handles it otherwise. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
 ## Install
 
@@ -192,7 +192,7 @@ covers rebuilding the index. See
 |---|---|---|
 | Where retrieval runs | the reader's browser | the vendor's cloud |
 | Where the index lives | a static file on the host already serving your site | the vendor's platform |
-| Index the reader downloads | 1-bit vectors, one bit per dimension — 323 KB for this site's 646 chunks | n/a — the index is theirs |
+| Index the reader downloads | 1-bit vectors, one bit per dimension — 336 KB for this site's 672 chunks | n/a — the index is theirs |
 | An off-topic question costs | zero model calls, zero tokens | not documented by any of them |
 | Citations checked against what was retrieved | yes, by host code no message can reach | not documented by any of them |
 | Refusal threshold measured on **your** corpus | `npx docpilot calibrate` | not documented by any of them |
@@ -222,6 +222,11 @@ dashboard, and there is no support contract.
 | `npx docpilot doctor` | check the configuration without a full build; exits non-zero when not ready |
 | `npx docpilot init` | scaffold the environment, the eval sets and the authoring skills; asks which agent tool gets them |
 | `npx docpilot update` | refresh those copied skills and the `/docpilot-*` slash commands after an upgrade |
+| `npx docpilot serve` | run the turn on your own server (`runtime: 'server'`), optionally beside the built site, with a turn log |
+| `npx docpilot traffic` | read the turn log: content gaps, vocabulary misses, pages never cited, golden-set candidates |
+| `npx docpilot dataset` | build SFT, KTO or DPO training sets from the turn log and readers' votes |
+| `npx docpilot model` | fingerprint a checkpoint, check a training set for eval leakage, compare two eval runs |
+| `npx docpilot llms` | lint an `llms.txt` against the format and your index, or build one from the manifest |
 
 `eval`, `bench` and `tune` each take a `--level=low|medium|high|xhigh|max|ultra`, and the six tiers are cumulative: `--level=medium` runs low + medium, no `--level` runs everything. Two reports are comparable only within one tier.
 

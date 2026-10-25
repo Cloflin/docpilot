@@ -198,6 +198,12 @@ export interface RunTurnOptions {
   budget?: any
   /** Embed a string the model wrote — engine-spec 015. Absent buys nothing. */
   embedQuery?: ((text: string) => Promise<any>) | null
+  /**
+   * Every prompt the turn sends, as sent — engine-spec 028. The server runtime
+   * keeps the last one for `log.prompts`: it is the prompt the answer was
+   * written from, which is what a fine-tuning set has to train on.
+   */
+  onMessages?: ((messages: any[]) => void) | null
 }
 
 export async function runTurn(options: RunTurnOptions) {
@@ -262,6 +268,7 @@ export async function runTurn(options: RunTurnOptions) {
    * happens on the turn's vector.
    */
   embedQuery = null,
+  onMessages = null,
   } = options
 
   const scopeLabel = retrieval.scope?.label || 'All docs'
@@ -308,6 +315,7 @@ export async function runTurn(options: RunTurnOptions) {
     promptChars += n
     if (n > promptCharsPeak) promptCharsPeak = n
     steps++
+    onMessages?.(messages)
     return messages
   }
   /** Tokens as the SERVER counted them; the character sums stay as a cheap proxy. */
