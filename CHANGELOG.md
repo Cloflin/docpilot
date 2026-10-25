@@ -32,7 +32,10 @@ No retrieval lever beat the 1.x index on both corpora (engine-spec 034), so the
 static index ranks exactly as 1.5's did; `--quantize=binary` halves its download
 (199 → 99 KB on the wire) at a cost inside the noise. The tuning agent kept
 three restating lines on Harborline that ranked three dev questions better and
-none worse; the test split did not move.
+none worse; the test split did not move. The gate stays off by default:
+`calibrate` finds no threshold on Harborline that passes every answerable probe
+above the lexical weight, and the provisional one catches one more of 15
+negatives on the server and none in the static install.
 
 ### Breaking
 
