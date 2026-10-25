@@ -3,3 +3,4 @@ docs/public/rag*/
 eval/embed-cache/
 eval/reports/
 eval/improve/
+eval/calibration.raw.jsonl

@@ -63,7 +63,7 @@ if (json.perf?.length) {
 
 // ── answers ─────────────────────────────────────────────────────────────────
 // Releases first, then the 2.0 server variants, the default before its alternative.
-const ORDER = ['v1.5-static', 'v2.0-static', 'v2.0-server', 'v2.0-server-agentic']
+const ORDER = ['v1.5-static', 'v2.0-static', 'v2.0-server', 'v2.0-server-agentic', 'v2.0-static-calibrated', 'v2.0-server-calibrated']
 const ordered = (names) => [...names].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b))
 const systems = ordered(files.filter((f) => /^answers-.*\.json$/.test(f)).map((f) => f.replace(/^answers-/, '').replace(/\.json$/, '')))
 if (systems.length) {

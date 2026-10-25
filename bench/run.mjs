@@ -4,6 +4,7 @@
  * produced by this script and nothing else.
  *
  *   node bench/run.mjs index        build one index per arm
+ *   node bench/run.mjs calibrate    fit the gate on eval/calibration.jsonl for the calibrated arm
  *   node bench/run.mjs retrieval    eval --gate-only per arm (free, minutes)
  *   node bench/run.mjs answers      the golden set answered, per system (hours on a local model)
  *   node bench/run.mjs security     the adversarial probes, per system
@@ -40,6 +41,11 @@ export const ARMS = {
   'ctx-path': { cli: 'v2', dir: 'docs/public/rag-ctx-path', env: { DOCPILOT_EMBED_CONTEXT: 'path' }, args: [] },
   'ctx-desc': { cli: 'v2', dir: 'docs/public/rag-ctx-desc', env: { DOCPILOT_EMBED_CONTEXT: 'path+desc' }, args: [] },
   llms: { cli: 'v2', dir: 'docs/public/rag-llms', env: { DOCPILOT_LLMS_FILE: 'truth/llms.reference.txt' }, args: [] },
+  // The 2.0 default index with the gate's refusals on: thresholds fitted by
+  // `calibrate` on eval/calibration.jsonl, which shares no question with the
+  // golden set the answers are scored on — or, where calibration fails as it
+  // does on Harborline, the provisional tau the build inlines instead.
+  calibrated: { cli: 'v2', dir: 'docs/public/rag-calibrated', env: { HARBORLINE_GUARD_MODE: 'calibrated' }, args: [], calibrate: true },
 }
 
 /** Answering systems: an arm, a runtime, a release, and the env of its turn policy. */
@@ -50,6 +56,9 @@ export const SYSTEMS = {
   'v2.0 server': { arm: 'base', cli: 'v2', runtime: 'server', env: {} },
   // The 1.x server turn, kept as the measured alternative.
   'v2.0 server agentic': { arm: 'base', cli: 'v2', runtime: 'server', env: { DOCPILOT_SERVER_LOOP: 'agentic' } },
+  // The gate on (guard.mode 'calibrated'), every other setting as above.
+  'v2.0 static calibrated': { arm: 'calibrated', cli: 'v2', runtime: 'browser', env: { HARBORLINE_GUARD_MODE: 'calibrated' } },
+  'v2.0 server calibrated': { arm: 'calibrated', cli: 'v2', runtime: 'server', env: { HARBORLINE_GUARD_MODE: 'calibrated' } },
 }
 
 const binOf = (cli) => {
@@ -84,8 +93,9 @@ function save(name, out, file) {
 const slug = (s) => s.replace(/[^\w.-]+/g, '-')
 
 const steps = {
-  index() {
+  index(which = null) {
     for (const [name, a] of Object.entries(ARMS)) {
+      if (which && name !== which) continue
       if (a.cli === 'v1.5' && !V15) {
         console.log(`  skip ${name}: no BASELINE_ROOT`)
         continue
@@ -96,13 +106,14 @@ const steps = {
       console.log(`  ${name.padEnd(10)} ${r.status === 0 ? 'built' : 'FAILED'} ${wire ? `${wire} KB wire` : ''}`)
     }
   },
-  retrieval() {
+  retrieval(which = null) {
     for (const [name, a] of Object.entries(ARMS)) {
+      if (which && name !== which) continue
       if (a.cli === 'v1.5' && !V15) continue
       // The v2 harness scores every arm, the 1.5 index included: retrieval is
       // the same code path, and only v2 reports nDCG and context precision.
       for (const split of ['dev', 'test']) {
-        const r = cli('v2', ['eval', '--gate-only', `--split=${split}`, '--quiet'], { HARBORLINE_INDEX_DIR: a.dir })
+        const r = cli('v2', ['eval', '--gate-only', `--split=${split}`, '--quiet'], { ...a.env, HARBORLINE_INDEX_DIR: a.dir })
         save(`retrieval-${slug(name)}-${split}`, r.out, reportOf(r.out))
         console.log(`  ${name.padEnd(10)} ${split} ${r.status === 0 ? 'ok' : 'FAILED'}`)
       }
@@ -151,6 +162,26 @@ const steps = {
     fs.writeFileSync(path.join(RESULTS, 'perf.json'), JSON.stringify(rows, null, 2))
     for (const r of rows) console.log(`  ${r.arm.padEnd(10)} raw ${r.rawKB} KB · wire ${r.wireKB} KB · vectors ${r.vectorsWireKB} KB`)
   },
+}
+
+/**
+ * Build the calibrated arm, fit its thresholds, and build it again so the
+ * manifest carries them — the order `docpilot index` → `calibrate` → `index`
+ * the CLI documents. The calibration is named for its index directory, so no
+ * other arm reads it.
+ */
+steps.calibrate = () => {
+  for (const [name, a] of Object.entries(ARMS)) {
+    if (!a.calibrate) continue
+    const env = { ...a.env, HARBORLINE_INDEX_DIR: a.dir }
+    const out = `eval/calibration.${path.basename(a.dir)}.json`
+    const first = cli(a.cli, ['index', '--yes', ...a.args], env)
+    const cal = first.status === 0 ? cli(a.cli, ['calibrate', `--out=${out}`], env) : first
+    save(`calibrate-${slug(name)}`, cal.out)
+    const again = cal.status === 0 ? cli(a.cli, ['index', '--yes', ...a.args], env) : cal
+    save(`index-${slug(name)}`, again.out)
+    console.log(`  ${name.padEnd(10)} ${again.status === 0 ? `calibrated → ${out}` : 'FAILED'}`)
+  }
 }
 
 steps.report = () => {

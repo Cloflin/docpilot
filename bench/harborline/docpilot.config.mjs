@@ -32,7 +32,13 @@ export const docPilot = {
     model: env.HARBORLINE_CHAT_MODEL || 'qwen3:8b',
     baseURL: env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
   },
-  guard: { mode: 'off' },
+  // `HARBORLINE_GUARD_MODE=calibrated` turns the gate's refusals on for the
+  // calibrated arm of bench/run.mjs. `calibrate` fits its thresholds on
+  // eval/calibration.jsonl, a probe set that shares no question with the golden
+  // set — and on this corpus it refuses to (eval/calibration.report.md: the tau
+  // that passes every positive sits below wLexical), so the build inlines the
+  // provisional tau 0.30 and the arm measures that.
+  guard: { mode: env.HARBORLINE_GUARD_MODE || 'off' },
   // No empty-state openers: their answers are written by the chat model at index
   // time, and a baked answer that intercepts a golden question measures the
   // bake, not the turn.

@@ -706,6 +706,358 @@
         }
       }
     },
+    "calibrated": {
+      "test": {
+        "positives": 52,
+        "negatives": 12,
+        "retrievalF1": 0.3291361416361418,
+        "recall8": 0.9134615384615384,
+        "mrr": 0.7059294871794872,
+        "recall1": 0.5,
+        "recall3": 0.7211538461538461,
+        "recall5": 0.8846153846153846,
+        "ndcg8": 0.7364652902654482,
+        "contextPrecision5": 0.6782051282051282,
+        "answerF1": null,
+        "identifierRecall": null,
+        "citationPrecision": null,
+        "citationRecall": null,
+        "supportPrecision": null,
+        "unsupportedAnswerRate": null,
+        "language": null,
+        "gateOverRefusal": 0,
+        "gateOverRefusalUB95": 0.049459127793665375,
+        "answerOverRefusal": 0,
+        "answerOverRefusalUB95": 0.049459127793665375,
+        "negativesCaught": 2,
+        "negativesCaughtRate": 0.16666666666666666,
+        "noAnswerPrecision": 0,
+        "hallucinated": null,
+        "scopeContainment": 1,
+        "rejectedFetches": 0,
+        "iterationsPerAnswer": null,
+        "requestsPerTurn": null,
+        "promptTokens": null,
+        "outputTokens": null,
+        "cachedTokens": null,
+        "cachedShare": null,
+        "tokensPerAcceptedAnswer": 0,
+        "promptChars": null,
+        "promptCharsPeak": null,
+        "observationChars": null,
+        "answerChars": null,
+        "latencyP50": 0,
+        "latencyP95": 0,
+        "latencyP99": 0,
+        "ttftP50": null,
+        "ttftP95": null,
+        "misses": [
+          "hn-002(answer)",
+          "hn-004(answer)",
+          "hn-006(answer)",
+          "hn-008(answer)",
+          "hn-010(answer)",
+          "hn-012(answer)",
+          "hn-014(answer)",
+          "hn-016(answer)",
+          "hn-018(answer)",
+          "hn-024(answer)"
+        ],
+        "languageFailures": [],
+        "byLanguage": {
+          "English": {
+            "positives": 43,
+            "negatives": 12,
+            "recall8": 0.9418604651162791,
+            "mrr": 0.7393410852713178,
+            "answerF1": null,
+            "identifierRecall": null,
+            "citationRecall": null,
+            "language": null,
+            "negativesCaughtRate": 0.16666666666666666
+          },
+          "Russian": {
+            "positives": 9,
+            "negatives": 0,
+            "recall8": 0.7777777777777778,
+            "mrr": 0.5462962962962963,
+            "answerF1": null,
+            "identifierRecall": null,
+            "citationRecall": null,
+            "language": null,
+            "negativesCaughtRate": null
+          }
+        },
+        "byDepth": null,
+        "taxonomy": {
+          "ok": [
+            "h-002",
+            "h-004",
+            "h-006",
+            "h-008",
+            "h-010",
+            "h-012",
+            "h-014",
+            "h-016",
+            "h-017",
+            "h-020",
+            "h-022",
+            "h-026",
+            "h-028",
+            "h-030",
+            "h-032",
+            "h-033",
+            "h-037",
+            "h-040",
+            "h-043",
+            "h-045",
+            "h-046",
+            "h-051",
+            "h-053",
+            "h-055",
+            "h-057",
+            "h-061",
+            "h-063",
+            "h-065",
+            "h-067",
+            "h-068",
+            "h-070",
+            "h-072",
+            "h-074",
+            "h-076",
+            "h-079",
+            "h-081",
+            "h-085",
+            "h-087",
+            "h-088",
+            "h-090",
+            "h-092",
+            "h-094",
+            "h-096",
+            "h-099",
+            "h-101",
+            "h-103",
+            "h-105"
+          ],
+          "retrieval-miss": [
+            "h-024",
+            "h-039",
+            "h-083"
+          ],
+          "gold-below-primed": [
+            "h-049",
+            "h-059"
+          ],
+          "neg-answered:refuse:no-evidence": [
+            "hn-002",
+            "hn-004",
+            "hn-006",
+            "hn-008",
+            "hn-010",
+            "hn-012",
+            "hn-014",
+            "hn-016",
+            "hn-018"
+          ],
+          "neg-caught": [
+            "hn-020",
+            "hn-022"
+          ],
+          "neg-answered:refuse:out-of-scope": [
+            "hn-024"
+          ]
+        },
+        "reSearch": null,
+        "missPages": null
+      },
+      "dev": {
+        "positives": 53,
+        "negatives": 13,
+        "retrievalF1": 0.3061844863731658,
+        "recall8": 0.9198113207547169,
+        "mrr": 0.7646226415094339,
+        "recall1": 0.5628930817610064,
+        "recall3": 0.7704402515723271,
+        "recall5": 0.8443396226415094,
+        "ndcg8": 0.7756670763827712,
+        "contextPrecision5": 0.7534591194968553,
+        "answerF1": null,
+        "identifierRecall": null,
+        "citationPrecision": null,
+        "citationRecall": null,
+        "supportPrecision": null,
+        "unsupportedAnswerRate": null,
+        "language": null,
+        "gateOverRefusal": 0,
+        "gateOverRefusalUB95": 0.04857126297307707,
+        "answerOverRefusal": 0,
+        "answerOverRefusalUB95": 0.04857126297307707,
+        "negativesCaught": 4,
+        "negativesCaughtRate": 0.3076923076923077,
+        "noAnswerPrecision": 0.07692307692307693,
+        "hallucinated": null,
+        "scopeContainment": 1,
+        "rejectedFetches": 0,
+        "iterationsPerAnswer": null,
+        "requestsPerTurn": null,
+        "promptTokens": null,
+        "outputTokens": null,
+        "cachedTokens": null,
+        "cachedShare": null,
+        "tokensPerAcceptedAnswer": 0,
+        "promptChars": null,
+        "promptCharsPeak": null,
+        "observationChars": null,
+        "answerChars": null,
+        "latencyP50": 0,
+        "latencyP95": 0,
+        "latencyP99": 0,
+        "ttftP50": null,
+        "ttftP95": null,
+        "misses": [
+          "hn-001(answer)",
+          "hn-003(answer)",
+          "hn-007(answer)",
+          "hn-009(answer)",
+          "hn-011(answer)",
+          "hn-013(answer)",
+          "hn-015(answer)",
+          "hn-017(answer)",
+          "hn-019(answer)"
+        ],
+        "languageFailures": [],
+        "byLanguage": {
+          "English": {
+            "positives": 48,
+            "negatives": 11,
+            "recall8": 0.9427083333333334,
+            "mrr": 0.7609374999999999,
+            "answerF1": null,
+            "identifierRecall": null,
+            "citationRecall": null,
+            "language": null,
+            "negativesCaughtRate": 0.2727272727272727
+          },
+          "Russian": {
+            "positives": 5,
+            "negatives": 2,
+            "recall8": 0.7,
+            "mrr": 0.8,
+            "answerF1": null,
+            "identifierRecall": null,
+            "citationRecall": null,
+            "language": null,
+            "negativesCaughtRate": 0.5
+          }
+        },
+        "byDepth": null,
+        "taxonomy": {
+          "ok": [
+            "h-001",
+            "h-003",
+            "h-007",
+            "h-009",
+            "h-011",
+            "h-015",
+            "h-018",
+            "h-021",
+            "h-023",
+            "h-025",
+            "h-027",
+            "h-029",
+            "h-031",
+            "h-034",
+            "h-035",
+            "h-036",
+            "h-041",
+            "h-042",
+            "h-044",
+            "h-047",
+            "h-048",
+            "h-050",
+            "h-052",
+            "h-054",
+            "h-056",
+            "h-058",
+            "h-060",
+            "h-062",
+            "h-064",
+            "h-066",
+            "h-069",
+            "h-071",
+            "h-073",
+            "h-075",
+            "h-077",
+            "h-078",
+            "h-080",
+            "h-082",
+            "h-084",
+            "h-086",
+            "h-089",
+            "h-091",
+            "h-093",
+            "h-095",
+            "h-097",
+            "h-098",
+            "h-100",
+            "h-102",
+            "h-104"
+          ],
+          "retrieval-miss": [
+            "h-005",
+            "h-013"
+          ],
+          "gold-below-primed": [
+            "h-019",
+            "h-038"
+          ],
+          "neg-answered:refuse:no-evidence": [
+            "hn-001",
+            "hn-003",
+            "hn-007",
+            "hn-009",
+            "hn-011",
+            "hn-013",
+            "hn-015",
+            "hn-017",
+            "hn-019"
+          ],
+          "neg-caught": [
+            "hn-005",
+            "hn-021",
+            "hn-023",
+            "hn-025"
+          ]
+        },
+        "reSearch": null,
+        "missPages": {
+          "undescribed": [
+            {
+              "page": "/guides/queue-control",
+              "described": false,
+              "records": [
+                "h-038"
+              ]
+            }
+          ],
+          "checked": 4
+        }
+      },
+      "vsBase": {
+        "ndcg8": {
+          "n": 52,
+          "mean": 0,
+          "lo": 0,
+          "hi": 0
+        },
+        "mrr": {
+          "n": 52,
+          "mean": 0,
+          "lo": 0,
+          "hi": 0
+        }
+      }
+    },
     "ctx-desc": {
       "test": {
         "positives": 52,
@@ -2929,6 +3281,398 @@
           "mean": 0.03,
           "lo": -0.02,
           "hi": 0.1
+        }
+      }
+    },
+    "v2.0-static-calibrated": {
+      "meta": {
+        "model": "qwen3:8b",
+        "runtime": "browser",
+        "records": 65
+      },
+      "summary": {
+        "positives": 50,
+        "negatives": 15,
+        "retrievalF1": 0.31019047619047635,
+        "recall8": 0.915,
+        "mrr": 0.6879999999999998,
+        "recall1": 0.48,
+        "recall3": 0.7,
+        "recall5": 0.845,
+        "ndcg8": 0.722774199450109,
+        "contextPrecision5": 0.6649999999999998,
+        "answerF1": 0.4052894778152502,
+        "identifierRecall": 0.6367346938775511,
+        "citationPrecision": 0.555,
+        "citationRecall": 0.745,
+        "supportPrecision": 0.9397399267399267,
+        "unsupportedAnswerRate": 0.02,
+        "language": 1,
+        "gateOverRefusal": 0,
+        "gateOverRefusalUB95": 0.051335931689179104,
+        "answerOverRefusal": 0,
+        "answerOverRefusalUB95": 0.051335931689179104,
+        "negativesCaught": 6,
+        "negativesCaughtRate": 0.4,
+        "noAnswerPrecision": 0.06666666666666667,
+        "hallucinated": 0,
+        "scopeContainment": 1,
+        "rejectedFetches": 0,
+        "iterationsPerAnswer": 1.04,
+        "requestsPerTurn": 1.0666666666666667,
+        "promptTokens": 2666.7166666666667,
+        "outputTokens": 268.3333333333333,
+        "cachedTokens": null,
+        "cachedShare": null,
+        "tokensPerAcceptedAnswer": 3522.06,
+        "promptChars": 8300.016666666666,
+        "promptCharsPeak": 7801.9,
+        "observationChars": 5166.35,
+        "answerChars": 604.8666666666667,
+        "latencyP50": 23775,
+        "latencyP95": 38929,
+        "latencyP99": 48145,
+        "ttftP50": 24136,
+        "ttftP95": 40355,
+        "misses": [
+          "hn-001(answer)",
+          "hn-002(answer)",
+          "hn-003(answer)",
+          "hn-004(answer)",
+          "hn-006(answer)",
+          "hn-007(answer)",
+          "hn-008(answer)",
+          "hn-009(answer)",
+          "hn-011(answer)"
+        ],
+        "languageFailures": [],
+        "byLanguage": {
+          "English": {
+            "positives": 41,
+            "negatives": 13,
+            "recall8": 0.9573170731707317,
+            "mrr": 0.6926829268292681,
+            "answerF1": 0.46198947986656563,
+            "identifierRecall": 0.6633333333333333,
+            "citationRecall": 0.7621951219512195,
+            "language": 1,
+            "negativesCaughtRate": 0.38461538461538464
+          },
+          "Russian": {
+            "positives": 9,
+            "negatives": 2,
+            "recall8": 0.7222222222222222,
+            "mrr": 0.6666666666666666,
+            "answerF1": 0.14698946847036912,
+            "identifierRecall": 0.5185185185185185,
+            "citationRecall": 0.6666666666666666,
+            "language": 1,
+            "negativesCaughtRate": 0.5
+          }
+        },
+        "byDepth": null,
+        "taxonomy": {
+          "ok": [
+            "h-001",
+            "h-002",
+            "h-003",
+            "h-004",
+            "h-006",
+            "h-007",
+            "h-008",
+            "h-009",
+            "h-021",
+            "h-022",
+            "h-025",
+            "h-026",
+            "h-036",
+            "h-037",
+            "h-040",
+            "h-041",
+            "h-042",
+            "h-043",
+            "h-044",
+            "h-045",
+            "h-056",
+            "h-057",
+            "h-060",
+            "h-061",
+            "h-069",
+            "h-070",
+            "h-071",
+            "h-072",
+            "h-078",
+            "h-079",
+            "h-081",
+            "h-082",
+            "h-089",
+            "h-090",
+            "h-091",
+            "h-098",
+            "h-099",
+            "h-101"
+          ],
+          "retrieval-miss": [
+            "h-005",
+            "h-024",
+            "h-039"
+          ],
+          "primed-low-f1": [
+            "h-010",
+            "h-023",
+            "h-027",
+            "h-058",
+            "h-080",
+            "h-092",
+            "h-100"
+          ],
+          "gold-below-primed": [
+            "h-038",
+            "h-059"
+          ],
+          "neg-answered:refuse:no-evidence": [
+            "hn-001",
+            "hn-002",
+            "hn-003",
+            "hn-004",
+            "hn-006",
+            "hn-007",
+            "hn-008",
+            "hn-009",
+            "hn-011"
+          ],
+          "neg-caught": [
+            "hn-005",
+            "hn-010",
+            "hn-020",
+            "hn-021",
+            "hn-022",
+            "hn-023"
+          ]
+        },
+        "reSearch": null,
+        "missPages": {
+          "undescribed": [
+            {
+              "page": "/guides/queue-control",
+              "described": false,
+              "records": [
+                "h-038"
+              ]
+            }
+          ],
+          "checked": 4
+        }
+      },
+      "vs15": {
+        "answerF1": {
+          "n": 50,
+          "mean": 0,
+          "lo": 0,
+          "hi": 0
+        },
+        "citationRecall": {
+          "n": 50,
+          "mean": 0,
+          "lo": 0,
+          "hi": 0
+        }
+      }
+    },
+    "v2.0-server-calibrated": {
+      "meta": {
+        "model": "qwen3:8b",
+        "runtime": "server",
+        "records": 65
+      },
+      "summary": {
+        "positives": 50,
+        "negatives": 15,
+        "retrievalF1": 0.31019047619047635,
+        "recall8": 0.915,
+        "mrr": 0.6879999999999998,
+        "recall1": 0.48,
+        "recall3": 0.7,
+        "recall5": 0.845,
+        "ndcg8": 0.722774199450109,
+        "contextPrecision5": 0.6649999999999998,
+        "answerF1": 0.4050735844940362,
+        "identifierRecall": 0.6888888888888891,
+        "citationPrecision": 0.6683673469387755,
+        "citationRecall": 0.7704081632653061,
+        "supportPrecision": 0.9060435625956569,
+        "unsupportedAnswerRate": 0.08163265306122448,
+        "language": 1,
+        "gateOverRefusal": 0,
+        "gateOverRefusalUB95": 0.051335931689179104,
+        "answerOverRefusal": 0,
+        "answerOverRefusalUB95": 0.051335931689179104,
+        "negativesCaught": 7,
+        "negativesCaughtRate": 0.4666666666666667,
+        "noAnswerPrecision": 0.06666666666666667,
+        "hallucinated": 0,
+        "scopeContainment": 1,
+        "rejectedFetches": 0,
+        "iterationsPerAnswer": 0,
+        "requestsPerTurn": 0.9076923076923077,
+        "promptTokens": 2003.6949152542372,
+        "outputTokens": 244.3728813559322,
+        "cachedTokens": null,
+        "cachedShare": null,
+        "tokensPerAcceptedAnswer": 2706.8571428571427,
+        "promptChars": null,
+        "promptCharsPeak": null,
+        "observationChars": null,
+        "answerChars": null,
+        "latencyP50": 20068,
+        "latencyP95": 38802,
+        "latencyP99": 120086,
+        "ttftP50": 8212,
+        "ttftP95": 11033,
+        "misses": [
+          "h-090(error)",
+          "hn-001(answer)",
+          "hn-002(answer)",
+          "hn-003(answer)",
+          "hn-004(answer)",
+          "hn-007(answer)",
+          "hn-008(answer)",
+          "hn-010(answer)",
+          "hn-011(answer)"
+        ],
+        "languageFailures": [],
+        "byLanguage": {
+          "English": {
+            "positives": 41,
+            "negatives": 13,
+            "recall8": 0.9573170731707317,
+            "mrr": 0.6926829268292681,
+            "answerF1": 0.4649607891363966,
+            "identifierRecall": 0.7025641025641026,
+            "citationRecall": 0.79375,
+            "language": 1,
+            "negativesCaughtRate": 0.46153846153846156
+          },
+          "Russian": {
+            "positives": 9,
+            "negatives": 2,
+            "recall8": 0.7222222222222222,
+            "mrr": 0.6666666666666666,
+            "answerF1": 0.13890823052799012,
+            "identifierRecall": 0.6296296296296295,
+            "citationRecall": 0.6666666666666666,
+            "language": 1,
+            "negativesCaughtRate": 0.5
+          }
+        },
+        "byDepth": null,
+        "taxonomy": {
+          "ok": [
+            "h-001",
+            "h-002",
+            "h-003",
+            "h-004",
+            "h-006",
+            "h-007",
+            "h-008",
+            "h-009",
+            "h-021",
+            "h-022",
+            "h-025",
+            "h-026",
+            "h-027",
+            "h-036",
+            "h-037",
+            "h-040",
+            "h-041",
+            "h-042",
+            "h-043",
+            "h-044",
+            "h-045",
+            "h-056",
+            "h-057",
+            "h-069",
+            "h-070",
+            "h-071",
+            "h-072",
+            "h-078",
+            "h-079",
+            "h-081",
+            "h-082",
+            "h-089",
+            "h-091",
+            "h-098",
+            "h-099",
+            "h-101"
+          ],
+          "retrieval-miss": [
+            "h-005",
+            "h-024",
+            "h-039"
+          ],
+          "primed-low-f1": [
+            "h-010",
+            "h-023",
+            "h-058",
+            "h-060",
+            "h-061",
+            "h-080",
+            "h-092",
+            "h-100"
+          ],
+          "gold-below-primed": [
+            "h-038",
+            "h-059"
+          ],
+          "error": [
+            "h-090"
+          ],
+          "neg-answered:refuse:no-evidence": [
+            "hn-001",
+            "hn-002",
+            "hn-003",
+            "hn-004",
+            "hn-007",
+            "hn-008",
+            "hn-010",
+            "hn-011"
+          ],
+          "neg-caught": [
+            "hn-005",
+            "hn-006",
+            "hn-009",
+            "hn-020",
+            "hn-021",
+            "hn-022",
+            "hn-023"
+          ]
+        },
+        "reSearch": null,
+        "missPages": {
+          "undescribed": [
+            {
+              "page": "/guides/queue-control",
+              "described": false,
+              "records": [
+                "h-038"
+              ]
+            }
+          ],
+          "checked": 4
+        }
+      },
+      "vs15": {
+        "answerF1": {
+          "n": 49,
+          "mean": 0.0013908166180703692,
+          "lo": -0.021050444498521916,
+          "hi": 0.023427840144365483
+        },
+        "citationRecall": {
+          "n": 49,
+          "mean": 0.030612244897959183,
+          "lo": -0.07142857142857142,
+          "hi": 0.1326530612244898
         }
       }
     }

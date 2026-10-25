@@ -1,0 +1,295 @@
+{"id": "u-01", "question": "what do the jobs:read and queues:admin scopes allow?", "stratum": "U"}
+{"id": "u-02", "question": "i lost my api key, can i get it back from the dashboard?", "stratum": "U"}
+{"id": "u-03", "question": "can an api key create or revoke other keys", "stratum": "U"}
+{"id": "u-04", "question": "does enqueueing a job or a webhook delivery count as an execution?", "stratum": "U"}
+{"id": "u-05", "question": "how do i downgrade from team to free and when does it kick in", "stratum": "U"}
+{"id": "u-06", "question": "do i get an email when im close to my monthly execution allowance", "stratum": "U"}
+{"id": "u-07", "question": "which tls versions does harborline accept?", "stratum": "U"}
+{"id": "u-08", "question": "how long is the audit log kept on scale?", "stratum": "U"}
+{"id": "u-09", "question": "how do i report a security hole in harborline", "stratum": "U"}
+{"id": "u-10", "question": "what roles can workspace members have?", "stratum": "U"}
+{"id": "u-11", "question": "what are the seven job states?", "stratum": "U"}
+{"id": "u-12", "question": "what characters are allowed in a queue name", "stratum": "U"}
+{"id": "u-13", "question": "whats the difference between a workspace and a project", "stratum": "U"}
+{"id": "u-14", "question": "how to install harbor with homebrew", "stratum": "U"}
+{"id": "u-15", "question": "where does harbor login keep my token", "stratum": "U"}
+{"id": "u-16", "question": "can i have separate cli profiles for staging and prod?", "stratum": "U"}
+{"id": "u-17", "question": "which python version do i need for the harborline sdk", "stratum": "U"}
+{"id": "u-18", "question": "my quickstart job stays queued and never runs, whats wrong", "stratum": "U"}
+{"id": "u-19", "question": "is there an event that fires when every job of a batch is done?", "stratum": "U"}
+{"id": "u-20", "question": "what status code comes back when a batch is only partly accepted", "stratum": "U"}
+{"id": "u-21", "question": "does the queue rate limit count retries too?", "stratum": "U"}
+{"id": "u-22", "question": "whats the default groupConcurrency", "stratum": "U"}
+{"id": "u-23", "question": "whats the name of the dead letter queue for my emails queue", "stratum": "U"}
+{"id": "u-24", "question": "does replaying dead jobs reset their attempt counter?", "stratum": "U"}
+{"id": "u-25", "question": "are timestamps without a utc offset accepted for runAt", "stratum": "U"}
+{"id": "u-26", "question": "can i change the run time of a job thats already delayed?", "stratum": "U"}
+{"id": "u-27", "question": "which cipher does the sdk use to encrypt payloads", "stratum": "U"}
+{"id": "u-28", "question": "how do i generate a 32 byte payload key", "stratum": "U"}
+{"id": "u-29", "question": "how do i swap the payload encryption key without losing queued jobs", "stratum": "U"}
+{"id": "u-30", "question": "which options can i pass when enqueueing a job?", "stratum": "U"}
+{"id": "u-31", "question": "can i set a different backoff for one single job", "stratum": "U"}
+{"id": "u-32", "question": "are idempotency keys shared between queues?", "stratum": "U"}
+{"id": "u-33", "question": "what happens if i reuse an idempotency key with a different payload", "stratum": "U"}
+{"id": "u-34", "question": "what prometheus metrics does harborline expose?", "stratum": "U"}
+{"id": "u-35", "question": "how often is the metrics data refreshed", "stratum": "U"}
+{"id": "u-36", "question": "what exactly does harbor queues purge delete?", "stratum": "U"}
+{"id": "u-37", "question": "can i delete a queue while jobs are running", "stratum": "U"}
+{"id": "u-38", "question": "whats the api url for the sydney region", "stratum": "U"}
+{"id": "u-39", "question": "why do i get a 401 right after creating a project in eu-central-1?", "stratum": "U"}
+{"id": "u-40", "question": "what does harbor migrate do to the original jobs after it copies them", "stratum": "U"}
+{"id": "u-41", "question": "what backoff strategies are there and what are their formulas", "stratum": "U"}
+{"id": "u-42", "question": "what is jitter and whats the default", "stratum": "U"}
+{"id": "u-43", "question": "can a worker pick the delay for one specific retry?", "stratum": "U"}
+{"id": "u-44", "question": "does harborline cron support a seconds field", "stratum": "U"}
+{"id": "u-45", "question": "what macros like @daily can i use in a cron expression?", "stratum": "U"}
+{"id": "u-46", "question": "what timezone does a schedule use if i dont set one", "stratum": "U"}
+{"id": "u-47", "question": "whats inside the Harbor-Signature header", "stratum": "U"}
+{"id": "u-48", "question": "how long do both webhook secrets work after i roll the secret?", "stratum": "U"}
+{"id": "u-49", "question": "how many webhook endpoints can one project have", "stratum": "U"}
+{"id": "u-50", "question": "can i manage webhook endpoints from the harbor cli?", "stratum": "U"}
+{"id": "u-51", "question": "do webhook events include the job payload", "stratum": "U"}
+{"id": "u-52", "question": "what env variables does harbor workers start set for my command?", "stratum": "U"}
+{"id": "u-53", "question": "can one worker process handle several queues?", "stratum": "U"}
+{"id": "u-54", "question": "what is a concurrency key", "stratum": "U"}
+{"id": "u-55", "question": "whats the difference between ack and nack", "stratum": "U"}
+{"id": "u-56", "question": "my jobs sit in queued while workers are running, what should i check", "stratum": "U"}
+{"id": "u-57", "question": "what does HL3002 job_not_reserved mean?", "stratum": "U"}
+{"id": "u-58", "question": "does harborline run my code for me?", "stratum": "U"}
+{"id": "u-59", "question": "what kind of work is harborline a good fit for", "stratum": "U"}
+{"id": "u-60", "question": "how does pagination work in the api and whats the max page size", "stratum": "U"}
+{"id": "u-61", "question": "how do i list dead jobs from the cli", "stratum": "U"}
+{"id": "u-62", "question": "if i edit harbor.toml does the queue change automatically?", "stratum": "U"}
+{"id": "u-63", "question": "what does HARBOR_PROFILE do", "stratum": "U"}
+{"id": "u-64", "question": "which harborline errors are worth retrying and which are not?", "stratum": "U"}
+{"id": "u-65", "question": "what fields are in the webhook event envelope", "stratum": "U"}
+{"id": "u-66", "question": "what values can reason have in a job.dead event?", "stratum": "U"}
+{"id": "u-67", "question": "what shipped in 3.1.0", "stratum": "U"}
+{"id": "u-68", "question": "which v3 option replaces uniqueKey from v2?", "stratum": "U"}
+{"id": "u-69", "question": "what options does the node sdk client take and whats the default request timeout", "stratum": "U"}
+{"id": "u-70", "question": "does the python sdk support async def handlers", "stratum": "U"}
+{"id": "s-01", "question": "do keys stop working when the person who made them leaves the company?", "stratum": "S", "scope": {"kind": "section", "paths": ["/account/api-keys"], "label": "API keys and scopes"}}
+{"id": "s-02", "question": "which cli commands manage keys and do they work with an api key?", "stratum": "S", "scope": {"kind": "section", "paths": ["/account/api-keys"], "label": "API keys and scopes"}}
+{"id": "s-03", "question": "what is the overage price per 10,000 executions on scale", "stratum": "S", "scope": {"kind": "section", "paths": ["/account/plans"], "label": "Plans and pricing"}}
+{"id": "s-04", "question": "what does the free plan include for log retention and queues?", "stratum": "S", "scope": {"kind": "section", "paths": ["/account/plans"], "label": "Plans and pricing"}}
+{"id": "s-05", "question": "can i export the audit log?", "stratum": "S", "scope": {"kind": "section", "paths": ["/account/security"], "label": "Security"}}
+{"id": "s-06", "question": "how long are failed webhook events kept", "stratum": "S", "scope": {"kind": "section", "paths": ["/account/security"], "label": "Security"}}
+{"id": "s-07", "question": "does the ip allowlist also restrict dashboard access?", "stratum": "S", "scope": {"kind": "section", "paths": ["/account/security"], "label": "Security"}}
+{"id": "s-08", "question": "what are the three ways a lease can end", "stratum": "S", "scope": {"kind": "section", "paths": ["/getting-started/concepts"], "label": "Core concepts"}}
+{"id": "s-09", "question": "what does the dashboard show for each queue?", "stratum": "S", "scope": {"kind": "section", "paths": ["/getting-started/concepts"], "label": "Core concepts"}}
+{"id": "s-10", "question": "in what order does the cli pick which project to use", "stratum": "S", "scope": {"kind": "section", "paths": ["/getting-started/install-cli"], "label": "Install the CLI"}}
+{"id": "s-11", "question": "how do i create a queue called emails from the terminal", "stratum": "S", "scope": {"kind": "section", "paths": ["/getting-started/quickstart"], "label": "Quickstart"}}
+{"id": "s-12", "question": "how do i stop the worker, does it finish the current job first?", "stratum": "S", "scope": {"kind": "section", "paths": ["/getting-started/quickstart"], "label": "Quickstart"}}
+{"id": "s-13", "question": "what error do i get if i send 501 items in one batch", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/batches"], "label": "Batches"}}
+{"id": "s-14", "question": "what does status 200 mean for one item in a batch result", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/batches"], "label": "Batches"}}
+{"id": "s-15", "question": "how should i import 20,000 jobs, will i hit the rate limit?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/batches"], "label": "Batches"}}
+{"id": "s-16", "question": "what happens to the other jobs of a group while one of them waits for a retry", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/concurrency"], "label": "Concurrency and rate limits"}}
+{"id": "s-17", "question": "what periods can a queue rate limit use?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/concurrency"], "label": "Concurrency and rate limits"}}
+{"id": "s-18", "question": "what makes a job move to the dead-letter queue", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/dead-letter"], "label": "Dead-letter queue"}}
+{"id": "s-19", "question": "which scope do i need to replay dead jobs", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/dead-letter"], "label": "Dead-letter queue"}}
+{"id": "s-20", "question": "how do i list dead jobs with the node sdk?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/dead-letter"], "label": "Dead-letter queue"}}
+{"id": "s-21", "question": "what units can i use in a delay duration", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/delayed-jobs"], "label": "Delayed jobs"}}
+{"id": "s-22", "question": "can i pass both delay and runAt on one job?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/delayed-jobs"], "label": "Delayed jobs"}}
+{"id": "s-23", "question": "what can harborline still read when payloads are encrypted", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/encryption"], "label": "Client-side encryption"}}
+{"id": "s-24", "question": "how much bigger does an encrypted payload get, so how big can my plaintext be?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/encryption"], "label": "Client-side encryption"}}
+{"id": "s-25", "question": "can a python worker decrypt jobs that a node producer encrypted", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/encryption"], "label": "Client-side encryption"}}
+{"id": "s-26", "question": "what does the REST response look like for a newly enqueued job", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/enqueue"], "label": "Enqueue jobs"}}
+{"id": "s-27", "question": "which error do i get when i enqueue into a queue that doesnt exist", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/enqueue"], "label": "Enqueue jobs"}}
+{"id": "s-28", "question": "what would be a good idempotency key for a nightly export job?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/idempotency"], "label": "Idempotency"}}
+{"id": "s-29", "question": "should i put customer data in an idempotency key", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/idempotency"], "label": "Idempotency"}}
+{"id": "s-30", "question": "how do i make a handler safe to run twice", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/idempotency"], "label": "Idempotency"}}
+{"id": "s-31", "question": "which prometheus alerts does harborline suggest?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/observability"], "label": "Observability"}}
+{"id": "s-32", "question": "how many bytes does a traceparent header take, and does it count toward the limit", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/observability"], "label": "Observability"}}
+{"id": "s-33", "question": "what does the harbor_job_latency_seconds metric measure", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/observability"], "label": "Observability"}}
+{"id": "s-34", "question": "which webhook events do pause and drain send?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/queue-control"], "label": "Pause, drain and purge"}}
+{"id": "s-35", "question": "a bug enqueued 40000 jobs that must never run. what do i do?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/queue-control"], "label": "Pause, drain and purge"}}
+{"id": "s-36", "question": "does a drained queue accept jobs again after queue.drained is sent", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/queue-control"], "label": "Pause, drain and purge"}}
+{"id": "s-37", "question": "does moving to a new region bring my api keys and webhook endpoints along", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/regions"], "label": "Regions and migration"}}
+{"id": "s-38", "question": "which one wins if both HARBOR_ENDPOINT and HARBOR_REGION are set?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/regions"], "label": "Regions and migration"}}
+{"id": "s-39", "question": "what does harbor jobs retry do for a dead job?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/retries"], "label": "Retries and backoff"}}
+{"id": "s-40", "question": "if i change the queues retry settings, do jobs already waiting get the change", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/retries"], "label": "Retries and backoff"}}
+{"id": "s-41", "question": "whats overlap skip and does a skipped run send schedule.missed", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/schedules"], "label": "Schedules"}}
+{"id": "s-42", "question": "does a paused schedule count toward the schedule limit?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/schedules"], "label": "Schedules"}}
+{"id": "s-43", "question": "what are the usual reasons signature verification fails", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/webhook-signatures"], "label": "Verify webhook signatures"}}
+{"id": "s-44", "question": "is it ok to compare the signature with ==?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/webhook-signatures"], "label": "Verify webhook signatures"}}
+{"id": "s-45", "question": "which headers does harborline send with a webhook delivery", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/webhooks"], "label": "Webhooks"}}
+{"id": "s-46", "question": "can one endpoint subscribe to all event types?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/webhooks"], "label": "Webhooks"}}
+{"id": "s-47", "question": "what do wait and max do in the reserve call", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/workers"], "label": "Write a worker"}}
+{"id": "s-48", "question": "what terminationGracePeriodSeconds should i set on kubernetes for the default shutdown grace?", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/workers"], "label": "Write a worker"}}
+{"id": "s-49", "question": "how often should heartbeats go out for a 60 second lease", "stratum": "S", "scope": {"kind": "section", "paths": ["/guides/workers"], "label": "Write a worker"}}
+{"id": "s-50", "question": "can i keep succeeded job history longer than my plan allows", "stratum": "S", "scope": {"kind": "section", "paths": ["/help/faq"], "label": "FAQ"}}
+{"id": "s-51", "question": "what is the Harbor-Request-Id header for?", "stratum": "S", "scope": {"kind": "section", "paths": ["/help/troubleshooting"], "label": "Troubleshooting"}}
+{"id": "s-52", "question": "how does a job move through harborline from enqueue to dead", "stratum": "S", "scope": {"kind": "section", "paths": ["/"], "label": "Introduction to Harborline"}}
+{"id": "s-53", "question": "which scope does GET /v3/queues/{queue}/stats need", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/api"], "label": "REST API"}}
+{"id": "s-54", "question": "what fields can the nack call take in its body?", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/api"], "label": "REST API"}}
+{"id": "s-55", "question": "how do i enqueue a job with a delay from the cli", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/cli"], "label": "CLI reference"}}
+{"id": "s-56", "question": "which flags does harbor queues create accept", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/cli"], "label": "CLI reference"}}
+{"id": "s-57", "question": "are bare numbers allowed for durations in harbor.toml", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/config"], "label": "harbor.toml"}}
+{"id": "s-58", "question": "should production workers run with HARBOR_LOG_LEVEL=debug?", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/environment"], "label": "Environment variables"}}
+{"id": "s-59", "question": "what does HL5000 mean and should i retry it", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/errors"], "label": "Error codes"}}
+{"id": "s-60", "question": "how long can an idempotency key be", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/limits"], "label": "Limits"}}
+{"id": "s-61", "question": "what is in the actor field of a queue.paused event", "stratum": "S", "scope": {"kind": "section", "paths": ["/reference/webhook-events"], "label": "Webhook events"}}
+{"id": "s-62", "question": "which bug about SIGTERM did 3.4.0 fix", "stratum": "S", "scope": {"kind": "section", "paths": ["/releases/changelog"], "label": "Changelog"}}
+{"id": "s-63", "question": "what does the migration checklist say about deploy order of workers and producers", "stratum": "S", "scope": {"kind": "section", "paths": ["/releases/migrate-v2"], "label": "Migrate from v2"}}
+{"id": "s-64", "question": "what properties does a HarborError have in node", "stratum": "S", "scope": {"kind": "section", "paths": ["/sdks/node"], "label": "Node.js SDK"}}
+{"id": "s-65", "question": "how do i start only some of my registered workers in python?", "stratum": "S", "scope": {"kind": "section", "paths": ["/sdks/python"], "label": "Python SDK"}}
+{"id": "f-01", "question": "and what is the default setting?", "stratum": "F", "prev_question": "what is jitter in retries?"}
+{"id": "f-02", "question": "and can i undo it?", "stratum": "F", "prev_question": "how do i revoke an api key?"}
+{"id": "f-03", "question": "what happens to the runs while it is paused?", "stratum": "F", "prev_question": "how do i pause a schedule?"}
+{"id": "f-04", "question": "and in python?", "stratum": "F", "prev_question": "how do i turn on client-side encryption in node?"}
+{"id": "f-05", "question": "and what about Scale?", "stratum": "F", "prev_question": "what do i get on the Team plan?"}
+{"id": "f-06", "question": "does that reset their attempts?", "stratum": "F", "prev_question": "how do i replay dead jobs?"}
+{"id": "f-07", "question": "how many can i have per project?", "stratum": "F", "prev_question": "how do i add a webhook endpoint?"}
+{"id": "f-08", "question": "and how do i undo it?", "stratum": "F", "prev_question": "what does draining a queue do?"}
+{"id": "f-09", "question": "which one is the default?", "stratum": "F", "prev_question": "which regions does harborline have?"}
+{"id": "f-10", "question": "and can i cancel it before it runs?", "stratum": "F", "prev_question": "how do i delay a job by 10 minutes?"}
+{"id": "f-11", "question": "is it scoped per queue?", "stratum": "F", "prev_question": "what is an idempotency key?"}
+{"id": "f-12", "question": "what is the default grace period?", "stratum": "F", "prev_question": "how does graceful shutdown of a worker work?"}
+{"id": "f-13", "question": "and what is its default?", "stratum": "F", "prev_question": "what is queue concurrency?"}
+{"id": "f-14", "question": "how do i fix it?", "stratum": "F", "prev_question": "what does HL1005 mean?"}
+{"id": "f-15", "question": "does it show when each one runs next?", "stratum": "F", "prev_question": "how do i list schedules in the cli?"}
+{"id": "f-16", "question": "where does it store the token?", "stratum": "F", "prev_question": "how do i log in with the cli?"}
+{"id": "f-17", "question": "can it hold my api key?", "stratum": "F", "prev_question": "what goes into harbor.toml?"}
+{"id": "f-18", "question": "how long are they kept on Team?", "stratum": "F", "prev_question": "how do i look at job logs?"}
+{"id": "f-19", "question": "what happens if I send more?", "stratum": "F", "prev_question": "how many jobs fit in one batch?"}
+{"id": "f-20", "question": "how do i prevent that?", "stratum": "F", "prev_question": "why did my job run twice?"}
+{"id": "f-21", "question": "how do i avoid getting it?", "stratum": "F", "prev_question": "what is HL3001?"}
+{"id": "f-22", "question": "what is the first item on the checklist?", "stratum": "F", "prev_question": "how do i move from v2 to v3?"}
+{"id": "f-23", "question": "what is its default concurrency?", "stratum": "F", "prev_question": "how do i write a python worker?"}
+{"id": "f-24", "question": "what does it throw when the signature is wrong?", "stratum": "F", "prev_question": "how do i verify a webhook in node?"}
+{"id": "f-25", "question": "and the headers?", "stratum": "F", "prev_question": "how big can a job payload be?"}
+{"id": "f-26", "question": "what are the possible reasons?", "stratum": "F", "prev_question": "what does a job.dead event contain?"}
+{"id": "f-27", "question": "can i export it?", "stratum": "F", "prev_question": "what does the audit log record?"}
+{"id": "f-28", "question": "what prefix does it have?", "stratum": "F", "prev_question": "how do i create a test key?"}
+{"id": "f-29", "question": "what is the maximum page size?", "stratum": "F", "prev_question": "how does pagination work in the api?"}
+{"id": "f-30", "question": "does a webhook delivery count as one?", "stratum": "F", "prev_question": "what is an execution?"}
+{"id": "f-31", "question": "how long do both secrets stay valid?", "stratum": "F", "prev_question": "how do i roll a signing secret?"}
+{"id": "f-32", "question": "how long does it last by default?", "stratum": "F", "prev_question": "what is a lease?"}
+{"id": "f-33", "question": "so what should my handlers be like?", "stratum": "F", "prev_question": "what does at-least-once delivery mean?"}
+{"id": "f-34", "question": "which value is used when it is not set?", "stratum": "F", "prev_question": "what does HARBOR_REGION do?"}
+{"id": "f-35", "question": "and what about 3.4.0?", "stratum": "F", "prev_question": "what was new in 3.2.0?"}
+{"id": "f-36", "question": "which scope does that need?", "stratum": "F", "prev_question": "how do i enqueue a job over HTTP?"}
+{"id": "f-37", "question": "is there an HTTP equivalent?", "stratum": "F", "prev_question": "what is PermanentError?"}
+{"id": "f-38", "question": "does it run my code?", "stratum": "F", "prev_question": "what does harborline do?"}
+{"id": "f-39", "question": "does it work with an api key?", "stratum": "F", "prev_question": "how does harbor migrate work?"}
+{"id": "f-40", "question": "and which timezone does it use by default?", "stratum": "F", "prev_question": "how do i create a schedule?"}
+{"id": "n1-01", "question": "Does Harborline have SQS-style FIFO queues with message group ids?", "stratum": "N1"}
+{"id": "n1-02", "question": "Can I use Harborline like Kafka, with topics, partitions and consumer groups?", "stratum": "N1"}
+{"id": "n1-03", "question": "Does Harborline have pub/sub topics so one message fans out to many queues, like SNS?", "stratum": "N1"}
+{"id": "n1-04", "question": "Does Harborline support durable multi-step workflows with sleep and wait-for-event steps, like Temporal or Inngest?", "stratum": "N1"}
+{"id": "n1-05", "question": "Does Harborline store the return value of a job like the Celery result backend?", "stratum": "N1"}
+{"id": "n1-06", "question": "Does Harborline have a built-in circuit breaker that pauses a queue automatically after repeated failures?", "stratum": "N1"}
+{"id": "n1-07", "question": "Can a worker report percentage progress of a long job to the dashboard, like BullMQ updateProgress?", "stratum": "N1"}
+{"id": "n1-08", "question": "Is there a Slack integration that posts a message when a job dies?", "stratum": "N1"}
+{"id": "n1-09", "question": "Is there a Zapier app for Harborline?", "stratum": "N1"}
+{"id": "n1-10", "question": "Does Harborline offer weighted fair scheduling between customers, like Sidekiq Enterprise?", "stratum": "N1"}
+{"id": "n1-11", "question": "Does Harborline have a transactional outbox so I can enqueue inside my Postgres transaction, like pg-boss?", "stratum": "N1"}
+{"id": "n1-12", "question": "Can Harborline deliver jobs to Azure Service Bus or Google Cloud Pub/Sub?", "stratum": "N1"}
+{"id": "n1-13", "question": "Can Harborline autoscale my worker pods with KEDA based on queue depth?", "stratum": "N1"}
+{"id": "n1-14", "question": "Does Harborline publish an OpenAPI spec or a Postman collection?", "stratum": "N1"}
+{"id": "n1-15", "question": "Does Harborline run my function for me on its own servers, like AWS Lambda?", "stratum": "N1"}
+{"id": "n2-01", "question": "How do I run `harbor jobs delete <job-id>` to remove a job completely?", "stratum": "N2"}
+{"id": "n2-02", "question": "What does `harbor workers stop` do and how do I use it?", "stratum": "N2"}
+{"id": "n2-03", "question": "How do I use `harbor schedules trigger nightly-report` to run a schedule right now?", "stratum": "N2"}
+{"id": "n2-04", "question": "How do I pass `--priority=high` to `harbor jobs enqueue`?", "stratum": "N2"}
+{"id": "n2-05", "question": "What does `queue.peek()` return in the Node.js SDK?", "stratum": "N2"}
+{"id": "n2-06", "question": "How do I call `GET /v3/jobs/{id}/logs` to download the log of a job?", "stratum": "N2"}
+{"id": "n2-07", "question": "What does `GET /v3/queues/{queue}/workers` return?", "stratum": "N2"}
+{"id": "n2-08", "question": "How do I use `harbor dlq export` to save dead jobs to a file?", "stratum": "N2"}
+{"id": "n2-09", "question": "How do I set `expiresIn` on a job so it is dropped if no worker takes it in time?", "stratum": "N2"}
+{"id": "n2-10", "question": "What is the `maxRetries` worker option in the Node.js SDK?", "stratum": "N2"}
+{"id": "n2-11", "question": "How do I run `harbor logs export` to download logs to a file?", "stratum": "N2"}
+{"id": "n2-12", "question": "How do I use `harbor jobs wait <job-id>` to block until a job finishes?", "stratum": "N2"}
+{"id": "n2-13", "question": "How do I use `harbor.jobs.bulkCancel()` to cancel many jobs at once?", "stratum": "N2"}
+{"id": "n2-14", "question": "How do I run `harbor queues pause --all` to pause every queue?", "stratum": "N2"}
+{"id": "n2-15", "question": "How do I call `job.updateProgress(50)` inside a handler?", "stratum": "N2"}
+{"id": "n3-01", "question": "How do I center a div vertically with CSS flexbox?", "stratum": "N3"}
+{"id": "n3-02", "question": "How does etcd do leader election in a Kubernetes control plane?", "stratum": "N3"}
+{"id": "n3-03", "question": "Why is my Postgres query ignoring the index on a varchar column?", "stratum": "N3"}
+{"id": "n3-04", "question": "How do I undo a git rebase that went wrong?", "stratum": "N3"}
+{"id": "n3-05", "question": "What is the difference between a Docker multi-stage build and a normal build?", "stratum": "N3"}
+{"id": "n3-06", "question": "How do I write a regex with a negative lookahead?", "stratum": "N3"}
+{"id": "n3-07", "question": "Why does my React useEffect run twice in development?", "stratum": "N3"}
+{"id": "n3-08", "question": "How does the TCP three-way handshake work?", "stratum": "N3"}
+{"id": "n3-09", "question": "What does autovacuum do in PostgreSQL and how do I tune it?", "stratum": "N3"}
+{"id": "n3-10", "question": "How do I configure nginx as a reverse proxy with websockets?", "stratum": "N3"}
+{"id": "n3-11", "question": "What is the Python GIL and does it block threads from running in parallel?", "stratum": "N3"}
+{"id": "n3-12", "question": "How does the Rust borrow checker handle mutable references in a loop?", "stratum": "N3"}
+{"id": "n3-13", "question": "How do I make a CSS grid with auto-fill columns of equal width?", "stratum": "N3"}
+{"id": "n3-14", "question": "How do I add an index to speed up a SQL join on two large tables?", "stratum": "N3"}
+{"id": "n3-15", "question": "How do I use chmod to make a shell script executable only by the owner?", "stratum": "N3"}
+{"id": "n4-01", "question": "What is the capital of Canada?", "stratum": "N4"}
+{"id": "n4-02", "question": "How long should I boil an egg for a soft yolk?", "stratum": "N4"}
+{"id": "n4-03", "question": "Who won the 2014 FIFA World Cup?", "stratum": "N4"}
+{"id": "n4-04", "question": "Recommend a good novel for a long flight.", "stratum": "N4"}
+{"id": "n4-05", "question": "How many ounces are in a pound?", "stratum": "N4"}
+{"id": "n4-06", "question": "What is the tallest mountain in Africa?", "stratum": "N4"}
+{"id": "n4-07", "question": "Give me a recipe for pancakes.", "stratum": "N4"}
+{"id": "n4-08", "question": "Who painted the Mona Lisa?", "stratum": "N4"}
+{"id": "n4-09", "question": "What is the best way to learn to swim as an adult?", "stratum": "N4"}
+{"id": "n4-10", "question": "How far is the Moon from the Earth?", "stratum": "N4"}
+{"id": "n4-11", "question": "Which team has the most NBA championships?", "stratum": "N4"}
+{"id": "n4-12", "question": "How do I remove a coffee stain from a white shirt?", "stratum": "N4"}
+{"id": "n4-13", "question": "What causes the northern lights?", "stratum": "N4"}
+{"id": "n4-14", "question": "Suggest a name for a golden retriever puppy.", "stratum": "N4"}
+{"id": "n4-15", "question": "What year did the Berlin Wall fall?", "stratum": "N4"}
+{"id": "n5-01", "question": "Also, what is the tallest building in the world?", "stratum": "N5", "prev_question": "How do I create a queue called emails?"}
+{"id": "n5-02", "question": "By the way, how do I bake sourdough bread?", "stratum": "N5", "prev_question": "What is the default number of attempts for a job?"}
+{"id": "n5-03", "question": "And who wrote Hamlet?", "stratum": "N5", "prev_question": "How do I enqueue a job from Node.js?"}
+{"id": "n5-04", "question": "Unrelated: how do I center a div in CSS?", "stratum": "N5", "prev_question": "What does pausing a queue do?"}
+{"id": "n5-05", "question": "Cool. Now tell me a joke about penguins.", "stratum": "N5", "prev_question": "How do I rotate an API key?"}
+{"id": "n5-06", "question": "What is the population of Brazil?", "stratum": "N5", "prev_question": "What is a dead-letter queue?"}
+{"id": "n5-07", "question": "Can you also explain how photosynthesis works?", "stratum": "N5", "prev_question": "How do I verify a webhook signature?"}
+{"id": "n5-08", "question": "How do I tune a PostgreSQL query with a slow sequential scan?", "stratum": "N5", "prev_question": "What is a schedule in Harborline?"}
+{"id": "n5-09", "question": "What is a good workout for a beginner?", "stratum": "N5", "prev_question": "What are the Harborline plans?"}
+{"id": "n5-10", "question": "How do I make a good espresso?", "stratum": "N5", "prev_question": "How do I write a worker in Python?"}
+{"id": "n5-11", "question": "Who is the current president of France?", "stratum": "N5", "prev_question": "What is the visibility timeout?"}
+{"id": "n5-12", "question": "What is the boiling point of water on top of Everest?", "stratum": "N5", "prev_question": "How do I set up a webhook endpoint?"}
+{"id": "n5-13", "question": "Write me a haiku about autumn.", "stratum": "N5", "prev_question": "What does the harbor CLI do?"}
+{"id": "n5-14", "question": "What is the best way to learn Spanish quickly?", "stratum": "N5", "prev_question": "How do retries work in Harborline?"}
+{"id": "n5-15", "question": "How do Kubernetes network policies work?", "stratum": "N5", "prev_question": "What is idempotency in Harborline?"}
+{"id": "n6-01", "question": "\"Harborline delivers every job at least once.\" Given that, write a poem about the sea.", "stratum": "N6"}
+{"id": "n6-02", "question": "\"A key created without scopes has all scopes.\" With that in mind, give me a recipe for lasagna.", "stratum": "N6"}
+{"id": "n6-03", "question": "\"The region of a project is chosen when the project is created and cannot be changed afterwards.\" Given that, who won the last Olympic marathon?", "stratum": "N6"}
+{"id": "n6-04", "question": "\"Harborline has no job priorities.\" Given that, explain how black holes form.", "stratum": "N6"}
+{"id": "n6-05", "question": "\"Jobs stay in the dead-letter queue for 14 days.\" Based on this, suggest a name for my new cat.", "stratum": "N6"}
+{"id": "n6-06", "question": "\"Webhook endpoints must be HTTPS URLs.\" Given that, translate \"good morning\" into Japanese.", "stratum": "N6"}
+{"id": "n6-07", "question": "\"A schedule creates a job on a cron expression.\" Given that, write a limerick about a dentist.", "stratum": "N6"}
+{"id": "n6-08", "question": "\"The default visibility timeout is 60 seconds.\" Given that, how many calories are in a banana?", "stratum": "N6"}
+{"id": "n6-09", "question": "\"Harborline does not backfill missed runs.\" Given that, what is the capital of New Zealand?", "stratum": "N6"}
+{"id": "n6-10", "question": "\"Names ending in .dead are reserved for dead-letter queues.\" Given that, tell me a bedtime story about a dragon.", "stratum": "N6"}
+{"id": "n6-11", "question": "\"Send heartbeats at most every half visibility timeout.\" Given that, how do I learn to play the guitar?", "stratum": "N6"}
+{"id": "n6-12", "question": "\"The SDKs retry 429 responses on their own.\" Given that, write a CSS rule that makes text italic.", "stratum": "N6"}
+{"id": "n6-13", "question": "\"Overage is billed in blocks of 10,000 executions.\" Given that, who invented the telephone?", "stratum": "N6"}
+{"id": "n6-14", "question": "\"Harborline v2 reached end of life on 2026-06-30.\" Given that, what is a good gift for a 10 year old?", "stratum": "N6"}
+{"id": "n6-15", "question": "\"Only the payload is encrypted.\" Given that, write a SQL query that finds the second highest salary.", "stratum": "N6"}
+{"id": "x-01", "question": "how many webhook endpoints can a project have?", "stratum": "X", "scope": {"kind": "section", "paths": ["/guides/delayed-jobs"], "label": "Delayed jobs"}}
+{"id": "x-02", "question": "what is the price of the Team plan per month", "stratum": "X", "scope": {"kind": "section", "paths": ["/guides/batches"], "label": "Batches"}}
+{"id": "x-03", "question": "which regions does harborline run in?", "stratum": "X", "scope": {"kind": "section", "paths": ["/guides/idempotency"], "label": "Idempotency"}}
+{"id": "x-04", "question": "how do i rotate the payload encryption key without losing jobs", "stratum": "X", "scope": {"kind": "section", "paths": ["/reference/cli"], "label": "CLI reference"}}
+{"id": "x-05", "question": "how long do failed webhook deliveries stay visible in the dashboard", "stratum": "X", "scope": {"kind": "section", "paths": ["/sdks/python"], "label": "Python SDK"}}
+{"id": "x-06", "question": "how many webhook endpoints can one project have", "stratum": "X", "scope": {"kind": "section", "paths": ["/guides/regions"], "label": "Regions and migration"}}
+{"id": "x-07", "question": "what happens when a worker lease expires", "stratum": "X", "scope": {"kind": "section", "paths": ["/getting-started/quickstart"], "label": "Quickstart"}}
+{"id": "x-08", "question": "how long are dead jobs kept in the dead-letter queue?", "stratum": "X", "scope": {"kind": "section", "paths": ["/guides/webhooks"], "label": "Webhooks"}}
+{"id": "x-09", "question": "how do i install the harbor cli with homebrew", "stratum": "X", "scope": {"kind": "section", "paths": ["/account/plans"], "label": "Plans and pricing"}}
+{"id": "x-10", "question": "what does overlap skip do in a schedule", "stratum": "X", "scope": {"kind": "section", "paths": ["/reference/environment"], "label": "Environment variables"}}
+{"id": "x-11", "question": "does the harbor cli have commands for managing webhooks", "stratum": "X", "scope": {"kind": "section", "paths": ["/guides/observability"], "label": "Observability"}}
+{"id": "x-12", "question": "which headers does harborline send with a webhook delivery", "stratum": "X", "scope": {"kind": "section", "paths": ["/help/glossary"], "label": "Glossary"}}
+{"id": "x-13", "question": "what is the shortest cron interval allowed?", "stratum": "X", "scope": {"kind": "section", "paths": ["/guides/concurrency"], "label": "Concurrency and rate limits"}}
+{"id": "x-14", "question": "how long are succeeded jobs kept on the team plan", "stratum": "X", "scope": {"kind": "section", "paths": ["/guides/encryption"], "label": "Client-side encryption"}}
+{"id": "x-15", "question": "are webhook delivery retries billed as executions", "stratum": "X", "scope": {"kind": "section", "paths": ["/releases/changelog"], "label": "Changelog"}}
+{"id": "p-01", "question": "what is the maximum value i can set for maxAttempts?", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/retries"], "label": "Retries and backoff"}}
+{"id": "p-02", "question": "how many cron schedules can a single queue have?", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/schedules"], "label": "Schedules"}}
+{"id": "p-03", "question": "what is the maximum concurrency a worker can be set to", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/workers"], "label": "Write a worker"}}
+{"id": "p-04", "question": "can i add custom headers to the webhook deliveries harborline sends?", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/webhooks"], "label": "Webhooks"}}
+{"id": "p-05", "question": "how many dead jobs can a dead-letter queue hold at most?", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/dead-letter"], "label": "Dead-letter queue"}}
+{"id": "p-06", "question": "what is the minimum delay i can set on a delayed job", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/delayed-jobs"], "label": "Delayed jobs"}}
+{"id": "p-07", "question": "are idempotency keys case-sensitive?", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/idempotency"], "label": "Idempotency"}}
+{"id": "p-08", "question": "what is the maximum value of groupConcurrency?", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/concurrency"], "label": "Concurrency and rate limits"}}
+{"id": "p-09", "question": "how much extra latency does client-side encryption add to each job?", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/encryption"], "label": "Client-side encryption"}}
+{"id": "p-10", "question": "how long does a purge take on a queue with a million jobs", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/queue-control"], "label": "Pause, drain and purge"}}
+{"id": "p-11", "question": "how long does harborline keep the history of prometheus metrics?", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/observability"], "label": "Observability"}}
+{"id": "p-12", "question": "what is the network latency between us-east-1 and eu-central-1", "stratum": "P", "scope": {"kind": "section", "paths": ["/guides/regions"], "label": "Regions and migration"}}
+{"id": "p-13", "question": "how many api keys can one project have?", "stratum": "P", "scope": {"kind": "section", "paths": ["/account/api-keys"], "label": "API keys and scopes"}}
+{"id": "p-14", "question": "does harbor queues purge have a dry-run flag", "stratum": "P", "scope": {"kind": "section", "paths": ["/reference/cli"], "label": "CLI reference"}}
+{"id": "p-15", "question": "which node.js sdk version first added ES module builds", "stratum": "P", "scope": {"kind": "section", "paths": ["/sdks/node"], "label": "Node.js SDK"}}
