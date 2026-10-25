@@ -1063,7 +1063,7 @@ describe('the build — what a lexical-only index writes', () => {
   it('names no blob, writes none, and records the mode in the manifest', () => {
     // Named by its own bytes since engine-spec 034, not by the corpus hash.
     expect(src).toContain('const vecName = vectorless ? null : `vectors.${vecHash}.bin`')
-    expect(src).toContain('if (vecName) fs.writeFileSync(path.join(OUT, vecName)')
+    expect(src).toContain('if (vecName) write(vecName, Buffer.from(flat.buffer))')
     expect(src).toContain('embedModel: vectorless ? null : EMBED_MODEL,')
     expect(src).toContain('vectors: vecName,')
     // The declared mode still seeds it, so `embed: false` never embeds at all.

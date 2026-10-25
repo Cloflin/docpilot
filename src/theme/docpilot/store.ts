@@ -25,8 +25,15 @@ export function unpackSigns(bytes: Uint8Array, rows: number, dims: number) {
 
 let loading = null
 
-async function fetchJson(url) {
-  const res = await fetch(url)
+/**
+ * `integrity` is the build's `sha256-…` for the file, when the manifest has one
+ * (engine-spec 034). The browser checks it before handing over a byte: a shard
+ * altered on the way — a poisoned CDN cache, a proxy that rewrote it — fails the
+ * load instead of becoming text the model reads as the docs. A manifest without
+ * the map (every index before 2.0) fetches as it always did.
+ */
+async function fetchJson(url, integrity = undefined) {
+  const res = await fetch(url, integrity ? { integrity } : undefined)
   if (!res.ok) throw new Error(`${url} → ${res.status}`)
   return res.json()
 }
@@ -157,19 +164,20 @@ export function loadIndex(base) {
   loading = (async () => {
     const manifest = await fetchJson(`${base}/manifest.json`)
 
+    const sri = (name) => manifest.integrity?.[name]
     const [shards, vectorBuffer, dfDoc, openersDoc] = await Promise.all([
-      Promise.all(manifest.shards.map((s) => fetchJson(`${base}/${s}`))),
+      Promise.all(manifest.shards.map((s) => fetchJson(`${base}/${s}`, sri(s)))),
       // A lexical-only index ships no vector blob, so there is no URL to ask
       // for — `${base}/null` is a request for a file that was never written,
       // and in this position a 404 fails the whole load rather than costing the
       // dense channel.
       manifest.vectors === null
         ? null
-        : fetch(`${base}/${manifest.vectors}`).then((r) => {
+        : fetch(`${base}/${manifest.vectors}`, sri(manifest.vectors) ? { integrity: sri(manifest.vectors) } : undefined).then((r) => {
             if (!r.ok) throw new Error(`vectors → ${r.status}`)
             return r.arrayBuffer()
           }),
-      fetchJson(`${base}/${manifest.df}`),
+      fetchJson(`${base}/${manifest.df}`, sri(manifest.df)),
       /**
        * The openers bundle — and the ONE fetch here allowed to fail quietly.
        *
@@ -186,7 +194,7 @@ export function loadIndex(base) {
        * same terms and for the same reason as `manifest.vectors` above.
        */
       manifest.openers
-        ? fetchJson(`${base}/${manifest.openers}`).catch(() => null)
+        ? fetchJson(`${base}/${manifest.openers}`, sri(manifest.openers)).catch(() => null)
         : null,
     ])
 

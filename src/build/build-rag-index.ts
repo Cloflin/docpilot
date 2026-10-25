@@ -1660,11 +1660,31 @@ async function main() {
   fs.rmSync(OUT, { recursive: true, force: true })
   fs.mkdirSync(OUT, { recursive: true })
 
+  /**
+   * EVERY FILE BELOW IS NAMED BY ITS OWN BYTES — engine-spec 034.
+   *
+   * They are served `immutable`, and the corpus hash they used to carry covers
+   * chunk ids and text only: a tokenizer change rewrote `df` under the same
+   * name, a config change rewrote `openers`, an embedder change rewrote the
+   * vectors — each a file a returning reader's cache kept. The manifest is the
+   * one file served `no-cache`, so it is the root; everything it names is a
+   * content address, and `integrity` beside each name lets the browser check
+   * the bytes it got against the bytes this build wrote (Subresource
+   * Integrity: `fetch(url, {integrity})`).
+   */
+  const digest = (bytes) => crypto.createHash('sha256').update(bytes).digest()
+  const named = (prefix, ext, bytes) => `${prefix}.${digest(bytes).toString('hex').slice(0, 8)}${ext}`
+  const integrity = {}
+  const write = (name, bytes) => {
+    fs.writeFileSync(path.join(OUT, name), bytes)
+    integrity[name] = `sha256-${digest(bytes).toString('base64')}`
+    return name
+  }
+
   const shards = []
   for (let i = 0; i < chunks.length; i += SHARD_SIZE) {
-    const name = `chunks-${String(i / SHARD_SIZE).padStart(2, '0')}.${hash}.json`
-    fs.writeFileSync(path.join(OUT, name), JSON.stringify(chunks.slice(i, i + SHARD_SIZE)))
-    shards.push(name)
+    const bytes = Buffer.from(JSON.stringify(chunks.slice(i, i + SHARD_SIZE)))
+    shards.push(write(named(`chunks-${String(i / SHARD_SIZE).padStart(2, '0')}`, '.json', bytes), bytes))
   }
   /**
    * THE VECTOR FILE IS NAMED BY ITS OWN BYTES — engine-spec 034.
@@ -1676,10 +1696,11 @@ async function main() {
    * reader's browser kept the old vectors against a new manifest. A name per
    * content cannot be stale.
    */
-  const vecHash = vectorless ? null : crypto.createHash('sha256').update(Buffer.from(flat.buffer)).digest('hex').slice(0, 8)
+  const vecHash = vectorless ? null : digest(Buffer.from(flat.buffer)).toString('hex').slice(0, 8)
   const vecName = vectorless ? null : `vectors.${vecHash}.bin`
-  if (vecName) fs.writeFileSync(path.join(OUT, vecName), Buffer.from(flat.buffer))
-  fs.writeFileSync(path.join(OUT, `df.${hash}.json`), JSON.stringify({ n: chunks.length, df: dfTop }))
+  if (vecName) write(vecName, Buffer.from(flat.buffer))
+  const dfBytes = Buffer.from(JSON.stringify({ n: chunks.length, df: dfTop }))
+  const dfName = write(named('df', '.json', dfBytes), dfBytes)
 
   /**
    * Hoisted out of the manifest literal because the openers pass needs the SAME
@@ -1703,7 +1724,7 @@ async function main() {
     chunkCount: chunks.length,
     shards,
     vectors: vecName,
-    df: `df.${hash}.json`,
+    df: dfName,
     pages: pageList,
     sections: sectionOut,
     orphanPages: orphans,
@@ -1832,9 +1853,8 @@ async function main() {
       warn,
     })
     if (bundle) {
-      const name = `openers.${hash}.json`
-      fs.writeFileSync(path.join(OUT, name), json)
-      manifest.openers = name
+      const bytes = Buffer.from(json)
+      manifest.openers = write(named('openers', '.json', bytes), bytes)
       for (const line of renderOpenerReport({
         entries,
         report,
@@ -1848,6 +1868,7 @@ async function main() {
     console.log('  openers          suggestions.precomputed is off — nothing resolved, nothing read')
   }
 
+  ;(manifest as any).integrity = integrity
   const manifestJson = JSON.stringify(manifest)
   if (manifestJson.length > MANIFEST_MAX_BYTES) {
     die(`manifest is ${manifestJson.length} bytes, over the ${MANIFEST_MAX_BYTES} ceiling`)
