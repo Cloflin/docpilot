@@ -44,6 +44,9 @@ An **arm** is an index build: how the corpus is chunked, embedded and stored. A 
 | `v2.0 server agentic` | `base` | `runtime: 'server'` with `turn.loop: 'agentic'`, the 1.x server turn |
 | `v2.0 static calibrated` | `calibrated` | `runtime: 'browser'` with `guard.mode: 'calibrated'` |
 | `v2.0 server calibrated` | `calibrated` | `runtime: 'server'` with `guard.mode: 'calibrated'` |
+| `v2.0 static deepseek` | `base` | `runtime: 'browser'`, the chat model `deepseek/deepseek-v4-flash` on OpenRouter |
+| `v2.0 server deepseek` | `base` | `runtime: 'server'`, the same hosted model |
+| `v2.0 server agentic deepseek` | `base` | `runtime: 'server'` with `turn.loop: 'agentic'`, the same hosted model |
 
 The 1.5 baseline is the code that shipped, run from a built checkout, not a model of it.
 
@@ -126,6 +129,25 @@ What it says:
 - **The server keeps its instruction.** The canary in `prompt.extend` reached no reader of either server turn. The static install ships its prompt to the browser, so its canary is public by design.
 - **Echoed markup is inert.** Every system repeated an injected `<script>`, `onerror=` or `javascript:` when asked to. The panel escapes HTML and links no `javascript:`, so the reader sees text.
 - **The loop resists more.** The agentic turn resisted two probes that one-shot followed: a translated instruction and an instruction planted in a page. With 30 probes the difference is two probes, inside the noise. A site that weighs injection resistance above speed can set `turn.loop: 'agentic'`.
+
+### A hosted model
+
+The same 65 questions with `deepseek/deepseek-v4-flash` on OpenRouter as the chat model; the embedder stays the local `bge-m3`. A right outcome is an answer to an answerable question or a refusal of a negative. The three runs cost $0.16.
+
+| system | chat model | right outcome | negatives refused | answerable answered | answer F1 | first token p50 | whole answer p50 | prompt tokens / turn |
+|---|---|---|---|---|---|---|---|---|
+| `v2.0 static` | `qwen3:8b`, local | 56/65 | 6/15 | 50/50 | 0.405 | 27.5 s | 27.5 s | 2,757 |
+| `v2.0 static deepseek` | `deepseek-v4-flash` | 63/65 | 14/15 | 49/50 | 0.429 | 10.4 s | 13.6 s | 7,762 |
+| `v2.0 server` | `qwen3:8b`, local | 55/65 | 6/15 | 49/50 | 0.405 | 8.3 s | 19.5 s | 2,004 |
+| `v2.0 server deepseek` | `deepseek-v4-flash` | 60/65 | 15/15 | 45/50 | 0.409 | 13.3 s | 17.3 s | 2,096 |
+| `v2.0 server agentic deepseek` | `deepseek-v4-flash` | 61/65 | 13/15 | 48/50 | 0.436 | 9.8 s | 13.7 s | 6,959 |
+
+Answer F1 here counts a refused answerable question as 0, so a system cannot raise it by refusing.
+
+What it says:
+
+- **The model is the lever.** With the hosted model the static install reached the right outcome on 63 of 65 questions instead of 56 (McNemar p = 0.039). Most of the gain is honesty: it refused 14 of the 15 questions the docs cannot answer, where the local model refused 6, and it still answered 49 of 50 answerable ones. Answer F1 moved inside the noise.
+- **One-shot is a local-model default.** With the hosted model the agentic loop showed the first token sooner than one-shot (9.8 s against 13.3 s) and answered every Russian question one-shot refused (9 of 9 against 6 of 9), at 3.3 times the prompt tokens. The right outcomes are level (61 and 60 of 65). A server with a fast hosted model can set `turn.loop: 'agentic'` and pay in tokens, not in time.
 
 ### The gate
 

@@ -216,7 +216,7 @@ Above `0.03` the build **dies** instead of writing the index. That is a hard gat
 
 **The bit is taken only where it holds.** By default (`--quantize=auto`) the build measures the 1-bit error first and writes the bit only when it is at most `0.015`; otherwise it writes **int8** — one signed byte per dimension, `round(v × 127)`, under a `0.01` gate — and says so. The error tracks width: at 4096 dimensions it is about `0.010` and ranking holds; at 1024 (`bge-m3`) it is about `0.023`, and MRR on the golden set falls from 0.57 to 0.54. `--quantize=binary` or `--quantize=int8` overrides the choice. Re-run `calibrate` after the format changes: the scale is fitted, but a threshold calibrated on one format is a measurement of that format.
 
-For scale: this documentation site indexes 777 chunks at 4096 dimensions, so its vector blob is 397,824 bytes — 389 KB, where int8 would have been 3.0 MB and float32 12.1 MB.
+For scale: this documentation site indexes 779 chunks at 4096 dimensions, so its vector blob is 398,848 bytes — 390 KB, where int8 would have been 3.0 MB and float32 12.2 MB.
 
 ### How the format was chosen {#how-the-format-was-chosen}
 

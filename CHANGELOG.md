@@ -35,7 +35,10 @@ three restating lines on Harborline that ranked three dev questions better and
 none worse; the test split did not move. The gate stays off by default:
 `calibrate` finds no threshold on Harborline that passes every answerable probe
 above the lexical weight, and the provisional one catches one more of 15
-negatives on the server and none in the static install.
+negatives on the server and none in the static install. The model is the lever:
+the same static install with a hosted `deepseek-v4-flash` reached the right
+outcome on 63 of 65 questions instead of 56 (McNemar p = 0.039), mostly by
+refusing what the docs do not answer.
 
 ### Breaking
 
