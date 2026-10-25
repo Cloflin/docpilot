@@ -124,7 +124,8 @@ function toSections(text, fallbackTitle) {
   const lines = text.split('\n')
   const sections = []
   let h1 = fallbackTitle || null
-  let cur = { title: null, anchor: null, level: 0, lines: [] }
+  let parent = null
+  let cur = { title: null, anchor: null, level: 0, parent: null, lines: [] }
   let fence = null
 
   for (const line of lines) {
@@ -150,7 +151,11 @@ function toSections(text, fallbackTitle) {
         continue
       }
       if (cur.lines.join('\n').trim() || cur.title) sections.push(cur)
-      cur = { title, anchor, level, lines: [] }
+      // The `##` a `###` sits under, for the embedder's context line (engine-
+      // spec 029). Kept on the section, never on the chunk: it is a property of
+      // where the text sits, and the reader's source row already shows the page.
+      if (level === 2) parent = title
+      cur = { title, anchor, level, parent: level === 3 ? parent : null, lines: [] }
       continue
     }
     cur.lines.push(line)
@@ -396,16 +401,41 @@ function paragraphSplit(text) {
 /**
  * @returns {{ chunks: Array, warnings: string[] }}
  */
+/**
+ * What the EMBEDDER reads beside a chunk's own text — engine-spec 029.
+ *
+ *   · `off`        the stored text, as every index before 2.0 was built;
+ *   · `path`       the full heading path — page › section › subsection — so a
+ *                  `###` stops losing the `##` it belongs to;
+ *   · `path+desc`  that, and the page's description on EVERY chunk, not only
+ *                  the first: the "contextual retrieval" shape, with the context
+ *                  written by the author (frontmatter, or llms.txt) instead of
+ *                  generated per chunk by a model.
+ *
+ * ONLY THE VECTOR MOVES. The stored text — what the model reads as an excerpt
+ * and the reader sees as a passage — is byte-identical in every mode, so the
+ * index hash, the chunk ids and every gold pin survive a change of mode, and
+ * nothing a reader looks at changes. The context rides on each record as a
+ * NON-ENUMERABLE `embedText`, which `JSON.stringify` skips: it reaches the
+ * embedder and never a shard.
+ */
+export type EmbedContext = 'off' | 'path' | 'path+desc'
+
 export function chunkMarkdown({
   src,
   path,
   kind,
   sidebarTitle,
+  embedContext = 'off',
+  pageDescription = null,
 }: {
   src: string
   path: string
   kind?: string
   sidebarTitle?: string
+  embedContext?: EmbedContext
+  /** A description from outside the page — llms.txt — used when the page has none. */
+  pageDescription?: string | null
 }) {
   const { title: fmTitle, description, layout, source, faq, text, warnings: normWarnings } =
     normaliseMarkdown(src)
@@ -436,7 +466,7 @@ export function chunkMarkdown({
       prev.body += `\n\n${s.title ? `${s.title}\n` : ''}${body}`
       continue
     }
-    merged.push({ title: s.title, anchor: s.anchor, level: s.level, body })
+    merged.push({ title: s.title, anchor: s.anchor, level: s.level, parent: s.parent, body })
   }
 
   const chunks = []
@@ -509,7 +539,7 @@ export function chunkMarkdown({
       const lead = description && chunks.length === 0 && i === 0 ? `\n${description}` : ''
       const full = `${context}${lead}\n${body}`.trim()
       if (!body.trim()) return
-      chunks.push({
+      const record = {
         // `~N`, NOT `-N`, for the second and later parts of one section.
         //
         // `-N` is already taken: it is how a repeated heading is disambiguated,
@@ -552,7 +582,18 @@ export function chunkMarkdown({
         breadcrumb,
         kind,
         text: full,
-      })
+      }
+      if (embedContext !== 'off') {
+        const trail = [pageTitle, s.level === 3 ? s.parent : null, s.title && s.title !== pageTitle ? s.title : null]
+          .filter(Boolean)
+          .join(' › ')
+        const about = embedContext === 'path+desc' ? description || pageDescription || '' : lead ? description : ''
+        Object.defineProperty(record, 'embedText', {
+          value: `${trail}${about ? `\n${about}` : ''}\n${body}`.trim(),
+          enumerable: false,
+        })
+      }
+      chunks.push(record)
     })
   }
 
@@ -618,5 +659,5 @@ export function chunkMarkdown({
   // property of the PAGE, and the manifest is where a page's properties live.
   // The caller checks it against the allowlist — this module has no I/O and no
   // configuration, which is what lets the linter re-chunk from source on a PR.
-  return { chunks, warnings, title: pageTitle, faq, source }
+  return { chunks, warnings, title: pageTitle, faq, source, description: description || null }
 }

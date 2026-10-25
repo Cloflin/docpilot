@@ -141,6 +141,17 @@ const REFRESH_EMBEDDINGS = process.argv.includes('--refresh-embeddings')
 const QUANTIZE = argValue('quantize') || 'auto'
 
 /**
+ * What the embedder reads beside each chunk — engine-spec 029, `chunker.ts`'s
+ * `EmbedContext`. An experiment knob until the measurement decides the default:
+ * the stored text does not change in any mode, so the knob moves the vectors and
+ * nothing a reader can see.
+ */
+const EMBED_CONTEXT = (() => {
+  const v = String(process.env.DOCPILOT_EMBED_CONTEXT || 'off')
+  return v === 'path' || v === 'path+desc' ? v : 'off'
+})()
+
+/**
  * Where `auto` stops taking the bit. Measured, not chosen: at 4096 dimensions
  * (qwen3-embedding-8b) the 1-bit error is ~0.010 and the golden set ranks within
  * noise of int8; at 1024 (bge-m3) it is ~0.026, MRR falls 0.57 → 0.54 and D
@@ -1258,6 +1269,7 @@ async function main() {
       src,
       path: route,
       kind: kindFor(route),
+      embedContext: EMBED_CONTEXT,
     })
     warnings.forEach(warn)
     if (!c.length) continue
@@ -1310,6 +1322,7 @@ async function main() {
         path: route,
         kind: kindFor(route),
         sidebarTitle: title,
+        embedContext: EMBED_CONTEXT,
       })
       warnings.forEach(warn)
       if (!c.length) {
@@ -1363,7 +1376,7 @@ async function main() {
       for (const m of src.matchAll(/\]\((\/[^)\s#]*)(?:#[^)\s]*)?\)/g)) {
         externalLinks.push({ file: path.relative(ROOT, file), href: m[1] })
       }
-      const { chunks: c, warnings, title, source } = chunkMarkdown({ src, path: id, kind: 'guide' })
+      const { chunks: c, warnings, title, source } = chunkMarkdown({ src, path: id, kind: 'guide', embedContext: EMBED_CONTEXT })
       warnings.forEach(warn)
       if (!c.length) {
         warn(`imported page produced no chunks: ${path.relative(ROOT, file)}`)
@@ -1573,7 +1586,9 @@ async function main() {
    */
   let vectorless = NO_EMBED
   if (!NO_EMBED) {
-    const vectors = await embedAll(chunks.map((c) => c.text))
+    // `embedText` when the chunker attached one (a non-enumerable field: it never
+    // reaches a shard), the stored text otherwise.
+    const vectors = await embedAll(chunks.map((c) => c.embedText ?? c.text))
     // `null`, not an empty array: the fallback fired and there is nothing to
     // check the length of. `embedAll` has already said so, loudly.
     if (vectors === null) vectorless = true
@@ -1651,7 +1666,18 @@ async function main() {
     fs.writeFileSync(path.join(OUT, name), JSON.stringify(chunks.slice(i, i + SHARD_SIZE)))
     shards.push(name)
   }
-  const vecName = vectorless ? null : `vectors.${hash}.bin`
+  /**
+   * THE VECTOR FILE IS NAMED BY ITS OWN BYTES — engine-spec 034.
+   *
+   * It was `vectors.<corpus hash>.bin`, and the corpus hash covers chunk ids and
+   * TEXT only. A rebuild with another embedder, another width, another
+   * quantisation or another embed context writes different bytes under the
+   * same name — and every file here is served `immutable`, so a returning
+   * reader's browser kept the old vectors against a new manifest. A name per
+   * content cannot be stale.
+   */
+  const vecHash = vectorless ? null : crypto.createHash('sha256').update(Buffer.from(flat.buffer)).digest('hex').slice(0, 8)
+  const vecName = vectorless ? null : `vectors.${vecHash}.bin`
   if (vecName) fs.writeFileSync(path.join(OUT, vecName), Buffer.from(flat.buffer))
   fs.writeFileSync(path.join(OUT, `df.${hash}.json`), JSON.stringify({ n: chunks.length, df: dfTop }))
 
@@ -1666,6 +1692,9 @@ async function main() {
   const manifest = {
     version: 3,
     hash,
+    // Only when it is not the 1.x default, so a default build's manifest is the
+    // manifest it always was. engine-spec 029.
+    ...(EMBED_CONTEXT !== 'off' && !vectorless ? { embedContext: EMBED_CONTEXT } : {}),
     embedModel: vectorless ? null : EMBED_MODEL,
     dims,
     // engine-spec 027. Absent means int8, which keeps an int8 manifest

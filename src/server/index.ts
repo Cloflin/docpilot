@@ -340,6 +340,7 @@ export async function createDocPilotServer(options: DocPilotServerOptions) {
             answers,
             metrics,
             embedTimeoutMs: opts.embedTimeoutMs,
+            policy: opts.turn.loop === 'agentic' && opts.turn.finalThink == null ? null : opts.turn,
           })
         } catch (e) {
           if (!abort.signal.aborted) emit('error', { message: 'no model answered', kind: e?.kind || null })

@@ -71,10 +71,10 @@ import { filterByLevel, parseLevelArg, DEFAULT_RUN_LEVEL } from './levels.js'
 import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 import { chainTexts, resolveChain } from './conversation.js'
 import { keyForBase, nodeEmbedTarget } from '../config.js'
-import { serverRows } from './server-eval.js'
+import { evalTurnPolicy, serverRows } from './server-eval.js'
 import { adversarialSummary, asRecord, loadProbes } from './adversarial.js'
 
-import { ROOT, RAG, REPORTS, GOLDEN, DOCS, DOCPILOT_DIR, settings as docPilot } from '../cli-context.js'
+import { ROOT, RAG, REPORTS, GOLDEN, DOCS, DOCPILOT_DIR, CONFIG, settings as docPilot } from '../cli-context.js'
 import { applyFileEnv } from '../cli-env.js'
 import { prefetchEmbeddings } from './prefetch.js'
 import { COMMANDS, entryFlagError, flagValue, flagGiven } from '../cli-flags.js'
@@ -1669,14 +1669,14 @@ function printSummary(s) {
  * wall is built twice: the filename stops the OVERWRITE, the filter stops the
  * COMPARISON, and neither depends on the other being right.
  */
-export const reportName = ({ indexHash, model, vectorlessIndex, level, embedModel, runtime = 'browser', split = null, set = 'golden' }: Record<string, any>) =>
+export const reportName = ({ indexHash, model, vectorlessIndex, level, embedModel, runtime = 'browser', split = null, set = 'golden', serverTurn = null }: Record<string, any>) =>
   `report-${indexHash}-${String(model).replace(/[^\w.-]+/g, '_')}` +
   `${LEXICAL ? '-lexical' : ''}${vectorlessIndex ? '-novec' : ''}` +
   `${embedModel ? `-emb-${fnv1a32(String(embedModel))}` : ''}` +
   `${!level || level === DEFAULT_RUN_LEVEL ? '' : `-lvl-${level}`}` +
   // engine-spec 029: three more axes that change WHAT was measured, each added
   // only when it is not the 1.x default, so every existing name still pairs.
-  `${runtime === 'server' ? '-srv' : ''}${split ? `-split-${split}` : ''}${set === 'adversarial' ? '-adv' : ''}` +
+  `${runtime === 'server' ? `-srv${serverTurn ? `-${fnv1a32(JSON.stringify(serverTurn))}` : ''}` : ''}${split ? `-split-${split}` : ''}${set === 'adversarial' ? '-adv' : ''}` +
   `-${PROMPT_HASH}.json`
 
 /**
@@ -1725,13 +1725,26 @@ export function leverFingerprint(tuning = null) {
 async function runServerRuntime({ index, guard, records, securityProbes, vectorless }) {
   const named = arg('models') ?? arg('model')
   const models = named ? MODELS : [null]
+  // The AUTHOR's settings, read from the file the launcher found: the server
+  // resolves them itself, as a deployment does, and `docPilot` here is already
+  // resolved — feeding a resolved shape back through the resolver is not a
+  // round trip anything promises.
+  let authored = {}
+  try {
+    authored = (await import(pathToFileURL(CONFIG).href)).docPilot ?? {}
+  } catch {
+    authored = {}
+  }
   const runs = []
   for (const model of models) {
     const label = model || docPilot.chat?.model || 'config'
     console.log(`\n── ${label} — server turn${ENDPOINT ? ` at ${originOf(ENDPOINT)}` : ', in-process'} ──`)
+    const turnPolicy = evalTurnPolicy(process.env)
+    if (turnPolicy) console.log(`  server.turn ${JSON.stringify(turnPolicy)} — the arm this report names`)
     const rows = await serverRows({
       records,
-      settings: docPilot,
+      turn: turnPolicy,
+      settings: authored,
       env: process.env,
       indexDir: RAG,
       endpoint: ENDPOINT,
@@ -1759,6 +1772,7 @@ async function runServerRuntime({ index, guard, records, securityProbes, vectorl
       records: records.length,
       level: RUN_LEVEL,
       runtime: 'server',
+      serverTurn: evalTurnPolicy(process.env),
       endpoint: ENDPOINT ? originOf(ENDPOINT) : null,
       split: SPLIT,
       set: SET,

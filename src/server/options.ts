@@ -35,6 +35,17 @@ export interface ServerOperatorSettings {
   }
   /** Origins allowed to POST a turn. Default: the request's own host only. */
   allowedOrigins?: string[] | null
+  /**
+   * How a server turn spends its model calls — engine-spec 031.
+   *
+   *   · `loop: 'agentic'` — the tool loop the browser runs (default);
+   *     `'one-shot'` — straight to the answer call with the evidence the gate
+   *     retrieved; `'adaptive'` — one-shot when that evidence is strong
+   *     (`G >= adaptiveG`), the loop otherwise.
+   *   · `finalThink: false` — no reasoning before the answer. On a local model
+   *     that is most of the wait for the first token.
+   */
+  turn?: { loop?: 'agentic' | 'one-shot' | 'adaptive'; adaptiveG?: number; finalThink?: boolean }
 }
 
 export const SERVER_DEFAULTS = {
@@ -45,6 +56,7 @@ export const SERVER_DEFAULTS = {
   embedTimeoutMs: 20000,
   cache: { embeddings: 1000, answers: false as false | { ttlMs: number; max: number } },
   allowedOrigins: null as string[] | null,
+  turn: { loop: 'agentic', adaptiveG: 0.6, finalThink: null },
 }
 
 const positive = (v, dflt) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : dflt)
@@ -57,6 +69,7 @@ export interface ServerOptions {
   embedTimeoutMs: number
   cache: { embeddings: number; answers: false | { ttlMs: number; max: number } }
   allowedOrigins: string[] | null
+  turn: { loop: 'agentic' | 'one-shot' | 'adaptive'; adaptiveG: number; finalThink: boolean | null }
 }
 
 export function resolveServerOptions(
@@ -84,5 +97,10 @@ export function resolveServerOptions(
         : false,
     },
     allowedOrigins: Array.isArray(s.allowedOrigins) ? s.allowedOrigins.map(String) : null,
+    turn: {
+      loop: s.turn?.loop === 'one-shot' || s.turn?.loop === 'adaptive' ? s.turn.loop : 'agentic',
+      adaptiveG: positive(s.turn?.adaptiveG, 0.6),
+      finalThink: typeof s.turn?.finalThink === 'boolean' ? s.turn.finalThink : null,
+    },
   }
 }

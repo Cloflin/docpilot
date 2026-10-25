@@ -1061,7 +1061,8 @@ describe('the build — what a lexical-only index writes', () => {
    * is a manifest the browser believes.
    */
   it('names no blob, writes none, and records the mode in the manifest', () => {
-    expect(src).toContain('const vecName = vectorless ? null : `vectors.${hash}.bin`')
+    // Named by its own bytes since engine-spec 034, not by the corpus hash.
+    expect(src).toContain('const vecName = vectorless ? null : `vectors.${vecHash}.bin`')
     expect(src).toContain('if (vecName) fs.writeFileSync(path.join(OUT, vecName)')
     expect(src).toContain('embedModel: vectorless ? null : EMBED_MODEL,')
     expect(src).toContain('vectors: vecName,')

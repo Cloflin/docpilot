@@ -132,6 +132,7 @@ export function previousReport(dir, meta) {
       if ((doc.meta?.runtime ?? 'browser') !== (meta.runtime ?? 'browser')) continue
       if ((doc.meta?.split ?? null) !== (meta.split ?? null)) continue
       if ((doc.meta?.set ?? 'golden') !== (meta.set ?? 'golden')) continue
+      if (JSON.stringify(doc.meta?.serverTurn ?? null) !== JSON.stringify(meta.serverTurn ?? null)) continue
       /**
        * THE CORPUS HASH DOES NOT COVER THE VECTOR SPACE.
        *

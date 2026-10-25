@@ -199,6 +199,8 @@ export interface ServerTurnContext {
   deadline?: AbortSignal | null
   /** Whole first-turn answers — `server.cache.answers`, off by default. */
   answers?: Lru<any> | null
+  /** `server.turn` — how the turn spends its model calls. Absent: the browser's turn. */
+  policy?: { loop: 'agentic' | 'one-shot' | 'adaptive'; adaptiveG: number; finalThink: boolean | null } | null
 }
 
 /**
@@ -291,6 +293,8 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
       embedRequests: 0,
       retrieveMs: null,
       probeMs: null,
+      probeWaitMs: null,
+      loop: null,
       modelMs: null,
       firstThoughtMs: null,
       firstTokenMs: null,
@@ -531,10 +535,30 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
     // The probe started beside the embedding; this is where its answer is needed.
     if (tools.pending) {
       const pending = tools.pending
+      const tWait = now()
       const native = await pending
+      // The boot probe's own time belongs to no turn; the part of it THIS turn
+      // waited for is this turn's, and on a cold local model it is the load.
+      timing.probeWaitMs = now() - tWait
       if (tools.pending === pending) tools.pending = null
       tools.fallback = native === false
       if (native !== null) tools.known = true
+    }
+
+    /**
+     * THE SERVER'S TURN POLICY — engine-spec 031. One-shot skips the tool loop
+     * (`maxIterations: 0` is how the harness already spells one-shot), adaptive
+     * does so when the gate's evidence is strong, and `finalThink` reaches the
+     * answer call. With no policy the turn is the browser's, call for call.
+     */
+    const policy = ctx.policy
+    const oneShot =
+      policy?.loop === 'one-shot' || (policy?.loop === 'adaptive' && Number.isFinite(g.G) && g.G >= policy.adaptiveG)
+    timing.loop = policy ? (oneShot ? 'one-shot' : 'agentic') : null
+    const turnConfig = {
+      ...config,
+      ...(oneShot ? { maxIterations: 0 } : {}),
+      guard: { ...guard, mode: config.guard.mode, supportMinIdentifiers: config.guard.supportMinIdentifiers },
     }
 
     let lastMessages = null
@@ -553,7 +577,7 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
       })),
       openerHint,
       addendum: input.addendum,
-      config: { ...config, guard: { ...guard, mode: config.guard.mode, supportMinIdentifiers: config.guard.supportMinIdentifiers } },
+      config: turnConfig,
       fallback: tools.fallback,
       queryVec: composedWon && composedVec ? composedVec : queryVec,
       composedQuery: composedWon ? composedQuery : null,
@@ -574,6 +598,7 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
         emit('stream', ev)
       },
       onMessages: ctx.keepMessages ? (m) => (lastMessages = m) : null,
+      finalThink: policy?.finalThink ?? true,
       signal,
     })
     timing.modelMs = now() - tModel

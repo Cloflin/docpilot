@@ -204,6 +204,7 @@ export interface RunTurnOptions {
    * written from, which is what a fine-tuning set has to train on.
    */
   onMessages?: ((messages: any[]) => void) | null
+  finalThink?: boolean
 }
 
 export async function runTurn(options: RunTurnOptions) {
@@ -249,6 +250,14 @@ export async function runTurn(options: RunTurnOptions) {
   onMember,
   onStream,
   signal,
+  /**
+   * Whether the answer call may reason first — engine-spec 031's
+   * `server.turn.finalThink`. An ARGUMENT rather than a config key: only the
+   * server decides it, the panel never reads it, and a config key nothing in
+   * the client half can set is what rule 11a exists to refuse. Absent: `true`,
+   * the turn every caller has always run.
+   */
+  finalThink = true,
   // What is left of the day's requests, from createBudget(). Absent for the
   // eval runner and for any host that keeps no count, and absent means the same
   // thing an unknown budget means everywhere else: run the turn in full.
@@ -961,7 +970,11 @@ export async function runTurn(options: RunTurnOptions) {
         // found it. `thinkSupported` is the switch that does exist, and it
         // answers the question that can actually be answered: whether the
         // MODEL has the capability, rather than whether somebody wanted it.
-        enableThink: thinkable(true),
+        // `finalThink: false` is the server's speed policy (engine-spec 031): on
+        // a local model the reasoning before the answer is most of the wait for
+        // its first token. Unset everywhere else, so every other turn is the
+        // turn it was.
+        enableThink: thinkable(finalThink !== false),
         onDelta: streamer(),
         onAbandon: abandoned,
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,

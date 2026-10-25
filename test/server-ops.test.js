@@ -338,3 +338,35 @@ describe('eval --runtime=server', () => {
     expect(rows[1].depth).toBe(1)
   })
 })
+
+describe('the server turn policy', () => {
+  const stub = stubModel()
+  afterAll(() => stub.close())
+
+  it('one-shot spends exactly the answer call and records the loop it took', async () => {
+    const base = await stub.ready
+    const records = []
+    const before = stub.calls.length
+    const dp = await createDocPilotServer({
+      settings: { ...chatOf(base), server: { turn: { loop: 'one-shot', finalThink: false } } },
+      env: { CUSTOM_BASE_URL: base },
+      index: INDEX,
+      log: { write: (r) => records.push(r) },
+    })
+    const evs = await events(await dp.handle(post({ question: 'How do I build the index?', messageId: 'pol-1' })))
+    expect(evs.find((e) => e.event === 'settle').data.outcome).toBe('answer')
+    const turnCalls = stub.calls.slice(before).filter((c) => !c.tools || c.tools.length === 0)
+    expect(turnCalls.length).toBeGreaterThanOrEqual(1)
+    const rec = records.find((r) => r.messageId === 'pol-1')
+    expect(rec.timing.loop).toBe('one-shot')
+    expect(rec.iterations).toBe(0)
+  })
+
+  it('without a policy the turn is the browser’s, call for call', async () => {
+    const base = await stub.ready
+    const records = []
+    const dp = await createDocPilotServer({ settings: chatOf(base), env: { CUSTOM_BASE_URL: base }, index: INDEX, log: { write: (r) => records.push(r) } })
+    await (await dp.handle(post({ question: 'How do I build the index?', messageId: 'pol-2' }))).text()
+    expect(records.find((r) => r.messageId === 'pol-2').timing.loop).toBe(null)
+  })
+})

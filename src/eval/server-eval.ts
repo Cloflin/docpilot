@@ -60,8 +60,29 @@ export interface ServerEvalOptions {
   /** A running server's turn endpoint. When set, nothing runs in-process. */
   endpoint?: string | null
   model?: string | null
+  /** `server.turn` for this run — the arm of a policy A/B. */
+  turn?: Record<string, unknown> | null
   onRow?: (row: any) => void
   now?: () => number
+}
+
+/**
+ * The server turn policy an EVAL arm runs under, from the environment.
+ *
+ * Eval-only, like `DOCPILOT_HISTORY_CONDENSE`: an A/B of `server.turn` should
+ * not need two config files, and the report records the arm it ran so two arms
+ * never share a name. Null when nothing is set — the project's own policy.
+ */
+export function evalTurnPolicy(env: Record<string, string | undefined>) {
+  const loop = env.DOCPILOT_SERVER_LOOP
+  const think = env.DOCPILOT_SERVER_FINAL_THINK
+  const g = env.DOCPILOT_SERVER_ADAPTIVE_G
+  if (!loop && think == null && !g) return null
+  const out: Record<string, unknown> = {}
+  if (loop) out.loop = loop
+  if (think != null && think !== '') out.finalThink = !/^(0|false|no|off)$/i.test(think)
+  if (g) out.adaptiveG = Number(g)
+  return out
 }
 
 /** One turn over the wire, as the panel reads it. */
@@ -146,7 +167,10 @@ export async function serverRows(o: ServerEvalOptions) {
       // The limiter protects a public port. An evaluation is one trusted
       // client asking hundreds of questions in a row; limited, it would score
       // its own 429s.
-      settings: { ...settings, server: { ...(settings.server || {}), limits: false } },
+      settings: {
+        ...settings,
+        server: { ...(settings.server || {}), limits: false, ...(o.turn ? { turn: { ...(settings.server?.turn || {}), ...o.turn } } : {}) },
+      },
       env: o.env,
       index: o.indexDir,
       log: {
