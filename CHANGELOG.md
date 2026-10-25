@@ -7,6 +7,91 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 2.0.0 — 2026-10-25
+
+Two installs, measured. Nothing in the panel changes: the static install
+answered all 65 Harborline questions byte for byte as 1.5 did, and a server
+install answers the same questions sooner. Every other item is under the hood or
+in the owner's tooling. The claims are measured on `bench/harborline` — a
+documentation site for a product that does not exist, so an answer can only come
+from retrieval — and on this package's own docs.
+
+### Measured
+
+Harborline, `bge-m3` and `qwen3:8b` on a local Ollama, 65 questions
+(`bench/harborline/results/RESULTS.md`):
+
+| system | answer F1 | first token p50 | whole answer p50 | attack success |
+|---|---|---|---|---|
+| 1.5 static | 0.405 | — | 24.5 s | — |
+| 2.0 static | 0.405 (byte-identical) | 27.5 s | 27.5 s | 30% |
+| 2.0 server (one-shot, the default) | 0.414 | 8.3 s | 19.5 s | 30% |
+| 2.0 server, `turn.loop: 'agentic'` | 0.407 | 25.0 s | 25.0 s | 23% |
+
+No retrieval lever beat the 1.x index on both corpora (engine-spec 034), so the
+static index ranks exactly as 1.5's did; `--quantize=binary` halves its download
+(199 → 99 KB on the wire) at a cost inside the noise. The tuning agent kept
+three restating lines on Harborline that ranked three dev questions better and
+none worse; the test split did not move.
+
+### Breaking
+
+- **The server install ships limits on.** `server.limits` defaults to 10 turns a
+  minute (burst 10) and 500 a day per client, 16 turns at once and 3 per client;
+  a refused turn is `429` with `Retry-After`. `server: {limits: false}` restores
+  1.x for a deployment that has a proxy doing this.
+- **A server turn has a deadline**: `server.turnTimeoutMs`, 300 s.
+- **A server turn is one-shot by default** (engine-spec 031): straight to the
+  answer call with the gate's evidence, no reasoning before it. On Harborline with
+  a local `qwen3:8b` the first token came at 8.3 s instead of 25.0 s at the median,
+  with answer F1 and citations inside the noise of the loop.
+  `server: {turn: {loop: 'agentic'}}` restores the 1.x tool loop.
+- **Index file names are content addresses.** Shards, `df`, vectors and openers
+  are named by a sha256 of their own bytes, and `manifest.integrity` carries each
+  file's Subresource Integrity, which the panel checks. A host that rewrites the
+  files in flight now fails the load instead of serving them.
+- **History the server did not sign is no longer trusted as the model's own
+  turn.** It reaches the model quoted in the reader's message. Set
+  `DOCPILOT_SERVER_SECRET` on every replica, or each demotes the others' answers.
+
+### Added
+
+- **`npx docpilot init` asks which install** — `--runtime=browser|server` — and
+  prints what to paste and, for a server, how to run it.
+- **The server install, watched** (engine-spec 031): `GET {endpoint}/metrics` in
+  Prometheus text or `?format=json` (loopback, or `DOCPILOT_METRICS_TOKEN`);
+  stage timings, the ranking, the first-token time in the turn log; the BM25
+  index and the capability probe warmed at boot; a per-process query-vector
+  cache; an opt-in whole-answer cache; `server.turn` — `loop: 'one-shot'`
+  (the default), `'agentic'` or `'adaptive'`, and `finalThink`.
+- **The server install, guarded** (engine-spec 033): signed history, a leak
+  guard on `prompt.override`/`extend`, a capped body, `serve --dir` refusing
+  dotfiles, `nosniff`, the image running as `node`.
+- **`eval`** (engine-spec 029): `--runtime=server` and `--endpoint=` measure the
+  server turn itself; `--split=dev|test`; `--set=adversarial` runs security probes
+  and reports the attack success rate; `--quiet`; recall@1/3/5, nDCG@8, context
+  precision@5, p99 and first-token latency.
+- **`docpilot improve plan|compare|check`** (engine-spec 035): one cause per
+  failing record and one edit per (cause, page); the 2-point keep/revert rule
+  with a paired bootstrap and McNemar, and for two gate-only reports a Pareto
+  move (some record better, none worse); a guard against copied test gold.
+- **The `docpilot-tuner` and `docpilot-writer` agents and the `docs-tune` skill**
+  (engine-spec 036), installed into `.claude/agents/` by `init` and `update`, with
+  a model and an effort chosen per task.
+- **The terminal** (engine-spec 030): the home screen, `docpilot status`,
+  `docpilot monitor`, progress bars, the eval scorecard, colour on a TTY only.
+- **`bench/harborline`** and `bench/run.mjs` — the benchmark the numbers above
+  come from.
+
+### Fixed
+
+- `docpilot serve` handed the server the RESOLVED settings, which dropped every
+  `server.*` key but `endpoint`.
+- First-token percentiles left out every answer that did not stream.
+- `noAnswerPrecision` read 0 on every run with `guard.mode: 'off'`; it is null
+  where no gate could have named a cause.
+- `index` printed each repeated warning once per occurrence.
+
 ## 1.5.0 — 2026-10-25
 
 ### Added
