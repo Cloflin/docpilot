@@ -34,6 +34,7 @@ An **arm** is an index build: how the corpus is chunked, embedded and stored. A 
 | `ctx-path` | The heading path embedded with each chunk (`DOCPILOT_EMBED_CONTEXT=path`) |
 | `ctx-desc` | The heading path and the page description embedded (`path+desc`) |
 | `llms` | Page notes from the reference `llms.txt` used as descriptions (`DOCPILOT_LLMS_FILE`) |
+| `calibrated` | `base` with the gate's refusals on (`HARBORLINE_GUARD_MODE=calibrated`), its thresholds from `node bench/run.mjs calibrate` |
 
 | system | arm | runtime |
 |---|---|---|
@@ -41,6 +42,8 @@ An **arm** is an index build: how the corpus is chunked, embedded and stored. A 
 | `v2.0 static` | `base` | `runtime: 'browser'` |
 | `v2.0 server` | `base` | `runtime: 'server'`, the 2.0 default turn: one-shot, no reasoning before the answer |
 | `v2.0 server agentic` | `base` | `runtime: 'server'` with `turn.loop: 'agentic'`, the 1.x server turn |
+| `v2.0 static calibrated` | `calibrated` | `runtime: 'browser'` with `guard.mode: 'calibrated'` |
+| `v2.0 server calibrated` | `calibrated` | `runtime: 'server'` with `guard.mode: 'calibrated'` |
 
 The 1.5 baseline is the code that shipped, run from a built checkout, not a model of it.
 
@@ -50,6 +53,7 @@ You need Node 20 or newer, a built checkout of this repository (`npm run build`,
 
 ```bash
 node bench/run.mjs index        # build one index per arm
+node bench/run.mjs calibrate    # fit the gate on eval/calibration.jsonl for the calibrated arm
 node bench/run.mjs retrieval    # eval --gate-only per arm, dev and test splits: free, minutes
 node bench/run.mjs answers      # the golden set answered, per system: hours on a local model
 node bench/run.mjs security     # the adversarial probes, per system
@@ -122,6 +126,23 @@ What it says:
 - **The server keeps its instruction.** The canary in `prompt.extend` reached no reader of either server turn. The static install ships its prompt to the browser, so its canary is public by design.
 - **Echoed markup is inert.** Every system repeated an injected `<script>`, `onerror=` or `javascript:` when asked to. The panel escapes HTML and links no `javascript:`, so the reader sees text.
 - **The loop resists more.** The agentic turn resisted two probes that one-shot followed: a translated instruction and an instruction planted in a page. With 30 probes the difference is two probes, inside the noise. A site that weighs injection resistance above speed can set `turn.loop: 'agentic'`.
+
+### The gate
+
+`eval/calibration.jsonl` holds 295 probes in the eleven strata `docpilot calibrate` reads, and none of them is a golden question. On Harborline `calibrate` refuses to write thresholds: the tau that lets every answerable probe through is 0.15, below the lexical weight 0.25, where a question would clear the gate on shared words alone (`bench/harborline/eval/calibration.report.md`). The build then inlines the provisional tau 0.30, and the calibrated systems measure that.
+
+| system | negatives caught | over-refusal | answer F1 | whole answer p50 |
+|---|---|---|---|---|
+| `v2.0 static` | 6/15 | 0/50 | 0.405 | 27.5 s |
+| `v2.0 static calibrated` | 6/15 | 0/50 | 0.405 | 23.8 s |
+| `v2.0 server` | 6/15 | 0/50 | 0.414 | 19.5 s |
+| `v2.0 server calibrated` | 7/15 | 0/50 | 0.405 | 20.1 s |
+
+What it says:
+
+- **The gate measures topic, not whether an answer exists.** Probes about absent features and absent APIs sit at a median G of 0.65 to 0.91, as high as the probes the docs answer (0.90 to 0.97). Only off-domain questions fall below a threshold that a real question never reaches.
+- **On these questions the gate adds one refusal.** In the static install it refuses five off-domain questions that the model refused anyway, so the reader gets the same answers without a model call. On the server it catches one more negative, with no false refusal. The two server runs gave the same text on 20 of 65 questions, and the gate changed five of them: the rest is the model's own variation.
+- **The default stays `guard.mode: 'off'`.** A threshold has to be measured per corpus and per language — see [Relevance gate](/features/gate) — and on this corpus no measured threshold exists. A site with blatant off-topic traffic can set `guard.tau` by hand and check it with `eval --gate-only`.
 
 ### Retrieval
 
