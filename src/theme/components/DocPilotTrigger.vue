@@ -3,7 +3,11 @@
     v-if="visible"
     type="button"
     class="docpilot-nav-trigger"
-    :class="[kind === 'nav' ? null : `is-${kind}`, kind === 'fab' && fabLabel ? 'has-label' : null]"
+    :class="[
+      kind === 'nav' ? null : `is-${kind}`,
+      kind === 'fab' && fabLabel ? 'has-label' : null,
+      kind === 'fab' ? `is-side-${ui.side}` : null,
+    ]"
     :title="kind === 'screen' ? undefined : T('trigger.title', { hint })"
     :aria-label="ariaLabel"
     :aria-expanded="kind === 'fab' ? s.open : undefined"
@@ -22,22 +26,42 @@
       INLINE, not a `<use>` into the sprite, and ui-specs/001 says why: this
       component is exported on its own and a consumer may compose only it, so
       its single glyph must not depend on `DocPilotIcons` being mounted.
+
+      In a box of its own, so the floating button can carry a SECOND drawing on
+      the same spot — ui-specs/015. While the popup above it is open the button
+      is how the reader closes it, and the sparkle turns into a chevron pointing
+      at the way the popup will go. Both are inline for the reason above, and the
+      turn is the stylesheet's, keyed on `aria-expanded`.
     -->
-    <svg
-      v-if="showGlyph"
-      class="docpilot-nav-trigger__glyph"
-      viewBox="0 0 24 24"
-      :width="glyphSize"
-      :height="glyphSize"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      <path v-for="d in GLYPHS.sparkle" :key="d" :d="d" />
-    </svg>
+    <span v-if="showGlyph" class="docpilot-nav-trigger__icon" aria-hidden="true">
+      <svg
+        class="docpilot-nav-trigger__glyph"
+        viewBox="0 0 24 24"
+        :width="glyphSize"
+        :height="glyphSize"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path v-for="d in GLYPHS.sparkle" :key="d" :d="d" />
+      </svg>
+      <svg
+        v-if="kind === 'fab'"
+        class="docpilot-nav-trigger__close"
+        viewBox="0 0 16 16"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path :d="GLYPHS.chevronDown" />
+      </svg>
+    </span>
     <!-- The floating button's own words. A visible label IS the accessible
          name, which is why `aria-label` steps aside above when it is present:
          voice control can only address a control by what is written on it. -->

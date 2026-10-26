@@ -1,22 +1,96 @@
 <template>
   <Teleport to="body">
-    <div v-if="s.open" class="docpilot">
-      <div v-if="mobile" class="docpilot__scrim" @click="close" />
+    <!--
+      THE FIELD, DEFINED ONCE — ui-specs/015.
+
+      It has two homes and is only ever in one of them: the panel's composer, as
+      it always was, or the bar at the bottom of the page under `panel: 'bar'`.
+      Defining it here and placing it with `ReuseField` keeps it ONE piece of
+      markup, so the `aria-describedby` list, the IME guard, the draft and the
+      send button cannot drift into two versions of the same control.
+
+      `inBar` adds the three things only the bar carries: the panel's glyph, the
+      button that brings back a conversation the reader put away, and the hotkey
+      hint a search box shows at rest.
+    -->
+    <DefineField v-slot="{ inBar }">
+      <div class="docpilot__field">
+        <span v-if="inBar" class="docpilot__field-glyph" aria-hidden="true"><Icon name="sparkle" /></span>
+        <textarea
+          v-model="input"
+          rows="1"
+          maxlength="1000"
+          :placeholder="placeholder"
+          aria-describedby="dp-quote dp-hint dp-counter dp-budget dp-footnote"
+          @input="onFieldInput"
+          @keydown="onKeydown"
+        />
+        <!-- With the field: its description has to exist wherever the field
+             does, and in the bar that is also when the window is shut. -->
+        <span id="dp-hint" class="docpilot__sr">{{ T('composer.hint', { scope: scopeLabel }) }}</span>
+        <button
+          v-if="inBar && s.turns.length && !s.open"
+          type="button"
+          class="docpilot__icon-btn docpilot__expand"
+          :aria-label="[T('composer.expand'), s.unread && T('trigger.unread')].filter(Boolean).join(' ')"
+          aria-controls="dp-panel"
+          aria-expanded="false"
+          @click="openPanel"
+        >
+          <Icon name="chevronDown" />
+          <span v-if="s.unread" class="docpilot__dot" aria-hidden="true" />
+        </button>
+        <kbd v-if="inBar && !barWide && !coarse" class="docpilot__key" aria-hidden="true">{{ hotkey }}</kbd>
+        <button
+          type="button"
+          class="docpilot__send"
+          :class="{ 'is-ready': canSend || s.busy }"
+          :aria-disabled="String(!canSend && !s.busy)"
+          :aria-label="T(s.busy ? 'composer.stop' : 'composer.send')"
+          @click="send"
+        >
+          <Icon :name="s.busy ? 'square' : 'arrowUp'" :filled="s.busy" />
+        </button>
+      </div>
+    </DefineField>
+
+    <!--
+      RESIDENT, where it used to be `v-if="s.open"` — ui-specs/015. Two things
+      need it to outlive the panel: an exit animation, which keeps the panel's
+      node until it has played, and the bar, which is on the page whether the
+      window is open or not. With neither, it is one empty block in `<body>`.
+
+      Under `panel: 'bar'` this element IS the bar's stack — fixed at the bottom
+      centre, the window above the bar in one column — so the window always sits
+      on top of the bar however tall the reader's question makes it.
+    -->
+    <div ref="root" class="docpilot" :class="rootClass">
+      <Transition name="dp-scrim">
+        <div v-if="s.open && mobile" class="docpilot__scrim" @click="close" />
+      </Transition>
 
       <!--
         Desktop is NON-MODAL: no scrim, no focus trap, docs stay readable beside
         the answer. Declaring aria-modal there would be a lie. Below 960px there
         is no room to read anything else, so it is honestly modal.
+
+        One transition for every shape: the stylesheet picks the exit from the
+        shape's class, and below 960px every shape leaves as the sheet it is.
       -->
+      <Transition name="dp-panel">
       <section
+        v-if="s.open"
+        id="dp-panel"
         ref="panel"
         class="docpilot__panel"
-        :class="`docpilot__panel--${panelKind}`"
+        :class="[`docpilot__panel--${panelKind}`, `is-side-${s.config.ui.side}`]"
         tabindex="-1"
         :role="mobile ? 'dialog' : 'complementary'"
         :aria-modal="mobile ? 'true' : undefined"
         aria-labelledby="dp-title"
         @keydown.esc.stop.prevent="onEsc"
+        @pointerover="aimLens"
+        @pointerout="leaveLens"
       >
         <header class="docpilot__header" :class="{ 'is-scrolled': scrolled }">
           <!-- the trigger's own glyph: the control pressed and the panel it
@@ -85,6 +159,7 @@
           Its own shell rather than the scope picker's: that one carries a rule
           on its TOP edge, which is correct under a thread and inverted here.
         -->
+        <Transition name="dp-dock">
         <div v-if="s.dockPanel === 'history'" id="dp-history" class="docpilot__dock" tabindex="-1">
           <div class="docpilot__dock-acts">
             <!-- aria-hidden: the list below is already named -->
@@ -137,6 +212,7 @@
             </li>
           </ol>
         </div>
+        </Transition>
 
         <div
           ref="thread"
@@ -167,11 +243,15 @@
               <p class="docpilot__greeting-p">{{ T('empty.body') }}</p>
             </div>
             <div v-if="suggestions.length" class="docpilot__suggestions">
+              <!-- `--docpilot-i` is the row's place in the stagger they rise
+                   in — ui-specs/015. Plumbing, not a token: it is never read
+                   outside the one animation-delay that multiplies it. -->
               <button
-                v-for="q in suggestions"
+                v-for="(q, i) in suggestions"
                 :key="q"
                 type="button"
                 class="docpilot__suggestion"
+                :style="{ '--docpilot-i': i }"
                 @click="submitText(q)"
               >
                 {{ q }}
@@ -217,7 +297,15 @@
             </p>
           </div>
 
-          <article v-for="turn in s.turns" :key="turn.id" class="docpilot__turn">
+          <!-- `is-fresh` — a turn the reader asked while looking, ui-specs/015.
+               Only that one rises in: a thread restored from history, or
+               re-mounted by reopening the panel, was already read. -->
+          <article
+            v-for="turn in s.turns"
+            :key="turn.id"
+            class="docpilot__turn"
+            :class="{ 'is-fresh': fresh.has(turn.id) }"
+          >
             <!-- The passage this question was about — ui-specs/007. Above the
                  bubble and quieter than it: the reference is not the ask. -->
             <p v-if="turn.quote" class="docpilot__quote">
@@ -920,6 +1008,7 @@
                footnote row directly below: a disclosure opens where its trigger
                is. The third — past conversations — is opened from the HEADER,
                so it is docked up there. ui-specs/003. -->
+          <Transition name="dp-dock">
           <div v-if="s.dockPanel === 'picker'" id="dp-picker" class="docpilot__picker" tabindex="-1">
             <div class="docpilot__picker-acts">
               <!-- aria-hidden: the group below is already named "Set the scope" -->
@@ -1048,7 +1137,9 @@
               </template>
             </div>
           </div>
+          </Transition>
 
+          <Transition name="dp-dock">
           <div v-if="s.dockPanel === 'prompt'" id="dp-prompt" class="docpilot__prompt" tabindex="0"
                role="region" :aria-label="T('promptDoc.region')">
             <template v-for="block in promptBlocks" :key="block.heading">
@@ -1083,6 +1174,7 @@
               </template>
             </p>
           </div>
+          </Transition>
 
           <template v-if="s.degraded">
             <p class="docpilot__lead">{{ T('degraded.lead') }}</p>
@@ -1109,27 +1201,9 @@
               </button>
             </div>
 
-            <div class="docpilot__field">
-              <textarea
-                v-model="input"
-                rows="1"
-                maxlength="1000"
-                :placeholder="placeholder"
-                aria-describedby="dp-quote dp-hint dp-counter dp-budget dp-footnote"
-                @input="grow"
-                @keydown="onKeydown"
-              />
-              <button
-                type="button"
-                class="docpilot__send"
-                :class="{ 'is-ready': canSend || s.busy }"
-                :aria-disabled="String(!canSend && !s.busy)"
-                :aria-label="T(s.busy ? 'composer.stop' : 'composer.send')"
-                @click="send"
-              >
-                <Icon :name="s.busy ? 'square' : 'arrowUp'" :filled="s.busy" />
-              </button>
-            </div>
+            <!-- In the bar instead, under `panel: 'bar'` on a wide screen —
+                 everything else in this block stays here, in the window. -->
+            <ReuseField v-if="!fieldInBar" :in-bar="false" />
 
             <p v-if="input.length >= 950" id="dp-counter" class="docpilot__counter">
               {{ T('composer.counter', { n: input.length }) }}
@@ -1181,9 +1255,47 @@
             </p>
           </template>
         </div>
-
-        <span id="dp-hint" class="docpilot__sr">{{ T('composer.hint', { scope: scopeLabel }) }}</span>
       </section>
+      </Transition>
+
+      <!--
+        The bar — ui-specs/015, `panel: 'bar'`.
+
+        On a wide screen it is the composer's field, at the bottom centre of the
+        page: typing into it raises the window above, and sending asks. Below
+        960px it is a button that opens the same full-screen sheet every other
+        shape opens, with the field inside — a fixed input on a phone sits under
+        the keyboard's own bar and fights the visual viewport, and the sheet
+        already answers both.
+
+        After mount only (`barOn` waits for it): the settings that ask for it are
+        read in the browser, and a fixed box arriving late shifts nothing.
+      -->
+      <div
+        v-if="barOn"
+        class="docpilot__bar"
+        @keydown.esc.stop.prevent="onBarEsc"
+        @focusin="onBarFocus"
+        @focusout="onBarFocus"
+        @pointerenter="warm"
+      >
+        <ReuseField v-if="fieldInBar" :in-bar="true" />
+        <button
+          v-else
+          type="button"
+          class="docpilot__bar-btn"
+          :aria-expanded="String(s.open)"
+          aria-controls="dp-panel"
+          @click="openPanel"
+        >
+          <Icon name="sparkle" />
+          <span class="docpilot__bar-label">{{ placeholder }}</span>
+          <template v-if="s.unread && !s.open">
+            <span class="docpilot__dot" aria-hidden="true" />
+            <span class="docpilot__sr">{{ T('trigger.unread') }}</span>
+          </template>
+        </button>
+      </div>
     </div>
     <!--
       OUTSIDE the `v-if`, and that is the whole point of it being down here.
@@ -1208,9 +1320,12 @@ import {
   nextTick,
   onMounted,
   onBeforeUnmount,
+  reactive,
   ref,
+  shallowRef,
   watch,
   type FunctionalComponent,
+  type Slot,
 } from 'vue'
 import * as session from '../docpilot/session.js'
 import type { Turn } from '../docpilot/session.js'
@@ -1229,6 +1344,7 @@ import { atBottom as isAtBottom, createFollower } from '../docpilot/follow.js'
 import { bindUnload, unbindUnload } from '../docpilot/unload.js'
 import { waitingKey } from '../docpilot/status.js'
 import { redactSecrets } from '../docpilot/credentials.js'
+import { pushEdge } from '../docpilot/ui.js'
 
 const s = session.state
 const { theme, route, lang, router } = useHost()
@@ -1247,6 +1363,11 @@ const uiLocale = computed(() => normaliseLocale(lang.value, i18nTree.value))
 const T = (path, vars) => translate(i18nTree.value, uiLocale.value, path, vars)
 
 const panel = ref<HTMLElement | null>(null)
+// The resident root — the panel AND the bar. Anything that has to find the
+// composer's field looks here rather than in `panel`: under `panel: 'bar'` the
+// field is not inside the panel at all. ui-specs/015.
+const root = ref<HTMLElement | null>(null)
+const fieldEl = () => root.value?.querySelector<HTMLTextAreaElement>('.docpilot__field textarea') ?? null
 const thread = ref<HTMLElement | null>(null)
 const mobile = ref(false)
 // Not the same question as `mobile`. A narrow window is about how much room
@@ -1318,6 +1439,76 @@ const input = ref('')
 const draft = ref('')
 const editing = ref(false)
 const announced = ref('')
+
+/**
+ * ── the bar — ui-specs/015 ──────────────────────────────────────────────────
+ *
+ * `hydrated` because the bar is decided in the browser: the settings that ask
+ * for it reach the store in `configure()`, on mount, and a server render that
+ * guessed would hand the client a node it then has to take away.
+ *
+ * `fieldInBar` is the one question the template asks: on a wide screen the
+ * field leaves the composer for the bar, and below 960px it stays in the sheet
+ * where it has always been.
+ */
+const hydrated = ref(false)
+const barOn = computed(
+  () => hydrated.value && panelKind.value === 'bar' && s.config.enabled !== false,
+)
+const fieldInBar = computed(() => barOn.value && !mobile.value)
+const barFocus = ref(false)
+// Wide while it is being used: focused, holding a question, or under an open
+// window, which takes the bar's width.
+const barWide = computed(() => fieldInBar.value && (barFocus.value || !!input.value.trim() || s.open))
+const rootClass = computed(() => ({
+  'docpilot--bar': barOn.value,
+  'is-open': s.open,
+  'is-wide': barWide.value,
+}))
+// How the hotkey is written at rest in the bar — the trigger's own rule.
+const mac = ref(false)
+const hotkey = computed(() => (mac.value ? '⌘I' : 'Ctrl I'))
+/**
+ * A press outside the bar and the window closes the window, and that press has
+ * put the reader somewhere — so focus is NOT handed back to the bar the way a
+ * close from the keyboard hands it back. One flag, read once by the watcher.
+ */
+let skipFocusReturn = false
+
+/**
+ * ONE FIELD, TWO HOMES — the markup is the `DefineField` block at the top of the
+ * template, and `ReuseField` places it. VueUse's `createReusableTemplate`, in
+ * the six lines this needs: the slot is a closure over this component's own
+ * scope, so `v-model`, the handlers and every reactive read inside it are this
+ * component's, wherever the field lands.
+ */
+const fieldSlot = shallowRef<Slot | null>(null)
+const DefineField: FunctionalComponent = (_, { slots }) => {
+  fieldSlot.value = slots.default ?? null
+  return null
+}
+const ReuseField: FunctionalComponent<{ inBar: boolean }> = (props) => fieldSlot.value?.(props) ?? null
+ReuseField.props = ['inBar']
+
+/**
+ * The turns the reader asked while looking — they rise in; ui-specs/015.
+ *
+ * One more turn than there was, while the panel is open, is an arrival the
+ * reader caused. A restored conversation replaces the list, and reopening the
+ * panel re-mounts every turn: neither is news, and neither is in here — the set
+ * is emptied when the panel closes.
+ */
+const fresh = reactive(new Set<string>())
+watch(
+  () => s.turns.length,
+  (n, was) => {
+    const last = s.turns[n - 1]
+    // `restored` as well: a stored conversation of exactly one turn also lands
+    // as one more turn than there was.
+    if (s.open && n === was + 1 && last && !last.restored) fresh.add(last.id)
+  },
+)
+
 let trigger: HTMLElement | null = null
 let mql: MediaQueryList | null = null
 let coarseMql: MediaQueryList | null = null
@@ -1407,6 +1598,24 @@ onMounted(() => {
 
   session.configure(theme.value, route.value, lang.value)
 
+  // After `configure`, which is what tells this component whether there is a
+  // bar at all — ui-specs/015.
+  hydrated.value = true
+  mac.value = /mac/i.test(navigator.platform || navigator.userAgent)
+  // Capture, like the selection watcher's: a host control that stops
+  // propagation must not keep the window open over the page it was pressed on.
+  document.addEventListener('pointerdown', onOutsidePointer, true)
+  // `ui.prefetch: 'idle'` is scheduled by the trigger that draws, and under the
+  // bar no trigger draws in the corner. The bar is the placement here, so it
+  // schedules — the index load is memoised, so a navbar trigger doing the same
+  // costs nothing.
+  if (barOn.value && s.config.ui.prefetch === 'idle') {
+    const run = () => session.prefetchIndex()
+    idleHandle = window.requestIdleCallback
+      ? window.requestIdleCallback(run, { timeout: 3000 })
+      : setTimeout(run, 1200)
+  }
+
   // The composer's own text, before the deep link that may replace it.
   restoreDraft()
 
@@ -1438,7 +1647,7 @@ watch(
     input.value = q
     s.pendingQuestion = ''
     nextTick(() => {
-      const ta = panel.value?.querySelector('.docpilot__field textarea')
+      const ta = fieldEl()
       if (!ta) return
       fit(ta)
       // The caret at the end, so the reader can add to it without pressing End
@@ -1467,6 +1676,12 @@ watch(lang, (l) => session.setLang(l))
 onBeforeUnmount(() => {
   mql?.removeEventListener('change', sync)
   coarseMql?.removeEventListener('change', syncPointer)
+  document.removeEventListener('pointerdown', onOutsidePointer, true)
+  if (idleHandle != null) {
+    window.cancelIdleCallback ? window.cancelIdleCallback(idleHandle) : clearTimeout(idleHandle)
+    idleHandle = null
+  }
+  clearTimeout(closingTimer)
   unbindUnload()
   unbindAsk?.()
   unbindAsk = null
@@ -1532,18 +1747,53 @@ watch(
  */
 const LAYOUT_CLASS = 'docpilot-push'
 
+/**
+ * WHICH EDGE, AND THE WAY BACK — ui-specs/015.
+ *
+ * `docpilot-push` keeps the meaning it shipped with: open, and pushing. Beside
+ * it, for the same lifetime, the LOGICAL edge the page is pushed from — logical
+ * because the adapters' rules are, and resolved here because `'left'` and
+ * `'right'` only become an edge once the page's direction is known, which is in
+ * the browser, now.
+ *
+ * `docpilot-push-closing` is the way back. A transition is read from the state
+ * being ENTERED, so with the padding and its transition both keyed on the open
+ * classes the page snapped home on the frame the drawer started to leave. The
+ * adapters declare the transition on this class too, and it comes off once the
+ * exit has had time to play — by a timer rather than the panel's `after-leave`,
+ * because push can also end with the panel still open (a window narrowed under
+ * 960px), where there is no leave to wait for.
+ *
+ * Never under the bar: it is centred, and there is no side to move the page away
+ * from.
+ */
+const PUSH_EDGES = ['docpilot-push-start', 'docpilot-push-end']
+const CLOSING_CLASS = 'docpilot-push-closing'
+let closingTimer: ReturnType<typeof setTimeout> | null = null
+
 watch(
-  () => [s.open, s.config.ui.layout, mobile.value],
-  ([open, layout, narrow]) => {
+  () => [s.open, s.config.ui.layout, mobile.value, panelKind.value, s.config.ui.side],
+  ([open, layout, narrow, kind, side]) => {
     if (typeof document === 'undefined') return
-    const on = open && layout === 'push' && !narrow
-    document.documentElement.classList.toggle(LAYOUT_CLASS, on)
+    const html = document.documentElement
+    const on = open && layout === 'push' && !narrow && kind !== 'bar'
+    const was = html.classList.contains(LAYOUT_CLASS)
+    html.classList.toggle(LAYOUT_CLASS, on)
+    const edge = `docpilot-push-${pushEdge(side, getComputedStyle(html).direction === 'rtl')}`
+    for (const name of PUSH_EDGES) html.classList.toggle(name, on && name === edge)
+    clearTimeout(closingTimer)
+    if (was && !on) {
+      html.classList.add(CLOSING_CLASS)
+      closingTimer = setTimeout(() => html.classList.remove(CLOSING_CLASS), 1000)
+    } else if (on) html.classList.remove(CLOSING_CLASS)
   },
 )
 
-// The class outlives the component otherwise: a route change that unmounts the
+// The classes outlive the component otherwise: a route change that unmounts the
 // panel with the drawer open would leave the host's content permanently inset.
-onBeforeUnmount(() => document.documentElement.classList.remove(LAYOUT_CLASS))
+onBeforeUnmount(() =>
+  document.documentElement.classList.remove(LAYOUT_CLASS, CLOSING_CLASS, ...PUSH_EDGES),
+)
 
 watch(
   () => s.open,
@@ -1557,8 +1807,9 @@ watch(
         if (mobile.value) panel.value?.focus()
         // The composer, by its own class — a bare `textarea` is whichever one
         // comes first in the DOM, and an open feedback comment or question
-        // editor sits above the composer in the thread.
-        else panel.value?.querySelector('.docpilot__field textarea')?.focus()
+        // editor sits above the composer in the thread. Under the bar it is the
+        // bar's field, which is where the reader was typing anyway.
+        else fieldEl()?.focus()
       }, 60)
     } else {
       // The popover's node unmounts with the panel, which implicitly closes it —
@@ -1566,12 +1817,21 @@ watch(
       // against a stale rect.
       closeAsk()
       quote.value = ''
+      // Reopening is not an arrival — see `fresh`.
+      fresh.clear()
       // Wait for the panel to leave the DOM first. The floating button is
       // hidden by a `:has()` rule while a panel is open, and `focus()` on a
       // `display: none` element is a silent no-op — so without this the focus
       // would be dropped on the floor exactly in the mode where the button the
-      // reader pressed is the only thing to return to.
+      // reader pressed is the only thing to return to. A panel that is still
+      // playing its exit no longer counts as open to that rule — ui-specs/015.
       await nextTick()
+      // Closed by a press somewhere on the page: the reader is there now.
+      if (skipFocusReturn) {
+        skipFocusReturn = false
+        trigger = null
+        return
+      }
       if (trigger && document.contains(trigger)) trigger.focus()
       else visibleTrigger()?.focus?.()
       trigger = null
@@ -1601,6 +1861,11 @@ watch(
  * document beats nowhere, which is what a dropped focus means for a keyboard.
  */
 function visibleTrigger() {
+  // Under the bar the bar IS the trigger, and it is always on screen.
+  if (barOn.value) {
+    const bar = root.value?.querySelector('.docpilot__bar textarea, .docpilot__bar-btn')
+    if (bar) return bar
+  }
   const buttons = document.querySelectorAll('.docpilot-nav-trigger')
   for (const el of buttons) if (el.getClientRects().length) return el
   return document.querySelector(hostConfig(s.config).content)
@@ -1734,6 +1999,118 @@ function toggleDock(which) {
   if (s.dockPanel === 'history') session.refreshHistory()
   if (s.dockPanel) nextTick(() => panel.value?.querySelector(`#dp-${which}`)?.focus())
 }
+
+// ── the lens — ui-specs/016 ──────────────────────────────────────────────────
+/**
+ * One hover fill per row, travelling from the item the pointer left to the one
+ * it reached instead of fading out on one and in on the next. Five rows carry
+ * one, each with the kind of item that takes it:
+ *
+ *   the header's buttons and both action rows   an icon button
+ *   the scope picker's presets                  a ghost pill
+ *   the suggestions                             a suggestion
+ *   every list of sources, history included     a row
+ *
+ * The lens is the ROW's own `::before`, switched by `data-lens` and placed by
+ * four `--docpilot-lens-*` properties on the row — no node of its own, so a list
+ * of sources keeps nothing but its items. Both are written to the node, not to state:
+ * the lens moves on every `pointerover`, and a reactive position would
+ * re-render this whole component for a paint no template reads. Vue owns no
+ * attribute or style on these rows, so a render undoes nothing written here.
+ *
+ * ONE pair of listeners, on the panel. `pointerover` bubbles, so a row of forty
+ * sources needs no listener of its own, and `pointerout` with its
+ * `relatedTarget` is `pointerleave` for whichever row holds the lens.
+ *
+ * A pointer that ARRIVES from outside a row finds the lens already under it: a
+ * fill that slid in from wherever it was last seen is motion with no cause on
+ * screen. `data-lens-instant` switches the travel off for that move, and the
+ * layout read commits the position before the travel is switched back on. Over
+ * the gap between two items the lens stays; over anything else — the ghost pill
+ * in a row of icon buttons, which has a shape and a wash of its own — it leaves.
+ *
+ * Touch is ignored. A tap has no hover to follow, and the press answers it.
+ */
+const LENS_ROWS = {
+  'docpilot__header-actions': 'docpilot__icon-btn',
+  'docpilot__actions': 'docpilot__icon-btn',
+  'docpilot__picker-presets': 'docpilot__text-btn',
+  'docpilot__suggestions': 'docpilot__suggestion',
+  'docpilot__sources': 'docpilot__source',
+}
+
+// The item under the pointer, and the row it is an item OF — a button inside a
+// source row is part of that row, not an item of its own.
+function lensHit(from: Element | null) {
+  for (let el = from; el && el !== panel.value; el = el.parentElement) {
+    const row = el.parentElement
+    if (!row) break
+    for (const [rowClass, itemClass] of Object.entries(LENS_ROWS)) {
+      if (row.classList.contains(rowClass) && el.classList.contains(itemClass)) {
+        return { row, item: el as HTMLElement, itemClass }
+      }
+    }
+  }
+  return null
+}
+
+function moveLens(row: HTMLElement, item: HTMLElement) {
+  const arriving = !row.hasAttribute('data-lens')
+  row.toggleAttribute('data-lens-instant', arriving)
+  row.style.setProperty('--docpilot-lens-x', `${item.offsetLeft}px`)
+  row.style.setProperty('--docpilot-lens-y', `${item.offsetTop}px`)
+  row.style.setProperty('--docpilot-lens-w', `${item.offsetWidth}px`)
+  row.style.setProperty('--docpilot-lens-h', `${item.offsetHeight}px`)
+  row.setAttribute('data-lens', '')
+  if (arriving) {
+    void row.offsetWidth
+    row.removeAttribute('data-lens-instant')
+  }
+}
+
+/**
+ * Items come and go, and grow, under the pointer — New chat takes Copy and
+ * itself out of the header, a thumb down brings the pill into the answer row, a
+ * citation's passage opens inside its row. ONE observer, on the row that holds
+ * the lens and only while it does: it re-measures whichever item is still
+ * `:hover`, or lets the lens go.
+ */
+let lensRow: HTMLElement | null = null
+let lensItem = ''
+let lensWatch: MutationObserver | null = null
+
+function dropLens() {
+  lensRow?.removeAttribute('data-lens')
+  lensWatch?.disconnect()
+  lensRow = null
+}
+
+function aimLens(e: PointerEvent) {
+  if (e.pointerType === 'touch') return
+  const hit = lensHit(e.target as Element)
+  if (!hit) {
+    if (e.target !== lensRow) dropLens()
+    return
+  }
+  if (hit.row !== lensRow) {
+    dropLens()
+    lensRow = hit.row
+    lensItem = hit.itemClass
+    lensWatch ??= new MutationObserver(() => {
+      const item = lensRow?.querySelector<HTMLElement>(`:scope > .${lensItem}:hover`)
+      if (lensRow && item) moveLens(lensRow, item)
+      else dropLens()
+    })
+    lensWatch.observe(hit.row, { childList: true, subtree: true })
+  }
+  moveLens(hit.row, hit.item)
+}
+
+function leaveLens(e: PointerEvent) {
+  if (lensRow && !lensRow.contains(e.relatedTarget as Node | null)) dropLens()
+}
+
+onBeforeUnmount(() => lensWatch?.disconnect())
 
 // ── conversations ────────────────────────────────────────────────────────────
 const hasHistory = computed(
@@ -2046,18 +2423,47 @@ function jumpToLatest() {
 }
 
 // ── composer ─────────────────────────────────────────────────────────────────
-const canSend = computed(() => input.value.trim().length > 0)
+// Not while degraded: the drawer and the popup never draw the field then, but
+// the bar is on the page regardless, and a question it sent would reach a panel
+// that has already said it cannot answer. ui-specs/015.
+const canSend = computed(() => input.value.trim().length > 0 && !s.degraded)
 // The measurement itself, separate from the handler: the inline question editor
 // opens with text already in it and has to size itself once before any input
 // event exists to carry it.
 const fit = (el: HTMLTextAreaElement) => {
   el.style.height = 'auto'
   el.style.height = `${el.scrollHeight}px`
+  // A scroller only once the text is past the five-line cap. `scrollHeight` is
+  // rounded, so a single line at 16 × 1.65 is 0.4px taller than the height it
+  // was just given — invisible under an overlay scrollbar, and a grey thumb in
+  // the field on a host that styles its scrollbars (this package's own docs
+  // site does). Found under the bar, which is never out of sight — ui-specs/015.
+  el.style.overflowY = el.scrollHeight > el.clientHeight + 1 ? 'auto' : 'hidden'
 }
 const grow = (e: Event) => fit(e.target as HTMLTextAreaElement)
+
+/**
+ * The composer's own input handler: the measurement, and — in the bar — the
+ * window rising at the first character. ui-specs/015.
+ *
+ * On typing rather than on focus: focus is also a reader tabbing past the bar
+ * on the way to the footer, and a window that rose over the article for that
+ * would be the panel taking the page back unasked. The value is read off the
+ * EVENT: Vue's `v-model` listener on the same element runs after this one, so
+ * `input` still holds the text from before the keystroke.
+ */
+function onFieldInput(e: Event) {
+  const el = e.target as HTMLTextAreaElement
+  fit(el)
+  if (fieldInBar.value && !s.open && el.value.trim()) session.open()
+}
+
 function send() {
   if (s.busy) return session.stop()
   if (!canSend.value) return
+  // A question sent from the bar is a question the reader wants to watch being
+  // answered, whether or not they had let the window rise yet.
+  if (fieldInBar.value && !s.open) session.open()
   submitText(input.value, quote.value)
   input.value = ''
   quote.value = ''
@@ -2065,9 +2471,71 @@ function send() {
     // The composer specifically. `textarea` alone is the first one in the panel,
     // which is an open question editor or feedback comment whenever one exists —
     // so the wrong field collapsed and the emptied composer stayed tall.
-    const ta = panel.value?.querySelector('.docpilot__field textarea')
+    const ta = fieldEl()
     if (ta) ta.style.height = 'auto'
   })
+}
+
+// ── the bar's own controls — ui-specs/015 ───────────────────────────────────
+const openPanel = () => session.open()
+
+// Esc in the bar is Esc in the window while there is one — the same cascade,
+// smallest thing first. With the window shut there is nothing to close, and the
+// key does what it does in any search box: it lets go of the field.
+function onBarEsc(e: KeyboardEvent) {
+  if (s.open) return onEsc()
+  ;(e.target as HTMLElement | null)?.blur?.()
+}
+
+/**
+ * The bar WIDENS for its text field, and NARROWS only when focus leaves it.
+ *
+ * Measured, and it is a defect rather than a taste: a press on the reopen button
+ * focused the bar on `pointerdown`, the bar began to widen, the button travelled
+ * out from under the pointer with it, and `pointerup` landed somewhere else — so
+ * no `click`, and a button that did nothing. The same happens in reverse when
+ * focus moves from the field to a button and the bar narrows. So focus arriving
+ * on a button changes nothing, and focus moving between the bar's own controls
+ * changes nothing: every button holds still while it is being pressed. The field
+ * loses nothing either — focus has already arrived by the time it starts to grow.
+ */
+function onBarFocus(e: FocusEvent) {
+  if (e.type === 'focusin') {
+    if ((e.target as Element | null)?.matches?.('textarea')) barFocus.value = true
+    return
+  }
+  const bar = e.currentTarget as HTMLElement
+  if (!(e.relatedTarget && bar.contains(e.relatedTarget as Node))) barFocus.value = false
+}
+
+// `ui.prefetch: 'hover'`, on the placement that is on the page — the trigger's
+// rule, for the shape that has no trigger in the corner.
+const warm = () => {
+  if (s.config.ui.prefetch === 'hover') session.prefetchIndex()
+}
+// Untyped for the trigger's reason: an idle-callback id or a timer, by engine.
+let idleHandle = null
+
+/**
+ * A press anywhere else on the page puts the window away — under the bar, and
+ * only there.
+ *
+ * The window rises over the middle of the article, where the drawer and the
+ * popup sit beside it, so it is the one shape a reader has to be able to dismiss
+ * by going back to what they were reading. The popup keeps its old behaviour: a
+ * panel parked in a corner beside the docs is not in the way of them.
+ *
+ * This package's own controls elsewhere on the page — a trigger, the article's
+ * quote popover, the call to action under the article — feed this window rather
+ * than leave it, so a press on one is not a press outside.
+ */
+function onOutsidePointer(e: PointerEvent) {
+  if (!barOn.value || !s.open || mobile.value) return
+  const target = e.target as Element | null
+  if (!target || root.value?.contains(target)) return
+  if (target.closest?.('.docpilot-nav-trigger, .docpilot__ask, .docpilot-cta')) return
+  skipFocusReturn = true
+  close()
 }
 /**
  * The default second argument is load-bearing. Three call sites pass one
@@ -2225,13 +2693,13 @@ function takeQuote() {
   if (!text) return
   quote.value = text
   s.announce = T('announce.quoteAdded')
-  nextTick(() => panel.value?.querySelector('.docpilot__field textarea')?.focus())
+  nextTick(() => fieldEl()?.focus())
 }
 
 function dropQuote() {
   quote.value = ''
   s.announce = T('announce.quoteRemoved')
-  nextTick(() => panel.value?.querySelector('.docpilot__field textarea')?.focus())
+  nextTick(() => fieldEl()?.focus())
 }
 
 /**
@@ -3070,12 +3538,18 @@ const REASONS = ['wrong', 'incomplete', 'not-in-docs', 'bad-links']
  * One glyph is drawn on a 24 box at 20px — the nav trigger's sparkle, reused
  * here rather than redrawn. Everything else is the 16×16 default it always was,
  * and the `viewBox` is stated so the symbol maps 1:1 into it either way.
+ *
+ * The check is the one glyph that is an EVENT — copied, picked — and it carries
+ * a class the stylesheet pops it in on: ui-specs/015. Every copy button swaps
+ * its glyph by name on the same element, so the class arriving is what starts
+ * the animation, and nothing here has to know which button it is.
  */
 const Icon: FunctionalComponent<{ name: string; filled?: boolean }> = (props) => {
   const { box, size } = { ...GLYPH_DEFAULTS, ...(GLYPH_BOX[props.name] || {}) }
   return h(
     'svg',
     {
+      class: props.name === 'check' ? 'docpilot__glyph-check' : undefined,
       viewBox: box,
       width: size,
       height: size,

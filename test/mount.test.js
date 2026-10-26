@@ -317,6 +317,42 @@ describe('ui.font', () => {
 })
 
 /**
+ * `ui.motion` — the third setting that lands on the DOCUMENT. ui-specs/017.
+ *
+ * The default writes nothing, so the stylesheet has to be told `'auto'` as
+ * well as `'reduce'`: with no class the panel moves whatever the OS says.
+ */
+describe('ui.motion', () => {
+  const still = () =>
+    ['docpilot-motion-auto', 'docpilot-motion-reduce'].filter((c) => document.documentElement.classList.contains(c))
+
+  afterEach(() => document.documentElement.classList.remove('docpilot-motion-auto', 'docpilot-motion-reduce'))
+
+  it('writes no class by default', () => {
+    panel = mountDocPilot({ config: CONFIG })
+    expect(still()).toEqual([])
+  })
+
+  it.each([
+    ['auto', 'docpilot-motion-auto'],
+    ['system', 'docpilot-motion-auto'],
+    ['reduce', 'docpilot-motion-reduce'],
+  ])('puts `%s` on the root as %s', (motion, cls) => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, motion } } })
+    expect(still()).toEqual([cls])
+  })
+
+  // REMOVED, not skipped — `setConfig` runs on a live page.
+  it('takes the class off again when the config goes back to full motion', () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, motion: 'reduce' } } })
+    session.configure({ docPilot: { ...CONFIG, ui: { ...CONFIG.ui, motion: 'auto' } } })
+    expect(still()).toEqual(['docpilot-motion-auto'])
+    session.configure({ docPilot: CONFIG })
+    expect(still()).toEqual([])
+  })
+})
+
+/**
  * `ui.theme` — the other setting that lands on the DOCUMENT.
  *
  * A class rather than an inline property, because a pin is nine tokens and a
@@ -876,5 +912,280 @@ describe('history.saveOnUnload — ui-specs/012', () => {
     streaming('half an answer')
     leave()
     expect(archived()).toBe('')
+  })
+})
+
+/**
+ * The bar — ui-specs/015, `panel: 'bar'`.
+ *
+ * What a source-text check cannot see: that the field really is in the bar and
+ * only there, that the window rises on the first character and not on focus,
+ * that a press outside puts the window away and leaves the bar, and that a
+ * centred shape pushes nothing.
+ */
+describe('the bar — ui-specs/015', () => {
+  const BAR = { ...CONFIG, ui: { trigger: 'fab', panel: 'bar' } }
+  const bar = () => document.querySelector('.docpilot__bar')
+  const barField = () => document.querySelector('.docpilot__bar .docpilot__field textarea')
+  // `open()` rejects the index offline and degrades the panel a microtask
+  // later — the composer suite's reason, and the same remedy.
+  const settle = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    session.state.degraded = false
+    await nextTick()
+    await nextTick()
+  }
+
+  beforeEach(() => {
+    session.state.open = false
+    session.state.turns = []
+    session.state.degraded = false
+  })
+
+  it('replaces the floating button, and is on the page with the window shut', async () => {
+    panel = mountDocPilot({ config: BAR })
+    await nextTick()
+    expect(document.querySelector('.docpilot-nav-trigger.is-fab')).toBe(null)
+    expect(bar()).not.toBe(null)
+    expect(barField()).not.toBe(null)
+    expect(document.querySelector('.docpilot__panel')).toBe(null)
+    // One field on the page, and it is the bar's.
+    expect(document.querySelectorAll('.docpilot__field textarea')).toHaveLength(1)
+  })
+
+  it('raises the window at the first character, not on focus', async () => {
+    panel = mountDocPilot({ config: BAR })
+    await nextTick()
+    const ta = barField()
+    ta.dispatchEvent(new FocusEvent('focusin', { bubbles: true }))
+    await nextTick()
+    expect(session.state.open).toBe(false)
+
+    ta.value = 'h'
+    ta.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    expect(session.state.open).toBe(true)
+
+    await settle()
+    expect(document.querySelector('.docpilot__panel--bar')).not.toBe(null)
+    // The field stayed in the bar: the window carries none of its own.
+    expect(document.querySelector('.docpilot__panel .docpilot__field')).toBe(null)
+    expect(document.querySelectorAll('.docpilot__field textarea')).toHaveLength(1)
+  })
+
+  it('puts the window away on a press outside, and leaves the bar', async () => {
+    panel = mountDocPilot({ config: BAR })
+    panel.open()
+    await settle()
+
+    // A press inside the bar is not a press outside.
+    barField().dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(session.state.open).toBe(true)
+
+    const outside = document.createElement('p')
+    document.body.append(outside)
+    outside.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(session.state.open).toBe(false)
+    expect(bar()).not.toBe(null)
+  })
+
+  it('pushes nothing — it is centred, and there is no side to move away from', async () => {
+    panel = mountDocPilot({ config: { ...BAR, ui: { ...BAR.ui, layout: 'push' } } })
+    panel.open()
+    await settle()
+    expect(document.documentElement.classList.contains('docpilot-push')).toBe(false)
+  })
+})
+
+/**
+ * The edge — ui-specs/015, `ui.side`.
+ *
+ * `docpilot-push` keeps the meaning it shipped with; the edge class beside it is
+ * new, and so is the class that carries the page home while the drawer leaves.
+ */
+describe('the edge — ui-specs/015', () => {
+  beforeEach(() => {
+    session.state.open = false
+  })
+
+  it('names the edge on <html> while a drawer pushes, and the way back', async () => {
+    panel = mountDocPilot({
+      config: { ...CONFIG, ui: { trigger: 'fab', panel: 'drawer', layout: 'push', side: 'left' } },
+    })
+    const html = document.documentElement
+    panel.open()
+    await nextTick()
+    expect(html.classList.contains('docpilot-push')).toBe(true)
+    expect(html.classList.contains('docpilot-push-start')).toBe(true)
+    expect(html.classList.contains('docpilot-push-end')).toBe(false)
+
+    panel.close()
+    await nextTick()
+    expect(html.classList.contains('docpilot-push')).toBe(false)
+    expect(html.classList.contains('docpilot-push-start')).toBe(false)
+    expect(html.classList.contains('docpilot-push-closing')).toBe(true)
+
+    // And none of the three outlives the component.
+    panel.destroy()
+    panel = null
+    expect(html.classList.contains('docpilot-push-closing')).toBe(false)
+  })
+
+  it('puts the floating button on its side from the first render', () => {
+    panel = mountDocPilot({ config: { ...CONFIG, ui: { trigger: 'fab', panel: 'popup', side: 'right' } } })
+    expect(document.querySelector('.docpilot-nav-trigger.is-fab').classList.contains('is-side-right')).toBe(true)
+  })
+})
+
+/**
+ * The lens — ui-specs/016.
+ *
+ * What a source-text check cannot see: that the fill is switched on the row the
+ * pointer is in, on the item kind that row moves between, and nowhere else. A
+ * mouse arriving on a row turns it on; a move to the next item re-aims it; the
+ * gap between two items keeps it; leaving the row, reaching an item of the
+ * wrong kind, or losing the item from under the pointer turns it off; a touch
+ * never turns it on. happy-dom lays nothing out, so each item is given the
+ * offsets a laid-out row would have.
+ */
+describe('the lens — ui-specs/016', () => {
+  const over = (el, pointerType = 'mouse') =>
+    el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType }))
+  const out = (el, to) =>
+    el.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: to }))
+  const lit = (row) => row.hasAttribute('data-lens')
+  const at = (row, axis) => row.style.getPropertyValue(`--docpilot-lens-${axis}`)
+  const itemsOf = (row, selector, axis = 'offsetLeft') => {
+    const items = [...row.querySelectorAll(`:scope > ${selector}`)]
+    items.forEach((el, i) => Object.defineProperty(el, axis, { configurable: true, value: i * 36 }))
+    return items
+  }
+
+  const answered = async (extra = {}) => {
+    panel = mountDocPilot({ config: CONFIG })
+    session.state.turns.push({
+      id: 'lens-1',
+      question: 'how do I authenticate?',
+      answerText: 'with a key',
+      state: 'complete',
+      startedAt: 0,
+      sources: [],
+      ...extra,
+    })
+    panel.open()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    session.state.degraded = false
+    await nextTick()
+    await nextTick()
+  }
+
+  afterEach(() => {
+    session.state.turns.length = 0
+    session.state.open = false
+  })
+
+  it('arrives on the header, follows the pointer along it, and leaves with it', async () => {
+    await answered()
+    const row = document.querySelector('.docpilot__header-actions')
+    const buttons = itemsOf(row, '.docpilot__icon-btn')
+    expect(buttons.length).toBeGreaterThan(1)
+    expect(lit(row)).toBe(false)
+
+    over(buttons[0].querySelector('svg') ?? buttons[0])
+    expect(lit(row)).toBe(true)
+    // Arrived without travel, and the travel is back on for the next move.
+    expect(row.hasAttribute('data-lens-instant')).toBe(false)
+    expect(at(row, 'x')).toBe('0px')
+
+    over(buttons.at(-1))
+    expect(at(row, 'x')).toBe(`${(buttons.length - 1) * 36}px`)
+
+    // The gap between two buttons is the row itself: the lens stays put.
+    over(row)
+    expect(lit(row)).toBe(true)
+    // Moving between two of its own items is not leaving.
+    out(buttons[0], buttons[1])
+    expect(lit(row)).toBe(true)
+
+    out(row, document.querySelector('.docpilot__title'))
+    expect(lit(row)).toBe(false)
+  })
+
+  it('never turns on for a touch', async () => {
+    await answered()
+    const row = document.querySelector('.docpilot__actions:not(.docpilot__actions--ask)')
+    over(itemsOf(row, '.docpilot__icon-btn')[0], 'touch')
+    expect(lit(row)).toBe(false)
+  })
+
+  it('belongs to one row at a time — the question and the answer each have their own', async () => {
+    await answered()
+    const ask = document.querySelector('.docpilot__actions--ask')
+    const answer = document.querySelector('.docpilot__actions:not(.docpilot__actions--ask)')
+    over(itemsOf(ask, '.docpilot__icon-btn')[1])
+    expect(lit(ask)).toBe(true)
+    expect(lit(answer)).toBe(false)
+
+    out(ask, answer)
+    over(itemsOf(answer, '.docpilot__icon-btn')[0])
+    expect(lit(ask)).toBe(false)
+    expect(lit(answer)).toBe(true)
+  })
+
+  it('leaves for the ghost pill in a row of icon buttons', async () => {
+    await answered({ verdict: 'down' })
+    const row = document.querySelector('.docpilot__actions:not(.docpilot__actions--ask)')
+    over(itemsOf(row, '.docpilot__icon-btn')[0])
+    expect(lit(row)).toBe(true)
+    over(row.querySelector(':scope > .docpilot__text-btn'))
+    expect(lit(row)).toBe(false)
+  })
+
+  it('travels down a list of sources, and a control inside a row is that row', async () => {
+    await answered({
+      sources: [
+        { id: 's1', n: 1, title: 'Keys', path: '/keys', url: '/keys' },
+        { id: 's2', n: 2, title: 'Tokens', path: '/tokens', url: '/tokens' },
+      ],
+    })
+    const list = document.querySelector('.docpilot__turn .docpilot__sources')
+    expect(list).not.toBe(null)
+    const rows = itemsOf(list, '.docpilot__source', 'offsetTop')
+    expect(rows.length).toBe(2)
+
+    over(rows[0].querySelector('a') ?? rows[0])
+    expect(lit(list)).toBe(true)
+    expect(at(list, 'y')).toBe('0px')
+
+    over(rows[1].querySelector('a') ?? rows[1])
+    expect(at(list, 'y')).toBe('36px')
+  })
+
+  it('travels between the suggestions', async () => {
+    panel = mountDocPilot({ config: CONFIG })
+    panel.open()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    session.state.degraded = false
+    await nextTick()
+    await nextTick()
+    const row = document.querySelector('.docpilot__suggestions')
+    expect(row).not.toBe(null)
+    const items = itemsOf(row, '.docpilot__suggestion', 'offsetTop')
+    over(items[0])
+    expect(lit(row)).toBe(true)
+    over(items.at(-1))
+    expect(at(row, 'y')).toBe(`${(items.length - 1) * 36}px`)
+  })
+
+  it('leaves when the items change under it and none is still hovered', async () => {
+    await answered()
+    const row = document.querySelector('.docpilot__header-actions')
+    over(itemsOf(row, '.docpilot__icon-btn')[0])
+    expect(lit(row)).toBe(true)
+    // What New chat does: Copy and New chat go, the row's children change.
+    session.state.turns.length = 0
+    await nextTick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(lit(row)).toBe(false)
   })
 })

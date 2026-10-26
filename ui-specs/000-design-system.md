@@ -62,6 +62,14 @@ Sources: [OpenAI design system](https://open-design.ai/systems/openai/) ·
 mechanism: the adapter re-declares the whole colour set on `:root` and wins by
 coming second. A consumer who loads the adapter alone gets no panel at all.
 
+**All of it is in `@layer docpilot`** — [017](017-motion-by-default-and-one-layer.md).
+Each file declares the layer in its source, so the core and an adapter share it
+and the order above still holds inside it; a site's unlayered CSS outranks all
+of it. Three VitePress rules stay outside, at the end of `vitepress.scss`,
+because each overrides VitePress's own component CSS on the same element. The
+bundle opens with `@layer __vitepress_base,docpilot;` so VitePress 2's reset
+layer is named first whatever the import order.
+
 **One thing outranks an adapter, and it has to.** `ui.theme` is a site saying
 *light* or *dark* against the host's own toggle, so it cannot be settled by load
 order — the core loads first. It is written as a class on `<html>`, and the core
@@ -140,7 +148,7 @@ it.
 | `--dp-on-text` | ink on `--dp-text` | `#ffffff` | `#1b1b1f` | `var(--vp-c-neutral-inverse, var(--vp-c-bg))` |
 | `--dp-focus` | the one focus ring | `#1f2328` | `#dfdfd6` | `var(--vp-c-brand-1)` |
 | `--dp-accent-soft` | the single accent — a marker-linked source row | `rgba(100,108,255,.18)` | — | `var(--brand-bg-active, var(--vp-c-brand-soft))` |
-| `--dp-alert` | the one signal colour — the unread dot on the trigger, and nothing else | `#e34c1e` | — | **not re-declared** |
+| `--dp-alert` | the one signal colour — the unread dot on the trigger or the bar's reopen button, and nothing else | `#e34c1e` | — | **not re-declared** |
 | `--dp-chip` | the nav trigger's fill — it must match the host's search box, which is a different job from anything inside the panel | `rgba(101,117,133,.08)` | `rgba(101,117,133,.16)` | `var(--vp-c-bg-alt)` |
 | `--dp-code-bg` | the code card's surface | `rgba(101,117,133,.08)` | `rgba(101,117,133,.16)` | `var(--vp-code-block-bg)` |
 | `--dp-shadow` | the three things that float: the popup, the FAB and the selection popover | two-layer black alpha | — | `var(--vp-shadow-3)` |
@@ -190,7 +198,8 @@ declaration climbing back out.
 | `--dp-gutter` | `20px` | the panel's inline padding |
 | `--dp-fab-size` / `--dp-fab-size-coarse` | `48px` / `56px` | the floating button's **block** size — an input to the popup's geometry |
 | `--dp-popup-inset` | `20px` | the distance from the corner, shared by the button and the popup so they line up |
-| `--dp-popup-block` | `640px` | the popup's height ceiling |
+| `--dp-popup-block` | `640px` | the popup's height ceiling, and the bar's window's |
+| `--dp-bar-inline` / `--dp-bar-inline-open` | `400px` / `640px` | the bar at rest, and in use — focused, holding a question, or under its window — [015](015-the-panel-opens-three-ways.md) |
 | `--dp-r-sm` … `--dp-r-pill` | see [Radius](#radius) | |
 | `--dp-z` | `29`, raised to `70` below 960px | VitePress puts its sidebar at 60 and its backdrop at 50 |
 
@@ -198,9 +207,11 @@ declaration climbing back out.
 
 | token | value |
 |---|---|
-| `--dp-dur` | `220ms` — entrances |
+| `--dp-dur` | `400ms` — every entrance; every exit takes half of it |
 | `--dp-dur-fast` | `150ms` — every colour, background and opacity change |
-| `--dp-ease` | `cubic-bezier(0.16, 1, 0.3, 1)` |
+| `--dp-ease` | a spring as `linear()` — stiffness 350, damping 35, ζ 0.94, no visible overshoot |
+| `--dp-ease-pop` | a spring as `linear()` — stiffness 300, damping 25, ζ 0.72, 3.8% overshoot |
+| `--dp-ease-exit` | `cubic-bezier(0.4, 0, 1, 1)` — an ease-in |
 
 ### The invariants a token change has to keep
 
@@ -292,7 +303,10 @@ not an oversight.
 
 One device, one value: `1px solid var(--dp-line)`.
 
-**Wears a ring:** the drawer's leading edge · the popup (all four sides) · the
+**Wears a ring:** the drawer's face towards the page — its leading edge, or its
+trailing one when it docks at the start ([015](015-the-panel-opens-three-ways.md)) ·
+the popup and the bar's window (all four sides, one rule) · the bar's field, which
+is the composer field · the bar's stand-in button below 960px · the
 selection popover · the header's bottom, `transparent` until the thread is
 scrolled · the conversation dock · the scope picker, its actions row and its
 filter field · the composer field · the feedback textarea · the question editor ·
@@ -309,8 +323,9 @@ fill. The picker's filter is the composer's arrangement one tier down.
 source and pick rows · every button · the nav trigger, which has to match a search
 box the host draws as a fill.
 
-**Three things float, and they get a shadow as well as a ring:** the popup, the
-FAB and the selection popover ([007](007-quote-a-passage.md)). Nothing else in
+**Five things float, and they get a shadow as well as a ring:** the popup, the
+FAB, the selection popover ([007](007-quote-a-passage.md)), and — since
+[015](015-the-panel-opens-three-ways.md) — the bar and its window. Nothing else in
 the package is elevated.
 
 The jump pill ([008](008-edit-a-question.md)) is the case that tests this and
@@ -319,6 +334,29 @@ not: a floating surface is one that has left the box it belongs to, and this one
 is inside its own panel. So it occludes with `--dp-surface` and a ring, and takes
 no shadow — the same treatment, and the same argument, as the code card's copy
 chip.
+
+### The window is glass — [016](016-the-window-is-glass.md)
+
+From 960px up the drawer, the popup and the bar's window are a material over the
+page: `color-mix(in srgb, var(--dp-surface) 70%, transparent)` under
+`backdrop-filter: blur(24px) saturate(180%)`. 70% keeps `--dp-text` at 4.5:1
+over a pure black or white field behind it; 24px leaves no glyph of the page;
+180% gives back the colour the blur greys. **Gated on `@supports
+(backdrop-filter)`** — outside it the opaque surface stands. The sheet below
+960px stays opaque: it covers the page behind a scrim.
+
+The two floating shapes carry a **rim** before their shadow — `inset 0 1px 0
+rgb(255 255 255 / 0.14)`, light on the top edge. A literal, and deliberately the
+opposite of `--dp-lip`: an underside must show in both schemes, a highlight on a
+light surface must not. It is a `box-shadow`, so rule 1 does not see it.
+
+**Glass yields** — one block at the end of `core.scss` puts `--dp-surface` back
+and the blur off on the panel and the jump pill under
+`prefers-reduced-transparency: reduce`, `prefers-contrast: more` and
+`forced-colors: active`.
+
+**No glass on glass.** The composer field stays an opaque `--dp-surface` well;
+the jump pill keeps a 2px blur and nothing wider.
 
 ### `outline` is focus, and nothing else
 
@@ -346,7 +384,9 @@ with a real border needs no restatement — which is why the popup and the
 selection popover are absent from the list. Only the fill-only surfaces are in
 it — the question bubble, the quote chip, the send button, the prompt editor, the
 copy chip — plus the status label, whose gradient is clipped to text and would
-otherwise render as an empty line.
+otherwise render as an empty line. The glass is dropped here too, by "glass
+yields": the mode keeps a fill's alpha while it forces the colour, so a
+translucent window would be a see-through system colour.
 
 ---
 
@@ -355,20 +395,53 @@ otherwise render as an empty line.
 | tier | value | for |
 |---|---|---|
 | fast | `--dp-dur-fast` 150ms | colour, background, opacity — every state change |
-| base | `--dp-dur` 220ms | the three panel entrances |
-| easing | `--dp-ease` `cubic-bezier(0.16, 1, 0.3, 1)` | transforms and entrances |
+| base | `--dp-dur` 400ms | every entrance; every exit takes `calc(var(--dp-dur) / 2)` |
+| settle | `--dp-ease` — a spring, no visible overshoot | the drawer, the sheet, the pushed page, the docks, every press |
+| pop | `--dp-ease-pop` — a spring, 3.8% overshoot | the popup, the bar and its window, the FAB, a new question, a check glyph, the suggestions |
+| leave | `--dp-ease-exit` — an ease-in | every exit |
+
+**The two eases are springs** — [015](015-the-panel-opens-three-ways.md). Solved
+for a damped oscillator, sampled every 10ms and simplified to 24 and 26 `linear()`
+stops; both play over `--dp-dur`, because scaling a spring's time axis changes its
+stiffness and not its shape, and one duration is what lets `--dp-dur: 0ms` switch
+every entrance off. `linear()` has been Baseline widely available since 2026-06.
+**The pop never carries opacity on its own curve's overshoot to a visible effect**
+— opacity clamps at 1 — and is never used on a full-height panel, where an
+overshoot reads as a wobble.
 
 Colour transitions run `linear`. For a fade between two colours the curve is
-imperceptible, and reserving the ease for movement is what keeps it meaningful.
+imperceptible, and reserving the springs for movement is what keeps them
+meaningful.
 
-`scale(0.96)` on `:active` is the press response, on all four pressable controls —
-`better-ui`'s value, and never below 0.95.
+`scale(0.96)` on `:active` is the press response, on all five pressable controls —
+the four in the panel and the floating button — `better-ui`'s value, and never
+below 0.95. The lens takes the same 0.96 with the button it sits under.
 
-Seven `@keyframes` exist: three entrances (`dp-in-x`, `dp-in-y`, `dp-in-pop`), one
-reduced-motion fade, **two that repeat, both on the busy status node** — the
-breathing dot and the label's sweep — and one that runs a **fixed three times**,
-`dp-bounce` on the unread dot. Their 1.8s and 2.4s are perceptual pacing, not part
-of the motion scale, and they do not move with these tokens.
+The lens travels between items on `--dp-ease` over `--dp-dur` —
+[016](016-the-window-is-glass.md). It does not travel in from outside a row, and
+it fades rather than travels out of one.
+
+**Entrances are keyframes on the element's own class; exits are `*-leave-active`
+classes on a Vue `<Transition>`**, which keeps the node until its `animationend`.
+Three transitions exist: `dp-panel` (every shape — the exit is picked by the
+shape's class, and below 960px every shape leaves as the sheet), `dp-dock` (the
+three docks, which leave as a fade) and `dp-scrim`. Exits are `forwards`, or the
+node flashes back for the frame between its last keyframe and its removal.
+
+Eleven `@keyframes` exist: four entrances (`dp-in-x`, `dp-in-y`, `dp-in-pop`,
+`dp-in-blur`), three exits (`dp-out-x`, `dp-out-y`, `dp-out-pop`), one fade that is
+both the reduced-motion entrance and, reversed, every reduced-motion exit,
+**two that repeat, both on the busy status node** — the breathing dot and the
+label's sweep — and one that runs a **fixed three times**, `dp-bounce` on the
+unread dot. Their 1.8s and 2.4s are perceptual pacing, not part of the motion
+scale, and they do not move with these tokens.
+
+**`dp-in-pop` is parametrised, not multiplied.** Everything that pops differs only
+in how far, so it reads four registered knobs — `--docpilot-rise`,
+`--docpilot-scale`, `--docpilot-blur`, and `--docpilot-from` for the drawer's
+slide — each `@property` with `inherits: false`, so a popup's blur does not leak
+into the bubbles inside it. They are plumbing, not tokens: no host has a reason to
+set one, so they are not `--dp-*` and are not in the published table.
 
 `dp-bounce` is finite on purpose, and rule 6a is why it could be either. An
 indicator that repeats forever is a notification the reader has to dismiss, and
@@ -377,8 +450,13 @@ arrival and the dot that stays is the state. Because it names no iteration count
 of `infinite`, **the seventh keyframe did not move rule 6a**, and a rule that does
 not need to move should not.
 
-> `prefers-reduced-motion` replaces every entrance with a fade, stops both
-> repeating animations, and cancels all four press scales. It must also restore
+> **The still variant** — `@include motion.still`, [017](017-motion-by-default-and-one-layer.md).
+> It applies under `ui.motion: 'reduce'`, and under `'auto'` while
+> `prefers-reduced-motion: reduce` holds; the default `'full'` never applies it.
+> It replaces every entrance and every exit with a fade,
+> drops the suggestions' stagger and the bar's travel between its two widths,
+> stops both repeating animations, stops the lens travelling (it appears in place,
+> as a hover did), and cancels all five press scales and the lens's. It must also restore
 > the status label's `-webkit-text-fill-color`: cancelling that animation alone
 > freezes a transparent fill mid-gradient and the label renders as an empty line.
 > `forced-colors` has the same obligation for the same reason.
@@ -408,17 +486,32 @@ spec, this is the one that is true.
 
 ### The panel
 
-**Drawer** — full height at the trailing edge, `--dp-width` wide, starting below
-`--dp-top`, one ring on its leading edge, entering on `dp-in-x`.
+**Drawer** — full height at an edge — the trailing one, or the leading one under
+`ui.side` ([015](015-the-panel-opens-three-ways.md)) — `--dp-width` wide, starting
+below `--dp-top`, one ring on the face that looks at the page, sliding in on
+`dp-in-x` along `--docpilot-from` and out on `dp-out-x`. The edge is mapped from
+`left`/`right` with `:dir()` inside a forgiving `:is()`.
 
 **Popup** — `--dp-width` wide and at most `--dp-popup-block` tall, sitting 12px
-above the floating button at `--dp-popup-inset` from the corner, `--dp-r-lg`,
+above the floating button at `--dp-popup-inset` from its corner, `--dp-r-lg`,
 **ring and shadow**, `overflow: hidden` so the thread cannot paint over its
-corners, entering on `dp-in-pop` from `transform-origin: bottom`.
+corners, popping on `dp-in-pop` from the button's corner — `bottom right`, or its
+mirror on the other edge or in right-to-left — with an 8px rise, 94% scale and a
+4px blur, and leaving on `dp-out-pop`.
 
-**Sheet** — below 960px both shapes are the same full-screen sheet with a scrim,
-`role="dialog"`, safe-area padding, and no border: it is edge to edge and there is
-nothing to separate from.
+**Bar** — `panel: 'bar'`, [015](015-the-panel-opens-three-ways.md). The root is a
+fixed column at the bottom centre, `--dp-bar-inline` wide and
+`--dp-bar-inline-open` in use, the width travelling on `--dp-ease`; the window
+above it is a flex item, not a fixed box, so it always ends 12px above the bar.
+The window takes the popup's ring, radius, shadow and exit by sharing its rule;
+it is as tall as its content up to `--dp-popup-block`, and it rises from the bar's
+centre 16px. The bar is the composer's own field plus a leading glyph, the reopen
+button and the hotkey at rest, with the field's ring and a shadow. Below 960px it
+is a button that wears the field's look and opens the sheet.
+
+**Sheet** — below 960px all three shapes are the same full-screen sheet with a
+scrim, `role="dialog"`, safe-area padding, and no border: it is edge to edge and
+there is nothing to separate from. It rises on `dp-in-y` and drops on `dp-out-y`.
 
 ### Selection popover — `.docpilot__ask`
 
@@ -454,6 +547,22 @@ declared `transparent` and coloured by `.is-scrolled` — declared unconditional
 so the 1px never enters or leaves the box model and the thread cannot shift when
 the reader crosses the top of the scroller.
 
+The actions row's hover is the **lens** — [016](016-the-window-is-glass.md): the
+row's own `::before` behind the buttons, `--dp-wash` at the icon button's size
+and `--dp-r-sm`, travelling to the hovered button on `--dp-ease` over `--dp-dur`.
+It appears in place when the pointer arrives from outside the row, fades in place
+when it leaves, takes the press scale with its button, ignores touch, and is
+re-measured by one `MutationObserver` on the row that holds it when an item
+comes, goes or grows. `data-lens` switches it; the component writes its box to
+the row as `--docpilot-lens-x/-y/-w/-h` — plumbing, not tokens — so a hover
+re-renders nothing. One pair of listeners on the panel serves every lens row.
+
+**Five rows carry one**, each moving between its own kind of item: the header and
+both action rows (icon buttons), the scope picker's presets (ghost pills, at
+`--dp-r-pill`), the suggestions (at `--dp-r-md`, taking each row's width) and
+every `.docpilot__sources` list, history included (level 1, `--dp-surface-2` at
+`--dp-r-md`, taking each row's height). `LENS_ROWS` in the component is the map.
+
 ### Question bubble
 
 `--dp-surface-2`, `--dp-r-bubble`, `max-width: 70%`, `padding: 10px 16px`,
@@ -471,6 +580,9 @@ down-vote's form has been closed. On a refusal copy drops out and Ask again lead
 the row. It is withheld entirely on a credential or social turn, which settle
 from a template with no model call — see [008](008-edit-a-question.md).
 
+Its hover is the **lens** ([016](016-the-window-is-glass.md)), as the header's
+is. The reopen link is a ghost pill with its own wash, so over it the lens leaves.
+
 ### Question row — `.docpilot__actions--ask`
 
 The answer's action row, under the bubble and aligned to the edge the bubble sits
@@ -478,7 +590,7 @@ on: `justify-content: flex-end`, `margin-block: 0 6px`, two `.docpilot__icon-btn
 It reuses `.docpilot__actions` **entirely** — the same `opacity: 0` and the same
 `.docpilot__turn:hover / :focus-within` reveal — so both rows in a turn appear
 together. A hover scoped to the bubble alone would need a bridge across the gap,
-and a bridge is where a hover reveal starts flickering.
+and a bridge is where a hover reveal starts flickering. It carries its own lens.
 
 ### Question editor — `.docpilot__edit`
 
@@ -499,7 +611,9 @@ so it separates against the thread rather than above it, exactly as the code
 card's copy chip does. Hover moves colour only, because `--dp-wash` is
 translucent and would let the thread show through the pill.
 
-**The one glass in the package**, and it is gated on `@supports
+**The first glass in the package** — the window became the second in
+[016](016-the-window-is-glass.md), which is why the pill's blur stays at 2px:
+anything wider on a glass window is glass on glass. It is gated on `@supports
 (backdrop-filter)`. Inside the query the fill drops to `color-mix(in srgb,
 var(--dp-surface) 65%, transparent)` under `blur(2px)`, and the bottom border
 alone becomes `color-mix(in srgb, var(--dp-text) 15%, transparent)` — a lip that
@@ -507,8 +621,9 @@ reads near-white on dark and grounded on light, where a white edge would erase
 the pill's underside. Both values are DERIVED: a literal dark fill would put a
 dark pill on the light panel and would not survive an adapter's `--dp-surface`.
 Outside the query the opaque fill stands, because 65% without a blur is a pill
-you read the thread through. `forced-colors: active` turns the blur off — the fill
-is forced to a system colour there but the blur is not.
+you read the thread through. "Glass yields" turns the glass off — opaque fill, no
+blur — under `forced-colors: active`, where the fill is forced to a system colour
+but the blur is not, and under reduced transparency and raised contrast as well.
 
 It rides a **rail of zero height** between the thread and the composer:
 `block-size: 0` with `align-items: flex-end` puts its bottom edge on the boundary
@@ -538,7 +653,10 @@ The textarea inside is transparent, borderless, `font-size: 16px`, capped at
 ### Icon button
 
 32px (44 coarse), `--dp-r-sm`, no fill at rest, `--dp-wash` on hover and focus,
-`--dp-text-dim` → `--dp-text`.
+`--dp-text-dim` → `--dp-text`. In a row that carries a lens — the header and both
+action rows — the lens paints the hover instead, under `(hover: hover)`; focus
+keeps the button's own wash and ring. A ghost pill in the scope picker's presets
+gives its hover to that row's lens the same way.
 
 ### Ghost pill — `.docpilot__text-btn`
 
@@ -558,14 +676,19 @@ Not a pill: these are whole sentences, and a pill around a sentence is a paragra
 with a rounded rectangle drawn on it. `--dp-surface-2` at rest — resting, because
 these rows are the only thing to do in an empty panel and a control whose
 only affordance is hover has none at all on a touchscreen — `--dp-wash` and
-promoted text on contact, `--dp-r-md`, 14px.
+promoted text on contact, `--dp-r-md`, 14px. Under a pointer the contact fill is
+the suggestions' **lens** ([016](016-the-window-is-glass.md)): the row's resting
+surface gives way and the lens, travelling down from the last row hovered, is the
+wash.
 
 ### Source and pick rows
 
 Grid, `--dp-r-md`, `--dp-text-dim`, `--dp-surface-2` on hover and `:focus-within`.
 A control inside separates by compositing level 2 on top; there is no `:has()`
 rule and no hover underline. `.is-linked` is the one accent surface in the
-package.
+package. In a `.docpilot__sources` list the hover is the list's **lens**
+([016](016-the-window-is-glass.md)) — the same level-1 fill, travelling down from
+row to row; `:focus-within` and `.is-linked` keep their own fills.
 
 ### Code card
 
@@ -601,7 +724,7 @@ one floor up is the same device for the same reason.
 The row grows a third grid track — `auto minmax(0, 1fr) 32px` — only on rows that
 carry the disclosure, which is the history row's arrangement and the same rule:
 only the rows with a control pay for the column. The chevron rotates 180° when
-open, and it is **the one rotation in the package**; `prefers-reduced-motion`
+open, and it is **the one rotation in the package**; the still variant
 cancels the turning and keeps the direction, because the direction is state.
 
 ### The answer's table — `.docpilot__table`
@@ -658,10 +781,17 @@ only** — the popup measures the button's block size to place itself — taking
 `padding-inline: 16px` and 14px/500, with the glyph pulled back 4px so a bounding
 box does not out-pad the letterforms beside it.
 
-### Unread dot — `.docpilot-nav-trigger__badge`
+Since [015](015-the-panel-opens-three-ways.md) it sits at the edge `ui.side`
+names, pops in on `dp-in-pop` from 60% on the page's first paint and whenever it
+returns from under a drawer or a sheet, presses like the panel's controls, and
+carries a second glyph in the same grid cell: while the popup is open the sparkle
+turns away and a chevron turns in, keyed on `aria-expanded`.
+
+### Unread dot — `.docpilot-nav-trigger__badge`, `.docpilot__dot`
 
 10px, `--dp-r-pill`, `--dp-alert`, at the block-start/inline-end corner of the
-trigger — half outside its box, over a `box-shadow` cut-out in `--dp-surface`.
+trigger — or of the bar's reopen button and its stand-in below 960px, which share
+the rule — half outside its box, over a `box-shadow` cut-out in `--dp-surface`.
 Never a border: rule 1 knows one border in this package and cutting a hole in a
 surface is a different job from drawing an edge on it. On the mobile nav row it
 is `position: static` at the end of the line, with no cut-out — that row is text,
@@ -669,7 +799,7 @@ and there is no corner near the words.
 
 `dp-bounce` three times on arrival. `forced-colors` is the one mode that gives it
 a real edge, `1px solid CanvasText`, because that mode erases both the fill and
-the cut-out; `prefers-reduced-motion` keeps the dot and drops the bounce, because
+the cut-out; the still variant keeps the dot and drops the bounce, because
 the dot is the information and the bounce is only the announcement of it.
 
 ### Article CTA
@@ -697,7 +827,7 @@ Design direction that can be checked, is. `scripts/check-docpilot.sh`, run by
 | 3 | the accent is declared once per file and used once; no brand token is named outside a `--dp-*` declaration | grep |
 | 5 | the four type sizes plus the two relative ones, and nothing else | grep |
 | 6a | exactly two repeating animations | grep |
-| 6b | both guard blocks restore the status label's text fill | awk |
+| 6b | both guard blocks — `motion.still` and `forced-colors` — restore the status label's text fill, and the mixin keeps the OS query and both root classes | awk + grep |
 | 7 | `--vp-c-text-3` never reaches text | grep |
 | 8 | `core.scss` names no VitePress token or selector | grep |
 | 9 | the adapter is a mapping: only foreign selectors, only `--dp-*` on `:root`, and the bundle entry is nothing but `@use` | awk |
@@ -709,8 +839,11 @@ Design direction that can be checked, is. `scripts/check-docpilot.sh`, run by
 Three of these are worth stating in prose because their *shape* matters more than
 their text.
 
-**Rule 1b's ceiling is now met — 20 of 20.** The twentieth is the unread dot's
-`forced-colors` edge (ui-specs/010). The next ring anywhere in either sheet is a
+**Rule 1b's ceiling is met again — 22 of 22.** It was 20 of 20 at the unread
+dot's `forced-colors` edge (ui-specs/010); [015](015-the-panel-opens-three-ways.md)
+raised it by two and named both: the drawer at the leading edge draws its ring on
+its other face, and the bar's stand-in button below 960px wears the field's ring.
+The bar's window shares the popup's ring by sharing its rule. The next ring is a
 deliberate edit to `scripts/check-docpilot.sh` rather than a diff nobody counted,
 which is exactly what the stated ceiling is for.
 

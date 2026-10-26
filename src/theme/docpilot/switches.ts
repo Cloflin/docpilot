@@ -787,9 +787,10 @@ export function resolveSuggestions(docPilot, warn = console.warn) {
      * So it is a default rather than a truth claim, and the switch is here for
      * the site that prefers the other reading. Nothing about the answer changes:
      * no model is called, no request is made, the reveal is a paint schedule
-     * over a string that is already in memory. `prefers-reduced-motion` skips it
-     * outright, and so does Stop — which completes the answer rather than
-     * truncating it, because there is nothing to truncate.
+     * over a string that is already in memory. `ui.motion` skips it with the
+     * rest of the motion — `'reduce'` always, `'auto'` while the OS asks — and so
+     * does Stop, which completes the answer rather than truncating it, because
+     * there is nothing to truncate.
      */
     reveal: flag(object ? raw.reveal : null, SUGGESTIONS_DEFAULTS.reveal, 'suggestions.reveal', warn),
   }

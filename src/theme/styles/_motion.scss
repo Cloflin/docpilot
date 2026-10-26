@@ -1,0 +1,31 @@
+/**
+ * `ui.motion` — when the still variant applies. ui-specs/017.
+ *
+ *   'full'    never: every entrance, exit and press plays, whatever the OS says.
+ *             The default since 2.0, and why nothing is written for it.
+ *   'auto'    while the reader's OS asks for reduced motion — what 1.x did
+ *             unconditionally. `session.configure` writes
+ *             `docpilot-motion-auto` onto `<html>` and the media query below
+ *             does the rest, live, with no listener.
+ *   'reduce'  always. `docpilot-motion-reduce` on `<html>`.
+ *
+ * The content is emitted twice, once per class, and that is the price of
+ * keeping the OS signal in CSS: a class written from a `matchMedia` listener
+ * would be a second copy of the reader's preference that can go stale.
+ *
+ * `:where()`, so the root class adds NOTHING to specificity. The rules inside
+ * were written to win as `@media` overrides — by coming last at their own
+ * weight — and they keep exactly that weight here. An adapter whose rule has to
+ * beat its own `html.docpilot-push …` states the class in full instead.
+ */
+@mixin still {
+  :where(html.docpilot-motion-reduce) {
+    @content;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(html.docpilot-motion-auto) {
+      @content;
+    }
+  }
+}

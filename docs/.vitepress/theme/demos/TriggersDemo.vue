@@ -4,10 +4,12 @@ import { useTimeline } from './timeline.js'
 
 /*
  * A site in miniature, and the four doors into the panel. Each variant gets
- * three beats: idle, the door is pressed, the panel is open.
+ * three beats: idle, the door is pressed, the panel is open. The floating
+ * placement is the bar — the shipped shape, ui-specs/015: pressing it is typing
+ * into it, and the window rises above it with the field left where it was.
  */
 const variants = [
-  { id: 'fab', label: "trigger: 'fab'", panel: 'popup' },
+  { id: 'fab', label: "trigger: 'fab'", panel: 'bar' },
   { id: 'nav', label: "trigger: 'nav'", panel: 'drawer' },
   { id: 'key', label: '⌘ I', panel: 'drawer' },
   { id: 'cta', label: 'under the article', panel: 'drawer' },
@@ -43,17 +45,17 @@ const pick = (i) => go(i * 3 + 2)
       <Transition name="mp-pop">
         <span v-if="v.id === 'key' && beat === 1" class="td-keys"><kbd>⌘</kbd><kbd>I</kbd></span>
       </Transition>
-      <span v-if="v.id === 'fab'" class="td-fab" :class="{ hot: beat === 1 }">
-        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2Z" /></svg>
-        Ask AI
-      </span>
-      <Transition name="td-popup">
-        <div v-if="beat === 2 && v.panel === 'popup'" class="td-popup">
+      <Transition name="td-window">
+        <div v-if="beat === 2 && v.panel === 'bar'" class="td-window">
           <div class="td-ph">DocPilot</div>
-          <div class="td-pb">How can I help you today?</div>
-          <div class="td-pc">Ask about Acme</div>
+          <div class="td-pb">How do I deploy?</div>
         </div>
       </Transition>
+      <span v-if="v.id === 'fab'" class="td-bar" :class="{ hot: beat === 1, open: beat > 0 }">
+        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2Z" /></svg>
+        <span class="td-bar-field" :class="{ typed: beat > 0 }">{{ beat > 0 ? 'How do I deploy?' : 'Ask about Acme' }}</span>
+        <kbd>⌘I</kbd>
+      </span>
       <Transition name="td-drawer">
         <div v-if="beat === 2 && v.panel === 'drawer'" class="td-drawer">
           <div class="td-ph">DocPilot</div>
@@ -214,21 +216,33 @@ kbd {
   padding: 6px 12px;
   box-shadow: 0 6px 18px -6px rgb(0 0 0 / 0.3);
 }
-.td-fab {
+.td-bar {
   position: absolute;
-  right: 14px;
+  left: 50%;
   bottom: 14px;
+  translate: -50% 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 14px;
+  gap: 8px;
+  width: 230px;
+  padding: 8px 12px;
   border-radius: 999px;
-  background: var(--cf-foreground);
-  color: var(--cf-background);
-  font-weight: 500;
-  transition: all 0.2s;
+  border: 1px solid var(--cf-border);
+  background: var(--cf-popover);
+  box-shadow: 0 10px 28px -12px rgb(0 0 0 / 0.35);
+  color: var(--cf-muted-foreground);
+  transition: all 0.2s, width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.td-popup,
+.td-bar.open {
+  width: 290px;
+}
+.td-bar-field {
+  flex: 1;
+}
+.td-bar-field.typed {
+  color: var(--cf-foreground);
+}
+.td-window,
 .td-drawer {
   position: absolute;
   display: flex;
@@ -237,13 +251,14 @@ kbd {
   background: var(--cf-popover);
   box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.35);
 }
-.td-popup {
-  right: 14px;
+.td-window {
+  left: 50%;
   bottom: 58px;
-  width: 210px;
-  height: 230px;
+  translate: -50% 0;
+  width: 290px;
+  height: 220px;
   border-radius: 14px;
-  transform-origin: bottom right;
+  transform-origin: bottom center;
 }
 .td-drawer {
   right: 0;
@@ -272,14 +287,14 @@ kbd {
   border: 1px solid var(--cf-border);
   color: var(--cf-muted-foreground);
 }
-.td-popup-enter-active,
-.td-popup-leave-active,
+.td-window-enter-active,
+.td-window-leave-active,
 .td-drawer-enter-active,
 .td-drawer-leave-active {
   transition: opacity 0.25s, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.td-popup-enter-from,
-.td-popup-leave-to {
+.td-window-enter-from,
+.td-window-leave-to {
   opacity: 0;
   transform: scale(0.9);
 }

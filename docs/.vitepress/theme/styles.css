@@ -31,3 +31,41 @@
   --dp-top: var(--cf-nav-height);
 }
 
+/*
+ * `ui.layout: 'push'` in this theme's terms — what `style/vitepress.css` does for
+ * the default theme, written against the classes the panel puts on `<html>`
+ * (ui-specs/015). `.cf-layout` holds everything in flow, the sidebar included —
+ * it is sticky here, not fixed — so padding it moves the page from either edge;
+ * the navbar is fixed above the drawer and stays. Inert while `ui.layout` is
+ * `'overlay'`, which is what this site ships.
+ */
+html.docpilot-push-end .cf-layout {
+  padding-inline-end: var(--dp-width);
+}
+
+html.docpilot-push-start .cf-layout {
+  padding-inline-start: var(--dp-width);
+}
+
+html.docpilot-push .cf-layout {
+  transition:
+    padding-inline-start var(--dp-dur) var(--dp-ease),
+    padding-inline-end var(--dp-dur) var(--dp-ease);
+}
+
+html.docpilot-push-closing .cf-layout {
+  transition:
+    padding-inline-start calc(var(--dp-dur) / 2) var(--dp-ease-exit),
+    padding-inline-end calc(var(--dp-dur) / 2) var(--dp-ease-exit);
+}
+
+/* The still variant, on the panel's own terms — `ui.motion`, ui-specs/017. */
+html.docpilot-motion-reduce:is(.docpilot-push, .docpilot-push-closing) .cf-layout {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.docpilot-motion-auto:is(.docpilot-push, .docpilot-push-closing) .cf-layout {
+    transition: none;
+  }
+}

@@ -766,7 +766,7 @@ In a terminal, and only when nothing has already answered them, it asks up to fi
 | `--no-commands` | install the skills and generate no slash commands |
 | `--runtime=browser\|server` | which install: `browser` (static, the default) or `server` |
 | `--trigger=nav\|fab\|both\|none` | where the button goes. A comma list works too — `--trigger=nav,fab` |
-| `--panel=auto\|drawer\|popup` | the shape of the panel |
+| `--panel=auto\|drawer\|popup\|bar` | the shape of the panel |
 | `--yes`, `-y` | take the defaults, ask nothing |
 
 The trigger question offers the four words; [`ui.trigger`](/reference/config#ui-trigger) also takes an array written out, which is something you put in your own config rather than answer at a prompt.

@@ -16,9 +16,17 @@
  * colour set rather than the tokens that happen to differ: a token left out
  * keeps the core's OS-driven value, and a dark-OS reader on a site pinned to
  * light gets one dark colour in an otherwise light panel.
+ *
+ * IN `@layer docpilot`, the core's layer — ui-specs/017 — so the order above
+ * still decides between the two files. The exceptions are at the end of the
+ * file, and why they are exceptions is stated there.
  */
 
 @use './breakpoints' as bp;
+
+// Everything down to the patches at the end of the file. Not indented, for the
+// same reason as the core's: the check script reads `:root {` at column 0.
+@layer docpilot {
 
 :root {
   // ── Surfaces ────────────────────────────────────────────────────────────────
@@ -84,35 +92,6 @@
 }
 
 /**
- * `.VPNavBarSearch` grows to fill the navbar, which is how upstream keeps the
- * search box at the left of the content area and everything else at the right.
- * Placed after a grown wrapper the trigger lands at the wrapper's far edge —
- * measured, 398px away from the box it is supposed to belong to. So the growing
- * moves onto the trigger: the wrapper shrinks to its box, the trigger sits 8px
- * after it, and one auto margin does the pushing the growth used to do.
- *
- * Only above the breakpoint. Below it nothing grows upstream either — search
- * and hamburger sit together at the right, and an auto margin there would drag
- * them apart.
- */
-@media (min-width: bp.$nav) {
-  // Gated on the trigger actually being in the bar. In `fab` mode nothing is
-  // mounted here, and shrinking the search box for a neighbour that does not
-  // exist would leave the host's own layout wrong for no reason. A browser
-  // without `:has()` skips the whole block: the search box keeps upstream's
-  // growth and the trigger, if there is one, sits at the far edge — visibly
-  // off, but nothing is broken and nothing is hidden.
-  .VPNavBar:has(.docpilot-nav-trigger:not(.is-screen):not(.is-fab)) {
-    .search {
-      flex-grow: 0;
-    }
-    .docpilot-nav-trigger:not(.is-screen) {
-      margin-inline-end: auto;
-    }
-  }
-}
-
-/**
  * `ui.layout: 'push'` — the panel moves the host's content instead of covering
  * it. ui-specs/009.
  *
@@ -126,20 +105,63 @@
  * A consumer on another theme overrides this one rule instead of patching a
  * component.
  *
- * `padding-inline-end`, not a margin or a width: it composes with whatever the
- * theme already does to that element, and it cannot make the content narrower
- * than the theme's own max-width intended. The class is written by the panel and
- * only above the sheet breakpoint — below it the panel is edge to edge and there
- * is nothing to push.
+ * ON `.Layout`, NOT `.VPContent` — ui-specs/015, which found the old rule dead
+ * on the widths where it mattered most. The old rule's selector, our class and
+ * `.VPContent`, weighed `(0,2,1)`; VitePress's own `.VPContent.has-sidebar`
+ * padding is scoped, which
+ * makes it `(0,3,0)`, and from 1440px up it sets `padding-right` itself — so the
+ * push padded nothing on a wide screen with a sidebar. `.Layout` has no padding
+ * of VitePress's to lose to, and padding it narrows everything in flow at once:
+ * VitePress 2 centres its content against `100%` of `.Layout`, so the article
+ * re-centres in what is left of the window, exactly as if the window were the
+ * panel's width narrower. The class is written by the panel and only above the
+ * sheet breakpoint — below it the panel is edge to edge and there is nothing to
+ * push.
+ *
+ * BOTH EDGES, which is why the rules are keyed on the EDGE class the panel
+ * writes beside `docpilot-push` rather than on that class alone.
+ *
+ * VitePress's sidebar is FIXED at the physical left, so it does not move with
+ * the flow, and it has to be moved by the distance the article's left edge
+ * moved — measured, at 2560px, with the sidebar left alone the article slid
+ * 230px under it. Up to 1440px the article sits a sidebar's width from the
+ * edge, so it moves the panel's whole width when the drawer docks on the
+ * sidebar's side and not at all when it docks on the other. Beyond 1440px
+ * VitePress centres the article in what is left of `.Layout`, so the narrowing
+ * is split between the two gutters and the article moves HALF the width —
+ * towards the side the drawer is not on, whichever that is.
+ *
+ * VitePress 1 centres against `100vw` instead, so beyond 1440px its article
+ * moves the whole width or not at all while the sidebar moves half: that opens
+ * a gap between them rather than an overlap — the miss in the safe direction.
+ * The navbar is fixed above the drawer, which starts below it, and stays where
+ * it is.
  */
-html.docpilot-push .VPContent {
+html.docpilot-push-end .Layout {
   padding-inline-end: var(--dp-width);
-  transition: padding-inline-end var(--dp-dur) var(--dp-ease);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html.docpilot-push .VPContent {
-    transition: none;
+html.docpilot-push-start .Layout {
+  padding-inline-start: var(--dp-width);
+}
+
+// The drawer on the sidebar's own side — the left, whatever the text direction.
+html.docpilot-push-start:dir(ltr) .VPSidebar,
+html.docpilot-push-end:dir(rtl) .VPSidebar {
+  translate: var(--dp-width) 0;
+}
+
+@media (min-width: 1440px) {
+  html.docpilot-push-start:dir(ltr) .VPSidebar,
+  html.docpilot-push-end:dir(rtl) .VPSidebar {
+    translate: calc(var(--dp-width) / 2) 0;
+  }
+
+  // The drawer on the right: the article re-centres leftwards, and the sidebar
+  // goes with it.
+  html.docpilot-push-end:dir(ltr) .VPSidebar,
+  html.docpilot-push-start:dir(rtl) .VPSidebar {
+    translate: calc(var(--dp-width) / -2) 0;
   }
 }
 
@@ -193,5 +215,91 @@ html.docpilot-light .docpilot__answer {
   .shiki,
   .shiki span {
     color: var(--shiki-light, inherit);
+  }
+}
+
+} // @layer docpilot
+
+/**
+ * ── Outside the layer: patches on VitePress's own components ─────────────────
+ *
+ * ui-specs/017. Everything above is layered, so any unlayered rule of the host's
+ * outranks it. These are the declarations that exist to override something
+ * VitePress itself declares on the same element, from its components' scoped
+ * CSS, which is unlayered — inside the layer each one would lose to the very
+ * rule it was written against:
+ *
+ *   `.VPNavBarSearch { flex-grow: 1 }`   the nav trigger lands 398px from search
+ *   `.VPSidebar { transition: … }`       the sidebar jumps where the page slides
+ *
+ * Each recipe moves whole: the trigger's auto margin is the other half of the
+ * search box's `flex-grow`, and `.Layout` shares the sidebar's transition so the
+ * page and the sidebar keep one clock. Nothing joins this section unless it has
+ * a VitePress declaration of its own to beat.
+ */
+
+/**
+ * `.VPNavBarSearch` grows to fill the navbar, which is how upstream keeps the
+ * search box at the left of the content area and everything else at the right.
+ * Placed after a grown wrapper the trigger lands at the wrapper's far edge —
+ * measured, 398px away from the box it is supposed to belong to. So the growing
+ * moves onto the trigger: the wrapper shrinks to its box, the trigger sits 8px
+ * after it, and one auto margin does the pushing the growth used to do.
+ *
+ * Only above the breakpoint. Below it nothing grows upstream either — search
+ * and hamburger sit together at the right, and an auto margin there would drag
+ * them apart.
+ */
+@media (min-width: bp.$nav) {
+  // Gated on the trigger actually being in the bar. In `fab` mode nothing is
+  // mounted here, and shrinking the search box for a neighbour that does not
+  // exist would leave the host's own layout wrong for no reason. A browser
+  // without `:has()` skips the whole block: the search box keeps upstream's
+  // growth and the trigger, if there is one, sits at the far edge — visibly
+  // off, but nothing is broken and nothing is hidden.
+  .VPNavBar:has(.docpilot-nav-trigger:not(.is-screen):not(.is-fab)) {
+    .search {
+      flex-grow: 0;
+    }
+    .docpilot-nav-trigger:not(.is-screen) {
+      margin-inline-end: auto;
+    }
+  }
+}
+
+/**
+ * The way there and the way back, each on the drawer's own clock.
+ *
+ * A transition is read from the state being ENTERED, so the way back needs a
+ * class of its own: `docpilot-push-closing` is on `<html>` while the drawer
+ * plays its exit, and the page comes home on the same accelerating curve, in the
+ * same half-duration, as the panel leaving beside it.
+ */
+html.docpilot-push .Layout,
+html.docpilot-push .VPSidebar {
+  transition:
+    padding-inline-start var(--dp-dur) var(--dp-ease),
+    padding-inline-end var(--dp-dur) var(--dp-ease),
+    translate var(--dp-dur) var(--dp-ease);
+}
+
+html.docpilot-push-closing .Layout,
+html.docpilot-push-closing .VPSidebar {
+  transition:
+    padding-inline-start calc(var(--dp-dur) / 2) var(--dp-ease-exit),
+    padding-inline-end calc(var(--dp-dur) / 2) var(--dp-ease-exit),
+    translate calc(var(--dp-dur) / 2) var(--dp-ease-exit);
+}
+
+// The still variant — ui-specs/017. Stated in full rather than through
+// `motion.still`, whose `:where()` weighs nothing: this has to beat the two rules
+// directly above at `(0,2,1)`, so the root class keeps its weight here.
+html.docpilot-motion-reduce:is(.docpilot-push, .docpilot-push-closing) :is(.Layout, .VPSidebar) {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.docpilot-motion-auto:is(.docpilot-push, .docpilot-push-closing) :is(.Layout, .VPSidebar) {
+    transition: none;
   }
 }

@@ -26,6 +26,8 @@ Each release in a few lines. The full notes — every change, every migration st
 - **Measure and improve.** `eval` scores the server turn, a dev and test split and attack probes; `docpilot improve` turns failing questions into edits and judges them; the `docpilot-tuner` agent runs that loop for you. See [Measure](/guide/measure) and [The tuning agent](/guide/tuning-agent).
 - **A terminal that shows the numbers.** `docpilot status`, `docpilot monitor` and an eval scorecard. See [The terminal](/features/terminal).
 - **Every claim is on a benchmark** you can rerun: [Harborline](/guide/benchmarks).
+- **The panel opens three ways, from a bar by default.** A question bar at the bottom centre whose answer rises above it is the shipped shape; a sidebar that moves the page from the left or the right and the corner popup are settings — `ui: { panel: 'popup' }` keeps 1.x. Motion leaves as well as arrives, on springs, and plays whatever the reader's OS says — `ui: { motion: 'auto' }` defers to it as 1.x did; the window is frosted glass, and the hover travels between the items of a row or a list. See [The assistant panel](/guide/panel#opening-it) and [Migrate to 2.0](/guide/migrate-2#panel-bar).
+- **Every stylesheet is in `@layer docpilot`.** Your own CSS outranks the panel with one class and no `!important` — and an unlayered reset does too. See [Appearance](/guide/appearance#five-entry-points) and [Migrate to 2.0](/guide/migrate-2#css-layer).
 
 <a class="cl-more" :href="gh('200--2026-10-25')">Full notes</a>
 

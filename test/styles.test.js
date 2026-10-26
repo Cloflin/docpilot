@@ -136,12 +136,15 @@ describe('stylesheet split', () => {
     for (const line of core.split('\n')) {
       const text = line.trim()
       if (text.endsWith('{')) {
-        stack.push([...pending, text.slice(0, -1).trim()].filter(Boolean).join(' '))
+        const head = [...pending, text.slice(0, -1).trim()].filter(Boolean).join(' ')
+        // `@layer docpilot` wraps the whole file — ui-specs/017 — and is not a
+        // selector anything inherits through.
+        stack.push(head.startsWith('@layer') ? '' : head)
         pending = []
       } else if (text === '}') {
         stack.pop()
         pending = []
-      } else if (/font-family:\s*var\(--dp-font\)/.test(text)) asked.push(stack.join(' '))
+      } else if (/font-family:\s*var\(--dp-font\)/.test(text)) asked.push(stack.filter(Boolean).join(' '))
       else if (text.endsWith(',')) pending.push(text)
       else pending = []
     }

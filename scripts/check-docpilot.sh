@@ -30,6 +30,7 @@ VUE=src/theme/components/DocPilot.vue
 CORE=src/theme/styles/core.scss
 VPCSS=src/theme/styles/vitepress.scss
 BREAKS=src/theme/styles/_breakpoints.scss
+MOTION=src/theme/styles/_motion.scss
 ENTRY=src/theme/styles/docpilot.scss
 DOCUCSS=src/theme/styles/docusaurus.scss
 ADAPTERS="$VPCSS $DOCUCSS"
@@ -45,7 +46,7 @@ printf '\nDocPilot design-direction checks\n\n'
 # Rule 0 — every file a rule below reads exists and is not empty. Without this,
 # a rename turns "0 borders" and "0 brand references" into passing rules.
 missing=''
-for f in "$VUE" "$CORE" $ADAPTERS "$BREAKS" "$ENTRY" "$HARNESS"; do
+for f in "$VUE" "$CORE" $ADAPTERS "$BREAKS" "$MOTION" "$ENTRY" "$HARNESS"; do
   [ -s "$f" ] || missing="$missing $f"
 done
 [ -z "$missing" ] && ok "rule 0 — every checked file exists and is non-empty" \
@@ -95,8 +96,14 @@ shape=$(cat $SCSS_ALL | grep -nE "$BORDER_RE" \
 # 1b — the ceiling, and the inventory. Generous, because the ring is a structural
 # device now rather than an exception; stated, because a jump past it should be a
 # deliberate edit to this file rather than a diff nobody counted.
+#
+# 20 -> 22 with ui-specs/015, and both are named: the drawer docked to the
+# LEADING edge draws its ring on the other face of itself — the face that looks
+# at the page — and below 960px the bar is a button that wears the field's ring
+# because it is the field's stand-in. The bar's window shares the popup's ring by
+# sharing its rule, which is why it is not a third.
 rings=$(cat $SCSS_ALL | grep -E "$BORDER_RE" | grep -vcE "$BORDER_RESET" | tr -d ' ')
-if [ "$rings" -le 20 ]; then
+if [ "$rings" -le 22 ]; then
   ok "rule 1 — $rings rings"
   awk -v re="$BORDER_RE" -v reset="$BORDER_RESET" '
     FNR == 1 { sel = "" }
@@ -107,7 +114,7 @@ if [ "$rings" -le 20 ]; then
       printf "          %-30s %s\n", sel, decl
     }' $SCSS_ALL
 else
-  bad "rule 1 — $rings rings, expected <= 20"
+  bad "rule 1 — $rings rings, expected <= 22"
 fi
 
 # 1c — every ring is on a selector this package owns. A border on `pre`, on a
@@ -211,17 +218,19 @@ allowed=$(printf '%s' "$sizes" | tr ' ' '\n' | grep -vE '^(24px|16px|14px|13px|0
                                         || bad "rule 5 — unexpected sizes: $allowed"
 
 # Rule 6 — exactly two @keyframes loops, and both on the busy status node: the
-# breathing dot and the label sweeping beside it. Both are cancelled by
-# prefers-reduced-motion and by forced-colors, which is checked separately
-# because a cancelled sweep that keeps its transparent text fill is invisible.
+# breathing dot and the label sweeping beside it. Both are cancelled by the still
+# variant (`@include motion.still`, ui-specs/017 — `ui.motion: 'auto' | 'reduce'`)
+# and by forced-colors, which is checked separately because a cancelled sweep
+# that keeps its transparent text fill is invisible.
 loops=$(cat $SCSS_ALL | grep -c 'infinite' || true)
 [ "$loops" -eq 2 ] && ok "rule 6 — two looping animations" \
                    || bad "rule 6 — $loops looping animations, expected 2"
 
 # Both files, so the assertion cannot be sidestepped by moving the guard block.
-for guard in 'prefers-reduced-motion' 'forced-colors'; do
+# The still variant opens with `@include`, forced-colors with `@media`.
+for guard in 'motion.still' 'forced-colors'; do
   block=$(awk -v g="$guard" '
-    /@media/ && index($0, g) { depth = 1; capture = 1; next }
+    /@(media|include)/ && index($0, g) { depth = 1; capture = 1; next }
     capture {
       depth += gsub(/\{/, "{"); depth -= gsub(/\}/, "}")
       print
@@ -235,12 +244,22 @@ for guard in 'prefers-reduced-motion' 'forced-colors'; do
   fi
 done
 
-# These two checks read CODE, not prose. Both rules are stated verbatim in the
-# files' own comments, so a naive grep flags the documentation of the rule as a
-# violation of it — strip comments first.
+# The checks from here on read CODE, not prose. Their rules are stated verbatim
+# in the files' own comments, so a naive grep flags the documentation of a rule
+# as a violation of it — strip comments first.
 strip_comments() {
   sed -e 's://.*::' -e 's:/\*.*\*/::' "$@" | grep -vE '^[[:space:]]*(\*|/\*)'
 }
+
+# The still variant is only as good as its mixin: `'auto'` has to reach the OS
+# preference, or a site that asked to defer to it never gets the fades.
+if strip_comments "$MOTION" | grep -q 'prefers-reduced-motion: reduce' \
+   && strip_comments "$MOTION" | grep -q 'docpilot-motion-auto' \
+   && strip_comments "$MOTION" | grep -q 'docpilot-motion-reduce'; then
+  ok "rule 6 — motion.still answers both 'auto' and 'reduce'"
+else
+  bad "rule 6 — motion.still lost the OS query or one of its two root classes"
+fi
 
 # Rule 7 — --vp-c-text-3 never reaches text.
 if strip_comments $SCSS_ALL | grep -q 'vp-c-text-3' || strip_comments "$VUE" | grep -q 'vp-c-text-3'; then

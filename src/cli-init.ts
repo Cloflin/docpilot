@@ -269,7 +269,7 @@ export const UI_QUESTIONS = [
     options: ['nav', 'fab', 'both', 'none'],
     hints: {
       nav: 'in the navigation bar beside search, and in the mobile menu',
-      fab: 'floating, bottom right of every page',
+      fab: 'floating on every page — the bar, or a button bottom right',
       both: 'all three at once — navbar, mobile menu and floating',
       none: 'no button; the ⌘I hotkey and your own control still open it',
     },
@@ -280,9 +280,10 @@ export const UI_QUESTIONS = [
     label: 'What shape should the panel be?',
     options: UI_PANELS,
     hints: {
-      auto: 'follow the button — nav opens the drawer, floating opens the popup',
+      auto: 'follow the button — nav opens the drawer, floating opens the bar',
       drawer: 'full height, docked to the right edge',
       popup: 'floating, bottom right, above the button',
+      bar: 'a question bar at the bottom centre; the answer rises above it',
     },
     default: UI_DEFAULTS.panel,
   },
@@ -338,7 +339,7 @@ export async function runInit({ argv = [], configPath = null } = {}) {
      * distinction is the whole reason a script can tell a typo from an outage.
      */
     console.error(`[docpilot] unknown option${flags.unknown.length === 1 ? '' : 's'}: ${flags.unknown.join(' ')}`)
-    console.error('  init accepts --runtime=browser|server, --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup,')
+    console.error('  init accepts --runtime=browser|server, --trigger=nav|fab|both|none (or a comma list), --panel=auto|drawer|popup|bar,')
     console.error('  --target=claude|codex|cursor|copilot|agents (or a comma list), --scope=project|user,')
     console.error('  --skills-dir=DIR, --commands-dir=DIR, --no-commands, --yes')
     return 2

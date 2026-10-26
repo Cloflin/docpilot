@@ -23,6 +23,11 @@
  * colour set. `docpilot.scss` is the entry point that does both; a consumer
  * importing `style/vitepress.css` alone gets an unstyled panel.
  *
+ * EVERY RULE HERE IS IN `@layer docpilot` — ui-specs/017. A site's own unlayered
+ * CSS outranks the panel whatever its specificity, so overriding a recipe takes
+ * one class and no `!important`. The adapters declare into the same layer, so
+ * the order above still decides between them.
+ *
  * The rules, each checkable by grep and each stated in full in 000:
  *   1. THE HAIRLINE IS ONE PIXEL AND ONE COLOUR SOURCE. Every border in this
  *      file and the adapter is `1px solid` from `--dp-line`, `transparent` or
@@ -32,8 +37,9 @@
  *      named outside a `--dp-*` declaration.
  *   4. Agent progress is one node whose text is replaced in place.
  *   5. Four UI type sizes — 24 / 16 / 14 / 13 — plus 0.9em and 0.75em.
- *   6. Seven keyframes; exactly two of them repeat, both on the busy status
- *      node. The seventh runs a fixed number of times and is not one of them.
+ *   6. Eleven keyframes — entrances, exits, a fade; exactly two of them repeat,
+ *      both on the busy status node. The unread dot's runs a fixed number of
+ *      times and is not one of them.
  *   7. --vp-c-text-3 never reaches text, by reference or by inheritance.
  *   8. This file names no VitePress token or selector.
  *   9. The adapter is a mapping, never a second design.
@@ -45,6 +51,11 @@
  */
 
 @use './breakpoints' as bp;
+@use './motion';
+
+// The whole file, closed at the very end. Not indented, so every rule reads at
+// the column the check script and a reviewer expect it at.
+@layer docpilot {
 
 /**
  * The tokens, on :root rather than on `.docpilot`.
@@ -203,6 +214,14 @@
    * lives beside the popup, where the geometry it feeds is.
    */
   --dp-fab-clear: calc(var(--dp-fab-size) + 12px);
+  /**
+   * The bar — ui-specs/015, `panel: 'bar'`. Its width at rest, and once it is
+   * in use: focused, holding a question, or under the window, which takes the
+   * same width. Both are clamped to the viewport less a 16px gutter where they
+   * are used, so a phone in landscape never scrolls sideways to reach send.
+   */
+  --dp-bar-inline: 400px;
+  --dp-bar-inline-open: 640px;
 
   /**
    * ── Radius — SIX STEPS, AND NONE OF THEM MOVES ──────────────────────────────
@@ -224,14 +243,36 @@
 
   --dp-gutter: 20px;
 
-  // ── Motion — two tiers and one curve ────────────────────────────────────────
-  // `--dp-dur-fast` carries every colour, background and opacity change;
-  // `--dp-dur` carries the three panel entrances. Colour transitions run
-  // `linear` — between two colours the curve is imperceptible — so the ease is
-  // reserved for movement, which is the only place it does any work.
-  --dp-dur: 220ms;
+  /**
+   * ── Motion — two tiers, two springs and an exit ─────────────────────────────
+   *
+   * `--dp-dur-fast` carries every colour, background and opacity change;
+   * `--dp-dur` carries every ENTRANCE, and half of it every exit. Colour
+   * transitions run `linear` — between two colours the curve is imperceptible —
+   * so the curves are reserved for movement, which is the only place they do
+   * any work.
+   *
+   * THE TWO CURVES ARE SPRINGS — ui-specs/015. Solved for a damped oscillator,
+   * sampled every 10ms and simplified to these stops:
+   *
+   *   --dp-ease      stiffness 350, damping 35 — ζ 0.94, no visible overshoot.
+   *                  Panels, the sheet, the page under `push`, every press.
+   *   --dp-ease-pop  stiffness 300, damping 25 — ζ 0.72, 3.8% overshoot. Things
+   *                  that pop: the popup, the window, the bar, a new question.
+   *                  Never on opacity, which would clamp the overshoot flat.
+   *
+   * Both play over `--dp-dur`. Scaling a spring's time axis changes its
+   * stiffness, not its shape, so one duration serves both — and a site that set
+   * `--dp-dur: 0ms` to switch the entrances off still switches all of them off.
+   *
+   * `--dp-ease-exit` is an ease-IN: a thing that leaves accelerates away, and it
+   * leaves in half the time it took to arrive.
+   */
+  --dp-dur: 400ms;
   --dp-dur-fast: 150ms;
-  --dp-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dp-ease: linear(0, 0.016 2.7%, 0.056 5.4%, 0.112 8.1%, 0.177 10.8%, 0.39 18.9%, 0.458 21.6%, 0.521 24.3%, 0.58 27%, 0.634 29.7%, 0.683 32.4%, 0.727 35.1%, 0.766 37.8%, 0.8 40.5%, 0.83 43.2%, 0.856 45.9%, 0.879 48.6%, 0.915 54.1%, 0.942 59.5%, 0.961 64.9%, 0.974 70.3%, 0.987 78.4%, 0.994 86.5%, 1);
+  --dp-ease-pop: linear(0, 0.014 2.3%, 0.051 4.5%, 0.104 6.8%, 0.17 9.1%, 0.243 11.4%, 0.475 18.2%, 0.548 20.5%, 0.618 22.7%, 0.682 25%, 0.74 27.3%, 0.792 29.5%, 0.839 31.8%, 0.879 34.1%, 0.913 36.4%, 0.943 38.6%, 0.967 40.9%, 0.987 43.2%, 1.002 45.5%, 1.015 47.7%, 1.03 52.3%, 1.037 56.8%, 1.037 61.4%, 1.034 65.9%, 1.013 84.1%, 1);
+  --dp-ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --dp-z: 29;
 }
 
@@ -392,14 +433,32 @@ html.docpilot-dark {
   inset: 0;
   background: var(--dp-scrim);
   z-index: calc(var(--dp-z) - 1);
+  animation: dp-fade var(--dp-dur-fast) linear;
 }
 
 /**
- * TWO SHAPES, one panel. The modifier is always present — `--drawer` or
- * `--popup`, never neither — so every geometric rule can name the shape it
- * belongs to instead of one shape being "the default" and the other undoing it.
+ * ── exits — ui-specs/015 ─────────────────────────────────────────────────────
  *
- * Below the sheet breakpoint the two are identical and this base block is all
+ * Vue's `<Transition>` keeps a leaving node in the document, carrying
+ * `*-leave-active`, until the animation that class starts has ended — the one
+ * thing CSS cannot do for a node a `v-if` removes. Entrances stay where they
+ * were, on each element's own class: an element that mounts is already
+ * animating, with nothing to coordinate.
+ *
+ * Every exit is `forwards`: between the last frame and the removal the node
+ * must hold where it ended, or it flashes back in for a frame.
+ */
+.dp-scrim-leave-active {
+  animation: dp-fade var(--dp-dur-fast) linear reverse forwards;
+}
+
+/**
+ * THREE SHAPES, one panel. The modifier is always present — `--drawer`,
+ * `--popup` or `--bar`, never none — so every geometric rule can name the shape
+ * it belongs to instead of one shape being "the default" and the others undoing
+ * it.
+ *
+ * Below the sheet breakpoint all three are identical and this base block is all
  * there is: a full-screen sheet, whichever shape was configured.
  */
 .docpilot__panel {
@@ -417,17 +476,27 @@ html.docpilot-dark {
     block-size: 100dvh;
     padding-block-start: env(safe-area-inset-top);
     animation: dp-in-y var(--dp-dur) var(--dp-ease);
+
+    &.dp-panel-leave-active {
+      animation: dp-out-y calc(var(--dp-dur) / 2) var(--dp-ease-exit) forwards;
+    }
   }
 }
 
 /**
- * The full-height drawer, docked to the trailing edge.
+ * The full-height drawer, docked to an edge — the trailing one unless
+ * `ui.side` moved it, ui-specs/015.
  *
  * The hairline lives HERE and not on the base selector, and that is not
  * bookkeeping: with the border on the base, the popup would have to switch it
  * off, and `border-inline-start: none` is still a border declaration to the
  * check script — a fifth one, failing a rule whose message would say nothing
- * about popups. Declaring it on the shape that has it keeps the count at four.
+ * about popups. Declaring it on the shape that has it keeps the count honest.
+ *
+ * `--docpilot-from` is the distance it slides in from, along x, and out to.
+ * Plumbing rather than a token: it is set by the edge and read by two
+ * keyframes, and nothing outside this block has an opinion about it. Positive
+ * is the right-hand side of the screen, so the right-to-left reading flips it.
  */
 .docpilot__panel--drawer {
   @media (min-width: bp.$sheet) {
@@ -438,7 +507,46 @@ html.docpilot-dark {
     // composer out of reach.
     block-size: calc(100dvh - var(--dp-top));
     border-inline-start: 1px solid var(--dp-line);
+    --docpilot-from: 100%;
     animation: dp-in-x var(--dp-dur) var(--dp-ease);
+
+    &:dir(rtl) {
+      --docpilot-from: -100%;
+    }
+
+    // Half the arrival and accelerating: a thing that leaves gets out of the way.
+    // The page under `layout: 'push'` comes back on the same curve and the same
+    // clock — the adapters read `docpilot-push-closing` for exactly this.
+    &.dp-panel-leave-active {
+      animation: dp-out-x calc(var(--dp-dur) / 2) var(--dp-ease-exit) forwards;
+    }
+  }
+}
+
+/**
+ * THE LEADING EDGE — `side: 'start'`, or a physical side that lands on it.
+ *
+ * `:dir()` does the mapping, which is what lets the floating button — rendered
+ * on the server, before any script has looked at the page — arrive on the right
+ * edge on its first paint. Inside `:is()`, which forgives: an engine without
+ * `:dir()` drops those two arguments and keeps `.is-side-start`, so a physical
+ * side degrades to the default edge rather than taking the whole rule down.
+ *
+ * The ring moves to the other face of the panel, and that is the one ring this
+ * shape could not share: the drawer's boundary is the face that looks at the
+ * page, whichever side the page is on.
+ */
+.docpilot__panel--drawer:is(.is-side-start, .is-side-left:dir(ltr), .is-side-right:dir(rtl)) {
+  @media (min-width: bp.$sheet) {
+    inset-inline-end: auto;
+    inset-inline-start: 0;
+    border-inline-start: none;
+    border-inline-end: 1px solid var(--dp-line);
+    --docpilot-from: -100%;
+
+    &:dir(rtl) {
+      --docpilot-from: 100%;
+    }
   }
 }
 
@@ -449,9 +557,10 @@ html.docpilot-dark {
  * affordance — the convention every chat widget has already taught — and that
  * is also what makes returning focus to it correct rather than lucky.
  *
- * It carries no border at all. Its edge is the shadow, which is why
- * `forced-colors` has to give it one: that mode erases shadows, and a surface
- * with neither would float with no boundary at all.
+ * It grows out of the button's CORNER — ui-specs/015. That used to be `bottom`
+ * on the argument that a corner needs a mirrored rule for right-to-left; it
+ * does, and `:dir()` is that rule. A scale that grows from the middle of the
+ * popup's bottom edge says the popup came from somewhere the button is not.
  */
 .docpilot__panel--popup {
   @media (min-width: bp.$sheet) {
@@ -463,15 +572,118 @@ html.docpilot-dark {
       var(--dp-popup-block),
       calc(100dvh - var(--dp-top) - var(--dp-popup-inset) * 2 - var(--dp-fab-clear))
     );
-    // Ring AND shadow. The shadow alone was its whole edge, which is invisible
-    // on a dark host and erased outright by forced-colors — the one mode where a
-    // floating surface most needs a boundary.
+    transform-origin: bottom right;
+    --docpilot-rise: 8px;
+    --docpilot-scale: 0.94;
+    --docpilot-blur: 4px;
+    animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop);
+
+    &:dir(rtl) {
+      transform-origin: bottom left;
+    }
+  }
+}
+
+.docpilot__panel--popup:is(.is-side-start, .is-side-left:dir(ltr), .is-side-right:dir(rtl)) {
+  @media (min-width: bp.$sheet) {
+    inset-inline-end: auto;
+    inset-inline-start: var(--dp-popup-inset);
+    transform-origin: bottom left;
+
+    &:dir(rtl) {
+      transform-origin: bottom right;
+    }
+  }
+}
+
+/**
+ * The window above the bar — ui-specs/015, `panel: 'bar'`.
+ *
+ * NOT a fixed box of its own. The bar's root is the fixed column at the bottom
+ * centre, and this is the first item in it, so it always ends 12px above the
+ * bar however tall the reader's question has made the field. It is as tall as
+ * what it holds and no taller than the popup is allowed to be: a window that
+ * opened at full height over an empty conversation would be a sheet of nothing
+ * over the article.
+ *
+ * It rises from the bar's centre on the popup's spring, further than the popup
+ * does, because it has further to come.
+ */
+.docpilot__panel--bar {
+  @media (min-width: bp.$sheet) {
+    position: relative;
+    inset: auto;
+    flex: 0 1 auto;
+    min-block-size: 0;
+    max-block-size: var(--dp-popup-block);
+    transform-origin: bottom;
+    --docpilot-rise: 16px;
+    --docpilot-scale: 0.96;
+    --docpilot-blur: 4px;
+    animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop);
+  }
+}
+
+/**
+ * What floats gets the ring AND the shadow — the popup and the bar's window,
+ * one rule between them, so the two floating shapes cannot drift apart.
+ *
+ * The shadow alone used to be the popup's whole edge, which is invisible on a
+ * dark host and erased outright by forced-colors — the one mode where a
+ * floating surface most needs a boundary.
+ */
+.docpilot__panel--popup,
+.docpilot__panel--bar {
+  @media (min-width: bp.$sheet) {
     border: 1px solid var(--dp-line);
     border-radius: var(--dp-r-lg);
     overflow: hidden; // the thread must not paint over the rounded corners
-    box-shadow: var(--dp-shadow);
-    transform-origin: bottom;
-    animation: dp-in-pop var(--dp-dur) var(--dp-ease);
+    // The rim first — ui-specs/016: light on the top edge of the glass. A
+    // literal on purpose: it is light, not a colour of the palette, and on a
+    // light surface it vanishes exactly as a highlight would. The ring is still
+    // the boundary; the rim only says which way is up.
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.14),
+      var(--dp-shadow);
+
+    &.dp-panel-leave-active {
+      animation: dp-out-pop calc(var(--dp-dur) / 2) var(--dp-ease-exit) forwards;
+    }
+  }
+}
+
+/**
+ * ── the glass — ui-specs/016 ────────────────────────────────────────────────
+ *
+ * The window is a MATERIAL over the page rather than paper laid on it: the
+ * drawer, the popup and the bar's window let the page through as colour and
+ * shape, never as text. The sheet below 960px stays opaque — it covers the page
+ * edge to edge behind a scrim, and there is nothing under it worth showing.
+ *
+ * Three numbers, and each is a legibility decision:
+ *
+ *   70%   of `--dp-surface`. At most 30% of a blurred page comes through, so
+ *         `--dp-text` holds 4.5:1 even over a pure black or white field.
+ *         Derived, so under an adapter it is the host's surface.
+ *   24px  the blur. Wide enough that no glyph of the page survives it: glass
+ *         that lets a paragraph through competes with the answer on top of it.
+ *   180%  saturate. A blur greys what it averages; this gives the colour back,
+ *         which is what reads as glass rather than smoke.
+ *
+ * GATED, as the jump pill is. Without `backdrop-filter` a 70% fill is a window
+ * you read the page through, so outside the query the opaque surface stands.
+ * Reduced transparency, more contrast and forced colours put it back as well —
+ * see "glass yields" at the end of this file.
+ */
+.docpilot__panel--drawer,
+.docpilot__panel--popup,
+.docpilot__panel--bar {
+  @media (min-width: bp.$sheet) {
+    @supports ((backdrop-filter: blur(24px)) or (-webkit-backdrop-filter: blur(24px))) {
+      background: color-mix(in srgb, var(--dp-surface) 70%, transparent);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+    }
   }
 }
 
@@ -512,7 +724,7 @@ html.docpilot-dark {
   border-radius: var(--dp-r-pill);
   box-shadow: var(--dp-shadow);
   transform-origin: bottom;
-  animation: dp-in-pop var(--dp-dur) var(--dp-ease);
+  animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop);
 
   // Below the selection where the platform draws its own callout above one.
   // The rise reads the same either way; only its origin flips.
@@ -528,7 +740,7 @@ html.docpilot-dark {
 
 @keyframes dp-in-x {
   from {
-    transform: translateX(100%);
+    transform: translateX(var(--docpilot-from, 100%));
     opacity: 0;
   }
 }
@@ -538,13 +750,227 @@ html.docpilot-dark {
     opacity: 0;
   }
 }
-// `bottom`, not `right bottom`: a corner origin would need a mirrored rule for
-// right-to-left, and the rise reads the same from either edge.
+/**
+ * The knobs the keyframes below read, REGISTERED so they do not inherit.
+ *
+ * A custom property inherits by default, and these are set on a panel whose
+ * descendants pop too: unregistered, the popup's 4px blur reached every
+ * question bubble and suggestion row inside it and none inside the drawer, so
+ * the same element moved differently by shape. Each element sets what it needs;
+ * the initial values are the selection popover's, which predates the knobs. An
+ * engine without `@property` inherits instead — the same motion with a little
+ * more blur, and nothing broken.
+ */
+@property --docpilot-rise {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 8px;
+}
+@property --docpilot-scale {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0.98;
+}
+@property --docpilot-blur {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --docpilot-from {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 100%;
+}
+
+/**
+ * The pop — a rise, a scale and an optional blur, and every one of them a knob.
+ *
+ * ONE keyframe for everything that pops rather than one per thing, because the
+ * things differ only in how far: the popup rises 8px from 94%, the window 16px,
+ * a question bubble 8px from 98%, a check glyph from half its size, a dock 6px
+ * from the edge it opens from. Each sets the `--docpilot-*` it needs; the
+ * fallbacks are the selection popover's, which predates the knobs.
+ */
 @keyframes dp-in-pop {
   from {
-    transform: translateY(8px) scale(0.98);
+    transform: translateY(var(--docpilot-rise, 8px)) scale(var(--docpilot-scale, 0.98));
+    opacity: 0;
+    filter: blur(var(--docpilot-blur, 0px));
+  }
+}
+// Un-blurs into place — an answer's first paint, ui-specs/015.
+@keyframes dp-in-blur {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+// The exits: the entrances, backwards and shorter — ui-specs/015.
+@keyframes dp-out-x {
+  to {
+    transform: translateX(var(--docpilot-from, 100%));
     opacity: 0;
   }
+}
+@keyframes dp-out-y {
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+@keyframes dp-out-pop {
+  to {
+    transform: translateY(4px) scale(0.97);
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
+/**
+ * ── the bar — ui-specs/015, `panel: 'bar'` ──────────────────────────────────
+ *
+ * The root becomes a fixed column at the bottom centre: the window, then the
+ * bar. Fixed as one box rather than as two, so the window's bottom edge is
+ * always 12px above the bar's top edge however many lines the question has
+ * grown to — two fixed boxes would need a measured offset between them, and a
+ * measurement is a frame late.
+ *
+ * `pointer-events: none` on the column and back on for each child: the column's
+ * box spans the 12px gap, and the article under a gap must still take a click.
+ *
+ * Its width is the bar's, and the bar is wide while it is being used — focused,
+ * holding a question, or under the open window, which takes that width too. The
+ * width moves on the panel spring; it is one box on a fixed layer, so the
+ * relayout is the bar's own.
+ */
+.docpilot--bar {
+  position: fixed;
+  z-index: var(--dp-z);
+  inset-inline: 0;
+  inset-block-end: max(var(--dp-popup-inset), env(safe-area-inset-bottom));
+  margin-inline: auto;
+  inline-size: min(var(--dp-bar-inline), calc(100% - 32px));
+  max-block-size: calc(100dvh - var(--dp-top) - var(--dp-popup-inset) * 2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+  transition: inline-size var(--dp-dur) var(--dp-ease);
+
+  > * {
+    pointer-events: auto;
+  }
+
+  &.is-wide {
+    inline-size: min(var(--dp-bar-inline-open), calc(100% - 32px));
+  }
+
+  // Below 960px the open window is the full-screen sheet, and the bar would
+  // be the one thing painted on top of it.
+  @media (max-width: #{bp.$sheet - 1px}) {
+    &.is-open .docpilot__bar {
+      display: none;
+    }
+  }
+}
+
+.docpilot__bar {
+  flex: none;
+  --docpilot-rise: 16px;
+  --docpilot-scale: 0.96;
+  animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop);
+}
+
+/**
+ * The composer's field, in the bar. The same field — its ring, its radius, its
+ * focus ring, its 16px — plus the three things only the bar carries, and the
+ * shadow, because here it floats.
+ *
+ * `grid-auto-flow: column`: the glyph and the text are the two declared
+ * columns, and whatever the moment adds after them — the reopen button, the
+ * hotkey, send — takes an implicit `auto` column of its own, so nothing here has
+ * to count which of them is present.
+ */
+.docpilot__bar .docpilot__field {
+  grid-template-columns: auto 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
+  padding-inline-start: 12px;
+  box-shadow: var(--dp-shadow);
+}
+
+.docpilot__field-glyph {
+  display: grid;
+  place-items: center;
+  block-size: 36px;
+  color: var(--dp-text-dim);
+}
+
+// The hotkey, written the way a search box writes it at rest. Decoration: the
+// trigger's `aria-keyshortcuts` is where the shortcut is stated.
+.docpilot__key {
+  align-self: center;
+  padding: 2px 6px;
+  border-radius: var(--dp-r-sm);
+  background: var(--dp-surface-2);
+  color: var(--dp-text-dim);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+// Up, because that is where the conversation is: the jump pill's chevron,
+// turned round.
+.docpilot__expand {
+  position: relative;
+  align-self: center;
+
+  svg {
+    transform: rotate(180deg);
+  }
+}
+
+/**
+ * Below 960px the bar is a button that LOOKS like the field it opens — the same
+ * ring, radius, height and 16px placeholder — because that is what pressing it
+ * produces: the sheet, with the field in it.
+ */
+.docpilot__bar-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 52px;
+  padding: 8px 16px 8px 12px;
+  border: 1px solid var(--dp-line);
+  border-radius: var(--dp-r-field);
+  background: var(--dp-surface);
+  box-shadow: var(--dp-shadow);
+  color: var(--dp-text-dim);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.65;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--dp-focus);
+    outline-offset: 2px;
+  }
+
+  @media (pointer: coarse) {
+    min-block-size: 60px;
+  }
+}
+
+.docpilot__bar-label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /**
@@ -598,6 +1024,109 @@ html.docpilot-dark {
 .docpilot__header-actions {
   display: flex;
   gap: 4px;
+}
+
+/**
+ * THE LENS — ui-specs/016. A row's hover as one fill that travels from item to
+ * item, where separate hovers used to fade out on one and in on the next.
+ *
+ * Five rows carry one, and the component's `LENS_ROWS` names the item each one
+ * moves between: icon buttons in the header and both action rows, ghost pills
+ * in the scope picker's presets, the suggestions, and the rows of every list of
+ * sources — history included. Along a row it travels across; down a list it
+ * travels down, and takes each item's own width and height on the way.
+ *
+ * It is the row's own `::before`, placed by four plumbing properties the
+ * component writes and switched by `data-lens`. It looks like the hover it
+ * replaces — the wash at the item's corner, and level 1 in a list of sources,
+ * where a row's hover is a selection — so what changed is that the hovers of a
+ * row became one object, not what a hover looks like. The corner never moves
+ * (rule 2); the box does.
+ *
+ * `left` and `translate` are PHYSICAL on purpose. `offsetLeft` is measured from
+ * the left in either writing direction, and a logical inset would put the lens
+ * on the mirror image of its item in right-to-left. `transform-origin` is the
+ * item's centre, so the press scales it in place rather than towards the row's
+ * corner.
+ *
+ * It travels on the settle spring. Arriving from outside the row it does not
+ * travel at all — `data-lens-instant` — and leaving the row it fades in place.
+ */
+.docpilot__header-actions,
+.docpilot__actions,
+.docpilot__picker-presets,
+.docpilot__suggestions,
+.docpilot__sources {
+  position: relative;
+  isolation: isolate; // the lens paints under the items and over nothing else
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    inline-size: var(--docpilot-lens-w, 0px);
+    block-size: var(--docpilot-lens-h, 0px);
+    border-radius: var(--dp-r-sm);
+    background: var(--dp-wash);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(var(--docpilot-lens-x, 0px), var(--docpilot-lens-y, 0px));
+    transform-origin: calc(var(--docpilot-lens-x, 0px) + var(--docpilot-lens-w, 0px) / 2)
+      calc(var(--docpilot-lens-y, 0px) + var(--docpilot-lens-h, 0px) / 2);
+    transition:
+      opacity var(--dp-dur-fast) linear,
+      transform var(--dp-dur) var(--dp-ease),
+      inline-size var(--dp-dur) var(--dp-ease),
+      block-size var(--dp-dur) var(--dp-ease),
+      scale var(--dp-dur-fast) var(--dp-ease);
+  }
+  &[data-lens]::before {
+    opacity: 1;
+  }
+  &[data-lens-instant]::before {
+    transition: opacity var(--dp-dur-fast) linear;
+  }
+}
+
+// Each takes its items' corner, and a list of sources its rows' level.
+.docpilot__picker-presets::before {
+  border-radius: var(--dp-r-pill);
+}
+.docpilot__suggestions::before {
+  border-radius: var(--dp-r-md);
+}
+.docpilot__sources::before {
+  border-radius: var(--dp-r-md);
+  background: var(--dp-surface-2);
+}
+
+// The lens IS the hover in these rows. Focus keeps each item's own fill and
+// ring, so a keyboard reader still sees where the ring is; a linked source keeps
+// its accent. A suggestion's resting surface gives way under the pointer, as it
+// always did — to the lens now instead of to its own wash.
+@media (hover: hover) {
+  .docpilot__header-actions > .docpilot__icon-btn,
+  .docpilot__actions > .docpilot__icon-btn,
+  .docpilot__picker-presets > .docpilot__text-btn,
+  .docpilot__suggestions > .docpilot__suggestion {
+    &:hover:not(:focus-visible) {
+      background: none;
+    }
+  }
+  .docpilot__sources > .docpilot__source:hover:not(:focus-within, .is-linked) {
+    background: none;
+  }
+}
+
+// The lens is the pressed item's fill, so it takes the item's press — where
+// the item has one. A source row does not.
+.docpilot__header-actions:has(> .docpilot__icon-btn:active)::before,
+.docpilot__actions:has(> .docpilot__icon-btn:active)::before,
+.docpilot__picker-presets:has(> .docpilot__text-btn:active)::before,
+.docpilot__suggestions:has(> .docpilot__suggestion:active)::before {
+  scale: 0.96;
 }
 
 // Chrome controls in a 32px box, at `--dp-r-sm`, not the full round: the
@@ -766,6 +1295,13 @@ html.docpilot-dark {
   transition:
     color var(--dp-dur-fast) linear,
     background-color var(--dp-dur-fast) linear;
+  // They rise in, one after another — ui-specs/015. `--docpilot-i` is the row's
+  // place, written by the template; a follow-up row, which has none, rises with
+  // no delay. `backwards`, so a row waiting its turn is not visible early.
+  --docpilot-rise: 6px;
+  --docpilot-scale: 1;
+  animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop) backwards;
+  animation-delay: calc(var(--docpilot-i, 0) * 40ms);
 
   &:hover,
   &:focus-visible {
@@ -803,6 +1339,43 @@ html.docpilot-dark {
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/**
+ * A turn the reader asked while looking — ui-specs/015.
+ *
+ * The question rises out of the corner it is anchored to, on the pop spring, and
+ * the answer un-blurs into place on its first paint — once: the answer element
+ * stays mounted while the stream writes into it, so the keyframe is not
+ * restarted per token. A turn restored from history carries no `is-fresh` and
+ * simply is there.
+ */
+.docpilot__turn.is-fresh {
+  .docpilot__question,
+  .docpilot__quote {
+    transform-origin: bottom right;
+    --docpilot-rise: 8px;
+    --docpilot-scale: 0.98;
+    animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop);
+
+    &:dir(rtl) {
+      transform-origin: bottom left;
+    }
+  }
+  .docpilot__answer {
+    animation: dp-in-blur var(--dp-dur) var(--dp-ease);
+  }
+}
+
+/**
+ * The check glyph is an event — copied, picked — and pops in at half its size.
+ * ui-specs/015. The class comes from the `Icon` component, so every button that
+ * swaps a glyph for the check gets this without knowing it does.
+ */
+.docpilot__glyph-check {
+  --docpilot-rise: 0px;
+  --docpilot-scale: 0.5;
+  animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop);
 }
 
 /**
@@ -1148,6 +1721,9 @@ html.docpilot-dark {
     }
     .docpilot__glyph-done {
       display: inline;
+      --docpilot-rise: 0px;
+      --docpilot-scale: 0.5;
+      animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop);
     }
   }
 
@@ -1916,7 +2492,8 @@ html.docpilot-light .docpilot__passage .shiki span {
   /**
    * ── the glass ─────────────────────────────────────────────────────────────
    *
-   * The one place in the package that blurs, and it is gated: without
+   * The first glass in the package, and the window's (ui-specs/016) is gated
+   * the same way for the same reason: without
    * `backdrop-filter` a 65% fill is just a pill you can read the thread
    * through, which is the failure the rule above exists to prevent. Inside the
    * query the blur does the occluding the alpha gave up, so the two are one
@@ -1932,10 +2509,12 @@ html.docpilot-light .docpilot__passage .shiki span {
    * see the token. `--dp-line` still carries the other three sides, so the ring
    * survives and the pill gains an underside rather than a second outline.
    *
-   * 2px, not more: the pill is 32px tall over running text, and a blur wide
-   * enough to smear a paragraph would read as frosted glass parked in a panel
-   * that has no other glass in it. `--dp-r-pill` is already 999px, which is
-   * every clamp a browser applies to a huge radius — the shape needs nothing.
+   * 2px, not more: the pill is 32px tall over running text, and since 016 it
+   * also lies on a window that is glass itself. A second heavy frost on the
+   * first is glass on glass, the stacking every material guideline warns off;
+   * 2px only quiets the thread under the chevron. `--dp-r-pill` is already
+   * 999px, which is every clamp a browser applies to a huge radius — the shape
+   * needs nothing.
    */
   @supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
     background: color-mix(in srgb, var(--dp-surface) 65%, transparent);
@@ -2307,6 +2886,28 @@ html.docpilot-light .docpilot__passage .shiki span {
   padding: 12px var(--dp-gutter);
   border-block-end: 1px solid var(--dp-line);
   outline: none;
+  // Down from the header it opens under — ui-specs/015.
+  --docpilot-rise: -6px;
+  --docpilot-scale: 1;
+  animation: dp-in-pop var(--dp-dur) var(--dp-ease);
+}
+
+/**
+ * The two composer docks rise from the footnote they open from — ui-specs/015.
+ * Named through the composer: the reasoning box shares `.docpilot__prompt`'s
+ * recipe, and the motion belongs to the docks, not to the recipe.
+ */
+.docpilot__composer > .docpilot__picker,
+.docpilot__composer > .docpilot__prompt {
+  --docpilot-rise: 6px;
+  --docpilot-scale: 1;
+  animation: dp-in-pop var(--dp-dur) var(--dp-ease);
+}
+
+// Every dock leaves as a fade: it is replaced by what it covered, and a slide
+// back would draw the eye to the part of the panel the reader is leaving.
+.dp-dock-leave-active {
+  animation: dp-fade var(--dp-dur-fast) linear reverse forwards;
 }
 
 .docpilot__dock-acts {
@@ -2493,6 +3094,27 @@ html.docpilot-light .docpilot__passage .shiki span {
     box-shadow: var(--dp-shadow);
     color: var(--dp-text);
     gap: 8px;
+    // It pops in — ui-specs/015 — on the page's first paint, and again each
+    // time it comes back from under a drawer or a sheet: an element whose
+    // `display` leaves `none` starts its animation over, so no script says when.
+    --docpilot-rise: 0px;
+    --docpilot-scale: 0.6;
+    animation: dp-in-pop var(--dp-dur) var(--dp-ease-pop);
+
+    // The fifth pressable control, on the same terms as the other four.
+    &:active {
+      transform: scale(0.96);
+      transition: transform var(--dp-dur-fast) var(--dp-ease);
+    }
+  }
+
+  // The leading edge — `ui.side`, ui-specs/015. The same mapping the drawer
+  // and the popup make, and for this element it is the reason the mapping is
+  // CSS: the button is server-rendered, and no script has looked at the page
+  // when it is first painted.
+  &.is-fab:is(.is-side-start, .is-side-left:dir(ltr), .is-side-right:dir(rtl)) {
+    inset-inline-end: auto;
+    inset-inline-start: var(--dp-popup-inset);
   }
 
   /**
@@ -2516,9 +3138,45 @@ html.docpilot-light .docpilot__passage .shiki span {
     font-weight: 500;
     white-space: nowrap;
 
-    .docpilot-nav-trigger__glyph {
+    .docpilot-nav-trigger__icon {
       margin-inline-start: -4px;
     }
+  }
+}
+
+/**
+ * The glyph's box — ui-specs/015. Every placement draws its sparkle in it; the
+ * floating button draws a chevron on the same spot as well, and while the popup
+ * above it is open the two trade places: the sparkle turns away and shrinks, the
+ * chevron turns in pointing the way the popup will go when pressed. One grid
+ * cell, so neither drawing moves the label beside it.
+ */
+.docpilot-nav-trigger__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+
+  > svg {
+    grid-area: 1 / 1;
+    transition:
+      transform var(--dp-dur) var(--dp-ease-pop),
+      opacity var(--dp-dur-fast) linear;
+  }
+}
+
+.docpilot-nav-trigger__close {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.6);
+}
+
+.docpilot-nav-trigger.is-fab[aria-expanded='true'] {
+  .docpilot-nav-trigger__glyph {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.6);
+  }
+  .docpilot-nav-trigger__close {
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -2541,7 +3199,8 @@ html.docpilot-light .docpilot__passage .shiki span {
  * reader has to dismiss, and there is nothing here to dismiss it with — the
  * panel is shut. Three is the arrival, and what stays afterwards is a mark.
  */
-.docpilot-nav-trigger__badge {
+.docpilot-nav-trigger__badge,
+.docpilot__dot {
   position: absolute;
   inset-block-start: -2px;
   inset-inline-end: -2px;
@@ -2611,13 +3270,17 @@ body:not(:has(.docpilot-nav-trigger.is-fab)) {
  * CSS. A browser without `:has()` simply does not apply these, and the FAB
  * stays visible behind a drawer that covers it: cosmetic, and a miss in the
  * safe direction.
+ *
+ * A panel playing its exit no longer counts — ui-specs/015. The close path
+ * hands focus back to this button the moment the exit starts, and `focus()` on
+ * a `display: none` element is a silent no-op.
  */
-body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
+body:has(.docpilot__panel--drawer:not(.dp-panel-leave-active)) .docpilot-nav-trigger.is-fab {
   display: none;
 }
 
 @media (max-width: #{bp.$sheet - 1px}) {
-  body:has(.docpilot__panel) .docpilot-nav-trigger.is-fab {
+  body:has(.docpilot__panel:not(.dp-panel-leave-active)) .docpilot-nav-trigger.is-fab {
     display: none;
   }
 }
@@ -2693,19 +3356,15 @@ body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
   // sitting on a system-coloured button with nothing between them. This is the
   // one mode where it needs a real edge, and it is the only place in the
   // package that draws one for it.
-  .docpilot-nav-trigger__badge {
+  .docpilot-nav-trigger__badge,
+  .docpilot__dot {
     forced-color-adjust: none;
     background: Highlight;
     border: 1px solid CanvasText;
     box-shadow: none;
   }
-  // The fill is forced to a system colour here; the blur underneath it is not,
-  // so the pill would sit as a smeared patch of thread inside a mode whose whole
-  // contract is flat system colours. Drop the glass and keep the ring.
-  .docpilot__jump {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
+  // The jump pill's glass and the window's are dropped by "glass yields" below,
+  // which names this mode among its three.
   // The system palette repaints `color` but never touches -webkit-text-fill-
   // color, so a label left at `transparent` renders as an empty line in the one
   // mode with the least tolerance for a missing string. Restore the whole trio.
@@ -2717,10 +3376,80 @@ body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+/**
+ * GLASS YIELDS — ui-specs/016. Every translucent surface in the package goes
+ * back to the opaque one it was made from, in three modes:
+ *
+ * - `prefers-reduced-transparency` — the reader asked for exactly this. Safari
+ *   does not report it yet; a reader there who also raised contrast is caught
+ *   by the next line.
+ * - `prefers-contrast: more` — a blurred page under the text is contrast the
+ *   reader does not get to choose.
+ * - `forced-colors` — the fill is forced to a system colour and the blur under
+ *   it is not, so the window would sit as a smeared patch of page inside a mode
+ *   whose whole contract is flat system colours. The ring stays.
+ */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
   .docpilot__panel,
-  .docpilot__ask {
+  .docpilot__jump {
+    background: var(--dp-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+// The still variant — `ui.motion: 'auto' | 'reduce'`, ui-specs/017. Under the
+// default `'full'` none of this applies, whatever the OS says.
+@include motion.still {
+  // Every entrance becomes a fade, and nothing waits its turn. ui-specs/015
+  // grew this list from the two panel shapes and the popover to everything
+  // that now arrives with a movement.
+  .docpilot__panel,
+  .docpilot__ask,
+  .docpilot__bar,
+  .docpilot__dock,
+  .docpilot__composer > .docpilot__picker,
+  .docpilot__composer > .docpilot__prompt,
+  .docpilot__suggestion,
+  .docpilot__turn.is-fresh .docpilot__question,
+  .docpilot__turn.is-fresh .docpilot__quote,
+  .docpilot__turn.is-fresh .docpilot__answer,
+  .docpilot__glyph-check,
+  .docpilot__answer .docpilot__code-copy.is-copied .docpilot__glyph-done,
+  .docpilot-nav-trigger.is-fab {
     animation-name: dp-fade;
+    animation-delay: 0s;
+  }
+  // And every exit is the same fade, reversed. The scrim and the docks already
+  // leave that way.
+  .docpilot__panel.dp-panel-leave-active {
+    animation-name: dp-fade;
+    animation-direction: reverse;
+  }
+  // The bar keeps its two widths and stops travelling between them.
+  .docpilot--bar {
+    transition: none;
+  }
+  // The lens still says which item is under the pointer, and stops travelling
+  // there — ui-specs/016. It appears in place, as a hover did.
+  .docpilot__header-actions::before,
+  .docpilot__actions::before,
+  .docpilot__picker-presets::before,
+  .docpilot__suggestions::before,
+  .docpilot__sources::before {
+    transition: opacity var(--dp-dur-fast) linear;
+  }
+  .docpilot__header-actions:has(> .docpilot__icon-btn:active)::before,
+  .docpilot__actions:has(> .docpilot__icon-btn:active)::before,
+  .docpilot__picker-presets:has(> .docpilot__text-btn:active)::before,
+  .docpilot__suggestions:has(> .docpilot__suggestion:active)::before {
+    scale: none;
+  }
+  // The floating button still changes its glyph while the popup is open — that
+  // is state — and stops turning it.
+  .docpilot-nav-trigger__close,
+  .docpilot-nav-trigger.is-fab[aria-expanded='true'] .docpilot-nav-trigger__glyph {
+    transform: none;
   }
   .docpilot__status-dot {
     animation: none;
@@ -2728,7 +3457,8 @@ body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
   }
   // The dot stays; the jump goes. What it says is carried by its being there at
   // all, which is why this is `animation: none` and not `display: none`.
-  .docpilot-nav-trigger__badge {
+  .docpilot-nav-trigger__badge,
+  .docpilot__dot {
     animation: none;
     transform: none;
   }
@@ -2741,13 +3471,14 @@ body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
     -webkit-text-fill-color: currentColor;
   }
   // Every control that answers a press with `scale(0.96)`. The list grew with
-  // the pill system — a press response that survives this query is the one
+  // the pill system — a press response that survives this block is the one
   // motion a reader asked not to see.
   .docpilot__icon-btn:active,
   .docpilot__send:active,
   .docpilot__text-btn:active,
   .docpilot__suggestion:active,
-  .docpilot__jump:active {
+  .docpilot__jump:active,
+  .docpilot-nav-trigger.is-fab:active {
     transform: none;
   }
   // The one rotation in the package — ui-specs/009. The chevron still has to
@@ -2763,3 +3494,5 @@ body:has(.docpilot__panel--drawer) .docpilot-nav-trigger.is-fab {
     opacity: 0;
   }
 }
+
+} // @layer docpilot

@@ -341,6 +341,9 @@ const UI_EN = {
     counter: '{n}/1000',
     hint: 'Type a question to send. Searching {scope}.',
     scopeAria: '{scope}. Change the pages searched',
+    // The bar's button that brings the window back over a conversation the
+    // reader put away — ui-specs/015. Only `panel: 'bar'` draws it.
+    expand: 'Show the conversation',
   },
   quote: {
     // The selection popover's one action. Deliberately not `trigger.label`,

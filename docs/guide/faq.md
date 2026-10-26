@@ -118,7 +118,7 @@ The `ui` object in the config. The full list of values is [`ui`](/reference/conf
 export const docPilot = {
   ui: {
     trigger: 'fab',            // 'fab' | 'nav' | 'screen' | 'both' | 'none' | an array
-    panel: 'auto',             // 'drawer' — full height at the right edge | 'popup' — above the button
+    panel: 'auto',             // 'bar' — at the bottom centre | 'drawer' — full height at the right edge | 'popup' — above the button
     layout: 'overlay',         // 'push' — the page moves aside instead of being covered
     theme: 'auto',             // 'light' | 'dark' — pin the scheme regardless of the site
     fabLabel: 'Ask AI',        // a string is taken verbatim; true — from i18n; false — icon only
@@ -131,7 +131,7 @@ export const docPilot = {
 Worth knowing:
 
 - **`trigger` is a list, not an either/or.** `'nav'` = `['nav', 'screen']` (a button in the navbar plus a row in the mobile menu), `'both'` = all three. `'none'` removes the buttons, but <kbd>⌘I</kbd> keeps working — [`ui.trigger`](/reference/config#ui-trigger).
-- **`panel: 'auto'` follows the trigger:** with a `fab` it is a popup, without one a drawer. By default that means a popup — [`ui.panel`](/reference/config#ui-panel).
+- **`panel: 'auto'` follows the trigger:** with a `fab` it is the bar at the bottom centre, without one a drawer. By default that means the bar; `panel: 'popup'` brings back the corner button and its popup — [`ui.panel`](/reference/config#ui-panel).
 - **`theme: 'light' | 'dark'` — a pinned panel wears DocPilot's palette, not your site's.** On VitePress `--dp-surface` is mapped onto `--vp-c-bg`, and that holds one value at a time — [`ui.theme`](/reference/config#ui-theme).
 - **An invalid value does not break the build**: it is printed to stdout and falls back to the default.
 
@@ -183,7 +183,7 @@ An adapter of your own for a host we do not ship is a `:root` block that re-decl
 ui: { font: '--brand-font', fontMono: 'JetBrains Mono, monospace' }
 ```
 
-`ui.font` is written onto `<html>` as an inline property — **the one layer that beats the adapter** — which is why it lands on both VitePress and Docusaurus. The CSS route (`:root { --dp-font: var(--my-font) }`) is what you need when the value depends on a media query, on `[data-theme]`, or on a container.
+`ui.font` is written onto `<html>` as an inline property, which beats the adapter on both VitePress and Docusaurus. The CSS route (`:root { --dp-font: var(--my-font) }`) beats it too, from any unlayered stylesheet — the adapter is in `@layer docpilot` — and is what you need when the value depends on a media query, on `[data-theme]`, or on a container.
 
 `--dp-font-mono` is a real stack rather than `inherit`: the page has no monospace face for the panel to borrow.
 
@@ -196,7 +196,7 @@ The highlighter is pluggable — Shiki, Prism, highlight.js, or your own; the wh
 - **Radii are not animated** — they are static on purpose: a changing shape competes with the colour change that has already said the same thing.
 - **`--dp-alert` is not mapped onto the host palette** — it is the one colour outside your theme, a 10px dot on the trigger when an answer arrives while the panel is closed ([`ui.background`](/reference/config#ui-background)).
 - **Nothing nested may ask for `--dp-font`**: `inherit` resolves relative to the element, so `var(--dp-font)` inside a monospace block returns the monospace face.
-- `prefers-reduced-motion` and `forced-colors` are handled — do not duplicate them with rules of your own: [What degrades, and how](/guide/appearance#what-degrades-and-how).
+- Reduced motion and `forced-colors` are handled — do not duplicate them with rules of your own. Motion plays by default whatever the OS says; [`ui.motion: 'auto'`](/reference/config#ui-motion) defers to `prefers-reduced-motion`. See [What degrades, and how](/guide/appearance#what-degrades-and-how).
 
 ---
 

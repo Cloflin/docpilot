@@ -39,6 +39,9 @@ and a research pass first, and a change that moves a rule updates 000 and
 | [012](012-nothing-is-lost-to-a-reload.md) | Leaving the page keeps what was written, what was typed, and says so while you wait |
 | [013](013-an-answer-that-was-already-written.md) | An opener whose answer the build already wrote settles instantly, in the reader's language or not at all |
 | [014](014-the-key-that-stopped-the-answer.md) | Enter during a running turn no longer throws the answer away; the composer stops being the thing that enforces one turn at a time |
+| [015](015-the-panel-opens-three-ways.md) | Three shapes — a sidebar that moves the page from either edge, the popup, and a bar at the bottom centre, the default — and motion that leaves as well as arrives, on springs written as `linear()` |
+| [016](016-the-window-is-glass.md) | The window is frosted glass that yields to reduced transparency, contrast and forced colours; a row or a list has one hover fill that travels between its items |
+| [017](017-motion-by-default-and-one-layer.md) | `ui.motion` — the panel moves whatever the OS says, and `'auto'` defers to it; every stylesheet is in `@layer docpilot`, save three VitePress patches |
 
 ## The rules
 

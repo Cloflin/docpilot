@@ -28,8 +28,23 @@ import path from 'node:path'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const outDir = path.join(root, 'dist')
 
+/**
+ * The third column is a layer ORDER statement written ahead of the bundle, and
+ * only the bundle. Every rule the panel ships is in `@layer docpilot`
+ * (ui-specs/017), and between two layers the one NAMED FIRST loses. VitePress 2
+ * keeps its Preflight-style reset in `@layer __vitepress_base` — `button {
+ * padding: 0 }`, `ul { list-style: none }` — and `src/theme/index.ts` imports this
+ * file before `vitepress/theme`, so without the statement `docpilot` is named
+ * first and the reset strips every button and list in the panel. Naming both
+ * here settles it whichever file the browser reaches first; on a host with no
+ * such layer the extra name is an empty layer and costs nothing.
+ *
+ * Not in `docpilot.scss`, which may hold nothing but its two `@use` lines (rule
+ * 9), and not in `vitepress.scss`, which compiles after the core inside the
+ * bundle — too late to name anything first.
+ */
 const ENTRIES = [
-  ['src/theme/styles/docpilot.scss', 'docpilot.css'],
+  ['src/theme/styles/docpilot.scss', 'docpilot.css', '@layer __vitepress_base,docpilot;'],
   ['src/theme/styles/core.scss', 'docpilot-core.css'],
   ['src/theme/styles/vitepress.scss', 'docpilot-vitepress.css'],
   ['src/theme/styles/docusaurus.scss', 'docpilot-docusaurus.css'],
@@ -74,18 +89,23 @@ try {
 
 mkdirSync(outDir, { recursive: true })
 
-for (const [from, to] of ENTRIES) {
-  const { css } = sass.compile(path.join(root, from), {
+for (const [from, to, prelude = ''] of ENTRIES) {
+  const { css: compiled } = sass.compile(path.join(root, from), {
     style: 'compressed',
     silenceDeprecations: ['legacy-js-api'],
   })
   // An empty output is the failure mode a split invites: a renamed partial, a
   // `@use` that resolves to nothing, and the build still "succeeds" — with a
   // stylesheet that silently ships no rules. Fail here instead of in a release.
-  if (!css.trim()) {
+  if (!compiled.trim()) {
     console.error(`[docpilot] ${from} compiled to an empty stylesheet — refusing to write ${to}`)
     process.exit(1)
   }
+  // Behind whatever marks the encoding, which may not move: compressed Sass
+  // writes a BOM the moment a rule carries a non-ASCII byte, and `@charset`
+  // anywhere but first is ignored.
+  const head = compiled.match(/^(﻿|@charset\s+[^;]+;)?/)[0]
+  const css = head + prelude + compiled.slice(head.length)
   writeFileSync(path.join(outDir, to), css)
   console.log(`[docpilot] dist/${to}  ${(css.length / 1024).toFixed(1)} KB`)
 }

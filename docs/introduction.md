@@ -5,7 +5,7 @@ description: An AI chat assistant you embed on any website. It answers from your
 
 <script setup>
 const features = [
-  { title: 'Triggers and layout', body: 'A floating button, a navbar icon, ⌘I, or a link under each article.', link: '/features/triggers' },
+  { title: 'Triggers and layout', body: 'A question bar, a navbar icon, ⌘I, or a link under each article.', link: '/features/triggers' },
   { title: 'Search scope', body: 'All docs, this page, this section, or hand-picked pages.', link: '/features/scope' },
   { title: 'Sources and passages', body: 'Every claim is numbered. Open a source to read the exact passage.', link: '/features/sources' },
   { title: 'Ask about a selection', body: 'Select text on the page or in an answer, press Ask AI.', link: '/features/quote' },
@@ -62,7 +62,7 @@ In the static install, steps 1 and 2 run without a server, so the only thing you
 
 ## How small the index is
 
-An embedding model returns 4,096 numbers per chunk, each a 32-bit float. DocPilot keeps one bit of each: its sign. This site's own index is 390 KB for 779 chunks at 4096 dimensions — the whole documentation you are reading.
+An embedding model returns 4,096 numbers per chunk, each a 32-bit float. DocPilot keeps one bit of each: its sign. This site's own index is 394 KB for 788 chunks at 4096 dimensions — the whole documentation you are reading.
 
 <Compression />
 

@@ -16,7 +16,7 @@ Six doors, and a site can have all of them at once.
 |---|---|---|
 | **Navbar button** | beside your search box | [`ui.trigger: 'nav'`](/reference/config#ui-trigger) |
 | **Mobile row** | a text row inside the hamburger menu | carried by `'nav'`; `'screen'` on its own |
-| **Floating button** | bottom corner, every page, every width | `ui.trigger: 'fab'` — **the default**, with [`ui.fabLabel`](/reference/config#ui-fablabel-ui-fabicon) for the words on it |
+| **Floating button** | on every page, at every width — the bar at the bottom centre by default, a button in the corner with `panel: 'popup'` or `'drawer'` | `ui.trigger: 'fab'` — **the default**, with [`ui.fabLabel`](/reference/config#ui-fablabel-ui-fabicon) for the words on the corner button |
 | **<kbd>⌘I</kbd> / <kbd>Ctrl I</kbd>** | always bound, even with no visible button at all | nothing to set |
 | **Under an article** | "Didn't find it? Ask DocPilot", in the `doc-footer-before` slot | rendered by the theme wrapper |
 | **A selection** | select a passage, press **Ask AI** above it | [`quote.fromDocs`](/reference/config#quote-fromdocs) — off by default |
@@ -25,13 +25,26 @@ Six doors, and a site can have all of them at once.
 mounts the panel itself, `open()` on the handle from
 [`mountDocPilot`](/install/javascript) is a seventh door.
 
-**The panel has two shapes.** A drawer pinned to the trailing edge at full
-height, or a popup floating above the button that opened it —
-[`ui.panel`](/reference/config#ui) picks one, and `'auto'` follows the trigger:
-the shipped floating button opens the popup, and `trigger: 'nav'` brings the
-drawer back with it.
-[`ui.layout: 'push'`](/reference/config#ui-layout) makes the page move aside
-instead of being covered.
+**The panel has three shapes**, and [`ui.panel`](/reference/config#ui-panel)
+picks one:
+
+| shape | what the reader sees | setting |
+|---|---|---|
+| **Bar** | a question bar at the bottom centre of every page; the conversation rises in a window above it as soon as the reader types — the shipped default | `'auto'` with the floating button, or `'bar'` |
+| **Popup** | floating above the corner button that opened it | `'popup'` |
+| **Sidebar** | a full-height drawer at an edge; with `layout: 'push'` the page moves aside instead of being covered | `'drawer'` — and `'auto'` without the floating button — plus [`ui.layout: 'push'`](/reference/config#ui-layout) and [`ui.side`](/reference/config#ui-side) |
+
+```js
+ui: { panel: 'drawer', layout: 'push', side: 'left' }   // a sidebar that moves the page right
+ui: { panel: 'popup', side: 'left' }                    // the button and its popup, bottom left
+ui: { panel: 'bar' }                                    // ask from the bottom of the page — the default
+```
+
+`'auto'` follows the trigger: the shipped floating placement is the bar, and
+`trigger: 'nav'` brings the drawer back with it. The popup is the one shape it
+never picks — the corner button and its popup are chosen by name. Below 960px
+every shape is the same full-screen sheet; the bar stays on the page as a button
+that opens it.
 
 **It warms up before it is opened.** [`ui.prefetch`](/reference/config#ui-prefetch)
 fetches the index on hover by default, so the first question is not also the
@@ -282,7 +295,7 @@ Panel chrome follows the page's locale. The credential warning and the greeting
 reply follow the language the **reader typed in**, which is not always the same
 thing.
 
-All 173 reader-facing strings are replaceable one at a time, in 25 groups, in the
+All 174 reader-facing strings are replaceable one at a time, in 25 groups, in the
 same shape as VitePress's own local-search i18n:
 
 ```js

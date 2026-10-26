@@ -125,7 +125,7 @@ import {
   DEFAULTS,
   THEME_ONLY,
 } from '../src/config.js'
-import { resolveUi, UI_DEFAULTS, UI_TRIGGERS } from '../src/theme/docpilot/ui.js'
+import { pushEdge, resolveUi, UI_DEFAULTS, UI_PANELS, UI_SIDES, UI_TRIGGERS } from '../src/theme/docpilot/ui.js'
 import {
   record as recordFeedback,
   resolveFeedback,
@@ -3196,8 +3196,43 @@ describe('009 — the panel beside the docs', () => {
   // The SUBJECT is the host's element; our class only says when. That is rule
   // 2 of the adapter, and the reason the core may not carry this rule at all.
   it('lives in the adapter, on a foreign subject', () => {
-    expect(adapter).toContain('html.docpilot-push .VPContent')
+    expect(adapter).toContain('html.docpilot-push .Layout')
     expect(core).not.toContain('VPContent')
+    expect(core).not.toContain('.Layout')
+  })
+
+  /**
+   * ui-specs/015 — from either edge, on both adapters, and back again.
+   *
+   * The padding is keyed on the EDGE class, so the trailing rule that shipped
+   * cannot also fire for a drawer on the leading edge; and the way back has a
+   * class of its own, because a transition is read from the state being
+   * entered — keyed on the open classes alone, the page snapped home on the
+   * frame the drawer began to leave.
+   */
+  it('moves the page from either edge, and back on the way out', () => {
+    const docusaurus = srcText('src/theme/styles/docusaurus.scss')
+    expect(adapter).toContain('html.docpilot-push-end .Layout')
+    expect(adapter).toContain('html.docpilot-push-start .Layout')
+    expect(adapter).toContain('html.docpilot-push-start:dir(ltr) .VPSidebar')
+    expect(adapter).toContain('html.docpilot-push-closing .Layout')
+    // `.VPContent` lost to VitePress's own scoped padding from 1440px up —
+    // `(0,2,1)` against `(0,3,0)` — so the subject moved to `.Layout`.
+    expect(adapter).not.toMatch(/html\.docpilot-push[a-z-]* \.VPContent/)
+    expect(docusaurus).toContain('html.docpilot-push-end .main-wrapper')
+    expect(docusaurus).toContain('html.docpilot-push-start .main-wrapper')
+    expect(docusaurus).toContain('html.docpilot-push-closing .main-wrapper')
+  })
+
+  it('names the edge from the side and the page direction', () => {
+    expect(pushEdge('end', false)).toBe('end')
+    expect(pushEdge('start', true)).toBe('start')
+    expect(pushEdge('left', false)).toBe('start')
+    expect(pushEdge('left', true)).toBe('end')
+    expect(pushEdge('right', false)).toBe('end')
+    expect(pushEdge('right', true)).toBe('start')
+    // A value that never met the resolver is the default edge, not a throw.
+    expect(pushEdge(undefined, false)).toBe('end')
   })
 
   // `overlay` is what shipped, and an upgrade must not rearrange a docs site.
@@ -3212,7 +3247,7 @@ describe('009 — the panel beside the docs', () => {
   // push. And the class must not outlive the component that wrote it.
   it('is desktop-only and is cleaned up on unmount', () => {
     expect(panel).toContain("layout === 'push' && !narrow")
-    expect(panel).toContain('document.documentElement.classList.remove(LAYOUT_CLASS)')
+    expect(panel).toContain('document.documentElement.classList.remove(LAYOUT_CLASS, CLOSING_CLASS, ...PUSH_EDGES)')
   })
 })
 
@@ -4428,16 +4463,19 @@ describe('resolveUi — trigger placement and panel shape', () => {
     return fn
   }
 
-  it('defaults to the floating button and the popup', () => {
+  it('defaults to the floating placement, drawn as the bar', () => {
     const err = collect()
     const expected = {
       // The WORD `'fab'` is one placement — deliberately, and unlike `'nav'`,
       // which is two: the floating button is on screen at every width already.
       trigger: ['fab'],
-      panel: 'popup',
+      // ui-specs/015, since 2.0: the bar IS the floating placement under
+      // `'auto'`, so the list keeps `fab` and only the corner button stops.
+      panel: 'bar',
+      side: 'end',
       showNavTrigger: false,
       showScreen: false,
-      showFab: true,
+      showFab: false,
       fabLabel: true,
       fabIcon: true,
       layout: 'overlay',
@@ -4447,6 +4485,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
       background: 'notify',
       credit: true,
       theme: 'auto',
+      motion: 'full',
       font: null,
       fontMono: null,
     }
@@ -4460,15 +4499,20 @@ describe('resolveUi — trigger placement and panel shape', () => {
   })
 
   it('resolves `auto` from the trigger, in both directions', () => {
-    expect(resolveUi({ ui: { trigger: 'fab' } }).panel).toBe('popup')
+    expect(resolveUi({ ui: { trigger: 'fab' } }).panel).toBe('bar')
     expect(resolveUi({ ui: { trigger: 'nav' } }).panel).toBe('drawer')
     // Spelling the default out loud must not change what it resolves to.
-    expect(resolveUi({ ui: { trigger: 'fab', panel: 'auto' } }).panel).toBe('popup')
+    expect(resolveUi({ ui: { trigger: 'fab', panel: 'auto' } }).panel).toBe('bar')
     expect(resolveUi({ ui: UI_DEFAULTS })).toEqual(resolveUi({}))
-    // The floating button decides it even in company: the popup is anchored to
-    // the corner it sits in, and the drawer is anchored to nothing.
-    expect(resolveUi({ ui: { trigger: ['nav', 'fab'] } }).panel).toBe('popup')
+    // The floating placement decides it even in company: under `'auto'` it IS
+    // the bar, and the drawer is anchored to nothing.
+    expect(resolveUi({ ui: { trigger: ['nav', 'fab'] } }).panel).toBe('bar')
     expect(resolveUi({ ui: { trigger: ['nav', 'screen'] } }).panel).toBe('drawer')
+    // The corner button and its popup are a name now, carried out in silence.
+    expect(resolveUi({ ui: { trigger: 'fab', panel: 'popup' } })).toMatchObject({
+      panel: 'popup',
+      showFab: true,
+    })
   })
 
   /**
@@ -4618,6 +4662,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
     expect(resolveUi({ ui: { trigger: 'nav', panel: 'popup' } }, err)).toEqual({
       trigger: ['nav', 'screen'],
       panel: 'popup',
+      side: 'end',
       showNavTrigger: true,
       showScreen: true,
       showFab: false,
@@ -4630,12 +4675,14 @@ describe('resolveUi — trigger placement and panel shape', () => {
       background: 'notify',
       credit: true,
       theme: 'auto',
+      motion: 'full',
       font: null,
       fontMono: null,
     })
     expect(resolveUi({ ui: { trigger: 'fab', panel: 'drawer' } }, err)).toEqual({
       trigger: ['fab'],
       panel: 'drawer',
+      side: 'end',
       showNavTrigger: false,
       showScreen: false,
       showFab: true,
@@ -4648,6 +4695,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
       background: 'notify',
       credit: true,
       theme: 'auto',
+      motion: 'full',
       font: null,
       fontMono: null,
     })
@@ -4694,17 +4742,66 @@ describe('resolveUi — trigger placement and panel shape', () => {
     expect(err.messages[0]).toContain('ui.fabLabel')
   })
 
+  /**
+   * ui-specs/015 — the third shape, and the edge.
+   *
+   * The bar is what `'auto'` makes of the floating placement since 2.0, and
+   * only of that one: a list without `fab` still gets the drawer, so a site that
+   * moved its button into the navbar never finds a bar it did not ask for. The
+   * bar replaces the floating button — the trigger list keeps `fab`, so a
+   * second pass is still a no-op, and only the drawing stops.
+   */
+  it('makes the floating placement a bar, and lets it replace the floating button', () => {
+    const err = collect()
+    expect(UI_PANELS).toEqual(['auto', 'drawer', 'popup', 'bar'])
+    for (const trigger of ['fab', 'both', ['nav', 'fab'], ['fab', 'screen']]) {
+      expect(resolveUi({ ui: { trigger } }, err).panel).toBe('bar')
+    }
+    for (const trigger of ['nav', 'screen', 'none', ['nav']]) {
+      expect(resolveUi({ ui: { trigger } }, err).panel).toBe('drawer')
+    }
+    const bar = resolveUi({ ui: { panel: 'bar' } }, err)
+    expect(bar).toMatchObject({ trigger: ['fab'], panel: 'bar', showFab: false })
+    // The navbar placements are not the floating one, and keep working.
+    expect(resolveUi({ ui: { trigger: 'both', panel: 'bar' } }, err)).toMatchObject({
+      showNavTrigger: true,
+      showScreen: true,
+      showFab: false,
+    })
+    expect(resolveUi({ ui: bar }, err)).toEqual(bar)
+    expect(err.messages).toEqual([])
+  })
+
+  it('places every shape at an edge, and names a bad one', () => {
+    const err = collect()
+    expect(UI_SIDES).toEqual(['end', 'start', 'left', 'right'])
+    expect(resolveUi({}, err).side).toBe('end')
+    for (const side of UI_SIDES) {
+      const out = resolveUi({ ui: { side } }, err)
+      expect(out.side).toBe(side)
+      // The word survives a second pass — the direction is the page's, not the
+      // build's, so nothing here may settle it.
+      expect(resolveUi({ ui: out }, err).side).toBe(side)
+    }
+    expect(err.messages).toEqual([])
+
+    expect(resolveUi({ ui: { side: 'top' } }, err).side).toBe('end')
+    expect(err.messages).toHaveLength(1)
+    expect(err.messages[0]).toContain('ui.side')
+    expect(err.messages[0]).toContain('"top"')
+  })
+
   it('reports a value outside the enum and falls back', () => {
     const err = collect()
     // The panel still resolves off the trigger that WAS given: a typo in one
     // key must not quietly undo the other.
     expect(resolveUi({ ui: { trigger: 'fab', panel: 'modal' } }, err)).toMatchObject({
       trigger: ['fab'],
-      panel: 'popup',
+      panel: 'bar',
     })
     expect(resolveUi({ ui: { trigger: 'sidebar' } }, err)).toMatchObject({
       trigger: ['fab'],
-      panel: 'popup',
+      panel: 'bar',
     })
     expect(err.messages).toHaveLength(2)
     expect(err.messages[0]).toContain('ui.panel')
@@ -4748,6 +4845,28 @@ describe('resolveUi — trigger placement and panel shape', () => {
     expect(err.messages[0]).toContain('"darkk"')
   })
 
+  /**
+   * `ui.motion` — ui-specs/017. `'full'` by default, whatever the OS says;
+   * `'auto'` survives resolution for `theme`'s reason, and `'system'` is its
+   * other spelling.
+   */
+  it('moves by default, and keeps `auto` for the browser to settle', () => {
+    const err = collect()
+    expect(resolveUi({}, err).motion).toBe('full')
+    for (const motion of ['full', 'auto', 'reduce']) {
+      expect(resolveUi({ ui: { motion } }, err).motion).toBe(motion)
+    }
+    expect(resolveUi({ ui: { motion: 'system' } }, err).motion).toBe('auto')
+    expect(err.messages).toEqual([])
+  })
+
+  it('reports a motion outside the enum and falls back to full motion', () => {
+    const err = collect()
+    expect(resolveUi({ ui: { motion: false } }, err).motion).toBe('full')
+    expect(err.messages).toHaveLength(1)
+    expect(err.messages[0]).toContain('ui.motion')
+  })
+
   // The property the two-sided call depends on: the build resolves and emits
   // under the same key, the browser resolves what it received. If a resolved
   // member were not itself legal input, the second pass would rewrite it.
@@ -4766,7 +4885,7 @@ describe('resolveUi — trigger placement and panel shape', () => {
       ['nav', 'fab'],
       ['nav', 'screen', 'fab'],
     ]) {
-      for (const panel of [undefined, 'auto', 'drawer', 'popup']) {
+      for (const panel of [undefined, 'auto', 'drawer', 'popup', 'bar']) {
         // Every resolved value of the union is itself legal input, which is what
         // makes the second pass a no-op rather than a rewrite.
         for (const fabLabel of [undefined, true, false, 'Ask AI']) {
@@ -4947,6 +5066,7 @@ describe('ui — from settings to the browser', () => {
     expect(resolveDocPilot({ ui: { trigger: 'fab' } }).ui).toEqual({
       trigger: 'fab',
       panel: 'auto',
+      side: 'end',
       fabLabel: true,
       fabIcon: true,
       layout: 'overlay',
@@ -4956,6 +5076,7 @@ describe('ui — from settings to the browser', () => {
       background: 'notify',
       credit: true,
       theme: 'auto',
+      motion: 'full',
       font: null,
       fontMono: null,
     })
@@ -4964,10 +5085,11 @@ describe('ui — from settings to the browser', () => {
   it('emits the resolved structure, so no component re-derives it', () => {
     expect(themeDocPilot(resolveDocPilot({})).ui).toEqual({
       trigger: ['fab'],
-      panel: 'popup',
+      panel: 'bar',
+      side: 'end',
       showNavTrigger: false,
       showScreen: false,
-      showFab: true,
+      showFab: false,
       fabLabel: true,
       fabIcon: true,
       layout: 'overlay',
@@ -4977,12 +5099,14 @@ describe('ui — from settings to the browser', () => {
       background: 'notify',
       credit: true,
       theme: 'auto',
+      motion: 'full',
       font: null,
       fontMono: null,
     })
-    expect(themeDocPilot(resolveDocPilot({ ui: { trigger: 'fab', fabLabel: 'Ask AI' } })).ui).toEqual({
+    expect(themeDocPilot(resolveDocPilot({ ui: { trigger: 'fab', panel: 'popup', fabLabel: 'Ask AI' } })).ui).toEqual({
       trigger: ['fab'],
       panel: 'popup',
+      side: 'end',
       showNavTrigger: false,
       showScreen: false,
       showFab: true,
@@ -4995,16 +5119,18 @@ describe('ui — from settings to the browser', () => {
       background: 'notify',
       credit: true,
       theme: 'auto',
+      motion: 'full',
       font: null,
       fontMono: null,
     })
     // The combination this whole change exists for, end to end: both buttons on
-    // the page, the popup chosen by the one placement with a geometric opinion.
+    // the page, and one popup above the floating one.
     expect(
       themeDocPilot(resolveDocPilot({ ui: { trigger: ['nav', 'fab'], panel: 'popup', fabLabel: 'Ask AI' } })).ui,
     ).toEqual({
       trigger: ['nav', 'fab'],
       panel: 'popup',
+      side: 'end',
       showNavTrigger: true,
       showScreen: false,
       showFab: true,
@@ -5017,6 +5143,7 @@ describe('ui — from settings to the browser', () => {
       background: 'notify',
       credit: true,
       theme: 'auto',
+      motion: 'full',
       font: null,
       fontMono: null,
     })
@@ -5027,6 +5154,7 @@ describe('ui — from settings to the browser', () => {
     expect(sessionState.config.ui).toEqual({
       trigger: ['fab'],
       panel: 'drawer',
+      side: 'end',
       showNavTrigger: false,
       showScreen: false,
       showFab: true,
@@ -5039,6 +5167,7 @@ describe('ui — from settings to the browser', () => {
       background: 'notify',
       credit: true,
       theme: 'auto',
+      motion: 'full',
       font: null,
       fontMono: null,
     })

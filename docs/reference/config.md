@@ -62,7 +62,7 @@ export const docPilot = {
   scope: { enabled: true, default: 'all', promptListLimit: 12, filter: 'auto', groupBySection: true },
   history: { enabled: true, maxConversations: 20, exportThread: true, saveOnUnload: true },
   prompt: { show: false, allowAppend: false, appendMaxChars: 500, override: null, extend: '' },
-  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, waitingEscalation: true, background: 'notify', credit: true, theme: 'auto', font: null, fontMono: null },
+  ui: { trigger: 'fab', panel: 'auto', side: 'end', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, waitingEscalation: true, background: 'notify', credit: true, theme: 'auto', motion: 'full', font: null, fontMono: null },
   host: { base: null, ragBase: null, article: null, search: null, content: null },
   i18n: { translations: {}, locales: {} },
 }
@@ -154,7 +154,7 @@ written by hand; only the values are mechanical.
 | [`suggestions.answers`](#suggestions-answers) | `boolean` | `true` | Also bakes the ANSWER to each opener, served instantly and free when the reader's language matches the language it was written in — *costs one model request per opener per index build* |
 | [`suggestions.matchTau`](#suggestions-matchtau) | `number \| false` | `0.65` | How much of a typed question's rare wording an opener has to cover, in both directions, to count as the same question — *`false` leaves exact matching only* |
 | [`suggestions.matchCos`](#suggestions-matchcos) | `number \| false` | `0.72` | The same test in the vector space, run after the query is embedded, so a paraphrase sharing no words with an opener still finds its answer — *costs nothing: the vector was bought for the turn either way* |
-| [`suggestions.reveal`](#suggestions-reveal) | `boolean` | `true` | A baked answer is painted progressively rather than appearing whole — *no request and no model; `prefers-reduced-motion` and Stop both skip it* |
+| [`suggestions.reveal`](#suggestions-reveal) | `boolean` | `true` | A baked answer is painted progressively rather than appearing whole — *no request and no model; [`ui.motion`](#ui-motion) and Stop both skip it* |
 | [`quote.fromAnswer`](#quote-fromanswer) | `boolean` | `true` | Selecting text inside an answer raises one button that attaches the passage to the composer as a chip — *off together with `fromDocs` also suppresses `ui.firstRunHint`, which names that gesture* |
 | [`quote.fromDocs`](#quote-fromdocs) | `boolean` | `false` | Extends that selection popover to your own article, so a reader can ask about the paragraph that confused them without retyping it — *only inside `host.article` — nav, sidebar and footer are deliberately out of bounds* |
 | [`citations.passage`](#citations-passage) | `boolean` | `false` | Gives every source row a chevron that expands the exact retrieved chunk inline, costing no request since the text is already in the browser — *on a restored conversation the chunk is resolved by id, so a rebuilt index simply drops the control* |
@@ -187,9 +187,10 @@ written by hand; only the values are mechanical.
 | [`prompt.override`](#prompt-override-prompt-extend) | `string \| null` | `null` | Replaces the shipped system instruction outright with text you wrote in full — `{product}` is not interpolated into it — *losing the shipped citation and confidence-0 rules refuses every turn; re-run `npx docpilot calibrate`* |
 | [`prompt.extend`](#prompt-override-prompt-extend) | `string` | `''` | Appended to whichever instruction is in force, shipped or overridden, for house rules short of a full rewrite |
 | [`ui.trigger`](#ui-trigger) | `UiTriggerWord \| UiTrigger[]` | `'fab'` | Picks which of the three placements show an open button; `'nav'` moves it into your navigation bar, `'both'` gives all three, `'none'` leaves only the hotkey — *as a word `'nav'` means the navbar button and its mobile row — `['nav']` is the desktop button alone* |
-| [`ui.panel`](#ui-panel) | `'auto' \| 'drawer' \| 'popup'` | `'auto'` | Shape the answer opens in — `'drawer'` full height at the trailing edge, `'popup'` floating above the button — *`'auto'` resolves to `'popup'` whenever `fab` is in the trigger list, even alongside `nav`* |
-| [`ui.fabLabel`](#ui-fablabel-ui-fabicon) | `true \| false \| string` | `true` | Words on the floating button: `true` takes the i18n string, a string is used verbatim, `false` leaves the icon alone — *floating placement only, and a blank or whitespace string counts as `false`* |
-| [`ui.fabIcon`](#ui-fablabel-ui-fabicon) | `boolean` | `true` | Drops the sparkle glyph from the floating button when `false`, leaving the label as the whole control — *floating placement only, and `false` is overruled when `fabLabel` is `false` too* |
+| [`ui.panel`](#ui-panel) | `'auto' \| 'drawer' \| 'popup' \| 'bar'` | `'auto'` | Shape the answer opens in — `'drawer'` full height at an edge, `'popup'` floating above the button, `'bar'` a question bar at the bottom centre with the conversation rising above it — *`'auto'` resolves to `'bar'` whenever `fab` is in the trigger list, even alongside `nav`, to `'drawer'` otherwise, and never to `'popup'`* |
+| [`ui.side`](#ui-side) | `'end' \| 'start' \| 'left' \| 'right'` | `'end'` | The edge the floating button, its popup and the drawer sit at, and the one `layout: 'push'` moves the page away from — *`'start'`/`'end'` follow the page's writing direction, `'left'`/`'right'` do not; the bar is centred and ignores it* |
+| [`ui.fabLabel`](#ui-fablabel-ui-fabicon) | `true \| false \| string` | `true` | Words on the floating button: `true` takes the i18n string, a string is used verbatim, `false` leaves the icon alone — *the corner button only, which the shipped bar replaces, and a blank or whitespace string counts as `false`* |
+| [`ui.fabIcon`](#ui-fablabel-ui-fabicon) | `boolean` | `true` | Drops the sparkle glyph from the floating button when `false`, leaving the label as the whole control — *the corner button only, which the shipped bar replaces, and `false` is overruled when `fabLabel` is `false` too* |
 | [`ui.layout`](#ui-layout) | `'overlay' \| 'push'` | `'overlay'` | How the panel treats the page beneath it — `'push'` pads the content aside so docs and answer sit side by side — *does nothing below 960px, where the panel is already edge to edge* |
 | [`ui.prefetch`](#ui-prefetch) | `'hover' \| 'idle' \| false` | `'hover'` | When the retrieval index is downloaded — `'idle'` pays up front, `false` waits until the panel is opened — *skipped entirely when the browser reports `saveData` or a 2G-class connection* |
 | [`ui.firstRunHint`](#ui-firstrunhint) | `boolean` | `false` | Shows one dismissible line on a first visit, naming the gesture nobody discovers: selecting a passage to ask about it — *withheld when both `quote` switches are off* |
@@ -197,6 +198,7 @@ written by hand; only the values are mechanical.
 | [`ui.background`](#ui-background) | `'notify' \| 'open' \| false` | `'notify'` | Whether a turn outlives the panel it was asked in — `'notify'` marks the trigger with a dot when it settles, `'open'` brings the panel back with the answer in place — *`false` abandons it on close; the composer's Stop always ends a turn regardless* |
 | [`ui.credit`](#ui-credit) | `boolean` | `true` | One word at the end of the footnote — `DocPilot`, linked to the project — so a reader can find out what answered them — *`false` removes it; the disclaimer beside it is not affected* |
 | [`ui.theme`](#ui-theme) | `'auto' \| 'light' \| 'dark' \| 'system'` | `'auto'` | Which colour scheme the panel wears — `'auto'` follows the page, `'light'` and `'dark'` pin it against both your site's toggle and the reader's OS — *a pinned panel wears DocPilot's own palette, not your site's, because a host has no dark value to read while it is in light mode* |
+| [`ui.motion`](#ui-motion) | `'full' \| 'auto' \| 'reduce' \| 'system'` | `'full'` | Whether the panel moves — `'full'` plays every entrance, exit and press whatever the reader's OS says, `'auto'` swaps them for fades while `prefers-reduced-motion: reduce` holds, `'reduce'` always — *`'full'` is a 2.0 change; `'auto'` is what 1.x always did* |
 | [`ui.font`](#ui-font-ui-fontmono) | `string \| false \| null` | `null` | The panel's face, for a site it cannot inherit one from — a family list, or the name of the custom property your site already keeps it in — *unset the panel wears the page's own font; a value here outranks a host adapter's mapping* |
 | [`ui.fontMono`](#ui-font-ui-fontmono) | `string \| false \| null` | `null` | The same for code blocks, the reasoning trace and the prompt disclosure — *unset they keep a system monospace stack, because a page has no monospace to inherit* |
 | [`host.base`](#host-base) | `string \| null` | `null` | Path the site is served from, e.g. `/docs/` for a subdirectory install — neutral fallback `/` — *applied only at the index fetch and citation navigation — manifest paths and answer hrefs stay base-less* |
@@ -1813,7 +1815,9 @@ shown whatever was asked, which is the one impression a grounded assistant canno
 afford on its first turn. So it is a default, and this is the switch for a site
 that prefers the other reading.
 
-`prefers-reduced-motion: reduce` skips it, because it is motion. **Stop** skips it
+It is motion, so [`ui.motion`](#ui-motion) decides it with the rest: `'reduce'`
+skips it, `'auto'` skips it while the reader's OS asks for reduced motion, and the
+default `'full'` plays it. **Stop** skips it
 too and *completes* the answer rather than truncating it: there is no request in
 flight, so a reader pressing Stop is asking to see the rest now.
 
@@ -2202,7 +2206,7 @@ privacy review leaves nothing behind.
 ## ui
 
 - **Type:** `object`
-- **Default:** `{ trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, background: 'notify', credit: true, theme: 'auto', font: null, fontMono: null }`
+- **Default:** `{ trigger: 'fab', panel: 'auto', side: 'end', fabLabel: true, fabIcon: true, layout: 'overlay', prefetch: 'hover', firstRunHint: false, background: 'notify', credit: true, theme: 'auto', motion: 'full', font: null, fontMono: null }`
 - **Related:** [Appearance](/guide/appearance)
 
 Where the buttons live, what shape the panel takes, what the floating button is
@@ -2215,7 +2219,8 @@ ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true }
 | key | values | default |
 |---|---|---|
 | `trigger` | a placement, a word standing for several, or an array — [see below](#ui-trigger) | `'fab'` |
-| `panel` | `'auto'` · `'drawer'` — full height, right edge · `'popup'` — floating, above the button | `'auto'` |
+| `panel` | `'auto'` · `'drawer'` — full height, at an edge · `'popup'` — floating, above the button · `'bar'` — a question bar at the bottom centre, the answer above it — [see below](#ui-panel) | `'auto'` |
+| `side` | `'end'` · `'start'` — follow the text · `'left'` · `'right'` — stay put — [see below](#ui-side) | `'end'` |
 | `fabLabel` | `true` — the shipped words · a string — those words · `false` — no label | `true` |
 | `fabIcon` | `false` drops the sparkle | `true` |
 | `layout` | `'overlay'` — the panel covers the page · `'push'` — the page moves aside | `'overlay'` |
@@ -2224,10 +2229,11 @@ ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true }
 | `background` | `'notify'` — a dot on the trigger · `'open'` — the panel returns · `false` — the turn is abandoned on close | `'notify'` |
 | `credit` | `false` removes the `DocPilot` link from the footnote | `true` |
 | `theme` | `'auto'` — the page decides · `'light'` · `'dark'` — pinned, whatever the page says — [see below](#ui-theme) | `'auto'` |
+| `motion` | `'full'` — it moves · `'auto'` — fades while the OS asks · `'reduce'` — fades always — [see below](#ui-motion) | `'full'` |
 | `font` | a family list, or the name of a custom property — [see below](#ui-font-ui-fontmono) | `null` — the page's own font |
 | `fontMono` | the same, for code — `null` keeps a system monospace stack | `null` |
 
-A value outside either enum is reported on stdout during the build and falls back
+A value outside any of these enums is reported on stdout during the build and falls back
 to the default; nothing throws, because a typo in a cosmetic setting must not be
 able to fail a docs build.
 
@@ -2241,7 +2247,7 @@ only exists outside it — so a site is allowed all of them at once.
 |---|---|
 | `'nav'` | in your navigation bar, beside the search box |
 | `'screen'` | a text row inside your mobile navigation menu |
-| `'fab'` | floating, bottom corner, on every page and at every width — **the default** |
+| `'fab'` | floating, on every page and at every width — the bar at the bottom centre under the shipped `panel`, a button in the corner under `'popup'` or `'drawer'` — **the default** |
 
 `'fab'` ships because it is the one placement that needs nothing from your
 theme: a navbar slot is a VitePress given and nothing else's, so a custom theme,
@@ -2253,7 +2259,7 @@ old `'nav'` default. Say `trigger: 'nav'` to put it back beside your search box 
 ui: { trigger: 'nav' }                            // navbar button + mobile row, drawer
 ui: { trigger: ['nav', 'fab'], panel: 'popup' }   // both buttons, one popup
 ui: { trigger: 'both' }                           // all three
-ui: { trigger: 'fab', fabLabel: 'Ask AI' }        // the floating button alone
+ui: { trigger: 'fab', panel: 'popup' }           // the corner button alone
 ui: { trigger: 'none' }                           // no button — ⌘I still opens it
 ```
 
@@ -2285,14 +2291,41 @@ open the panel.
 
 ### ui.layout
 
-The desktop drawer is fixed to the trailing edge, so it covers your right aside
-and, on a narrow desktop, part of the prose column. `'push'` gives the content an
-inline-end padding while the panel is open, so the two sit side by side.
+The desktop drawer is fixed to an edge — the trailing one, unless
+[`ui.side`](#ui-side) moved it — so it covers that side of your page and, on a
+narrow desktop, part of the prose column. `'push'` pads the content away from
+that edge while the panel is open, so the two sit side by side, and the page
+moves back on the same curve as the drawer leaves.
+
+```js
+ui: { panel: 'drawer', layout: 'push' }                 // the trailing edge
+ui: { panel: 'drawer', layout: 'push', side: 'left' }   // the left edge
+```
 
 **Off by default**, because it reflows your layout on every open and not every
 theme will take that well — it is a mode you choose rather than a fix that
 arrives. Below 960px it does nothing: the panel is edge to edge there and there
-is nothing to push.
+is nothing to push. Under [`panel: 'bar'`](#ui-panel) it does nothing either —
+the bar is centred, and there is no side to move the page away from.
+
+**What moves is decided by the host's adapter.** On VitePress the whole layout
+narrows and the article re-centres in what is left of the window, with
+VitePress's own sidebar moved along with it. On Docusaurus `.main-wrapper` is
+padded from either edge. On any other host the panel writes classes onto
+`<html>` and leaves the styling to you:
+
+| class | on `<html>` while |
+|---|---|
+| `docpilot-push` | the panel is open and pushing |
+| `docpilot-push-start` / `docpilot-push-end` | the same, naming the edge — logical, so `side: 'left'` on a right-to-left page is `-end` |
+| `docpilot-push-closing` | the drawer is playing its exit — the window to transition your padding back in |
+
+```css
+html.docpilot-push-end main { padding-inline-end: var(--dp-width); }
+html.docpilot-push-start main { padding-inline-start: var(--dp-width); }
+html.docpilot-push main,
+html.docpilot-push-closing main { transition: padding var(--dp-dur) var(--dp-ease); }
+```
 
 ### ui.prefetch
 
@@ -2408,8 +2441,8 @@ nothing in a browser does.
 mobile navigation menu. It bounces three times on arrival and then rests; it is
 not a count, and it carries `aria-hidden`, because the words that go with it are
 in the button's accessible name and a screen reader is told through the panel's
-live region as the turn settles. `prefers-reduced-motion` keeps the dot and drops
-the bounce.
+live region as the turn settles. The still variant of
+[`ui.motion`](#ui-motion) keeps the dot and drops the bounce.
 
 ### ui.credit
 
@@ -2476,9 +2509,54 @@ overrule. It also sets `color-scheme` on the panel and the trigger — the caret
 the scrollbar and any native control — and never on `<html>`, because your page's
 own scrollbars are not the panel's to repaint.
 
+**Your own unlayered CSS still outranks it.** The pin lives in `@layer docpilot`
+with the rest of the panel, so a `--dp-*` you declare outside a layer — a site
+mapping the tokens onto its own design system — wins over the pin as it wins
+over everything else in the package. Scope such a mapping, or put it in a layer
+named after `docpilot`, if the pin has to hold. See
+[Appearance](/guide/appearance#five-entry-points).
+
 This is a site-wide setting with no reader-facing switch. A reader who wants the
 panel to follow them already has one: their site's own theme toggle, under
 `'auto'`.
+
+### ui.motion
+
+**`'full'` is the default since 2.0, and it plays the motion whatever the reader's
+OS says.** 1.x followed `prefers-reduced-motion` with no way to turn that off;
+`'auto'` is that behaviour, now a choice.
+
+```js
+ui: { motion: 'full' }     // springs, pops and presses — the shipped value
+ui: { motion: 'auto' }     // fades while the reader's OS asks for reduced motion
+ui: { motion: 'reduce' }   // fades, always
+```
+
+`'system'` is accepted as a spelling of `'auto'` and resolves to it.
+
+| value | what plays |
+|---|---|
+| `'full'` | every entrance and exit on its spring, the press scale, the lens travelling between items, the bar changing width, the reveal of a baked answer |
+| `'auto'` | the same, until the reader's OS reports `prefers-reduced-motion: reduce` — then the still variant below, live, without a reload |
+| `'reduce'` | the still variant, always |
+
+**The still variant** replaces every entrance and exit with a fade, drops the
+suggestions' stagger and the bar's travel between its widths, stops the lens
+travelling, cancels the press scale, stops the two repeating animations on the
+status line and the unread dot's bounce, places a baked answer whole, and stops
+`ui.layout: 'push'` from sliding the page. What it keeps is state: the dot stays,
+the chevron still points the other way.
+
+It is a class on `<html>` — `docpilot-motion-auto` or `docpilot-motion-reduce` —
+and `'full'` writes none. The OS signal is read by the stylesheet, so `'auto'`
+follows a reader who changes the setting mid-visit.
+
+**A host can still take the motion away.** VitePress's own `base.css` cuts every
+animation on the page to a millisecond and every transition to nothing, with
+`!important`, while the OS asks for reduced motion — on a default-theme site that reader sees
+no motion whatever this says. The panel writes no `!important` and does not
+fight it. The documentation site you are reading has no such rule, so `'full'`
+holds here.
 
 ### ui.font, ui.fontMono
 
@@ -2509,10 +2587,9 @@ monospace stack.
 
 Both are written onto `<html>` as `--dp-font` and `--dp-font-mono`, **which
 outranks a host adapter** — a value here reaches the panel on VitePress and
-Docusaurus too, where a `:root` rule of your own in a stylesheet loaded before
-the adapter would not. An inline property on the root is one of the two layers
-that can; [`ui.theme`](#ui-theme) is the other, and it gets there by specificity
-rather than by being inline. A value that could end the declaration or
+Docusaurus too. Since 2.0 an unlayered `:root` rule of your own does as well,
+wherever it loads, because the adapter is in `@layer docpilot` and your rule is
+not; inside a layer of your own named before `docpilot` it would lose. A value that could end the declaration or
 open another — `;` `{` `}` `<` `>` `@` `*` `\` or `url()` — is reported on stdout
 during the build and dropped, and the panel keeps the page's font.
 
@@ -2522,25 +2599,80 @@ the value depends on something only a stylesheet knows — a media query, a
 
 ### ui.panel
 
-`'auto'` follows the trigger: a list with `fab` in it opens the popup, a list
+`'auto'` follows the trigger: a list with `fab` in it opens the bar, a list
 without one opens the drawer. Both keys ship untouched, so the shipped panel is
-the **popup** — and a site that sets `trigger: 'nav'` and nothing else gets the
-drawer back without touching this key at all. The crossed pairs — `nav` + `popup`, `fab` +
-`drawer` — are carried out in silence, which is what `'auto'` is for: once the
-implied pairing has a name of its own, an explicit value is an intention rather
-than a mistake to correct.
+the **bar** — and a site that sets `trigger: 'nav'` and nothing else gets the
+drawer back without touching this key at all. The crossed pairs — `nav` + `popup`,
+`fab` + `popup`, `fab` + `drawer` — are carried out in silence, which is what
+`'auto'` is for: once the implied pairing has a name of its own, an explicit
+value is an intention rather than a mistake to correct.
 
-The floating button decides it **even in company**, so `['nav', 'fab']` opens the
-popup: the popup is anchored to the corner the floating button sits in, the
-drawer is anchored to nothing, and the one placement with a geometric opinion is
-the one that holds it. Say `panel: 'drawer'` to overrule that.
+The floating placement decides it **even in company**, so `['nav', 'fab']` draws
+the bar beside the navbar button, and both open the same window. Say
+`panel: 'popup'` for the corner button and its popup, or `panel: 'drawer'` for
+the drawer.
+
+```js
+ui: { panel: 'popup' }                       // the corner button and its popup — 1.x's default
+ui: { trigger: ['nav', 'fab'], panel: 'popup' }
+```
 
 A popup with **no** floating button on the page — `trigger: ['nav'], panel:
 'popup'` — sits flush against the corner inset instead of reserving room for a
 button that is not there.
 
-Below 960px both shapes are the same full-screen sheet, and the floating button
-hides itself while it is open.
+**`'bar'` is the shipped shape**, and what `'auto'` resolves to with the floating
+placement. The composer leaves the panel and becomes a bar at the bottom
+centre of every page, [`--dp-bar-inline`](/reference/theme) wide at rest and
+`--dp-bar-inline-open` once it is in use. The first character typed into it
+raises a window above it holding everything the popup holds — the header with
+history, copy, new chat and close, the thread, the scope, the prompt disclosure,
+the footnote — with only the field moved out.
+
+```js
+ui: { panel: 'bar' }
+```
+
+The window closes on <kbd>Esc</kbd>, on its close button, and on a press anywhere
+else on the page; the bar stays. A conversation put away is one press from
+coming back: the bar carries a button for it, with the unread dot on it when an
+answer settled while the window was shut. Sending from the bar opens the window
+too, and <kbd>⌘I</kbd>, a navbar trigger and `open()` open it as they open every
+other shape.
+
+**The bar replaces the floating button.** It is the floating placement in this
+shape, so `fab` in the trigger list draws nothing; `nav` and `screen` keep
+working. Below 960px the bar is a button that opens the same full-screen sheet the
+other shapes use, with the field inside it.
+
+Below 960px all three shapes are the same full-screen sheet, and the floating
+button hides itself while it is open.
+
+### ui.side
+
+Which edge the panel belongs to: the floating button, the popup above it and the
+drawer all move together, and [`layout: 'push'`](#ui-layout) moves the page away
+from the same edge.
+
+| value | edge |
+|---|---|
+| `'end'` | the trailing edge — right on a left-to-right page. **The default**, and where all three have always been |
+| `'start'` | the leading edge |
+| `'left'` | the left edge, whatever the page's direction |
+| `'right'` | the right edge, on the same terms |
+
+```js
+ui: { side: 'left' }                                    // button and popup, bottom left
+ui: { panel: 'drawer', layout: 'push', side: 'left' }   // a sidebar on the left
+```
+
+Both pairs exist because they answer different sites: an author placing the
+assistant on the left of an English page writes the word they see, and a site
+with right-to-left locales wants the panel to follow the text. The value reaches
+the browser as written — the page's direction is the reader's, not the build's —
+and the stylesheet maps it with `:dir()`, so even the server-rendered floating
+button lands on the right edge on its first paint. The bar is centred and
+ignores it.
 
 ### ui.fabLabel, ui.fabIcon
 
@@ -2549,9 +2681,9 @@ everyone else — and unlike the navbar trigger it has no search box beside it t
 borrow context from. So it carries words:
 
 ```js
-ui: { trigger: 'fab', fabLabel: 'Спросить ИИ' }   // exactly these words
-ui: { trigger: 'fab', fabLabel: false }           // the 48px circle, icon only
-ui: { trigger: 'fab', fabIcon: false }            // words only
+ui: { panel: 'popup', fabLabel: 'Спросить ИИ' }   // exactly these words
+ui: { panel: 'popup', fabLabel: false }           // the 48px circle, icon only
+ui: { panel: 'popup', fabIcon: false }            // words only
 ```
 
 `fabLabel: true` looks the string up through [i18n](/guide/i18n) as
@@ -2564,11 +2696,13 @@ string is the same as `false`.
 rendering. It is reported on stdout and the icon is kept: the failure mode of a
 cosmetic setting must never be a panel nobody can open.
 
-Both keys describe the **floating** placement only. The navbar trigger has always
-been icon-only beside the host's search box and the mobile nav-screen row has
-always been text; neither reads them, and `npx docpilot init` still asks only the
-two placement questions — its trigger question offers the four words, and a list
-is something you write in your own config.
+Both keys describe the **corner button** only, so they take effect under
+`panel: 'popup'` or `'drawer'`: the shipped bar replaces that button and reads
+neither. The navbar trigger has always been icon-only beside the host's search
+box and the mobile nav-screen row has always been text; neither reads them, and
+`npx docpilot init` still asks only the two placement questions — its trigger
+question offers the four words, and a list is something you write in your own
+config.
 
 **This is a departure from convention, and worth saying so.** No package in either
 dependency tree of this project exposes an enum for placement — placement is

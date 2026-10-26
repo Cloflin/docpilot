@@ -501,9 +501,26 @@ export type UiTrigger = 'nav' | 'screen' | 'fab'
 export type UiTriggerWord = UiTrigger | 'both' | 'all' | 'none'
 
 /** What an author writes. `resolveUi` turns it into `ResolvedUi`. */
+/**
+ * Which edge the panel belongs to — ui-specs/015. `'start'` and `'end'` follow
+ * the page's writing direction; `'left'` and `'right'` stay where they say.
+ */
+export type UiSide = 'end' | 'start' | 'left' | 'right'
+
 export interface UiSettings {
   trigger?: UiTriggerWord | UiTrigger[]
-  panel?: 'auto' | 'drawer' | 'popup'
+  /**
+   * `'bar'` puts the composer in a bar at the bottom centre and raises the
+   * conversation in a window above it — ui-specs/015. It replaces the floating
+   * button. `'auto'`, the default, resolves to it when `fab` is in the trigger
+   * list and to `'drawer'` when it is not; `'popup'` is chosen by name.
+   */
+  panel?: 'auto' | 'drawer' | 'popup' | 'bar'
+  /**
+   * The edge the floating button, the popup and the drawer sit at, and the one
+   * `layout: 'push'` moves the page away from. The bar is centred and ignores it.
+   */
+  side?: UiSide
   fabLabel?: boolean | string
   fabIcon?: boolean
   layout?: 'overlay' | 'push'
@@ -534,6 +551,15 @@ export interface UiSettings {
    */
   theme?: 'auto' | 'light' | 'dark' | 'system'
   /**
+   * Whether the panel moves — ui-specs/017.
+   *
+   * `'full'`, the default, plays every entrance, exit and press whatever the
+   * OS says. `'auto'` swaps them for fades while `prefers-reduced-motion:
+   * reduce` holds, which is what 1.x always did; `'reduce'` does so always.
+   * `'system'` is a spelling of `'auto'` and resolves to it.
+   */
+  motion?: 'full' | 'auto' | 'reduce' | 'system'
+  /**
    * The panel's face, for a site the panel cannot inherit one from. A family
    * list — `'Inter, system-ui, sans-serif'` — or the name of the custom
    * property the site already keeps it in — `'--brand-font'`, which is wrapped
@@ -555,7 +581,8 @@ export interface UiSettings {
  */
 export interface ResolvedUi {
   trigger: UiTrigger[]
-  panel: 'drawer' | 'popup'
+  panel: 'drawer' | 'popup' | 'bar'
+  side: UiSide
   showNavTrigger: boolean
   showScreen: boolean
   showFab: boolean
@@ -573,6 +600,8 @@ export interface ResolvedUi {
    * SIGNAL that only exists in the reader's browser. `'system'` is gone by now.
    */
   theme: 'auto' | 'light' | 'dark'
+  /** `'auto'` survives for `theme`'s reason: the signal is in the browser. */
+  motion: 'full' | 'auto' | 'reduce'
   /** A CSS value, ready to write — a family list or a `var(--…)`. */
   font: string | null
   fontMono: string | null

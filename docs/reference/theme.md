@@ -144,6 +144,12 @@ Copy this, delete what you are not changing, load it **after** the package's CSS
      no floating button on the page it collapses to 0px (see below). */
   --dp-fab-clear: calc(var(--dp-fab-size) + 12px);
 
+  /* The bar under ui.panel: 'bar' — its width at rest, and once it is in use:
+     focused, holding a question, or under the window, which takes the same
+     width. Both are clamped to the viewport less a 16px gutter. */
+  --dp-bar-inline: 400px;
+  --dp-bar-inline-open: 640px;
+
   /* ── Radius — six steps, and none of them moves ─────────────────────────── */
 
   /* Each step names a KIND of thing, not a state. Radii used to be
@@ -157,15 +163,24 @@ Copy this, delete what you are not changing, load it **after** the package's CSS
   --dp-r-field: 28px;   /* the composer */
   --dp-r-pill: 999px;   /* send, ghost pills, the floating button, the status dot */
 
-  /* ── Motion — two tiers and one curve ───────────────────────────────────── */
+  /* ── Motion — two tiers, two springs and an exit ────────────────────────── */
 
-  /* --dp-dur carries the three panel entrances; --dp-dur-fast carries every
-     colour, background and opacity change. Colour transitions run `linear` —
-     between two colours the curve is imperceptible — so the ease is reserved
-     for movement, which is the only place it does any work. */
-  --dp-dur: 220ms;
+  /* --dp-dur carries every entrance, and half of it every exit; --dp-dur-fast
+     carries every colour, background and opacity change. Colour transitions
+     run `linear` — between two colours the curve is imperceptible — so the
+     curves are reserved for movement.
+
+     The two eases are SPRINGS written as linear(): --dp-ease is stiffness 350,
+     damping 35 — no visible overshoot — for panels, the sheet, the pushed page
+     and every press; --dp-ease-pop is 300 / 25, a 3.8% overshoot, for what pops:
+     the popup, the bar and its window, a new question, a check glyph. Both play
+     over --dp-dur, so setting it to 0ms still switches every entrance off.
+     --dp-ease-exit is an ease-in: a thing that leaves accelerates away. */
+  --dp-dur: 400ms;
   --dp-dur-fast: 150ms;
-  --dp-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dp-ease: linear(0, 0.016 2.7%, 0.056 5.4%, 0.112 8.1%, 0.177 10.8%, 0.39 18.9%, 0.458 21.6%, 0.521 24.3%, 0.58 27%, 0.634 29.7%, 0.683 32.4%, 0.727 35.1%, 0.766 37.8%, 0.8 40.5%, 0.83 43.2%, 0.856 45.9%, 0.879 48.6%, 0.915 54.1%, 0.942 59.5%, 0.961 64.9%, 0.974 70.3%, 0.987 78.4%, 0.994 86.5%, 1);
+  --dp-ease-pop: linear(0, 0.014 2.3%, 0.051 4.5%, 0.104 6.8%, 0.17 9.1%, 0.243 11.4%, 0.475 18.2%, 0.548 20.5%, 0.618 22.7%, 0.682 25%, 0.74 27.3%, 0.792 29.5%, 0.839 31.8%, 0.879 34.1%, 0.913 36.4%, 0.943 38.6%, 0.967 40.9%, 0.987 43.2%, 1.002 45.5%, 1.015 47.7%, 1.03 52.3%, 1.037 56.8%, 1.037 61.4%, 1.034 65.9%, 1.013 84.1%, 1);
+  --dp-ease-exit: cubic-bezier(0.4, 0, 1, 1);
 
   /* ── Stacking ──────────────────────────────────────────────────────────── */
 
@@ -238,15 +253,17 @@ body:not(:has(.docpilot-nav-trigger.is-fab)) {
 
 ## Overriding
 
-Order is the mechanism. The core declares every token with a real value; an
-adapter re-declares the colour set on `:root` at the same specificity and wins by
-coming second. Your rules have to come after the adapter:
+The core and the adapter are in `@layer docpilot`, and inside it order is the
+mechanism: the core declares every token with a real value; an adapter
+re-declares the colour set on `:root` at the same specificity and wins by coming
+second. Your own rules are outside the layer, so they win over both wherever
+they load — keep them unlayered, or in a layer named after `docpilot`:
 
 ```js
 // docs/.vitepress/theme/index.js
 import DefaultTheme from 'vitepress/theme'
 import { withDocPilot } from '@cloflin/docpilot/theme'
-import './my-docpilot-tokens.css'   // after — this is the whole trick
+import './my-docpilot-tokens.css'   // unlayered — it wins in any position
 
 export default withDocPilot(DefaultTheme)
 ```
@@ -260,14 +277,14 @@ export default withDocPilot(DefaultTheme)
 }
 ```
 
-Two settings are exceptions and reach the panel without any ordering on your
-part. [`ui.font` / `ui.fontMono`](/reference/config#ui) are written onto `<html>`
-as inline custom properties, which outranks an adapter outright.
+Two settings reach the panel from the package's side.
+[`ui.font` / `ui.fontMono`](/reference/config#ui) are written onto `<html>` as
+inline custom properties, which outranks an adapter and your stylesheets alike.
 [`ui.theme`](/reference/config#ui-theme) gets there the other way, by declaring
 the dark set on a selector one class more specific than the `:root` an adapter
-maps on.
+maps on — inside the layer, so an unlayered `--dp-*` of yours still beats a pin.
 
 A token declared here and nowhere in the core is a token nothing reads. The
 suite checks that pairing in both directions — the published table and
-`core.scss` are asserted to name exactly the same 34 properties — so a token
+`core.scss` are asserted to name exactly the same 39 properties — so a token
 added to one and forgotten in the other fails the build rather than shipping.

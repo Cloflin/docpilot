@@ -17,7 +17,17 @@
  * be a second thing to keep in step for no gain: the Docusaurus plugin lists
  * `core.css` and then this file in `getClientModules()`, and the order the
  * cascade needs is the order of two lines in a file this package owns.
+ *
+ * ALL OF IT IN `@layer docpilot`, the core's layer — ui-specs/017. Unlike the
+ * VitePress adapter this one has no exceptions: nothing here overrides a
+ * declaration Docusaurus makes on the same element. Infima itself is unlayered
+ * unless the site turns on `future.v4.useCssCascadeLayers`, and until then its
+ * bare `h1`–`h6`, `ul`, `code` and `a` rules outrank the core's answer body.
  */
+
+// Not indented, for the same reason as the core's: the check script reads
+// `:root {` at column 0.
+@layer docpilot {
 
 :root {
   // ── Surfaces ────────────────────────────────────────────────────────────────
@@ -122,3 +132,52 @@ html.docpilot-light .docpilot__answer {
     color: var(--shiki-light, inherit);
   }
 }
+
+/**
+ * `ui.layout: 'push'` — the page moves aside instead of being covered.
+ * ui-specs/009 described it; ui-specs/015 gave this host its rule, which it had
+ * never had: the setting used to do nothing on a Docusaurus site at all.
+ *
+ * `.main-wrapper` and nothing else. Docusaurus's navbar is sticky rather than
+ * fixed, and its doc sidebar is sticky INSIDE this wrapper, so padding the one
+ * element moves the article, the sidebar and the table of contents together,
+ * from either edge — the drawer starts below the navbar, which keeps its place.
+ *
+ * Keyed on the EDGE class the panel writes beside `docpilot-push`, and the way
+ * back on `docpilot-push-closing`, for the reason the VitePress adapter states:
+ * a transition is read from the state being entered.
+ */
+html.docpilot-push-end .main-wrapper {
+  padding-inline-end: var(--dp-width);
+}
+
+html.docpilot-push-start .main-wrapper {
+  padding-inline-start: var(--dp-width);
+}
+
+html.docpilot-push .main-wrapper {
+  transition:
+    padding-inline-start var(--dp-dur) var(--dp-ease),
+    padding-inline-end var(--dp-dur) var(--dp-ease);
+}
+
+html.docpilot-push-closing .main-wrapper {
+  transition:
+    padding-inline-start calc(var(--dp-dur) / 2) var(--dp-ease-exit),
+    padding-inline-end calc(var(--dp-dur) / 2) var(--dp-ease-exit);
+}
+
+// The still variant — ui-specs/017. Stated in full rather than through
+// `motion.still`, whose `:where()` weighs nothing: this has to beat the two rules
+// directly above at `(0,2,1)`, so the root class keeps its weight here.
+html.docpilot-motion-reduce:is(.docpilot-push, .docpilot-push-closing) .main-wrapper {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.docpilot-motion-auto:is(.docpilot-push, .docpilot-push-closing) .main-wrapper {
+    transition: none;
+  }
+}
+
+} // @layer docpilot

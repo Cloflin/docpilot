@@ -3127,9 +3127,13 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
         // The floating button's own composition is named only when it IS on the
         // page: "no label" printed under a navbar trigger describes a control
         // that does not exist.
-        const fab = ui.trigger.includes('fab')
+        // `showFab`, not the trigger list: under `panel: 'bar'` the list keeps
+        // `fab` and the bar is what draws — ui-specs/015.
+        const fab = ui.showFab
             ? ` · ${[ui.fabIcon ? 'icon' : null, ui.fabLabel === false ? null : 'label'].filter(Boolean).join(' + ')}`
             : ''
+        // The edge only when it moved, and never for the bar, which is centred.
+        const edge = ui.side === 'end' || ui.panel === 'bar' ? '' : ` · ${ui.side} edge`
         // The placements spelled out rather than the array's own `toString`.
         // `nav,screen,fab` is a line somebody has to decode; and "no trigger" is
         // the one state worth naming in words, because a build log that said
@@ -3142,7 +3146,7 @@ export function logDocPilot(docPilot, env = {}, ready = null) {
         const scheme = ui.theme === 'auto' ? '' : ` · ${ui.theme}`
         console.log(
             `[docpilot] ui     ${where} · ${ui.panel} panel` +
-                `${docPilot.ui?.panel === 'auto' ? '   (auto)' : ''}${fab}${scheme}`,
+                `${docPilot.ui?.panel === 'auto' ? '   (auto)' : ''}${edge}${fab}${scheme}`,
         )
     }
     // Same silence rule again. Loud when the archive is off, because "off" also
@@ -3547,7 +3551,8 @@ export const DEFAULTS = {
          *
          * `reveal` paints a baked answer progressively instead of placing it
          * whole. It is a paint schedule and nothing else: no request, no model,
-         * and `prefers-reduced-motion` skips it.
+         * and `ui.motion: 'reduce'` skips it, as `'auto'` does while the OS asks
+         * for reduced motion.
          */
         precomputed: true,
         answers: true,
@@ -3669,12 +3674,13 @@ export const DEFAULTS = {
      * always meant.
      *
      * `panel: 'auto'` follows the trigger — a list with `fab` in it opens the
-     * floating popup, a list without one opens the full-height drawer. Both
-     * crossed pairs are legal and are carried out in silence. The SHIPPED pair
-     * is `fab` + popup: the floating button is the only placement that does not
-     * need a slot in somebody else's navigation bar, so it is the only one that
-     * renders on every host. `ui: { trigger: 'nav' }` puts the button back in
-     * the navbar, and `'auto'` returns the drawer with it.
+     * bar at the bottom centre, a list without one opens the full-height
+     * drawer. Every crossed pair is legal and is carried out in silence. The
+     * SHIPPED pair is `fab` + bar: the floating placement is the only one that
+     * does not need a slot in somebody else's navigation bar, so it is the only
+     * one that renders on every host. `ui: { trigger: 'nav' }` puts the button
+     * back in the navbar, and `'auto'` returns the drawer with it;
+     * `panel: 'popup'` returns the corner button and its popup.
      * `fabLabel` / `fabIcon` describe the floating
      * placement only: `true` takes the shipped words through i18n, a string
      * takes those words verbatim, `false` drops that half. See
@@ -3691,7 +3697,19 @@ export const DEFAULTS = {
      */
     ui: {
         trigger: 'fab',
+        /**
+         * `'auto'` is the bar with `fab` in the trigger list, the drawer without
+         * it — ui-specs/015: the composer as a bar at the bottom centre, the
+         * conversation in a window that rises above it. The shipped shape since
+         * 2.0; `'popup'` is the corner button's own and is chosen by name.
+         */
         panel: 'auto',
+        /**
+         * Which edge the button, the popup and the drawer sit at, and the one
+         * `layout: 'push'` moves the page away from — ui-specs/015.
+         * `'end'` · `'start'` follow the text; `'left'` · `'right'` do not.
+         */
+        side: 'end',
         fabLabel: true,
         fabIcon: true,
         layout: 'overlay',
@@ -3724,6 +3742,16 @@ export const DEFAULTS = {
          * `session.configure` writes a class onto `<html>`.
          */
         theme: 'auto',
+        /**
+         * Whether the panel moves — ui-specs/017. `'full'` · `'auto'` ·
+         * `'reduce'`, and `'system'` reads as `'auto'`.
+         *
+         * `'full'` plays every entrance, exit and press whatever the OS says —
+         * a 2.0 change. `'auto'` restores 1.x: fades instead of springs while
+         * `prefers-reduced-motion: reduce` holds. A class on `<html>`, like
+         * `theme`.
+         */
+        motion: 'full',
         /**
          * The panel wears the page's own font and ships none of its own —
          * `--dp-font` is `inherit`. These two are for the site whose face the

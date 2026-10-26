@@ -234,10 +234,10 @@ export const DEFAULTS = {
   // suite says so — this is what the panel runs on before `configure` lands.
   ui: {
     trigger: ['fab'],
-    panel: 'popup',
+    panel: 'bar',
     showNavTrigger: false,
     showScreen: false,
-    showFab: true,
+    showFab: false,
     fabLabel: true,
     fabIcon: true,
     layout: 'overlay',
@@ -493,6 +493,24 @@ function applyTheme(ui) {
   root.classList.toggle('docpilot-dark', ui?.theme === 'dark')
 }
 
+/**
+ * `ui.motion` — the third setting that reaches the STYLESHEET. ui-specs/017.
+ *
+ * A class on `<html>` for `theme`'s reasons, and `'auto'` gets one too: the
+ * default `'full'` writes nothing, so the stylesheet cannot tell "follow the OS"
+ * from "ignore it" without being told. What the OS says is still read in CSS,
+ * live, by the media query `motion.still` wraps around the auto class.
+ *
+ * REMOVED, not skipped, on `'full'` — the same rule as the two above.
+ */
+function applyMotion(ui) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (!root) return
+  root.classList.toggle('docpilot-motion-auto', ui?.motion === 'auto')
+  root.classList.toggle('docpilot-motion-reduce', ui?.motion === 'reduce')
+}
+
 export function configure(themeConfig, path, lang) {
   const cfg = themeConfig?.docPilot || {}
   state.config = {
@@ -574,6 +592,7 @@ export function configure(themeConfig, path, lang) {
     // rather than left to whichever of the four mounted roots renders first.
     applyFont(state.config.ui)
     applyTheme(state.config.ui)
+    applyMotion(state.config.ui)
     state.debug = new URLSearchParams(location.search).has('dpdebug')
     feedback.installConsoleHelper()
   }
@@ -1528,14 +1547,20 @@ export interface Turn {
  * frames is about 1.4 seconds whatever the length — faster than the model that
  * would otherwise have written it, and slow enough to read as writing.
  *
- * `prefers-reduced-motion` skips it, because it is motion. Stop skips it too and
- * COMPLETES the answer rather than truncating it: there is nothing in flight to
- * cancel, so a reader who presses Stop is asking to see the rest now.
+ * It is motion, so `ui.motion` decides it with everything else that moves —
+ * ui-specs/017: `'reduce'` skips it, `'auto'` skips it while the OS asks for
+ * reduced motion, and the default `'full'` plays it whatever the OS says. Stop
+ * skips it too and COMPLETES the answer rather than truncating it: there is
+ * nothing in flight to cancel, so a reader who presses Stop is asking to see the
+ * rest now.
  */
 const REVEAL_FRAMES = 16
 
 function shouldReveal(cfg) {
   if (cfg?.suggestions?.reveal === false) return false
+  const motion = cfg?.ui?.motion
+  if (motion === 'reduce') return false
+  if (motion !== 'auto') return true
   // `matchMedia` is absent in SSR and in a test environment that has not asked
   // for it; a missing preference is not a stated preference, so the default
   // stands.
@@ -1895,8 +1920,8 @@ export async function submit(question, { quote = '' } = {}) {
    * that lands whole and instantly does not read as fast, it reads as CANNED —
    * as a help topic that was going to be shown whatever was asked. That is the
    * one impression a grounded assistant cannot afford on its first turn. The
-   * reveal is a paint schedule, it is off under `prefers-reduced-motion`, and
-   * Stop completes it rather than truncating it.
+   * reveal is a paint schedule, `ui.motion` turns it off with the rest of the
+   * motion (ui-specs/017), and Stop completes it rather than truncating it.
    *
    * It takes a controller of its own, so Stop reaches the reveal at all. The
    * turn owns no request, so the abort cancels a `setInterval` and nothing else.

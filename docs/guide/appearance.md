@@ -13,13 +13,33 @@ properties to override, and what the two placements actually do.
 | `@cloflin/docpilot/style/core.css` | the panel, on real values | any other host, or your own mapping |
 | `@cloflin/docpilot/style/vitepress.css` | the VitePress mapping only | you replaced the core and kept the host |
 | `@cloflin/docpilot/style/docusaurus.css` | the Docusaurus mapping only | loaded for you by the Docusaurus plugin |
-| `@cloflin/docpilot/web.css` | the core, from the prebuilt bundle, inside `@layer docpilot` | a `<script>` tag, or the React adapter |
+| `@cloflin/docpilot/web.css` | the core, from the prebuilt bundle | a `<script>` tag, or the React adapter |
 
-**Only `web.css` is layered.** It is the one build that lands on a site nobody
-mapped an adapter for, so it declares everything inside `@layer docpilot` and
-lets that site's own unlayered CSS win — with the reset caveat spelled out under
-[Script tag → Colours](/install/web#colours). The other four are not layered:
-they are loaded by a host whose tokens they already translate.
+**All five are in `@layer docpilot`.** An unlayered rule beats a layered one
+whatever its specificity, so any CSS your site already has wins over the panel's
+without `!important` and without counting selectors — `.docpilot__send {
+border-radius: 4px }` is enough. The core and an adapter share the one layer, so
+the order below still decides between them.
+
+**It points the other way too.** A reset your page loads unlayered outranks the
+panel just as easily:
+
+| host | what overrules the panel | what to do |
+|---|---|---|
+| VitePress 2 | nothing — its reset is in `@layer __vitepress_base`, and `style.css` names that layer before `docpilot` | — |
+| VitePress 1 | the unlayered `base.css`: `button { padding: 0; background: transparent }`, `ul { list-style: none }`, `a { color: inherit }` | upgrade to VitePress 2 — there is no unlayered build to fall back on |
+| Docusaurus | Infima's bare `h1`–`h6`, `ul`, `code`, `pre` and `a` in the answer body | turn on `future.v4.useCssCascadeLayers`, which puts Infima in a layer |
+| Tailwind v3 | preflight's unlayered `* { border: 0 solid }` erases every hairline | Tailwind v4 layers it; on v3, declare the border back |
+
+On a site whose own CSS is layered, the layer named first loses. Load the panel's
+stylesheet after yours, or name the order yourself before anything else —
+`@layer base, docpilot;` — and on VitePress 2 keep `__vitepress_base` ahead of
+`docpilot` in that list.
+
+**Three rules in the VitePress adapter stay outside the layer**, because each
+exists to beat a declaration VitePress makes on its own component: the search
+box's `flex-grow`, which would otherwise push the navbar trigger 398px away from
+it, and the sidebar's `transition` in both directions of `ui.layout: 'push'`.
 
 An adapter is loaded **after** the core, always. The Docusaurus plugin lists them
 in that order itself; everywhere else it is the order of your two imports.
@@ -36,7 +56,7 @@ import './my-docpilot-tokens.css'
 export default withDocPilot(DefaultTheme)
 ```
 
-**Order is the mechanism, not a convention.** The core declares every token with a real value; the adapter re-declares the colour set on `:root` at the same specificity and wins by coming second. Load the adapter first and it loses. Load it alone and the panel has no styles at all — it declares no rules of its own, only a translation table.
+**Order is the mechanism, not a convention.** Inside `@layer docpilot` the core declares every token with a real value; the adapter re-declares the colour set on `:root` at the same specificity and wins by coming second. Load the adapter first and it loses. Your own tokens are outside the layer and win in any position. Load it alone and the panel has no styles at all — it declares no rules of its own, only a translation table.
 
 ## Surfaces come in three levels
 
@@ -77,7 +97,7 @@ Everything the panel paints goes through one of these. The second column is what
 
 `--dp-wash` and `--dp-lip` are **derived rather than mapped**, and deliberately: substitution resolves it against whatever `--dp-text` ends up being, so it follows the host's theme — and your override of it — without a second declaration. Neither has a dark variant and neither may be given one; the suite requires every token that darkens to be re-declared unconditionally by an adapter, and no host token expresses "7% in light, 15% in dark" as one value.
 
-`--dp-lip` is the **second and last border colour** in the package, and it is a different job from the hairline rather than a second one of it. The jump pill is the one glass surface here — a translucent fill under `backdrop-filter: blur(2px)` — and a translucent thing with no light on its underside reads as a hole in the thread instead of an object over it. `--dp-line` still draws the pill's other three sides. Because it resolves against `--dp-text`, it is a near-white rim in dark and a grounded dark edge in light; a literal `rgba(255,255,255,.15)` would have been right in one scheme and invisible in the other.
+`--dp-lip` is the **second and last border colour** in the package, and it is a different job from the hairline rather than a second one of it. The jump pill is glass over the thread — a translucent fill under `backdrop-filter: blur(2px)` — and a translucent thing with no light on its underside reads as a hole in the thread instead of an object over it. `--dp-line` still draws the pill's other three sides. Because it resolves against `--dp-text`, it is a near-white rim in dark and a grounded dark edge in light; a literal `rgba(255,255,255,.15)` would have been right in one scheme and invisible in the other.
 
 `--dp-alert` is the **one colour in the package that is not part of your theme**, and the reason it is not mapped is the same reason it exists. It paints a single 10px dot on the trigger, and only when an answer settled while the panel was closed — see [`ui.background`](/reference/config#ui-background). "There is something waiting" is not a statement any brand palette has a value for, so an adapter that reached for the host's own warning colour would be answering a question the host never asked; a site that disagrees repoints the one token. It has no dark variant because it needs none: the shipped literal clears the 3:1 non-text floor against both surfaces, at 4.8:1 on the light one and 3.6:1 on the dark. It is never text, never a border, and the only place it appears outside that dot is `forced-colors`, where the system palette takes it over entirely.
 
@@ -86,6 +106,7 @@ Geometry is declared once and does not vary with appearance:
 | token | value | for |
 |---|---|---|
 | `--dp-width` | `clamp(360px, 30vw, 460px)` | the drawer and the popup, deliberately the same |
+| `--dp-bar-inline`, `--dp-bar-inline-open` | `400px`, `640px` | the bar under [`panel: 'bar'`](/reference/config#ui-panel) at rest, and in use — focused, holding a question, or under its window, which takes the same width |
 | `--dp-gutter` | `20px` | the panel's inline padding |
 | `--dp-r-sm` | `8px` | icon buttons, the copy chip, the nav trigger, inline text buttons, inline code |
 | `--dp-r-md` | `12px` | rows and blocks: suggestion, source, pick, the code card |
@@ -93,9 +114,11 @@ Geometry is declared once and does not vary with appearance:
 | `--dp-r-bubble` | `22px` | the question |
 | `--dp-r-field` | `28px` | the composer |
 | `--dp-r-pill` | `999px` | send, pills, the floating button, the status dot |
-| `--dp-dur` | `220ms` | the three panel entrances |
+| `--dp-dur` | `400ms` | every entrance; every exit takes half of it |
 | `--dp-dur-fast` | `150ms` | every colour, background and opacity change |
-| `--dp-ease` | `cubic-bezier(0.16, 1, 0.3, 1)` | transforms and entrances |
+| `--dp-ease` | a spring as `linear()` — stiffness 350, damping 35, no visible overshoot | panels, the sheet, the pushed page, every press |
+| `--dp-ease-pop` | a spring as `linear()` — stiffness 300, damping 25, a 3.8% overshoot | what pops: the popup, the bar and its window, a new question, a check glyph |
+| `--dp-ease-exit` | `cubic-bezier(0.4, 0, 1, 1)` | every exit — a thing that leaves accelerates away |
 | `--dp-z` | `29`, `70` below 960px | above VitePress's own sidebar on the sheet |
 | `--dp-fab-size`, `--dp-fab-size-coarse` | `48px`, `56px` | the floating button's **block** size |
 | `--dp-popup-inset` | `20px` | the distance from the corner, shared by the button and the popup so they line up |
@@ -154,10 +177,10 @@ docPilot: {
 ```
 
 [`ui.font`](/reference/config#ui-font-ui-fontmono) is written onto `<html>` as an
-inline custom property, which is **the only layer that outranks an adapter** — so
-it reaches the panel on VitePress and Docusaurus too, where the host's own family
-would otherwise win. A `:root` rule of your own has to be loaded after the
-adapter to beat it, which is the ordering rule the top of this page is about.
+inline custom property, which outranks an adapter — so it reaches the panel on
+VitePress and Docusaurus too, where the host's own family would otherwise win. A
+`:root` rule of your own outranks the adapter as well, from any unlayered
+stylesheet, because the adapter is in `@layer docpilot`.
 
 **Nothing nested may ask for `--dp-font`.** `inherit` is resolved against the
 element that uses it, so `var(--dp-font)` written inside a monospaced block
@@ -165,21 +188,23 @@ returns the monospace. The one place that used to do it — the heading between
 the prompt disclosure's blocks — is why the prompt panel now carries the face and
 marks its monospaced *blocks* instead of the other way round.
 
-## Two shapes, two placements
+## Three shapes, any edge
 
 ```js
 docPilot: {
-  ui: { trigger: 'fab', panel: 'auto', fabLabel: true, fabIcon: true, theme: 'auto' },
+  ui: { trigger: 'fab', panel: 'auto', side: 'end', fabLabel: true, fabIcon: true, theme: 'auto' },
 }
 ```
 
 See [`ui`](/reference/config#ui) for the values. What each produces:
 
-**Drawer** — full height, docked to the trailing edge, `--dp-width` wide, starting below `--dp-top`, with a hairline on its leading edge.
+**Drawer** — full height, docked to an edge — the trailing one unless [`ui.side`](/reference/config#ui-side) moves it — `--dp-width` wide, starting below `--dp-top`, with a hairline on the face that looks at the page. With [`ui.layout: 'push'`](/reference/config#ui-layout) the page moves away from that edge while it is open, and back as it leaves.
 
-**Popup** — `--dp-width` wide and at most `--dp-popup-block` tall, `--dp-popup-inset` from the trailing edge, sitting `--dp-fab-clear` above that edge — `12px` above the floating button, or flush against the inset when [`ui.trigger`](/reference/config#ui) does not include one — at `--dp-r-lg`. It carries a hairline **and** `--dp-shadow`: a shadow alone is invisible on a dark host and erased outright by `forced-colors`, which is the one mode where a floating surface most needs an edge.
+**Popup** — `--dp-width` wide and at most `--dp-popup-block` tall, `--dp-popup-inset` from its edge, sitting `--dp-fab-clear` above it — `12px` above the floating button, or flush against the inset when [`ui.trigger`](/reference/config#ui) does not include one — at `--dp-r-lg`. It carries a hairline **and** `--dp-shadow`: a shadow alone is invisible on a dark host and erased outright by `forced-colors`, which is the one mode where a floating surface most needs an edge.
 
-The floating button stays visible while the popup is open and closes it again — the convention every chat widget has already taught, and what makes returning focus to it correct. It hides itself when it would be underneath: always beneath a drawer, and below 960px beneath either shape.
+**Bar** — [`panel: 'bar'`](/reference/config#ui-panel), and what `'auto'` draws with the floating placement, so the shipped shape. The composer's field, at the bottom centre of every page: `--dp-bar-inline` wide at rest, `--dp-bar-inline-open` once it is focused, holds a question or sits under its window, at `--dp-r-field` with a hairline **and** `--dp-shadow`. The window rises above it — the popup's recipe, centred, as tall as what it holds and never taller than `--dp-popup-block` — at the first character typed. It replaces the floating button, and `ui.side` does not apply: it is centred.
+
+The floating button stays visible while the popup is open and closes it again — the convention every chat widget has already taught, and what makes returning focus to it correct; its sparkle turns into a chevron for as long as the popup is up. It hides itself when it would be underneath: always beneath a drawer, and below 960px beneath any shape.
 
 With a label it becomes a pill and grows on the **inline axis only** — `--dp-fab-size` is an input to the popup's own geometry, which sits a fixed distance above the button, so a taller control would move the panel and a wider one cannot. `--dp-fab-size-coarse` still applies as the block size on a pointer-less device, so the target floor is met either way.
 
@@ -189,9 +214,13 @@ With a label it becomes a pill and grows on the **inline axis only** — `--dp-f
 
 **Past conversations open above the thread**, under the header button that opens them, with one hairline against the thread and a list that scrolls inside `min(240px, 32dvh)`. The scope picker and the prompt disclosure stay at the bottom, under the footnote row *they* are opened from. At most one of the three is open.
 
-**Selecting inside an answer offers to quote it.** A one-button popover appears above the selection; pressing it puts the passage in the composer as a chip the reader can withdraw, and the question is then asked *about* it. The popover is the third and last thing in the package that floats, so it takes a hairline **and** `--dp-shadow` like the popup. It uses the platform's top layer where there is one, which is what keeps the popup shape from clipping it, and a plain fixed box where there is not. The chip is `--dp-surface-2` at `--dp-r-md`, one line, 13px, dimmed — a quotation reads as quieter text here, never as a rule down its side.
+**Selecting inside an answer offers to quote it.** A one-button popover appears above the selection; pressing it puts the passage in the composer as a chip the reader can withdraw, and the question is then asked *about* it. The popover floats, so it takes a hairline **and** `--dp-shadow` like the popup, the floating button, the bar and the bar's window — the five things in the package that do. It uses the platform's top layer where there is one, which is what keeps the popup shape from clipping it, and a plain fixed box where there is not. The chip is `--dp-surface-2` at `--dp-r-md`, one line, 13px, dimmed — a quotation reads as quieter text here, never as a rule down its side.
 
-**The hairline is the structure.** One device, one value — `1px solid var(--dp-line)` — on the drawer's edge, the popup, the selection popover, the header (transparent until the thread is scrolled), the conversation dock, the scope picker, the composer, the feedback textarea, the code card and the floating button. `outline` is the focus ring and nothing else: `2px solid var(--dp-focus)` at `2px` offset, on every control. The one exception is the jump pill's bottom edge, which takes `--dp-lip` because it is the package's only glass surface and needs an underside rather than a boundary.
+**The hairline is the structure.** One device, one value — `1px solid var(--dp-line)` — on the drawer's edge, the popup and the bar's window, the bar, the selection popover, the header (transparent until the thread is scrolled), the conversation dock, the scope picker, the composer, the feedback textarea, the code card and the floating button. `outline` is the focus ring and nothing else: `2px solid var(--dp-focus)` at `2px` offset, on every control. The one exception is the jump pill's bottom edge, which takes `--dp-lip` because it is glass lying on the thread and needs an underside rather than a boundary.
+
+**The window is glass.** From 960px up the drawer, the popup and the bar's window are your `--dp-surface` at 70% under `backdrop-filter: blur(24px) saturate(180%)`: the page behind arrives as colour and shape, never as legible text, and the answer keeps its full contrast. The two floating shapes add a one-pixel highlight on their top edge, light falling on the glass, which disappears on a light surface as a highlight would. Below 960px the sheet stays opaque. Nothing inside is a second glass: the composer is an opaque field on it, and the jump pill's blur stays at 2px.
+
+**A row has one hover.** In the header, the action rows under a question and an answer, the scope picker's presets, the suggestions and every list of sources — past conversations included — the hover is a single fill that travels from the item you left to the one you reached, on the settle spring: across a row of buttons, down a list, taking each item's width and height on the way. It looks like the hover it replaces — the wash on a control, `--dp-surface-2` on a source row — appears in place when the pointer arrives from outside, and fades in place when it leaves. Keyboard focus keeps each item's own fill and ring, and a linked source keeps its accent.
 
 **Buttons are pills, not links.** No border, a `--dp-wash` on hover and focus, `scale(0.96)` on press, and the inverted `--dp-text` / `--dp-on-text` pair for a toggle that is on. The three controls inside the footnote sentence, and the call-to-action under each article, keep their underline — a pill in running text breaks the line box — and take the same wash at `--dp-r-sm`.
 
@@ -209,13 +238,17 @@ The navbar trigger and the floating button deliberately do not depend on it — 
 
 **Type is four sizes.** 24px for the empty state's greeting and nothing else; 16px for the answer, the question and both composers; 14px for titles, rows and labels; 13px for meta and mono. Weights are 400, 500 and 600. Both composers are 16px at every width, which is also what stops iOS zooming the viewport when one is focused.
 
-Below 960px the two shapes are identical: a full-screen sheet with a scrim, `role="dialog"` and safe-area padding.
+Below 960px the three shapes are identical: a full-screen sheet with a scrim, `role="dialog"` and safe-area padding. The bar stays on the page as a button that looks like its field and opens that sheet.
+
+**Motion is two springs and an exit.** Everything that arrives moves on `--dp-ease` — a spring with no visible overshoot, for the drawer, the sheet, the pushed page — or `--dp-ease-pop`, a spring with a 3.8% overshoot, for what pops: the popup out of its button's corner, the bar's window out of the bar, a question you just asked, the check that says something was copied. Both play over `--dp-dur`. Everything that leaves does so in half that time on `--dp-ease-exit`, an ease-in, and the panel stays in the document until its exit has played. Empty-state suggestions rise in a 40ms stagger; an answer un-blurs into place on its first paint; a conversation restored from history simply is there. All of it is CSS — there is no animation library in the package.
 
 ## What degrades, and how
 
 Three rules use `:has()` — hiding the floating button under an open panel, shrinking the host's search box only when the navbar trigger is actually there, and dropping the room the popup reserves below itself when there is no floating button to reserve it for. A browser without `:has()` applies none of them: the button stays visible behind a drawer that covers it, the trigger sits at the far edge of the navbar instead of beside search, and a popup opened from the navbar floats one button-height above the corner. All three are cosmetic, and all three miss in the safe direction — nothing is hidden and nothing stops working.
 
-`prefers-reduced-motion` replaces every entrance with a fade, stops the two repeating animations and cancels every press scale, restoring the status label's own colour rather than freezing it mid-gradient.
+`backdrop-filter` is gated: a browser without it gets the opaque surface, because 70% without a blur is a window you read the page through. The glass also goes opaque under `prefers-reduced-transparency: reduce`, `prefers-contrast: more` and `forced-colors: active` — the jump pill's with it. Safari does not report reduced transparency yet; a reader there who also raised contrast is covered.
+
+Motion is **on by default, whatever the reader's OS says** — [`ui.motion`](/reference/config#ui-motion). `'auto'` defers to `prefers-reduced-motion` and `'reduce'` always applies the still variant: every entrance and every exit becomes a fade, the stagger goes, the bar keeps its two widths without travelling between them, the hover in a row or a list appears in place instead of travelling, the two repeating animations stop and every press scale is cancelled, restoring the status label's own colour rather than freezing it mid-gradient. On a VitePress default-theme site the theme's own `base.css` removes all motion with `!important` for a reader whose OS asks, whatever `ui.motion` says.
 
 `forced-colors` needs less than it used to. That mode replaces every background with a system colour, but it forces a border's colour too — so the surfaces that wear a hairline survive it untouched, and only the fill-only ones (the question bubble, the quote chip, the send button, the prompt editor, the copy chip, the suggestion rows) take a `CanvasText` edge. The status label is repainted as well, since its gradient is clipped to text and would otherwise render as an empty line.
 

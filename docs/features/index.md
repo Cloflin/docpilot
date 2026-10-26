@@ -4,7 +4,8 @@ description: Everything the panel does, one page each, with a live mock-up and t
 
 <script setup>
 const reader = [
-  { title: 'Triggers and layout', body: 'A floating button, a navbar icon, ⌘I, or a link under each article. Popup or drawer.', link: '/features/triggers' },
+  { title: 'Triggers and layout', body: 'A question bar, a navbar icon, ⌘I, or a link under each article. Bar, popup or drawer.', link: '/features/triggers' },
+  { title: 'Panel shapes', body: 'The same conversation as a bar, a popup, or a drawer that pushes the page aside.', link: '/features/shapes' },
   { title: 'Search scope', body: 'All docs, this page, this section, or pages the reader picks.', link: '/features/scope' },
   { title: 'Sources and passages', body: 'Numbered citations, and an accordion with the exact passage behind each one.', link: '/features/sources' },
   { title: 'Ask about a selection', body: 'Select text on the page or in an answer, press Ask AI.', link: '/features/quote' },
@@ -21,7 +22,11 @@ const engine = [
   { title: 'Pasted keys', body: 'A key typed into a question never leaves the browser.', link: '/features/credentials' },
   { title: 'Feedback', body: 'Thumbs, reasons, a comment — to your endpoint or the reader’s device.', link: '/features/feedback' },
   { title: 'How this works', body: 'Show readers the instruction the model runs under.', link: '/features/prompt' },
-  { title: 'The terminal', body: 'A home screen, project status and a live server monitor in the command line.', link: '/features/terminal' },
+]
+const running = [
+  { title: 'Static or server', body: 'The turn in the reader’s browser, or on your server — and how to choose.', link: '/features/runtime' },
+  { title: 'The terminal', body: 'init, index, eval, status: a home screen, project status and a live server monitor.', link: '/features/terminal' },
+  { title: 'Skills for your agent', body: 'Skills, slash commands and tuning agents, copied by init and refreshed by update.', link: '/features/skills' },
 ]
 </script>
 
@@ -36,5 +41,9 @@ Every feature below is on by default unless its page says otherwise, and every o
 ## What happens underneath
 
 <Cards :items="engine" />
+
+## How you run it
+
+<Cards :items="running" />
 
 The complete list of keys, with types and defaults, is the [Configuration reference](/reference/config).

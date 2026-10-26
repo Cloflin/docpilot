@@ -589,12 +589,12 @@ describe('openers — a turn that costs no embedding request', () => {
     })
   }
 
-  const setup = async (over = {}) => {
+  const setup = async (over = {}, ui = {}) => {
     const { resolveDocPilot, themeDocPilot } = await import('../src/config.js')
     session.configure(
       {
         docPilot: themeDocPilot(
-          resolveDocPilot({ suggestions: { questions: [OPENER], ...over } }, ENV),
+          resolveDocPilot({ suggestions: { questions: [OPENER], ...over }, ui }, ENV),
           ENV,
         ),
       },
@@ -1246,8 +1246,8 @@ describe('openers — the paraphrase the vector caught', () => {
  * THE REVEAL — engine-specs/017, `suggestions.reveal`.
  *
  * A paint schedule over a string that is already in memory. What is worth
- * pinning is not the animation but its three exits: the switch, the reader's
- * motion preference, and Stop — which completes the answer rather than
+ * pinning is not the animation but its three exits: the switch, `ui.motion`,
+ * and Stop — which completes the answer rather than
  * truncating it, because there is no request in flight to cancel.
  */
 describe('openers — a baked answer is revealed, not placed', () => {
@@ -1350,9 +1350,37 @@ describe('openers — a baked answer is revealed, not placed', () => {
     expect(turn.answerText).toBe(TEXT)
   })
 
-  it('`prefers-reduced-motion` skips it without needing the switch', async () => {
-    vi.stubGlobal('matchMedia', (q) => ({ matches: /reduced-motion/.test(q), media: q }))
+  /**
+   * `ui.motion` decides it — ui-specs/017. The default plays it whatever the OS
+   * says; `'auto'` defers to `prefers-reduced-motion`, and `'reduce'` needs no
+   * OS signal at all.
+   */
+  const reducedOs = () => vi.stubGlobal('matchMedia', (q) => ({ matches: /reduced-motion/.test(q), media: q }))
+
+  it('plays under `prefers-reduced-motion` by default', async () => {
+    vi.useFakeTimers()
+    reducedOs()
     await setup()
+    const done = session.submit(OPENER)
+    await vi.advanceTimersByTimeAsync(100)
+    const turn = session.state.turns.at(-1)
+    expect(turn.answerText.length).toBeLessThan(TEXT.length)
+    await vi.runAllTimersAsync()
+    await done
+    expect(turn.answerText).toBe(TEXT)
+  })
+
+  it('`motion: auto` skips it while the OS asks for reduced motion', async () => {
+    reducedOs()
+    await setup({}, { motion: 'auto' })
+    await session.submit(OPENER)
+    const turn = session.state.turns.at(-1)
+    expect(turn.state).toBe('complete')
+    expect(turn.answerText).toBe(TEXT)
+  })
+
+  it('`motion: reduce` skips it with no OS signal at all', async () => {
+    await setup({}, { motion: 'reduce' })
     await session.submit(OPENER)
     const turn = session.state.turns.at(-1)
     expect(turn.state).toBe('complete')

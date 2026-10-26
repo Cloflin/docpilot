@@ -9,7 +9,8 @@ against `package.json`'s version and refuses the publish if they disagree.
 
 ## 2.0.0 — 2026-10-25
 
-Two installs, measured. Nothing in the panel changes: the static install
+Two installs, measured, and a panel that opens three ways — from a bar at the
+bottom of the page by default. The answers do not change: the static install
 answered all 65 Harborline questions byte for byte as 1.5 did, and a server
 install answers the same questions sooner. Every other item is under the hood or
 in the owner's tooling. The claims are measured on `bench/harborline` — a
@@ -40,8 +41,81 @@ the same static install with a hosted `deepseek-v4-flash` reached the right
 outcome on 63 of 65 questions instead of 56 (McNemar p = 0.039), mostly by
 refusing what the docs do not answer.
 
+### The panel opens three ways
+
+ui-specs/015. Every key and value that shipped keeps its meaning, and one
+default moves: `panel: 'auto'` with the floating placement is the bar now — see
+Breaking.
+
+- **A sidebar that moves the page, from either edge.** `ui.side` — `'end'` (the
+  default, where everything has always been), `'start'`, `'left'` or `'right'` —
+  places the floating button, its popup and the drawer, and
+  `panel: 'drawer', layout: 'push'` now moves the page away from whichever edge
+  that is. While it pushes, `<html>` carries `docpilot-push` as before plus
+  `docpilot-push-start` / `-end` and, during the exit, `docpilot-push-closing`.
+- **A question bar at the bottom centre.** `panel: 'bar'` puts the composer in a
+  bar on every page; the first character typed raises a window above it with
+  everything the popup holds. It closes on Esc, its close button or a press
+  outside, replaces the floating button, and is a button that opens the sheet
+  below 960px. It is the shipped shape: `'auto'` resolves to it whenever `fab`
+  is in the trigger list.
+- **Motion that leaves as well as arrives.** The entrances move on springs
+  written as `linear()` — stiffness 350 / damping 35 for panels, 300 / 25 for what
+  pops — and every shape, dock and scrim now has an exit. The popup grows out of
+  its button's corner, the floating button's sparkle turns into a chevron while
+  the popup is open, a question you ask rises in, its answer un-blurs on first
+  paint, and the empty state's suggestions rise in a stagger. No animation
+  library: it is CSS and Vue's `<Transition>`. `--dp-dur` is now `400ms` and
+  `--dp-ease` the spring; `--dp-ease-pop`, `--dp-ease-exit`, `--dp-bar-inline` and
+  `--dp-bar-inline-open` are new. All of it plays whatever the reader's OS says
+  — see `ui.motion` under Breaking.
+- **The window is glass.** ui-specs/016. From 960px up the drawer, the popup
+  and the bar's window are `--dp-surface` at 70% under `backdrop-filter:
+  blur(24px) saturate(180%)`, and the two floating shapes carry a highlight on
+  their top edge. Without `backdrop-filter`, and under
+  `prefers-reduced-transparency`, `prefers-contrast: more` or `forced-colors`,
+  the panel and the jump pill are opaque as before; the sheet below 960px always
+  is. No token is added or changed.
+- **A row has one hover.** In the header, the action rows under a question and
+  an answer, the scope picker's presets, the suggestions and every list of
+  sources (past conversations included), the hover is one fill that travels
+  between the items — across a row, down a list — instead of fading out on one
+  and in on the next. Keyboard focus keeps each item's own fill and ring; the
+  still variant of `ui.motion` stops the travel.
+
 ### Breaking
 
+- **The panel opens from a bar by default.** `ui.panel: 'auto'` with `fab` in
+  `ui.trigger` — both shipped values — resolves to `'bar'` instead of
+  `'popup'`, so a site that set neither gets the bar at the bottom centre in
+  place of the corner button and its popup, and `['nav', 'fab']` gets the navbar
+  button beside the bar. A list without `fab` still gets the drawer.
+  `ui: {panel: 'popup'}` restores 1.x; `fabLabel` and `fabIcon` dress the corner
+  button only, so the bar reads neither.
+- **The panel moves whatever the reader's OS says.** ui-specs/017. 1.x
+  followed `prefers-reduced-motion` with no way to turn that off; 2.0 adds
+  `ui.motion` — `'full'` (the default) plays every entrance, exit and press,
+  `'auto'` swaps them for fades while the OS asks for reduced motion, `'reduce'`
+  always. `ui: {motion: 'auto'}` restores 1.x. It reaches the stylesheet as
+  `docpilot-motion-auto` / `docpilot-motion-reduce` on `<html>`, and the reveal of
+  a baked answer follows it. On a VitePress default-theme site the theme's own
+  `base.css` still removes all motion with `!important` for that reader; the
+  panel does not fight it.
+- **Every stylesheet is in `@layer docpilot`.** ui-specs/017. In 1.x only
+  `web.css` was. Your unlayered CSS now outranks the panel whatever its
+  specificity — one class is enough to restyle a recipe — and an unlayered
+  `--dp-*` of yours outranks an adapter and a `ui.theme` pin wherever it loads.
+  The other side of that: an unlayered reset outranks the panel too. VitePress
+  1's `base.css` (`button { padding: 0 }`, `ul { list-style: none }`) strips the
+  panel's buttons and lists; VitePress 2 keeps its reset in `@layer
+  __vitepress_base`, which `style.css` names before `docpilot`. On Docusaurus,
+  Infima's bare `h1`–`h6`, `ul`, `code`, `pre` and `a` repaint the answer body
+  unless the site turns on `future.v4.useCssCascadeLayers`. Three rules in the
+  VitePress adapter stay unlayered because each overrides VitePress's own
+  component CSS: the search box's `flex-grow` beside the navbar trigger, and the
+  sidebar's `transition` under `ui.layout: 'push'`. `bin/build-web.js` no longer
+  wraps the web build — `core.scss` declares the layer — and
+  `test/packaging.test.js` now holds all five files to it.
 - **The server install ships limits on.** `server.limits` defaults to 10 turns a
   minute (burst 10) and 500 a day per client, 16 turns at once and 3 per client;
   a refused turn is `429` with `Retry-After`. `server: {limits: false}` restores
@@ -97,6 +171,13 @@ refusing what the docs do not answer.
 - `noAnswerPrecision` read 0 on every run with `guard.mode: 'off'`; it is null
   where no gate could have named a cause.
 - `index` printed each repeated warning once per occurrence.
+- `layout: 'push'` on VitePress padded nothing from 1440px up on a page with a
+  sidebar: the rule on `.VPContent` lost to VitePress's own scoped padding. It
+  moves `.Layout` now, and VitePress's sidebar with it.
+- `layout: 'push'` did nothing on Docusaurus; the adapter pads `.main-wrapper`
+  from either edge now.
+- The composer's field showed a scrollbar thumb on one line of text on a host
+  that styles its scrollbars; it scrolls only past its five-line cap now.
 
 ## 1.5.0 — 2026-10-25
 

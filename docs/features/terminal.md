@@ -5,7 +5,21 @@ description: The DocPilot command line shows the numbers — a home screen with 
 
 # The terminal
 
-Run `npx docpilot` in a terminal and it shows where your project stands and what to do next. Three parts make that up: the **home screen**, `docpilot status` and `docpilot monitor`. The progress bars and the eval scorecard that the other commands draw follow the same rules.
+Run `npx docpilot` in a terminal and it shows where your project stands and what to do next. Three parts make that up: the **home screen**, `docpilot status` and `docpilot monitor`. The progress bars and the eval scorecard that the other commands draw follow the same rules. The mock-up plays a first session on an imaginary site: `init`, `index`, `eval --gate-only`, then `status` naming the next step.
+
+<Demo>
+  <CliDemo />
+  <template #code>
+
+```bash
+npx docpilot init               # the skills, the install, where the panel goes
+npx docpilot index              # build the index
+npx docpilot eval --gate-only   # measure retrieval; no model is called
+npx docpilot status             # where the project stands, and what to run next
+```
+
+  </template>
+</Demo>
 
 This page is about what you see and when. Every flag is in the [CLI reference](/reference/cli).
 

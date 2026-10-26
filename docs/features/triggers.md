@@ -1,10 +1,10 @@
 ---
-description: Four ways into the panel — a floating button, a navbar icon, a keyboard shortcut and a link under the article — and two ways it opens.
+description: Four ways into the panel — a question bar, a navbar icon, a keyboard shortcut and a link under the article — and three shapes it opens in.
 ---
 
 # Triggers and layout
 
-A reader opens the panel from a floating button, from an icon beside your search box, with <kbd>⌘</kbd> <kbd>I</kbd> (<kbd>Ctrl</kbd> <kbd>I</kbd>), or from the *Didn't find it? Ask DocPilot* link under each article. Press a variant to see where it puts the door.
+A reader opens the panel from the question bar at the bottom of the page, from an icon beside your search box, with <kbd>⌘</kbd> <kbd>I</kbd> (<kbd>Ctrl</kbd> <kbd>I</kbd>), or from the *Didn't find it? Ask DocPilot* link under each article. Press a variant to see where it puts the door.
 
 <Demo>
   <TriggersDemo />
@@ -14,7 +14,8 @@ A reader opens the panel from a floating button, from an icon beside your search
 docPilot: {
   ui: {
     trigger: 'fab',      // 'nav' | 'screen' | 'fab' | 'both' | 'none' | an array
-    panel: 'auto',       // 'popup' next to a floating button, else 'drawer'
+    panel: 'auto',       // 'bar' with the floating placement, else 'drawer'; or 'popup'
+    side: 'end',         // 'left' | 'right' | 'start' | 'end'
     fabLabel: 'Ask AI',  // false for an icon-only button
   },
 }
@@ -28,9 +29,10 @@ docPilot: {
 | Key | Default | What it does |
 |---|---|---|
 | `ui.trigger` | `'fab'` | Where the buttons go. `'nav'` puts an icon beside search and a row in the mobile menu; `'fab'` a floating button; `'both'` all three; `'none'` no button. |
-| `ui.panel` | `'auto'` | `'popup'` floats above the button; `'drawer'` takes the full height at the edge. `'auto'` picks the popup when there is a floating button. |
-| `ui.fabLabel` | `true` | `true` shows *Ask AI*, a string shows that text, `false` shows the icon alone. |
-| `ui.layout` | `'overlay'` | `'push'` narrows the page instead of covering it when the drawer opens. |
+| `ui.panel` | `'auto'` | `'popup'` floats above the button; `'drawer'` takes the full height at the edge; `'bar'` puts a question bar at the bottom centre and raises the conversation above it as the reader types, in place of the floating button. `'auto'` picks the bar when the floating placement is in the list, the drawer when it is not, and never the popup. |
+| `ui.side` | `'end'` | The edge the floating button, its popup and the drawer sit at: `'left'`, `'right'`, or `'start'`/`'end'` to follow the page's text direction. |
+| `ui.fabLabel` | `true` | The words on the corner button under `'popup'` or `'drawer'`: `true` shows *Ask AI*, a string shows that text, `false` shows the icon alone. |
+| `ui.layout` | `'overlay'` | `'push'` narrows the page instead of covering it when the drawer opens, from whichever edge `ui.side` names. |
 | `ui.background` | `'notify'` | An answer that finishes while the panel is closed puts a dot on the trigger; `'open'` reopens the panel instead. |
 | `ui.prefetch` | `'hover'` | Starts fetching the index when the pointer reaches a trigger, so the first answer starts sooner. |
 

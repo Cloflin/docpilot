@@ -181,8 +181,7 @@ there, so it outranks the media query without you overriding a token. See
 [`ui.theme`](/reference/config#ui-theme).
 
 **This stylesheet is a cascade layer.** Its whole contents are declared inside
-`@layer docpilot`, and only this file is — the VitePress and Docusaurus builds
-are not. An unlayered rule beats a layered one whatever its specificity, so any
+`@layer docpilot`, as every stylesheet in the package is since 2.0. An unlayered rule beats a layered one whatever its specificity, so any
 CSS your site already has wins over the panel's without `!important` and without
 counting selectors:
 

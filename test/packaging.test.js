@@ -36,27 +36,73 @@ describe('packaging', () => {
   const built = (rel) => rel.startsWith('dist/') && !distBuilt
 
   /**
-   * The one build output whose CSS is wrapped in a cascade layer, asserted
-   * because the failure is silent: the wrapper is a Vite plugin that has to run
-   * after `vite:css-post` emits the asset, and a plugin ordered wrong finds no
-   * stylesheet, rewrites nothing and ships an unlayered file that looks fine
-   * until a host's reset outranks it — or, the other way, until a site that
-   * overrode the panel from an unlayered rule stops being able to.
+   * Every stylesheet the package ships is in `@layer docpilot` — ui-specs/017 —
+   * and asserted, because the failures are silent. A rule that escapes the layer
+   * outranks a site that thought it could override the panel with one class; a
+   * layer nested in itself still parses; and a bundle that names `docpilot`
+   * before VitePress's reset layer loses every button and list to it.
+   *
+   * What may sit OUTSIDE the layer is stated per file: nothing at all, the order
+   * statement the bundle opens with, or the VitePress adapter's patches on
+   * VitePress's own components — rules headed `.VPNavBar…` or
+   * `html.docpilot-…`, never one on a DocPilot element alone.
    *
    * Skipped when `dist/` is absent, the way every other check here treats a
    * tree whose `prepare` has not run.
    */
-  it('wraps only the web stylesheet in @layer docpilot', () => {
-    const layered = 'dist/docpilot.web.css'
-    const plain = ['dist/docpilot.css', 'dist/docpilot-core.css', 'dist/docpilot-vitepress.css', 'dist/docpilot-docusaurus.css']
-    if (!fs.existsSync(abs(layered))) return
-    const css = fs.readFileSync(abs(layered), 'utf8')
-    expect(css.startsWith('@layer docpilot{'), `${layered} is not wrapped in @layer docpilot`).toBe(true)
-    // Nested once over itself still parses, so only a count catches it.
-    expect(css.split('@layer docpilot{').length - 1, `${layered} is wrapped more than once`).toBe(1)
-    for (const f of plain) {
-      if (!fs.existsSync(abs(f))) continue
-      expect(fs.readFileSync(abs(f), 'utf8').includes('@layer'), `${f} must not be layered — its host loads an adapter over it`).toBe(false)
+  const LAYER = '@layer docpilot{'
+  const ORDER = '@layer __vitepress_base,docpilot;'
+
+  /** The text outside every `@layer docpilot{…}` block, and the blocks' bodies. */
+  function splitLayer(css) {
+    let outside = ''
+    const bodies = []
+    let at = 0
+    for (let open = css.indexOf(LAYER); open !== -1; open = css.indexOf(LAYER, at)) {
+      outside += css.slice(at, open)
+      let depth = 1
+      let i = open + LAYER.length
+      for (; depth && i < css.length; i++) {
+        if (css[i] === '{') depth++
+        else if (css[i] === '}') depth--
+      }
+      bodies.push(css.slice(open + LAYER.length, i - 1))
+      at = i
+    }
+    // Comments are not rules — Vite appends a `/*$vite$:1*/` marker of its own.
+    return { outside: (outside + css.slice(at)).replace(/\/\*[\s\S]*?\*\//g, ''), bodies }
+  }
+
+  const patchHeads = (css) =>
+    [...css.matchAll(/(?:^|[{};])\s*([^{};@][^{};]*)\{/g)].map((m) => m[1].trim())
+
+  it.each([
+    ['dist/docpilot.css', 'bundle'],
+    ['dist/docpilot-core.css', 'none'],
+    ['dist/docpilot-vitepress.css', 'patches'],
+    ['dist/docpilot-docusaurus.css', 'none'],
+    ['dist/docpilot.web.css', 'none'],
+  ])('%s is in @layer docpilot', (file, outsideMay) => {
+    if (!fs.existsSync(abs(file))) return
+    const css = fs.readFileSync(abs(file), 'utf8').replace(/^(\uFEFF|@charset\s+[^;]+;)/, '')
+    const { outside, bodies } = splitLayer(css)
+    expect(bodies.length, `${file} has no @layer docpilot block`).toBeGreaterThan(0)
+    for (const body of bodies) {
+      expect(body.includes('@layer'), `${file} nests a layer inside docpilot`).toBe(false)
+    }
+    if (outsideMay === 'none') {
+      expect(outside.trim(), `${file} has rules outside the layer`).toBe('')
+      return
+    }
+    let rest = outside
+    if (outsideMay === 'bundle') {
+      expect(css.startsWith(ORDER), `${file} does not name the reset layer first`).toBe(true)
+      rest = outside.slice(ORDER.length)
+    }
+    const heads = patchHeads(rest)
+    expect(heads.length, `${file} lost its VitePress patches`).toBeGreaterThan(0)
+    for (const head of heads) {
+      expect(head, `${file} styles outside the layer`).toMatch(/^(\.VPNavBar|html\.docpilot-)/)
     }
   })
 

@@ -4,7 +4,8 @@
  *
  *   ui: {
  *     trigger:      'nav' | 'fab' | 'screen' | 'both' | 'none' | [...],
- *     panel:        'auto' | 'drawer' | 'popup',
+ *     panel:        'auto' | 'drawer' | 'popup' | 'bar',
+ *     side:         'end' | 'start' | 'left' | 'right',  // ui-specs/015
  *     fabLabel:     true | false | string,      // ui-specs/005
  *     fabIcon:      true | false,
  *     layout:       'overlay' | 'push',         // ui-specs/009
@@ -13,6 +14,7 @@
  *     waitingEscalation: true | false,          // ui-specs/012
  *     credit:       true | false,               // the `DocPilot` link in the footnote
  *     theme:        'auto' | 'light' | 'dark',  // ui-specs/011
+ *     motion:       'full' | 'auto' | 'reduce', // ui-specs/017
  *     font:         string | null,              // a family list, or `--your-var`
  *     fontMono:     string | null,
  *   }
@@ -25,18 +27,19 @@
  * enum, never a design decision, and the enum is what changed.
  *
  * `panel: 'auto'` is the default and means "whatever the trigger implies": a
- * list with the floating button in it opens a floating popup, a list without one
- * opens the full-height drawer. The SHIPPED pair is therefore the floating
- * button and the popup, because `trigger` defaults to `'fab'`. The shape of the
- * option is VitePress's own — see `resolveMode()` in theme-default's docsearch
- * support — an enum with an `auto` member plus a resolver that returns the
- * FINISHED structure. Nothing downstream re-derives `'auto'` for itself, so no
- * two readers of the setting can disagree about what it meant.
+ * list with the floating placement in it opens the bar at the bottom centre, a
+ * list without one opens the full-height drawer. The SHIPPED pair is therefore
+ * the floating placement and the bar, because `trigger` defaults to `'fab'`.
+ * The shape of the option is VitePress's own — see `resolveMode()` in
+ * theme-default's docsearch support — an enum with an `auto` member plus a
+ * resolver that returns the FINISHED structure. Nothing downstream re-derives
+ * `'auto'` for itself, so no two readers of the setting can disagree about what
+ * it meant.
  *
- * The explicit combinations — `nav` + `popup`, `fab` + `drawer` — are carried
- * out in silence. That is what `'auto'` is for: once the implied pairing has a
- * name of its own, an explicit value is an intention rather than a mistake to
- * be corrected.
+ * The explicit combinations — `nav` + `popup`, `fab` + `popup`, `fab` +
+ * `drawer` — are carried out in silence. That is what `'auto'` is for: once the
+ * implied pairing has a name of its own, an explicit value is an intention
+ * rather than a mistake to be corrected.
  *
  * A value outside the enum is reported and dropped, never thrown: this resolves
  * during a docs build, and a typo in a cosmetic setting must not be able to
@@ -105,7 +108,39 @@ const UI_TRIGGER_WORDS = {
 /** What `npx docpilot init` offers, and what a bad value is reported against. */
 export const UI_TRIGGER_WORD_LIST = Object.keys(UI_TRIGGER_WORDS)
 
-export const UI_PANELS = ['auto', 'drawer', 'popup']
+/**
+ * `'bar'` — ui-specs/015. The composer leaves the panel and becomes a bar at the
+ * bottom centre of the page; the window with the conversation rises above it.
+ *
+ * WHAT `'auto'` RESOLVES TO WITH THE FLOATING PLACEMENT, since 2.0. 015 first
+ * took it by name only, on the argument that a bar is a decision about what the
+ * page leads with rather than a consequence of where the button is. The package
+ * made that decision for the shipped pair: the bar is what a page leads with
+ * now, in the major where a default may move, and a site that wants the corner
+ * button and its popup back says `panel: 'popup'`.
+ */
+export const UI_PANELS = ['auto', 'drawer', 'popup', 'bar']
+
+/**
+ * WHICH EDGE THE PANEL BELONGS TO — ui-specs/015.
+ *
+ *   'end'    the trailing edge: right on a left-to-right page. Where the floating
+ *            button, the popup and the drawer have always been, and the default.
+ *   'start'  the leading edge
+ *   'left'   the left edge, whatever the page's direction
+ *   'right'  the right edge, on the same terms
+ *
+ * Both pairs, because they answer different sites: an author who wants the
+ * assistant on the left of an English page writes the word they see, and a site
+ * with right-to-left locales wants the panel to follow the text. The resolved
+ * value is the word itself — the direction is a fact about the reader's page,
+ * not about the build, so nothing here may settle it. The stylesheet maps the
+ * physical pair onto the logical edge with `:dir()`, and `pushEdge` below does
+ * the same for the one decision that is made in script.
+ *
+ * The bar is centred and ignores it.
+ */
+export const UI_SIDES = ['end', 'start', 'left', 'right']
 
 /**
  * `'overlay'` is today's behaviour and stays the default — ui-specs/009.
@@ -180,6 +215,30 @@ export const UI_BACKGROUND = ['notify', 'open', false]
 export const UI_THEMES = ['auto', 'light', 'dark']
 
 /**
+ * WHETHER THE PANEL MOVES — ui-specs/017.
+ *
+ *   'full'    every entrance, exit, press and travel plays, whatever the OS
+ *             says. The default since 2.0.
+ *   'auto'    the still variant while `prefers-reduced-motion: reduce` holds —
+ *             fades instead of springs, no stagger, no press scale, no loops.
+ *             What 1.x did with no way to turn it off.
+ *   'reduce'  the still variant always.
+ *
+ * `'system'` is a spelling of `'auto'`, on the terms `theme` gives it.
+ *
+ * `'auto'` SURVIVES RESOLUTION, for `theme`'s reason: it names a signal in the
+ * reader's browser, and the stylesheet reads it there. `session.configure`
+ * writes `docpilot-motion-auto` or `docpilot-motion-reduce` onto `<html>`; the
+ * default writes nothing.
+ *
+ * THE DEFAULT IGNORES AN OS PREFERENCE, by decision rather than by oversight —
+ * ui-specs/017 records it and what it costs. A site that would rather defer to
+ * the reader's OS says `'auto'`, and the reveal of a baked answer follows the
+ * same setting.
+ */
+export const UI_MOTIONS = ['full', 'auto', 'reduce']
+
+/**
  * WHAT MAY REACH `style.setProperty`, stated as what may not.
  *
  * The resolved value is written onto `<html>` as a custom property and is read
@@ -216,12 +275,17 @@ export const UI_DEFAULTS = {
    */
   trigger: 'fab',
   /**
-   * `'auto'`, which with the default trigger resolves to `'popup'`.
+   * `'auto'`, which with the default trigger resolves to `'bar'`.
    *
    * The pairing stays derived rather than stated: a site that moves the button
    * into its navbar gets the drawer back from the same key it never touched.
    */
   panel: 'auto',
+  /**
+   * `'end'` — where the button, the popup and the drawer have always been.
+   * ui-specs/015.
+   */
+  side: 'end',
   fabLabel: true,
   fabIcon: true,
   layout: 'overlay',
@@ -270,6 +334,13 @@ export const UI_DEFAULTS = {
    * product that wants the assistant to read as one scheme everywhere.
    */
   theme: 'auto',
+  /**
+   * `'full'` — the motion plays, whatever the OS says. ui-specs/017.
+   *
+   * A default that changes behaviour on update: 1.x followed
+   * `prefers-reduced-motion` unconditionally. `'auto'` restores that.
+   */
+  motion: 'full',
   /**
    * `null` — and the default lives in the STYLESHEET, not here.
    *
@@ -470,10 +541,28 @@ function triggers(value, err) {
   return [...UI_TRIGGER_WORDS[UI_DEFAULTS.trigger]]
 }
 
+/**
+ * The LOGICAL edge a configured side lands on, for the one decision about it that
+ * is made in script — which `docpilot-push-*` class goes onto `<html>`.
+ * ui-specs/015.
+ *
+ * Everything else about the side is the stylesheet's, which maps `'left'` and
+ * `'right'` with `:dir()` and so needs no script on a server-rendered button.
+ * The push class is written from a watcher, in the browser, where the page's
+ * direction is a fact rather than a guess.
+ */
+export function pushEdge(side, rtl) {
+  if (side === 'start' || side === 'end') return side
+  if (side === 'left') return rtl ? 'end' : 'start'
+  if (side === 'right') return rtl ? 'start' : 'end'
+  return 'end'
+}
+
 export function resolveUi(docPilot, err = console.error) {
   const ui = docPilot?.ui || {}
   const trigger = triggers(ui.trigger, err)
   const panel = pick(ui.panel, UI_PANELS, UI_DEFAULTS.panel, 'panel', err)
+  const side = pick(ui.side, UI_SIDES, UI_DEFAULTS.side, 'side', err)
   const layout = pick(ui.layout, UI_LAYOUTS, UI_DEFAULTS.layout, 'layout', err)
   const prefetch = pick(ui.prefetch, UI_PREFETCH, UI_DEFAULTS.prefetch, 'prefetch', err)
   const fabLabel = label(ui.fabLabel, err)
@@ -489,6 +578,8 @@ export function resolveUi(docPilot, err = console.error) {
     err('[docpilot] ui.fabIcon and ui.fabLabel cannot both be off — keeping the icon', ui)
     fabIcon = true
   }
+  // Never 'auto' past this line — see the note on `panel` in the object below.
+  const shape = panel === 'auto' ? (trigger.includes('fab') ? 'bar' : 'drawer') : panel
   return {
     // ALWAYS an array. See the idempotency note at the top of the file for why
     // the word the author typed is not what comes back out.
@@ -496,15 +587,17 @@ export function resolveUi(docPilot, err = console.error) {
     /**
      * Never 'auto' past this line. Every consumer reads a real shape.
      *
-     * The floating button decides it, and it decides it even when the navbar
-     * button is in the list too: the popup is anchored to the corner the FAB
-     * sits in, and the drawer is not anchored to anything. So `['nav','fab']`
-     * opens the popup, both buttons open the same panel, and the one placement
-     * with a geometric opinion is the one that gets to hold it. A site that
-     * wants the drawer with a FAB says `panel: 'drawer'` — which was always
-     * legal and is still carried out in silence.
+     * The floating placement decides it, and it decides it even when the
+     * navbar button is in the list too: under `'auto'` the floating placement
+     * IS the bar — ui-specs/015 — and the drawer is not anchored to anything.
+     * So `['nav','fab']` draws the bar beside the navbar button, both open the
+     * same window, and the one placement with a geometric opinion is the one
+     * that gets to hold it. A site that wants the corner button says
+     * `panel: 'popup'`, and one that wants the drawer with it says
+     * `panel: 'drawer'` — both carried out in silence.
      */
-    panel: panel === 'auto' ? (trigger.includes('fab') ? 'popup' : 'drawer') : panel,
+    panel: shape,
+    side,
     // Stated rather than left to each component to compute from `trigger`: the
     // three placements are three mounted instances of one component, and "does
     // this one render" is the answer all three need. Booleans rather than the
@@ -512,7 +605,14 @@ export function resolveUi(docPilot, err = console.error) {
     // that can be handed a string by a hand-written themeConfig.
     showNavTrigger: trigger.includes('nav'),
     showScreen: trigger.includes('screen'),
-    showFab: trigger.includes('fab'),
+    /**
+     * The bar REPLACES the floating button — ui-specs/015. It is the floating
+     * placement in that shape, and a corner button beside a centred bar would be
+     * two doors into one room, one of them pointing at nothing the bar does not
+     * already do. `trigger` keeps `'fab'`, so the resolved list is still the
+     * author's list and a second pass changes nothing; only the drawing stops.
+     */
+    showFab: trigger.includes('fab') && shape !== 'bar',
     // These two describe the FLOATING placement only — see ui-specs/005. The
     // navbar trigger has always been icon-only beside the host's search box and
     // the nav-screen row has always been text; neither reads them.
@@ -553,6 +653,16 @@ export function resolveUi(docPilot, err = console.error) {
       UI_THEMES,
       UI_DEFAULTS.theme,
       'theme',
+      err,
+    ),
+    // Reaches the stylesheet the way `theme` does — a class on `<html>` — and
+    // `'system'` is folded into `'auto'` before the enum check for the same
+    // reason. ui-specs/017.
+    motion: pick(
+      ui.motion === 'system' ? 'auto' : ui.motion,
+      UI_MOTIONS,
+      UI_DEFAULTS.motion,
+      'motion',
       err,
     ),
     /**

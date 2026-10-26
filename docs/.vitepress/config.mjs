@@ -164,7 +164,28 @@ export const docPilot = {
       }),
   budget: { probe: 'never' },
   suggestions: { questions: openers },
-  ui: { trigger: 'fab' },
+  /**
+   * `DOCPILOT_UI` overrides the shape for a local look at the other two —
+   * ui-specs/015. JSON, merged over what the site ships, and never set in a
+   * deploy:
+   *
+   *   DOCPILOT_UI='{"panel":"popup"}' npm run docs:dev
+   *   DOCPILOT_UI='{"panel":"drawer","layout":"push","side":"left"}' npm run docs:dev
+   *
+   * A value that does not parse is dropped with a line in the dev log rather
+   * than taking the site down.
+   */
+  ui: { trigger: 'fab', ...uiOverride() },
+}
+
+function uiOverride() {
+  if (!env.DOCPILOT_UI) return {}
+  try {
+    return JSON.parse(env.DOCPILOT_UI)
+  } catch {
+    console.warn(`[docs] DOCPILOT_UI is not JSON — ignored: ${env.DOCPILOT_UI}`)
+    return {}
+  }
 }
 
 const ai = defineDocPilot(docPilot, env)
@@ -207,6 +228,7 @@ const groups = [
     items: [
       { text: 'Overview', link: '/features/' },
       { text: 'Triggers and layout', link: '/features/triggers' },
+      { text: 'Panel shapes', link: '/features/shapes', badge: 'new' },
       { text: 'Search scope', link: '/features/scope' },
       { text: 'Sources and passages', link: '/features/sources' },
       { text: 'Ask about a selection', link: '/features/quote' },
@@ -221,7 +243,9 @@ const groups = [
       { text: 'Feedback', link: '/features/feedback' },
       { text: 'Pasted keys', link: '/features/credentials' },
       { text: 'How this works', link: '/features/prompt' },
+      { text: 'Static or server', link: '/features/runtime', badge: 'new' },
       { text: 'The terminal', link: '/features/terminal', badge: 'new' },
+      { text: 'Skills for your agent', link: '/features/skills', badge: 'new' },
     ],
   },
   {

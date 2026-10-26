@@ -104,7 +104,7 @@ Run that on the build machine with its environment. The route has to match paths
 export const docPilot = {
   ui: {
     trigger: 'fab',          // 'fab' | 'nav' | 'screen' | 'both' | 'none' | an array
-    panel: 'auto',           // 'drawer' | 'popup'
+    panel: 'auto',           // 'bar' | 'drawer' | 'popup'
     layout: 'overlay',       // 'push' — the page moves aside instead of being covered
     theme: 'auto',           // 'light' | 'dark' — pin the scheme regardless of the site
     fabLabel: 'Ask AI',      // a string is verbatim; true — from i18n; false — icon only
@@ -113,7 +113,7 @@ export const docPilot = {
 }
 \`\`\`
 
-\`trigger\` is a list, not an either/or: \`'nav'\` is \`['nav', 'screen']\` and \`'both'\` is all three. \`'none'\` removes the buttons and leaves ⌘I working. \`panel: 'auto'\` follows the trigger — a popup with a \`fab\`, a drawer without one. An invalid value never breaks the build; it is printed and falls back.
+\`trigger\` is a list, not an either/or: \`'nav'\` is \`['nav', 'screen']\` and \`'both'\` is all three. \`'none'\` removes the buttons and leaves ⌘I working. \`panel: 'auto'\` follows the trigger — the bar with a \`fab\`, a drawer without one; \`'popup'\` brings back the corner button. An invalid value never breaks the build; it is printed and falls back.
 
 **2. The \`--dp-*\` CSS tokens — colour and geometry.** Everything the panel paints goes through one. Override them *after* the panel's styles:
 
