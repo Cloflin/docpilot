@@ -7,7 +7,7 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
-## 2.0.0 — 2026-10-25
+## 2.0.0 — 2026-10-26
 
 Two installs, measured, and a panel that opens three ways — from a bar at the
 bottom of the page by default. The answers do not change: the static install
@@ -179,6 +179,11 @@ Breaking.
   from either edge now.
 - The composer's field showed a scrollbar thumb on one line of text on a host
   that styles its scrollbars; it scrolls only past its five-line cap now.
+- `markdown-it` is `^15.0.3`. 15.0.0–15.0.2 carry four quadratic-time parsing
+  advisories (GHSA-r7fv-28h4-cvq7, GHSA-vfgh-jcmw-g37q, GHSA-gfr2-rv44-r23c,
+  GHSA-253c-mchw-3w2r), and the prebuilt `web` bundle inlines the parser. The
+  panel runs with `html`, `linkify` and `typographer` off, so of the four only
+  the multi-line link reference definition reached it.
 
 ## 1.5.0 — 2026-10-25
 

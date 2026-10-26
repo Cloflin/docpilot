@@ -209,7 +209,7 @@ The blob is a single file, `vectors.<hash>.bin`, exactly `chunkCount × dims / 8
 **The error is measured, not assumed.** Every build samples up to 200 vector pairs, compares the exact float cosine against the 1-bit score, and prints the mean absolute difference:
 
 ```
-quantisation err 0.01224 mean |Δcos| (1-bit)
+quantisation err 0.01230 mean |Δcos| (1-bit)
 ```
 
 Above `0.03` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.

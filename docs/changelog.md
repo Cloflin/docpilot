@@ -15,7 +15,7 @@ Each release in a few lines. The full notes — every change, every migration st
 
 ## 2.0.0
 
-<div class="cl-date">Oct 25, 2026</div>
+<div class="cl-date">Oct 26, 2026</div>
 
 ### Two installs, measured, a panel that opens from a bar, and an agent that tunes your docs
 
@@ -29,7 +29,7 @@ Each release in a few lines. The full notes — every change, every migration st
 - **The panel opens three ways, from a bar by default.** A question bar at the bottom centre whose answer rises above it is the shipped shape; a sidebar that moves the page from the left or the right and the corner popup are settings — `ui: { panel: 'popup' }` keeps 1.x. Motion leaves as well as arrives, on springs, and plays whatever the reader's OS says — `ui: { motion: 'auto' }` defers to it as 1.x did; the window is frosted glass, and the hover travels between the items of a row or a list. See [The assistant panel](/guide/panel#opening-it) and [Migrate to 2.0](/guide/migrate-2#panel-bar).
 - **Every stylesheet is in `@layer docpilot`.** Your own CSS outranks the panel with one class and no `!important` — and an unlayered reset does too. See [Appearance](/guide/appearance#five-entry-points) and [Migrate to 2.0](/guide/migrate-2#css-layer).
 
-<a class="cl-more" :href="gh('200--2026-10-25')">Full notes</a>
+<a class="cl-more" :href="gh('200--2026-10-26')">Full notes</a>
 
 ## 1.5.0
 
