@@ -40,6 +40,8 @@ stylesheet after yours, or name the order yourself before anything else —
 exists to beat a declaration VitePress makes on its own component: the search
 box's `flex-grow`, which would otherwise push the navbar trigger 398px away from
 it, and the sidebar's `transition` in both directions of `ui.layout: 'push'`.
+The still variant of that transition stays out with them, because it has to
+cancel it.
 
 An adapter is loaded **after** the core, always. The Docusaurus plugin lists them
 in that order itself; everywhere else it is the order of your two imports.
@@ -244,7 +246,7 @@ Below 960px the three shapes are identical: a full-screen sheet with a scrim, `r
 
 ## What degrades, and how
 
-Three rules use `:has()` — hiding the floating button under an open panel, shrinking the host's search box only when the navbar trigger is actually there, and dropping the room the popup reserves below itself when there is no floating button to reserve it for. A browser without `:has()` applies none of them: the button stays visible behind a drawer that covers it, the trigger sits at the far edge of the navbar instead of beside search, and a popup opened from the navbar floats one button-height above the corner. All three are cosmetic, and all three miss in the safe direction — nothing is hidden and nothing stops working.
+Four rules use `:has()` — hiding the floating button under an open panel, shrinking the host's search box only when the navbar trigger is actually there, dropping the room the popup reserves below itself when there is no floating button to reserve it for, and letting the hover in a row take the press of the item under it. A browser without `:has()` applies none of them: the button stays visible behind a drawer that covers it, the trigger sits at the far edge of the navbar instead of beside search, a popup opened from the navbar floats one button-height above the corner, and the hover holds its size while the item it marks is pressed. All four are cosmetic, and all four miss in the safe direction — nothing is hidden and nothing stops working.
 
 `backdrop-filter` is gated: a browser without it gets the opaque surface, because 70% without a blur is a window you read the page through. The glass also goes opaque under `prefers-reduced-transparency: reduce`, `prefers-contrast: more` and `forced-colors: active` — the jump pill's with it. Safari does not report reduced transparency yet; a reader there who also raised contrast is covered.
 

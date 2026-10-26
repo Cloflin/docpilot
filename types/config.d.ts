@@ -500,13 +500,13 @@ export type UiTrigger = 'nav' | 'screen' | 'fab'
  */
 export type UiTriggerWord = UiTrigger | 'both' | 'all' | 'none'
 
-/** What an author writes. `resolveUi` turns it into `ResolvedUi`. */
 /**
  * Which edge the panel belongs to — ui-specs/015. `'start'` and `'end'` follow
  * the page's writing direction; `'left'` and `'right'` stay where they say.
  */
 export type UiSide = 'end' | 'start' | 'left' | 'right'
 
+/** What an author writes. `resolveUi` turns it into `ResolvedUi`. */
 export interface UiSettings {
   trigger?: UiTriggerWord | UiTrigger[]
   /**

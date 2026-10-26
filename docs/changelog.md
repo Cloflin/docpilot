@@ -17,7 +17,7 @@ Each release in a few lines. The full notes — every change, every migration st
 
 <div class="cl-date">Oct 25, 2026</div>
 
-### Two installs, measured, and an agent that tunes your docs
+### Two installs, measured, a panel that opens from a bar, and an agent that tunes your docs
 
 - **Choose your install first.** `npx docpilot init` asks where a question is answered: in the reader's browser (static) or on your server. See [Choose your install](/install/choose). Upgrading from 1.x: [Migrate to 2.0](/guide/migrate-2).
 - **A faster server turn.** One-shot by default: on a local model the first token comes three times sooner, with answer quality inside the noise. A metrics endpoint, stage timings in the turn log, and limits and a deadline on by default. See [Server operations](/guide/server-operations).

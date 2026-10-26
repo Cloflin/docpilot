@@ -60,10 +60,10 @@
 /**
  * The tokens, on :root rather than on `.docpilot`.
  *
- * `.docpilot` exists only while the panel is open, and three of this package's
- * elements live outside it and outlive it — the navbar trigger, the floating
- * button and the article call to action. Tokens declared on the panel would be
- * unreachable to all three.
+ * `.docpilot` holds only the panel and the bar, and three of this package's
+ * elements live outside it — the navbar trigger, the floating button and the
+ * article call to action. Tokens declared on the panel would be unreachable to
+ * all three.
  *
  * Colours are stated twice: a light set here, a dark set under
  * `prefers-color-scheme`. Everything that is not a colour — geometry, radii,

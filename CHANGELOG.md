@@ -113,7 +113,8 @@ Breaking.
   unless the site turns on `future.v4.useCssCascadeLayers`. Three rules in the
   VitePress adapter stay unlayered because each overrides VitePress's own
   component CSS: the search box's `flex-grow` beside the navbar trigger, and the
-  sidebar's `transition` under `ui.layout: 'push'`. `bin/build-web.js` no longer
+  sidebar's `transition` under `ui.layout: 'push'` — with its still variant,
+  which has to cancel it. `bin/build-web.js` no longer
   wraps the web build — `core.scss` declares the layer — and
   `test/packaging.test.js` now holds all five files to it.
 - **The server install ships limits on.** `server.limits` defaults to 10 turns a

@@ -149,7 +149,7 @@ Everything the panel paints goes through one of the tokens. Override them **afte
 ```
 
 - Colours: `--dp-surface`, `--dp-surface-2`, `--dp-wash`, `--dp-line`, `--dp-lip`, `--dp-text`, `--dp-text-dim`, `--dp-on-text`, `--dp-focus`, `--dp-accent-soft`, `--dp-alert`, `--dp-chip`, `--dp-code-bg`, `--dp-shadow`, `--dp-scrim`.
-- Geometry and timing: `--dp-width`, `--dp-gutter`, `--dp-r-sm/md/lg/bubble/field/pill`, `--dp-dur`, `--dp-dur-fast`, `--dp-ease`, `--dp-z`, `--dp-fab-size`, `--dp-popup-inset`, `--dp-popup-block`, `--dp-top`.
+- Geometry and timing: `--dp-width`, `--dp-gutter`, `--dp-r-sm/md/lg/bubble/field/pill`, `--dp-dur`, `--dp-dur-fast`, `--dp-ease`, `--dp-ease-pop`, `--dp-ease-exit`, `--dp-z`, `--dp-fab-size`, `--dp-fab-size-coarse`, `--dp-popup-inset`, `--dp-popup-block`, `--dp-bar-inline`, `--dp-bar-inline-open`, `--dp-top`.
 
 The full table with the core values, and what the VitePress and Docusaurus adapters turn them into, is [Appearance → The tokens](/guide/appearance#the-tokens).
 

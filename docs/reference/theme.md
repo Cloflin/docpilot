@@ -91,9 +91,10 @@ Copy this, delete what you are not changing, load it **after** the package's CSS
      site's own code surface. */
   --dp-code-bg: rgba(101, 117, 133, 0.08);
 
-  /* Worn by the three things that float: the popup, the selection popover and
-     the floating button. Each also carries a hairline, because a shadow alone
-     is invisible on a dark host and erased outright by `forced-colors`. */
+  /* Worn by what floats: the popup, the bar and its window, the selection
+     popover and the floating button. Each also carries a hairline, because a
+     shadow alone is invisible on a dark host and erased outright by
+     `forced-colors`. */
   --dp-shadow:
     0 12px 32px rgba(0, 0, 0, 0.16),
     0 2px 8px rgba(0, 0, 0, 0.12);
