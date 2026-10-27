@@ -12773,6 +12773,98 @@ describe('the environment, and who wins', () => {
     expect(seen.chat.provider).toBe('deepseek')
   })
 
+  /**
+   * The loader was `import('vitepress')`, resolved from the PACKAGE's location:
+   * a Docusaurus site, a plain script, or strict pnpm got `{}` behind a bare
+   * `catch`, and the key `init` had told them to put in `.env.local` was never
+   * read. A `vitepress` that cannot load stands in for all three.
+   */
+  it('reads the file on a site with no VitePress to borrow a loader from', async () => {
+    vi.resetModules()
+    vi.doMock('vitepress', () => {
+      throw new Error("Cannot find package 'vitepress'")
+    })
+    try {
+      const { fileEnv } = await import('../src/cli-env.js')
+      const seen = await inTmp({ '.env.local': 'GROQ_API_KEY=k-from-file\n' }, (d) => fileEnv(d, {}))
+      expect(seen).toEqual({ GROQ_API_KEY: 'k-from-file' })
+    } finally {
+      vi.doUnmock('vitepress')
+      vi.resetModules()
+    }
+  })
+
+  /** Vite's files, Vite's order, Vite's `$VAR` expansion — and the law. */
+  it('reads .env then .env.local, expands $VAR, and fills only what is unset', async () => {
+    const { applyFileEnv } = await import('../src/cli-env.js')
+    const env = { SHELL_SET: 'shell', EMPTY: '' }
+    const added = await inTmp(
+      {
+        '.env': 'A=from-env\nB=kept\nSHELL_SET=file\nEMPTY=file\nexport C="two\\nlines" # note\n',
+        '.env.local': "A=from-local\nD=${A}/x\nE='${MISSING:-default}'\nF=\\$A\n",
+      },
+      (d) => applyFileEnv(env, d),
+    )
+    expect(env).toEqual({
+      SHELL_SET: 'shell',
+      EMPTY: '',
+      A: 'from-local',
+      B: 'kept',
+      C: 'two\nlines',
+      D: 'from-local/x',
+      E: 'default',
+      F: '$A',
+    })
+    expect(added.sort()).toEqual(['A', 'B', 'C', 'D', 'E', 'F'])
+  })
+
+  /**
+   * `util.parseEnv` — the parser Vite 8 itself calls — arrived in Node 20.12,
+   * and `engines` admits 20.0. The fallback is held to the native parser on the
+   * same text wherever that one exists, so the two cannot drift apart unseen.
+   */
+  it('parses without util.parseEnv the way util.parseEnv does', async () => {
+    const util = await import('node:util')
+    const { parseDotenv } = await import('../src/cli-env.js')
+    const text = [
+      '# a comment',
+      '',
+      'PLAIN=value',
+      '  SPACED  =  padded  ',
+      'export EXPORTED=yes',
+      'INLINE=kept # dropped',
+      'DOUBLE="has # hash"',
+      "SINGLE='single'",
+      'BACKTICK=`tick`',
+      'NEWLINE="one\\ntwo"',
+      "LITERAL='one\\ntwo'",
+      'MULTI="first',
+      'second"',
+      'EMPTY=',
+      'NOEQUALS',
+      'WINDOWS=crlf\r',
+      'DUP=first',
+      'DUP=second',
+    ].join('\n')
+    const want = {
+      PLAIN: 'value',
+      SPACED: 'padded',
+      EXPORTED: 'yes',
+      INLINE: 'kept',
+      DOUBLE: 'has # hash',
+      SINGLE: 'single',
+      BACKTICK: 'tick',
+      NEWLINE: 'one\ntwo',
+      LITERAL: 'one\\ntwo',
+      MULTI: 'first\nsecond',
+      EMPTY: '',
+      WINDOWS: 'crlf',
+      DUP: 'second',
+    }
+    expect(parseDotenv(text)).toEqual(want)
+    if (typeof util.parseEnv === 'function') expect(util.parseEnv(text)).toEqual(want)
+  })
+
   it('is applied by the launcher, so the two commands that never read it see it', async () => {
     // `bench` and `lint` carried no loader at all. Nothing in either file
     // changed; the launcher fills `process.env` before it dispatches.
