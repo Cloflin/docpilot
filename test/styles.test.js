@@ -259,3 +259,44 @@ describe('stylesheet split', () => {
     expect(vue).toContain(`matchMedia('(min-width: ${sheet}px)')`)
   })
 })
+
+/**
+ * The glass's alpha — ui-specs/016. A formula no other gate renders: happy-dom
+ * computes no colour, and the check script reads names, not arithmetic. So it
+ * is evaluated here on what it has to tell apart — the core's own two
+ * surfaces, every 8-bit mean either side of 128, and a host surface with an
+ * alpha of its own, which the glass multiplies rather than replaces.
+ */
+describe('the glass alpha', () => {
+  // Gated: the declaration holds a var(), so a browser without relative colour
+  // syntax computes it to `transparent` instead of dropping it.
+  const gate = blockAfter(stripComments(CORE), '@supports (color: rgb(from')
+  const expr = gate.match(/rgb\(from var\(--dp-surface\) r g b \/ (.+)\);/)?.[1]
+  const clamp = (lo, v, hi) => Math.min(Math.max(lo, v), hi)
+  // `calc(` is a parenthesis and `clamp(` a function: what is left is arithmetic.
+  const alphaOf = (r, g, b, alpha = 1) =>
+    new Function('r', 'g', 'b', 'alpha', 'clamp', `return ${expr.replace(/calc\(/g, '(')}`)(r, g, b, alpha, clamp)
+
+  it('is written on the surface, inside its own @supports', () => {
+    expect(expr).toMatch(/^[\w\s.+\-*/(),]+$/)
+  })
+
+  it('takes 70% of a light surface and 85% of a dark one', () => {
+    expect(alphaOf(0xff, 0xff, 0xff)).toBeCloseTo(0.7)
+    expect(alphaOf(0x1b, 0x1b, 0x1f)).toBeCloseTo(0.85)
+  })
+
+  it('steps at a mean of 128, with no 8-bit surface in between', () => {
+    for (let sum = 0; sum <= 765; sum++) {
+      const r = Math.min(sum, 255)
+      const g = Math.min(sum - r, 255)
+      expect(alphaOf(r, g, sum - r - g), `channel sum ${sum}`).toBeCloseTo(sum < 384 ? 0.85 : 0.7)
+    }
+  })
+
+  it('multiplies the surface’s own alpha', () => {
+    expect(alphaOf(0, 0, 0, 0)).toBe(0)
+    expect(alphaOf(0xff, 0xff, 0xff, 0.9)).toBeCloseTo(0.63)
+    expect(alphaOf(0x1b, 0x1b, 0x1f, 0.5)).toBeCloseTo(0.425)
+  })
+})

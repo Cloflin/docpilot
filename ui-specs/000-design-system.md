@@ -339,8 +339,9 @@ chip.
 
 From 960px up the drawer, the popup and the bar's window are a material over the
 page: `color-mix(in srgb, var(--dp-surface) 70%, transparent)` under
-`backdrop-filter: blur(24px) saturate(180%)`. 70% keeps `--dp-text` at 4.5:1
-over a pure black or white field behind it; 24px leaves no glyph of the page;
+`backdrop-filter: blur(24px) saturate(180%)`, 85% when the surface itself is
+dark. 70% keeps `--dp-text` at 4.5:1 over a pure black or white field behind
+it; 24px leaves no glyph of the page;
 180% gives back the colour the blur greys. **Gated on `@supports
 (backdrop-filter)`** — outside it the opaque surface stands. The sheet below
 960px stays opaque: it covers the page behind a scrim.

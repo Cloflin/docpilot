@@ -662,13 +662,29 @@ html.docpilot-dark {
  *
  * Three numbers, and each is a legibility decision:
  *
- *   70%   of `--dp-surface`. At most 30% of a blurred page comes through, so
- *         `--dp-text` holds 4.5:1 even over a pure black or white field.
+ *   70%   of `--dp-surface` on a light surface, 85% on a dark one. At most 30%
+ *         of a blurred page comes through, so `--dp-text` holds 4.5:1 even
+ *         over a pure black or white field. Dark takes less of the page: 30%
+ *         of a blurred light page lifts a dark panel into grey haze.
  *         Derived, so under an adapter it is the host's surface.
  *   24px  the blur. Wide enough that no glyph of the page survives it: glass
  *         that lets a paragraph through competes with the answer on top of it.
  *   180%  saturate. A blur greys what it averages; this gives the colour back,
  *         which is what reads as glass rather than smoke.
+ *
+ * DARK IS READ OFF THE SURFACE, not off a scheme. Under an adapter the scheme
+ * is the host's — `html.dark`, `[data-theme]` — and none of it may appear in
+ * this file; a token for the alpha would have to go in the dark set, and an
+ * adapter has no host value to re-declare it with. So the alpha steps on the
+ * surface's own mean channel: below 128 it is 85%, from 128 up 70%. The ramp
+ * between the two is 0.15 of a unit wide, and an 8-bit surface's mean moves in
+ * thirds, so no hex surface lands on it. A browser without relative colour
+ * syntax keeps 70% in both.
+ *
+ * TIMES THE SURFACE'S OWN ALPHA, as `color-mix()` with `transparent` is. A host
+ * surface may be `transparent` or translucent, and `rgb(from …)` writing its
+ * own alpha over that would turn a clear panel into near-black glass under
+ * dark text: `transparent` is black at zero alpha, and its mean reads as dark.
  *
  * GATED, as the jump pill is. Without `backdrop-filter` a 70% fill is a window
  * you read the page through, so outside the query the opaque surface stands.
@@ -683,6 +699,10 @@ html.docpilot-dark {
       background: color-mix(in srgb, var(--dp-surface) 70%, transparent);
       -webkit-backdrop-filter: blur(24px) saturate(180%);
       backdrop-filter: blur(24px) saturate(180%);
+
+      @supports (color: rgb(from red r g b / calc(alpha * clamp(0.7, r, 0.85)))) {
+        background: rgb(from var(--dp-surface) r g b / calc(alpha * clamp(0.7, 0.7 + (128 - (r + g + b) / 3), 0.85)));
+      }
     }
   }
 }

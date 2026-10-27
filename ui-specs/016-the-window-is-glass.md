@@ -69,11 +69,18 @@ The drawer, the popup and the bar's window, from 960px up:
 ```scss
 background: color-mix(in srgb, var(--dp-surface) 70%, transparent);
 backdrop-filter: blur(24px) saturate(180%);
+
+/* a dark surface: 85% — see the table. Gated, and not optional: the
+   declaration holds a var(), so a browser without relative colour syntax does
+   not drop it — it computes to `transparent` and the panel reads through. */
+@supports (color: rgb(from red r g b / calc(alpha * clamp(0.7, r, 0.85)))) {
+  background: rgb(from var(--dp-surface) r g b / calc(alpha * clamp(0.7, 0.7 + (128 - (r + g + b) / 3), 0.85)));
+}
 ```
 
 | value | why |
 |---|---|
-| 70% of `--dp-surface` | at most 30% of a blurred page comes through. `--dp-text` keeps 4.5:1 even over a pure black or white field behind the panel. `--dp-text-dim` does not at that extreme; a docs page's blurred average is close to its own background, so in practice it does. Derived, so under an adapter it is the host's surface. |
+| 70% of `--dp-surface`, 85% on a dark one | at most 30% of a blurred page comes through. `--dp-text` keeps 4.5:1 even over a pure black or white field behind the panel. `--dp-text-dim` does not at that extreme; a docs page's blurred average is close to its own background, so in practice it does. A dark surface takes 15%: 30% of a blurred light page lifts it into grey haze. Dark is read off the surface's mean channel (below 128), not off a scheme, because under an adapter the scheme is the host's and no token can carry it. The step is exact for any 8-bit surface: its mean moves in thirds, and the ramp is 0.15 wide. The result is multiplied by the surface's own alpha, as `color-mix()` with `transparent` is, so a transparent host surface stays clear rather than turning black. Without relative colour syntax both stay at 70%. Derived, so under an adapter it is the host's surface. |
 | `blur(24px)` | no glyph of the page survives it. Glass that lets a paragraph through competes with the answer on top. |
 | `saturate(180%)` | a blur greys what it averages; this gives the colour back, which is what reads as glass rather than smoke. |
 
