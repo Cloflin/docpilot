@@ -119,6 +119,41 @@ describe('a site tool the build refuses — engine-spec 038 §6', () => {
     expect(refused({ a: { description: 'x', confirm: true, run: { fetch: '/api', method: 'POST' } } }, 'server')).toEqual([])
   })
 
+  /**
+   * "The model controls neither the host nor the path" — engine-spec 038 §8. A
+   * value is URL-encoded, so it cannot add a `:` or a `/`; a placeholder the
+   * template itself puts before the path is the one way left to choose a host.
+   */
+  it('refuses a placeholder before the path of a fetch or an href, and keeps one in the path or the query', () => {
+    const at = (run, confirm = false) => ({
+      a: {
+        description: 'x',
+        parameters: { type: 'object', properties: { host: { type: 'string' }, id: { type: 'string' } } },
+        confirm,
+        run,
+      },
+    })
+    for (const fetch of [
+      'https://{host}/status',
+      'http://api.test:{id}/status',
+      '{host}://api.test/status',
+      '{host}:status',
+      '//{host}/status',
+      '/\\{host}/status',
+      'https://{id}@api.test/status',
+      'https://api.{host}',
+    ]) {
+      expect(refused(at({ fetch })).join('\n'), fetch).toMatch(/\{(host|id)\} before the path/)
+      expect(refused(at({ href: fetch }, true)).join('\n'), fetch).toMatch(/\{(host|id)\} before the path/)
+    }
+    for (const fetch of ['/api/{id}', 'https://api.test/v1/{id}?q={host}', 'https://api.test?q={host}', 'api/{id}', '{id}']) {
+      expect(refused(at({ fetch })), fetch).toEqual([])
+    }
+    expect(refused(at({ href: 'mailto:help@x.test?subject={id}' }, true))).toEqual([])
+    // An event has no URL, so a placeholder there is nothing to check.
+    expect(refused(at({ event: 'acme:{host}' }, true))).toEqual([])
+  })
+
   it('stops the build, naming the tool', () => {
     expect(() => themeDocPilot(resolveDocPilot({ chat: { provider: 'openai' }, tools: { a: {} } }), ENV)).toThrow(
       /\[docpilot\] tools\.a\.description is required/,
@@ -184,6 +219,30 @@ describe('the check every argument passes', () => {
 
   it('URL-encodes every argument into a template', () => {
     expect(expandTemplate('/api/{q}?x={q}', { q: 'a b/c' })).toBe('/api/a%20b%2Fc?x=a%20b%2Fc')
+  })
+
+  /**
+   * Encoding keeps `/` out, and still lets `..` through: `encodeURIComponent`
+   * leaves dots alone, and the URL parser then walks out of the template's path
+   * — `/api/orders/..` is `/api/`.
+   */
+  it('refuses an argument that would make a dot segment of the path', () => {
+    for (const [template, value] of [
+      ['/api/orders/{id}', { id: '..' }],
+      ['/api/orders/{id}', { id: '.' }],
+      ['/api/orders/{id}/items', { id: '..' }],
+      ['https://api.test/{a}{b}', { a: '.', b: '.' }],
+      ['/api/.{id}', { id: '.' }],
+      ['/api/%2e{id}', { id: '.' }],
+    ]) {
+      expect(() => expandTemplate(template, value), template).toThrow(/a dot segment/)
+    }
+    // A percent-encoded dot in the VALUE is encoded again, and is no dot.
+    expect(expandTemplate('/api/orders/{id}', { id: '%2e%2e' })).toBe('/api/orders/%252e%252e')
+    expect(expandTemplate('/api/orders/{id}', { id: '...' })).toBe('/api/orders/...')
+    expect(expandTemplate('/api/orders/{id}', { id: '..x' })).toBe('/api/orders/..x')
+    // The query is not the path.
+    expect(expandTemplate('/api/orders?id={id}#{id}', { id: '..' })).toBe('/api/orders?id=..#..')
   })
 })
 
@@ -387,11 +446,16 @@ describe('a function call, end to end — engine-spec 038 §5', () => {
   it('serves a repeated call from the turn, and runs it once', async () => {
     const handler = vi.fn(async () => ({ requestsPerDay: 5000 }))
     registerTool('plan_limits', handler)
-    await turn({
+    const r = await turn({
       tools: PLAN,
       onChat: (body, i) => (i < 3 ? toolReply('plan_limits', { plan: 'pro' }) : answering(['tool:plan_limits:1'])),
     })
     expect(handler).toHaveBeenCalledTimes(1)
+    // And it is sent once: every observation is re-sent on every later step, so
+    // a second copy of the result would be paid for on each of them.
+    const sent = JSON.stringify(r.chats.at(-1).messages)
+    expect(sent.match(/requestsPerDay/g)).toHaveLength(1)
+    expect(sent).toMatch(/same call as an earlier step/)
   })
 
   it('does not offer a function tool nothing here can run', async () => {
@@ -470,6 +534,16 @@ describe('what runs a tool — engine-spec 038 §3', () => {
     expect(calls[0].url).toBe('/api/pro%20plan')
     expect(calls[0].init.method).toBe('GET')
     expect(JSON.parse(calls[1].init.body)).toEqual({ tool: 'p', args: { email: 'a@b.co' }, context: { question: 'q', page: '/a' } })
+  })
+
+  it('fetch: an argument that leaves the template’s path is a failure, and nothing is sent', async () => {
+    const calls = []
+    vi.stubGlobal('fetch', async (url) => (calls.push(url), { ok: true, status: 200, text: async () => '{}' }))
+    const [get] = normaliseTools({
+      g: { description: 'x', parameters: { type: 'object', properties: { id: { type: 'string' } } }, run: { fetch: '/api/orders/{id}' } },
+    })
+    await expect(runTool(get, { id: '..' })).rejects.toThrow(/a dot segment/)
+    expect(calls).toEqual([])
   })
 
   it('fetch: a status that is not 2xx is a failure', async () => {

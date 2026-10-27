@@ -43,6 +43,14 @@ const FORMATS = new Set(['email', 'uri', 'date', 'multiline'])
 const FIELD_KEYS = new Set(['type', 'description', 'enum', 'default', 'format', 'maxLength', 'minimum', 'maximum'])
 const PLACEHOLDER = /\{([A-Za-z0-9_-]+)\}/g
 
+/**
+ * A URL template's scheme, authority and path — RFC 3986 appendix B, with `\`
+ * read as `/`, because the WHATWG parser reads `/\host` as `//host` and the
+ * template is checked as a browser will parse it.
+ */
+const URL_PARTS = /^(?:([^:/\\?#]+):)?(?:[/\\]{2}([^/\\?#]*))?([^?#]*)/
+const DOT_SEGMENT = /^(?:\.|%2e){1,2}$/i
+
 // ── the registry ─────────────────────────────────────────────────────────────
 
 /**
@@ -217,6 +225,12 @@ function runProblems(at, name, t, runtime) {
     for (const m of run[kind].matchAll(PLACEHOLDER)) {
       if (!(m[1] in props)) out.push(`${at}.run.${kind} uses {${m[1]}}, which is not a parameter`)
     }
+    // The model writes the arguments, so a placeholder in the scheme or the host
+    // lets it choose where the request goes — on the server, an internal address.
+    // Encoding cannot help there: a host is made of the characters it keeps.
+    const [, scheme = '', authority = ''] = URL_PARTS.exec(run[kind].replace(/[\t\n\r]/g, '').trim())
+    const early = `${scheme}${authority}`.match(PLACEHOLDER)
+    if (early) out.push(`${at}.run.${kind} puts ${early[0]} before the path — a placeholder may fill the path or the query, never the scheme or the host`)
   }
   /**
    * A FUNCTION TOOL RUNS WITHOUT THE READER, so it may only read. A POST is a
@@ -406,9 +420,24 @@ export function describeErrors(errors) {
 
 // ── running one ──────────────────────────────────────────────────────────────
 
-/** `{name}` → the URL-encoded argument. Every placeholder is a parameter — the build checked. */
+/**
+ * `{name}` → the URL-encoded argument. Every placeholder is a parameter, and none
+ * sits before the path — the build checked.
+ *
+ * A PATH SEGMENT THAT FILLS TO A DOT IS REFUSED, not encoded. `encodeURIComponent`
+ * keeps `.` as it is, and `%2e` is no way out: the URL parser reads it as a dot
+ * too, so `/api/orders/{id}` given `..` is `/api/` either way. Checked a segment
+ * at a time, because an encoded value cannot contain the `/` that ends one.
+ */
 export function expandTemplate(template, value) {
-  return String(template).replace(PLACEHOLDER, (_, k) => (value[k] == null ? '' : encodeURIComponent(String(value[k]))))
+  const t = String(template)
+  const fill = (s) => s.replace(PLACEHOLDER, (_, k) => (value[k] == null ? '' : encodeURIComponent(String(value[k]))))
+  for (const segment of URL_PARTS.exec(t)[3].split(/[/\\]/)) {
+    if (segment.search(PLACEHOLDER) < 0) continue
+    const filled = fill(segment).replace(/[\t\n\r]/g, '')
+    if (DOT_SEGMENT.test(filled)) throw new Error(`${segment} cannot be "${filled}": a dot segment leaves the path the site wrote`)
+  }
+  return fill(t)
 }
 
 async function fetchRun(def, run, args, ctx) {

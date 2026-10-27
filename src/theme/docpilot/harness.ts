@@ -159,6 +159,34 @@ function observation(tool, scopeLabel, results) {
 }
 
 /**
+ * What a repeated call is answered with: a pointer back, not a second copy.
+ *
+ * buildMessages re-sends every observation on every step, so the cached result
+ * pushed again was paid for once more per remaining step, per repeat — on the
+ * weak-model path the cache exists for. Pushing NOTHING would be worse: the
+ * next prompt would be the one that produced this call, and it would produce
+ * it again until the free steps ran out.
+ */
+const REPEAT_NOTE = 'The same call as an earlier step; its result is above. Use it, or make a different call.'
+const repeated = (tool) => ({ tool, note: REPEAT_NOTE })
+
+/**
+ * The built-ins' arguments, in the shape `checkArgs` reads — a model writes
+ * them as it writes a site tool's, and engine-spec 038 §6 checks those in code.
+ * Unchecked, a list where `query` belongs threw out of MiniSearch and out of the
+ * turn. `k` is a number, not an integer: the retriever clamps it, and a step
+ * charged for `5.5` would buy nothing.
+ */
+const BUILTIN_ARGS = new Map(
+  Object.entries({
+    search_docs: { query: { type: 'string' }, k: { type: 'number' }, kind: { type: 'string' } },
+    fetch_section: { id: { type: 'string' } },
+    expand_section: { id: { type: 'string' }, direction: { type: 'string' } },
+    list_pages: { prefix: { type: 'string' } },
+  }).map(([name, properties]) => [name, { parameters: { properties } }]),
+)
+
+/**
  * The excerpt body, and the note that says it was cut.
  *
  * The cut is head-anchored — see excerpt.js for the measurement that kept it
@@ -317,7 +345,7 @@ export async function runTurn(options: RunTurnOptions) {
   const fnByName = new Map<string, any>(siteFns.map((t) => [t.name, t]))
   /** What a function tool returned, by the id the answer may cite it with. */
   const toolSources = new Map<string, any>()
-  const toolCache = new Map()
+  const toolCache = new Set()
   /** Each function call, for the turn log: `{tool, ok, ms}`. */
   const toolLog = []
   const citable = () => [...emittedIds, ...toolSources.keys()]
@@ -555,7 +583,7 @@ export async function runTurn(options: RunTurnOptions) {
     ),
   )
 
-  const searchCache = new Map()
+  const searchCache = new Set()
 
   /**
    * Expansions taken this turn. Never refunded — see the cap below.
@@ -563,13 +591,20 @@ export async function runTurn(options: RunTurnOptions) {
   let expansions = 0
 
   async function execute(name, args) {
+    const builtin = BUILTIN_ARGS.get(name)
+    if (builtin) {
+      const checked = checkArgs(builtin, args)
+      if (!checked.ok) return { error: `invalid arguments — ${describeErrors(checked.errors)}`, charge: true }
+      args = checked.value
+    }
+
     if (name === 'search_docs') {
       const key = `${String(args.query || '').trim().toLowerCase()}|${args.kind || ''}`
       if (searchCache.has(key)) {
         // A cache hit cost no iteration and, as far as the reader is concerned,
         // did not happen: it is not reflected in the UI at all.
         debug('cached-search', key)
-        return { observation: searchCache.get(key), free: true }
+        return { observation: repeated(name), free: true }
       }
       onPhase?.({ phase: 'searching' })
       // The query the MODEL chose, recorded rather than inferred. It is the one
@@ -615,7 +650,7 @@ export async function runTurn(options: RunTurnOptions) {
         scopeLabel,
         chunks.map((c) => excerpt(c, SEARCH_CHARS)),
       )
-      searchCache.set(key, obs)
+      searchCache.add(key)
       if (!chunks.length) obs.note = 'No results in the selected pages.'
       return { observation: obs }
     }
@@ -712,7 +747,7 @@ export async function runTurn(options: RunTurnOptions) {
       const key = `${name}|${JSON.stringify(checked.value)}`
       if (toolCache.has(key)) {
         debug('cached-tool', key)
-        return { observation: toolCache.get(key), free: true }
+        return { observation: repeated(name), free: true }
       }
       onPhase?.({ phase: 'tool', label: siteTool.title })
       const t0 = Date.now()
@@ -724,7 +759,7 @@ export async function runTurn(options: RunTurnOptions) {
         toolLog.push({ tool: name, ok: true, ms: Date.now() - t0 })
         debug('tool', { tool: name, args: checked.value })
         const obs = observation(name, scopeLabel, [{ id, title: siteTool.title, from: 'this site, live', text }])
-        toolCache.set(key, obs)
+        toolCache.add(key)
         return { observation: obs }
       } catch (e) {
         // The reader pressed stop: that ends the turn, as it does everywhere.

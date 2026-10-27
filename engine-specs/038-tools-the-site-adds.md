@@ -219,6 +219,8 @@ cache and costs nothing, like a repeated search.
 - `run` has more than one executor, or an unknown method;
 - a function tool has a `POST` `fetch`, a `href` or an `event`;
 - a `{placeholder}` in a URL template is not a parameter;
+- a `{placeholder}` in a `fetch` or `href` template sits before the path — in
+  the scheme or the host;
 - `run` is a function on the browser runtime;
 - a `fetch` URL is relative on the server runtime, where there is no page
   origin.
@@ -231,6 +233,8 @@ cache and costs nothing, like a repeated search.
 - `enum`, `format`, `maxLength`, `minimum` and `maximum` are enforced;
 - a missing `required` value rejects the call. There is one exception: a form
   action keeps the missing field for the reader to fill.
+- a path placeholder that fills to a dot segment (`.`, `..`, or `%2e` forms)
+  fails the call before anything is sent.
 
 The same check runs again on what the reader sends from a form.
 

@@ -9110,8 +9110,10 @@ describe('runTurn — the free-step ceiling', () => {
 
   const run = (toolCall) => {
     let calls = 0
-    vi.stubGlobal('fetch', async () => {
+    const bodies = []
+    vi.stubGlobal('fetch', async (_url, init) => {
       calls++
+      bodies.push(JSON.parse(init.body))
       // Every step answers with the same doomed tool call. Nothing here ever
       // advances the turn, which is exactly the situation being bounded.
       if (calls > 200) throw new Error('runaway: the loop is not bounded')
@@ -9135,7 +9137,7 @@ describe('runTurn — the free-step ceiling', () => {
       config: { llm: { provider: 'ollama', baseURL: 'http://x', model: 'm' }, maxIterations: 4 },
       fallback: false,
       queryVec: null,
-    }).then((r) => ({ ...r, calls }))
+    }).then((r) => ({ ...r, calls, bodies }))
   }
 
   afterEach(() => vi.unstubAllGlobals())
@@ -9219,6 +9221,33 @@ describe('runTurn — the free-step ceiling', () => {
   it('the same cached search cannot buy free steps forever', async () => {
     const r = await run({ function: { name: 'search_docs', arguments: '{"query":"alpha"}' } })
     expect(r.calls).toBeLessThanOrEqual(10)
+  })
+
+  /**
+   * …and is not paid for again on every step it repeats. The cached observation
+   * pushed a second time was the same excerpts twice in a prompt that is re-sent
+   * whole on every later call; a repeat now gets a note pointing back at them.
+   */
+  it('answers a cached search with a note, not a second copy of its results', async () => {
+    const r = await run({ function: { name: 'search_docs', arguments: '{"query":"alpha"}' } })
+    const last = r.bodies.at(-1).messages.map((m) => String(m.content)).join('\n')
+    // Once for the priming retrieval, once for the first search — and no more.
+    expect(last.match(/"id":"a#one"/g)).toHaveLength(2)
+    expect(last).toMatch(/same call as an earlier step/)
+  })
+
+  /**
+   * A BUILT-IN'S ARGUMENTS ARE CHECKED LIKE A SITE TOOL'S. A weak model that
+   * sent a list of queries threw out of MiniSearch and out of `runTurn`, and the
+   * reader saw a transport error where a refused step would have done.
+   */
+  it.each([
+    ['a list', '{"query":["alpha","token"]}'],
+    ['an object', '{"query":{"text":"alpha"}}'],
+  ])('reads %s where a query string belongs as a tool error, not a failed turn', async (_, args) => {
+    const r = await run({ function: { name: 'search_docs', arguments: args } })
+    expect(r.calls).toBeLessThanOrEqual(10)
+    expect(r.bodies[1].messages.map((m) => String(m.content)).join('\n')).toMatch(/invalid arguments — query: not text/)
   })
 
   /**
