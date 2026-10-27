@@ -1514,7 +1514,9 @@ function onStream(turn, ev, started) {
     const now = performance.now()
     if (now - lastRender < RENDER_FLOOR_MS) return
     lastRender = now
-    turn.answerHtml = renderAnswer(ev.text, knownPaths.value).html
+    // `pending`: not settled yet, so an id the model wrote where `[n]` goes is
+    // hidden until `finish()` has turned it into its marker — ui-specs/020.
+    turn.answerHtml = renderAnswer(ev.text, knownPaths.value, [], { pending: true }).html
   }
 }
 
@@ -3026,7 +3028,7 @@ export async function submit(question, { quote = '' } = {}) {
       // Stopping mid-write keeps what was already written, so the last render is
       // forced here: the throttle above is allowed to be up to one frame behind
       // and this is the frame that stops arriving.
-      if (turn.answerText) turn.answerHtml = renderAnswer(turn.answerText, knownPaths.value).html
+      if (turn.answerText) turn.answerHtml = renderAnswer(turn.answerText, knownPaths.value, [], { pending: true }).html
       turn.state = turn.answerHtml ? 'aborted' : 'no-answer'
       if (!turn.answerHtml) {
         turn.refusal = {
@@ -3269,7 +3271,7 @@ async function submitRemote(q, frozen, selected) {
     finishTurn(turn, started)
   } catch (e) {
     if (signal.aborted) {
-      if (turn.answerText) turn.answerHtml = renderAnswer(turn.answerText, knownPaths.value).html
+      if (turn.answerText) turn.answerHtml = renderAnswer(turn.answerText, knownPaths.value, [], { pending: true }).html
       turn.state = turn.answerHtml ? 'aborted' : 'no-answer'
       if (!turn.answerHtml) {
         turn.refusal = { cause: 'not-answerable', scopeLabel: frozen.label, scopeKind: frozen.kind, pagesRead: 0, closest: [], closestAreOutside: false }

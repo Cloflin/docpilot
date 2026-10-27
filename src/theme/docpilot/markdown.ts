@@ -324,17 +324,51 @@ function filterLinks(tokens, known) {
 }
 
 /**
+ * A section id where `[n]` goes, kept off the screen until the answer settles —
+ * ui-specs/020.
+ *
+ * `finish()` turns `[guide/setup#install]` into its marker, but only at the
+ * settle (engine-spec 039): every frame before it paints the model's own text,
+ * and the id sat in the sentence as forty characters of plain text until the
+ * last frame swapped it for a superscript. Hidden instead, the marker simply
+ * appears at the settle. Link text and code are never touched, and neither is a
+ * word with a `#` in it: a part counts only with a `/` in it or an anchor after
+ * the `#`, so `[C#]` stays where it is.
+ */
+const PENDING_ID = /( ?)\[([^[\]\n]+)\]/g
+const idPart = (p) => /^\/?[^\s#]+#\S*$/.test(p) && (p.includes('/') || !p.endsWith('#'))
+
+function hidePendingIds(tokens) {
+  for (const token of tokens) {
+    if (!token.children) continue
+    let inLink = 0
+    for (const t of token.children) {
+      if (t.type === 'link_open') inLink++
+      if (t.type === 'link_close') inLink--
+      if (t.type !== 'text' || inLink > 0 || !t.content.includes('#')) continue
+      t.content = t.content.replace(PENDING_ID, (whole, _space, inner) => {
+        const parts = inner.trim().split(/\s*[,;]\s*|\s+/).filter(Boolean)
+        return parts.length && parts.every(idPart) ? '' : whole
+      })
+    }
+  }
+}
+
+/**
  * @param {string} text     answer markdown
  * @param {Set<string>} known  manifest.pages[].path
  * @param {Array<{n:number, href:string, title:string}>} sources  validated citations, in order
+ * @param {{pending?: boolean}} [opts]  `pending`: text the turn has not settled
+ *   yet — a frame of the stream, or what a stop left behind
  * @returns {{ html: string, delinked: string[] }}
  */
-export function renderAnswer(text, known, sources = []) {
+export function renderAnswer(text, known, sources = [], { pending = false } = {}) {
   const tokens = md.parse(String(text || ''), {})
   markerLinks(tokens)
   const delinked = filterLinks(tokens, known)
 
   if (sources.length) linkMarkers(tokens, sources)
+  else if (pending) hidePendingIds(tokens)
 
   return { html: md.renderer.render(tokens, md.options, {}), delinked }
 }

@@ -324,3 +324,33 @@ describe('the gate reads positives — engine-spec 039', () => {
     expect(summarise([row({ id: 'q-1', unlinked: null })]).unlinked).toBe(null)
   })
 })
+
+describe('an id before the settle — ui-specs/020', () => {
+  const known = new Set(['/a'])
+
+  it('keeps an id the model wrote off the screen while the answer streams', () => {
+    const frame = 'Your own server [editor-configuration/image-storage#connecting-your-own-server]. S3 [a#one, b#one] too [1].'
+    const { html } = renderAnswer(frame, known, [], { pending: true })
+    expect(html).not.toContain('#connecting-your-own-server')
+    expect(html).not.toContain('a#one')
+    expect(html).toContain('Your own server.')
+    // A number is left to the settle, exactly as before.
+    expect(html).toContain('[1]')
+  })
+
+  it('leaves a word with a # in it, link text and code alone', () => {
+    const frame = 'Written in [C#], see [a#one](/a#one), and `map[a#one]`.\n\n```js\nx[b#one]\n```'
+    const { html } = renderAnswer(frame, known, [], { pending: true })
+    expect(html).toContain('[C#]')
+    expect(html).toContain('map[a#one]')
+    expect(html).toContain('x[b#one]')
+    expect(html).toContain('>a#one</a>')
+  })
+
+  it('changes nothing about a settled answer or a call that did not ask', () => {
+    const text = 'Own server [a#one].'
+    expect(renderAnswer(text, known).html).toContain('[a#one]')
+    const rows = [{ n: 1, href: '/a#one', title: 'Alpha' }]
+    expect(renderAnswer(text, known, rows, { pending: true }).html).toContain('[a#one]')
+  })
+})
