@@ -522,13 +522,13 @@ describe('openers — the match path never embeds', () => {
   /**
    * `SUGGESTION_LIMIT` has one spelling and two readers.
    *
-   * `DocPilot.vue` held its own literal `3` while `questionsOf` sliced at the
+   * The panel held its own literal `3` while `questionsOf` sliced at the
    * constant, so the warning an author read and the list a reader saw were free
    * to disagree and nothing was watching. The number is not allowed back into
    * the component.
    */
   it('the component slices at the constant, not at a literal', () => {
-    const vue = srcText('src/theme/components/DocPilot.vue')
+    const vue = srcText('src/theme/components/Panel.vue')
     const computed = vue.match(/const suggestions = computed\(\(\) => \{[\s\S]*?\n\}\)/)
     expect(computed, 'the suggestions computed').not.toBe(null)
     expect(computed[0]).toContain('SUGGESTION_LIMIT')

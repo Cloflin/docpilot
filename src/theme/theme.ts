@@ -30,13 +30,21 @@ import DefaultTheme from 'vitepress/theme'
 import { installVitePressHost } from './docpilot/host-vitepress.js'
 import { setHighlighter } from './docpilot/highlight.js'
 import { createShikiHighlighter } from './docpilot/highlighters/shiki.js'
-import DocPilot from './components/DocPilot.vue'
-import DocPilotTrigger from './components/DocPilotTrigger.vue'
-import DocPilotCta from './components/DocPilotCta.vue'
-import DocPilotIcons from './components/DocPilotIcons.vue'
-import DocPilotQuote from './components/DocPilotQuote.vue'
+import Panel from './components/Panel.vue'
+import Trigger from './components/Trigger.vue'
+import Cta from './components/Cta.vue'
+import Icons from './components/Icons.vue'
+import Quote from './components/Quote.vue'
 
-export { DocPilot, DocPilotTrigger, DocPilotCta, DocPilotIcons, DocPilotQuote }
+// The files carry what each one IS; the exports keep the prefix, because a
+// consumer registers them by these names next to components of their own.
+export {
+  Panel as DocPilot,
+  Trigger as DocPilotTrigger,
+  Cta as DocPilotCta,
+  Icons as DocPilotIcons,
+  Quote as DocPilotQuote,
+}
 // engine-spec 038: register what runs a site tool, from `enhanceApp` or any client module.
 export { registerTool } from './docpilot/tools.js'
 
@@ -47,7 +55,7 @@ export { registerTool } from './docpilot/tools.js'
  *
  * Once would be enough for the documented paths — importing either function
  * evaluates this module body. The repeat covers the one that is not: a project
- * that imports `DocPilot.vue` from `@cloflin/docpilot/theme/components/…`
+ * that imports `Panel.vue` from `@cloflin/docpilot/theme/components/…`
  * directly, and reaches for `docPilotSlots()` afterwards. `installVitePressHost`
  * is a latch, so the extra calls cost a boolean test.
  *
@@ -109,14 +117,14 @@ export function docPilotSlots(slots = {}) {
   return {
     ...slots,
     'layout-bottom': () => [
-      h(DocPilotIcons),
-      h(DocPilot),
-      h(DocPilotTrigger, { variant: 'fab' }),
-      h(DocPilotQuote),
+      h(Icons),
+      h(Panel),
+      h(Trigger, { variant: 'fab' }),
+      h(Quote),
     ],
-    'nav-bar-content-before': () => h(DocPilotTrigger),
-    'nav-screen-content-after': () => h(DocPilotTrigger, { variant: 'screen' }),
-    'doc-footer-before': () => h(DocPilotCta),
+    'nav-bar-content-before': () => h(Trigger),
+    'nav-screen-content-after': () => h(Trigger, { variant: 'screen' }),
+    'doc-footer-before': () => h(Cta),
   }
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The modules, compiled — `src/**` to `dist/**`, plus the five components.
+ * The modules, compiled — `src/**` to `dist/**`, plus the components.
  *
  * WHAT CHANGED, AND WHY THE OLD POLICY IS GONE. Until 1.0.0 this file did not
  * exist and could not have: `exports` pointed straight at `./src/*.js`, the
@@ -73,8 +73,8 @@ const components = () => {
     for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
       if (entry.isDirectory()) walk(path.join(dir, entry.name))
       // The declaration travels with the component: `allowArbitraryExtensions`
-      // makes `X.d.vue.ts` the types for `X.vue`, and a consumer resolving the
-      // `./theme/components/*.vue` subpath finds it beside the file.
+      // makes `X.d.vue.ts` the types for `X.vue`, and a consumer resolving a
+      // `./theme/components/….vue` subpath finds it beside the file.
       else if (entry.name.endsWith('.vue') || entry.name.endsWith('.d.vue.ts'))
         out.push(path.join(dir, entry.name))
     }
@@ -103,7 +103,7 @@ const copyComponents = () => {
 if (watch) {
   // Two watchers, because the two halves are watched by different things: tsc
   // owns the modules and knows their dependency graph, and `fs.watch` is enough
-  // for five files that import nothing at build time.
+  // for files that import nothing at build time.
   const { spawn } = await import('node:child_process')
   copyComponents()
   for (const dir of new Set(components().map((rel) => path.dirname(path.join(root, rel))))) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { srcText } from './helpers/source.js'
+import { srcText, panelText } from './helpers/source.js'
 
 import { resolveDocPilot, themeDocPilot } from '../src/config.js'
 import { assembleIndex, __setIndex } from '../src/theme/docpilot/store.js'
@@ -263,7 +263,7 @@ describe('a turn no service could answer', () => {
  * reader as an unexplained list of links.
  */
 describe('what the panel does with it', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
   const i18n = srcText('src/theme/docpilot/i18n.js')
 
   it('leads a hybrid turn with the reason, and offers Retry on it alone', () => {
@@ -281,8 +281,7 @@ describe('what the panel does with it', () => {
    * same sentence twice. The rate-limited state established the precedent.
    */
   it('does not shout it', () => {
-    const results = panel.slice(panel.indexOf("turn.state === 'results'"))
-    expect(results.slice(0, results.indexOf("turn.state === 'error'"))).not.toMatch(/role="alert"/)
+    expect(srcText('src/theme/components/panel/Results.vue')).not.toMatch(/role="alert"/)
   })
 
   it('ships the two sentences and the announcement', () => {

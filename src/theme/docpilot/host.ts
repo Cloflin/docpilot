@@ -247,7 +247,7 @@ export function joinBase(base, rel) {
  * `session.js` would be the obvious place to read it from, but `session.js` has
  * to call this to know where the index is — so a module-level read here would
  * be an import cycle. Passing it in also serves the caller this file could not
- * otherwise reach: `DocPilotQuote` mounts on every page and needs `article`
+ * otherwise reach: `Quote.vue` mounts on every page and needs `article`
  * BEFORE `configure()` has run, so it passes `theme.docPilot` straight off the
  * host binding.
  *

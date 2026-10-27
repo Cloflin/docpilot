@@ -23,7 +23,7 @@
       <button type="button" class="docpilot__text-btn docpilot__ask-btn" @click="take">
         <!--
           INLINE, not a `<use>` into the sprite — ui-specs/001's rule for a
-          component that may be composed on its own. `DocPilotIcons` ships in the
+          component that may be composed on its own. `Icons.vue` ships in the
           same slot as this today, but a consumer who mounts only some of these
           components must not get a button with a hole where its glyph was. The
           nav trigger inlines its one glyph for the same reason.

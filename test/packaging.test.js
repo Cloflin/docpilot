@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { srcText } from './helpers/source.js'
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 
 /**
@@ -160,6 +161,34 @@ describe('packaging', () => {
   })
 
   /**
+   * The five components by file, and no part of the panel.
+   *
+   * A `*` in `exports` matches across `/`, so `./theme/components/*.vue` also
+   * exported the nineteen parts under `panel/` — components that read the
+   * panel's context and render nothing anywhere else, and that nobody could
+   * then rename without breaking an import. Node's own resolver is the witness:
+   * it is what a consumer's `import` goes through.
+   */
+  it('exports the five components by file, under both names, and no part of the panel', () => {
+    const require = createRequire(abs('package.json'))
+    const resolve = (file) => require.resolve(`${pkg.name}/theme/components/${file}`)
+    let refused = null
+    try {
+      resolve('panel/Turn.vue')
+    } catch (e) {
+      refused = e.code
+    }
+    expect(refused, 'panel/Turn.vue is reachable from outside the package').toBe('ERR_PACKAGE_PATH_NOT_EXPORTED')
+    if (!distBuilt) return
+    const NAMES = { Panel: 'DocPilot', Trigger: 'DocPilotTrigger', Cta: 'DocPilotCta', Icons: 'DocPilotIcons', Quote: 'DocPilotQuote' }
+    for (const [file, before] of Object.entries(NAMES)) {
+      const target = fs.realpathSync(abs(`dist/theme/components/${file}.vue`))
+      expect(resolve(`${file}.vue`)).toBe(target)
+      expect(resolve(`${before}.vue`), `the name 2.0 published ${file}.vue under`).toBe(target)
+    }
+  })
+
+  /**
    * Every JavaScript entry point is typed.
    *
    * The declarations under `types/` are hand-written and are the package's
@@ -310,9 +339,9 @@ describe('packaging', () => {
       './dist/web.js',
     ])
     for (const f of [
-      'src/theme/components/DocPilotTrigger.vue',
-      'src/theme/components/DocPilotCta.vue',
-      'src/theme/components/DocPilotQuote.vue',
+      'src/theme/components/Trigger.vue',
+      'src/theme/components/Cta.vue',
+      'src/theme/components/Quote.vue',
     ]) {
       // Anchored: both components mention `<style>` in the comment that says
       // why they no longer have one.
@@ -582,10 +611,10 @@ describe('publish metadata', () => {
  * The one URL that is written twice.
  *
  * `homepage` in the manifest is what npm renders on the package page; the
- * footnote credit in `DocPilot.vue` is what a reader of somebody else's docs
- * site clicks. They are the same address, kept in two files because neither can
- * import the other — the theme is bundled into a browser chunk and has no
- * business reading `package.json`.
+ * footnote credit in `panel/Footnote.vue` is what a reader of somebody else's
+ * docs site clicks. They are the same address, kept in two files because
+ * neither can import the other — the theme is bundled into a browser chunk and
+ * has no business reading `package.json`.
  *
  * These two HAVE disagreed. A release went out with a homepage that did not
  * resolve, and nothing failed: a manifest field is not executed, and neither is
@@ -597,9 +626,9 @@ describe('the credit link and the manifest homepage', () => {
   const linkPkg = JSON.parse(fs.readFileSync(linkAbs('package.json'), 'utf8'))
 
   it('point at the same place', () => {
-    const panel = srcText('src/theme/components/DocPilot.vue')
+    const panel = srcText('src/theme/components/panel/Footnote.vue')
     const found = panel.match(/const CREDIT_URL = '([^']+)'/)
-    expect(found, 'a `const CREDIT_URL` in DocPilot.vue').not.toBe(null)
+    expect(found, 'a `const CREDIT_URL` in Footnote.vue').not.toBe(null)
     expect(found[1], 'the footnote credit disagrees with package.json homepage').toBe(linkPkg.homepage)
   })
 })

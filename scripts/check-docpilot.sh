@@ -26,7 +26,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-VUE=src/theme/components/DocPilot.vue
+# The panel is a shell plus its parts — every file under `panel/` is read with
+# it, so a part split out of the shell cannot take a rule's subject along.
+VUE="src/theme/components/Panel.vue $(find src/theme/components/panel -name '*.vue' -o -name '*.ts' | sort | tr '\n' ' ')"
 CORE=src/theme/styles/core.scss
 VPCSS=src/theme/styles/vitepress.scss
 BREAKS=src/theme/styles/_breakpoints.scss
@@ -46,7 +48,7 @@ printf '\nDocPilot design-direction checks\n\n'
 # Rule 0 — every file a rule below reads exists and is not empty. Without this,
 # a rename turns "0 borders" and "0 brand references" into passing rules.
 missing=''
-for f in "$VUE" "$CORE" $ADAPTERS "$BREAKS" "$MOTION" "$ENTRY" "$HARNESS"; do
+for f in $VUE "$CORE" $ADAPTERS "$BREAKS" "$MOTION" "$ENTRY" "$HARNESS"; do
   [ -s "$f" ] || missing="$missing $f"
 done
 [ -z "$missing" ] && ok "rule 0 — every checked file exists and is non-empty" \
@@ -262,7 +264,7 @@ else
 fi
 
 # Rule 7 — --vp-c-text-3 never reaches text.
-if strip_comments $SCSS_ALL | grep -q 'vp-c-text-3' || strip_comments "$VUE" | grep -q 'vp-c-text-3'; then
+if strip_comments $SCSS_ALL | grep -q 'vp-c-text-3' || strip_comments $VUE | grep -q 'vp-c-text-3'; then
   bad "rule 7 — --vp-c-text-3 is referenced in code"
 else
   ok "rule 7 — no --vp-c-text-3 reference"

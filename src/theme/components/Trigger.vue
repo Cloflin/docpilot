@@ -25,7 +25,7 @@
 
       INLINE, not a `<use>` into the sprite, and ui-specs/001 says why: this
       component is exported on its own and a consumer may compose only it, so
-      its single glyph must not depend on `DocPilotIcons` being mounted.
+      its single glyph must not depend on `Icons.vue` being mounted.
 
       In a box of its own, so the floating button can carry a SECOND drawing on
       the same spot — ui-specs/015. While the popup above it is open the button

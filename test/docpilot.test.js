@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { srcText, distEntry, isSource } from './helpers/source.js'
+import { srcText, distEntry, isSource, panelFiles, panelText, panelTemplates } from './helpers/source.js'
 
 import {
   stripImages,
@@ -2519,7 +2519,7 @@ describe('009 — tables in an answer', () => {
 
 describe('009 — the three defects with no DOM', () => {
   const read = srcText
-  const panel = read('src/theme/components/DocPilot.vue')
+  const panel = panelText()
 
   /**
    * Safari drops list semantics from a list styled `list-style: none` outside a
@@ -2732,7 +2732,7 @@ describe('009 — the passage renders as markdown', () => {
   // The panel has no DOM here, so the binding is asserted the way 008's row
   // placement is: by reading the source and stating the contract it keeps.
   describe('the disclosure that shows it', () => {
-    const panel = srcText('src/theme/components/DocPilot.vue')
+    const panel = panelText()
     const region = panel.slice(panel.indexOf('class="docpilot__passage"'))
 
     it('renders the html and not the interpolated source', () => {
@@ -2787,7 +2787,7 @@ describe('toPlainText', () => {
 })
 
 describe('009 — a copied answer carries its sources', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
 
   // `[1]` pasted into a ticket with nothing behind it is worse than no citation
   // at all, because it looks like provenance.
@@ -2927,7 +2927,7 @@ describe('009 — the prefetch split', () => {
   })
 
   it('is wired to intent, not to page load, by default', () => {
-    const trigger = read('src/theme/components/DocPilotTrigger.vue')
+    const trigger = read('src/theme/components/Trigger.vue')
     expect(trigger).toContain('@pointerenter="warm"')
     expect(trigger).toContain('@focus="warm"')
     expect(trigger).toContain("ui.value.prefetch === 'hover'")
@@ -3049,7 +3049,7 @@ describe('ensureIndex — the load, and what is restored on it', () => {
 
 describe('009 — quoting the documentation itself', () => {
   const read = srcText
-  const quote = read('src/theme/components/DocPilotQuote.vue')
+  const quote = read('src/theme/components/Quote.vue')
 
   /**
    * The two mounts cannot both claim one selection: the panel teleports to
@@ -3063,7 +3063,7 @@ describe('009 — quoting the documentation itself', () => {
    */
   it('watches the host article and nothing else on the page', () => {
     expect(quote).toContain('.closest?.(hostConfig(theme.value?.docPilot).article)')
-    expect(read('src/theme/components/DocPilot.vue')).toContain(".closest?.('.docpilot__answer')")
+    expect(panelText()).toContain(".closest?.('.docpilot__answer')")
   })
 
   it('takes the article selector from the binding, not from the store', () => {
@@ -3110,7 +3110,7 @@ describe('009 — quoting the documentation itself', () => {
  * enough for the project that opted in.
  */
 describe('009 — an empty panel under a narrow scope', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
 
   // The reason the blank state existed, and the reason it was right: the
   // built-in three fall outside a narrow scope and the gate refuses all of them.
@@ -3139,7 +3139,7 @@ describe('009 — an empty panel under a narrow scope', () => {
 })
 
 describe('009 — follow-up questions', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
   const fn = panel.match(/function followUps\(turn\) \{[\s\S]*?\n\}/)[0]
 
   // ChatGPT ships these and its readers write custom instructions to suppress
@@ -3171,7 +3171,7 @@ describe('009 — follow-up questions', () => {
 })
 
 describe('009 — the first-visit hint', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
 
   it('is off by default — it paints something nobody asked for', () => {
     expect(themeDocPilot(resolveDocPilot({})).ui.firstRunHint).toBe(false)
@@ -3208,7 +3208,7 @@ describe('009 — the first-visit hint', () => {
  * checks.
  */
 describe('the credit link in the footnote', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
   const collect = () => {
     const messages = []
     const err = (message) => messages.push(message)
@@ -3277,7 +3277,7 @@ describe('the credit link in the footnote', () => {
 
 /** ui-specs/009, wave 6 — working the thread, and the panel beside the docs. */
 describe('009 — working the thread', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
 
   /**
    * ChatGPT's own behaviour, and readline's before it. The EMPTY condition is
@@ -3335,7 +3335,7 @@ describe('009 — working the thread', () => {
 })
 
 describe('009 — the picker at corpus scale', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
 
   // A text input is not an option, so it cannot live inside the listbox.
   it('puts the filter outside the listbox and binds it with aria-controls', () => {
@@ -3378,7 +3378,7 @@ describe('009 — the picker at corpus scale', () => {
 describe('009 — the panel beside the docs', () => {
   const adapter = srcText('src/theme/styles/vitepress.scss')
   const core = srcText('src/theme/styles/core.scss')
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
 
   // The SUBJECT is the host's element; our class only says when. That is rule
   // 2 of the adapter, and the reason the core may not carry this rule at all.
@@ -4600,7 +4600,7 @@ describe('empty-state suggestions — configured, with the built-in three as fal
   }
 
   // The regression this whole change exists for: the key was documented in
-  // UI-SPEC §13 and read by DocPilot.vue, but never put in the client object, so
+  // UI-SPEC §13 and read by the panel, but never put in the client object, so
   // the built-in fallback was the only branch that could run.
   it('reaches the client config at all', () => {
     expect(themeDocPilot(docPilot(['One?', 'Two?'])).suggestions.questions).toEqual(['One?', 'Two?'])
@@ -5949,11 +5949,7 @@ describe('i18n — merge and fallback', () => {
  * translatable. Both are invisible in review and obvious here.
  */
 describe('i18n — the components go through the table', () => {
-  const FILES = [
-    'src/theme/components/DocPilot.vue',
-    'src/theme/components/DocPilotTrigger.vue',
-    'src/theme/components/DocPilotCta.vue',
-  ]
+  const FILES = [...panelFiles(), 'src/theme/components/Trigger.vue', 'src/theme/components/Cta.vue']
   const read = srcText
 
   it('every key the components ask for exists in the table', () => {
@@ -5969,7 +5965,7 @@ describe('i18n — the components go through the table', () => {
   })
 
   it('no reader-facing string is left hard-coded in a component', () => {
-    for (const f of FILES) {
+    for (const f of FILES.filter((f) => f.endsWith('.vue'))) {
       const src = read(f)
       // A STATIC aria-label is one nobody can translate.
       expect(src.match(/\saria-label="[^"{]/g) || [], f).toEqual([])
@@ -6006,8 +6002,7 @@ describe('i18n — the components go through the table', () => {
    * that turned the missing flag into a passing rule.
    */
   it('leaks no tool name, model id or threshold into the component', () => {
-    const src = read('src/theme/components/DocPilot.vue')
-    const surface = src.slice(0, src.indexOf('<style'))
+    const surface = panelText()
     for (const token of [
       'search_docs',
       'fetch_section',
@@ -6031,13 +6026,14 @@ describe('i18n — the components go through the table', () => {
    * decision that looks like a detail and is not.
    */
   it('keeps the selection popover’s contract', () => {
-    const src = read('src/theme/components/DocPilot.vue')
-    const template = src.slice(0, src.indexOf('<script'))
+    const src = panelText()
+    const shell = read('src/theme/components/Panel.vue')
+    const template = shell.slice(0, shell.indexOf('<script'))
 
     // Between the thread and the composer, because THAT is the tab order: a
     // reader who selected inside the thread reaches "Ask AI" with one Tab.
     expect(template.indexOf('docpilot__ask')).toBeGreaterThan(template.indexOf('docpilot__thread'))
-    expect(template.indexOf('docpilot__ask')).toBeLessThan(template.indexOf('docpilot__composer'))
+    expect(template.indexOf('docpilot__ask')).toBeLessThan(template.indexOf('<Composer'))
 
     // `manual`, never `auto`: an auto popover light-dismisses on the pointerdown
     // that BEGINS the next selection, and Esc belongs to the cascade.
@@ -6080,13 +6076,15 @@ describe('i18n — the components go through the table', () => {
    * decision that a refactor would quietly undo.
    */
   it('keeps the question row’s contract', () => {
-    const src = read('src/theme/components/DocPilot.vue')
-    const template = src.slice(0, src.indexOf('<script'))
+    const src = panelText()
+    const shell = read('src/theme/components/Panel.vue')
+    const template = shell.slice(0, shell.indexOf('<script'))
+    const question = read('src/theme/components/panel/Question.vue')
 
     // The row is UNDER the bubble, not above it: it acts on the question, and a
     // control above the thing it acts on reads as belonging to the turn before.
-    expect(template.indexOf('docpilot__actions--ask')).toBeGreaterThan(
-      template.indexOf('docpilot__question'),
+    expect(question.indexOf('docpilot__actions--ask')).toBeGreaterThan(
+      question.indexOf('docpilot__question'),
     )
 
     // The pill is between the thread and the popover, so the popover keeps the
@@ -6294,9 +6292,9 @@ describe('brand neutrality of the shipped defaults', () => {
   const FILES = [
     'src/theme/docpilot/prompt.js',
     'src/theme/docpilot/credentials.js',
-    'src/theme/components/DocPilot.vue',
-    'src/theme/components/DocPilotTrigger.vue',
-    'src/theme/components/DocPilotCta.vue',
+    ...panelFiles(),
+    'src/theme/components/Trigger.vue',
+    'src/theme/components/Cta.vue',
   ]
 
   it('names no product of its own, in copy or in comments', () => {
@@ -14627,8 +14625,7 @@ describe('unload — one listener, counted', () => {
  * in a diff nobody reads twice.
  */
 describe('an upstream message never reaches the reader', () => {
-  const vue = srcText('src/theme/components/DocPilot.vue')
-  const template = vue.slice(0, vue.search(/<script setup[^>]*>/))
+  const template = panelTemplates()
 
   it('binds `turn.error` to nothing in the template', () => {
     expect(template).not.toContain('turn.error')

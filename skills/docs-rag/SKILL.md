@@ -1028,7 +1028,8 @@ agents, and fix a vocabulary gap in the section that answers.
 - `npm run check` (`scripts/check-docpilot.sh`) plus the design rules that moved into
   the test suite. Two bite here: `harness.js` may never contain the bare token
   `index`, and `search_docs fetch_section expand_section list_pages maxIterations
-  qwen3 threshold topK` may never appear in `DocPilot.vue`.
+  qwen3 threshold topK` may never appear in the panel — `Panel.vue` and every
+  file under `src/theme/components/panel/`.
 - `systemText()` takes no addendum parameter, and the test suite asserts the
   system message is byte-identical with and without a reader instruction.
 - With `tools: null` the system message, the tool list and both answer schemas
@@ -1175,7 +1176,7 @@ agents, and fix a vocabulary gap in the section that answers.
   scripts print "0 requests" in their own headers, and a script that claims it and
   then makes one is worse than a script that never claimed it. The test suite
   greps both import lists, static and dynamic.
-- **`SUGGESTION_LIMIT` has one spelling and two readers.** `DocPilot.vue` may not
+- **`SUGGESTION_LIMIT` has one spelling and two readers.** `Panel.vue` may not
   repeat the number as a literal. It did — `.slice(0, 3)` against `questionsOf`'s
   `slice(0, SUGGESTION_LIMIT)` — so the warning an author read and the list a
   reader saw were free to disagree, and nothing was watching.

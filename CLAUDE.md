@@ -10,7 +10,7 @@ ESM-only, Node >= 20. TypeScript in `src/`, Vue components for the panel, VitePr
 
 - `npm run verify` — the gate: `check → build:js → typecheck → conformance → vitest`. Run this, not its parts, before committing.
 - `npm test` — `vitest run` (happy-dom; `vitest.config.js` passes `--no-experimental-webstorage` to the workers where the node knows it).
-- `npm run check` — `scripts/check-docpilot.sh`, design-direction rules over `src/theme/**` SCSS and `DocPilot.vue`. Repo-internal, not shipped.
+- `npm run check` — `scripts/check-docpilot.sh`, design-direction rules over `src/theme/**` SCSS and the panel's components. Repo-internal, not shipped.
 - `npm run typecheck` / `npm run typecheck:dist` — the second one type-checks built `dist/` against `tsconfig.conformance.json`.
 - `npm run build` — css + js + web, three separate builders in `bin/`.
 - `npm run docs:dev` / `npm run docs:build`; reindex with `npm run docs:index` (`node bin/docpilot.js index`).
@@ -19,7 +19,8 @@ ESM-only, Node >= 20. TypeScript in `src/`, Vue components for the panel, VitePr
 
 - `src/theme/docpilot/*` — panel runtime: gate, retriever, llm, providers, budget, session.
 - `src/build/*` — indexer. `src/eval/*` — calibration, benches, reports. `src/feedback/*` — feedback pipeline.
-- `src/adapters/*` — Vue, React, Docusaurus. `src/theme/components/*.vue` — the panel itself.
+- `src/adapters/*` — Vue, React, Docusaurus. `src/theme/components/` — the five public components (`Panel`, `Trigger`, `Cta`, `Icons`, `Quote`; exported as `DocPilot*`). `panel/` beside them holds the panel's parts and composables, sharing one context (`panel/context.ts`).
+- Tests that read the panel's source go through `panelText()` / `panelTemplates()` in `test/helpers/source.js`; one about *place* (tab order, which file holds a constant) reads that one file.
 - `bin/` — CLI plus the three builders. `test/*.test.js` — tests are JS, sources are TS.
 - `engine-specs/` and `ui-specs/` — numbered design specs; new work takes the next number.
 

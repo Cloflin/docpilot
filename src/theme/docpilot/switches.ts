@@ -57,7 +57,7 @@ export const SUGGESTIONS_DEFAULTS = {
    *
    * A SECOND KEY RATHER THAN A SECOND SHAPE FOR `questions`, and the split is
    * the whole of why nothing downstream had to change. `questions` is read by
-   * `DocPilot.vue` as the chip labels, by `openerQuestions` as the bake list and
+   * `Panel.vue` as the chip labels, by `openerQuestions` as the bake list and
    * by `questionsHash` as the fingerprint; all three want strings, and a union
    * there would have made every one of them ask which form it was handed.
    * `authored` is derived from the same array in the same pass and carries the
@@ -77,9 +77,9 @@ export const SUGGESTIONS_DEFAULTS = {
 /**
  * The built-in three, for a project that configured none.
  *
- * Lived in `DocPilot.vue` until the indexer needed the same list: it bakes what
- * the panel WILL SHOW, and a second copy of the list would bake three questions
- * the reader never sees. Same reason `normalise` moved into text.js.
+ * Lived in the panel's component until the indexer needed the same list: it
+ * bakes what the panel WILL SHOW, and a second copy of the list would bake three
+ * questions the reader never sees. Same reason `normalise` moved into text.js.
  *
  * Deliberately engine-agnostic: this package ships to any VitePress site, so a
  * default that names a feature only one product has is a question the gate will
@@ -623,7 +623,7 @@ export function resolveBudget(docPilot, report = console.error) {
  * four rule-11 checks, two of which EXECUTE the documented default — for a
  * number the author states by typing questions.
  *
- * EXPORTED, and that is the fix rather than the decoration. `DocPilot.vue` held
+ * EXPORTED, and that is the fix rather than the decoration. The panel held
  * its own literal `3`, so the warning an author read and the list a reader saw
  * were free to disagree and nothing was watching. One constant, two readers.
  */

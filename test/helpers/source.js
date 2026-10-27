@@ -39,6 +39,44 @@ export function srcText(rel) {
   throw new Error(`no source at ${rel} (tried .js and .ts)`)
 }
 
+const PANEL = 'src/theme/components/Panel.vue'
+const PARTS = 'src/theme/components/panel/'
+
+/**
+ * Every file the panel is made of, repo-relative: `Panel.vue` first, then its
+ * parts and composables under `panel/`, in name order.
+ */
+export function panelFiles() {
+  const parts = fs.readdirSync(new URL(PARTS, ROOT)).filter(isSource).sort()
+  return [PANEL, ...parts.map((f) => PARTS + f)]
+}
+
+/**
+ * The panel's whole source, as one text.
+ *
+ * Most assertions over the panel are about what it CONTAINS — a guard, a key,
+ * a literal that must not come back — and which of its files holds the line is
+ * not their subject: a part moved from one file to another must not fail them.
+ * The ones that are about PLACE — tab order in a template, the file a constant
+ * is pinned in — read the one file they mean.
+ */
+export function panelText() {
+  return panelFiles()
+    .map((f) => srcText(f))
+    .join('\n')
+}
+
+/** The markup of every `.vue` file in the panel, joined — no script. */
+export function panelTemplates() {
+  return panelFiles()
+    .filter((f) => f.endsWith('.vue'))
+    .map((f) => {
+      const src = srcText(f)
+      return src.slice(0, src.search(/<script setup[^>]*>/))
+    })
+    .join('\n')
+}
+
 /**
  * The path to hand a spawned `node`, for the four tests that run an eval
  * command as a child process.

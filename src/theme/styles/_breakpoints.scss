@@ -2,7 +2,7 @@
  * The two widths this package changes shape at, named once so that the core
  * stylesheet and the VitePress adapter cannot drift apart.
  *
- * `$sheet` is not free to move: `DocPilot.vue` watches `(min-width: 960px)` in a
+ * `$sheet` is not free to move: `Panel.vue` watches `(min-width: 960px)` in a
  * matchMedia string of its own and switches the panel between `complementary`
  * and a modal `dialog` on it. A stylesheet that changed shape at a width the
  * component does not agree with would hand a reader a full-screen sheet that

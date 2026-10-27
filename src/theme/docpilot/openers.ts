@@ -32,7 +32,7 @@ import { DEFAULT_SUGGESTIONS, MATCH_NEVER } from './switches.js'
 /**
  * The list the panel WILL show, which is the list the build baked.
  *
- * `DocPilot.vue` falls back to the built-in three when a project configured
+ * `Panel.vue` falls back to the built-in three when a project configured
  * none, so a project that configured none still shows three chips and those
  * three still deserve a bake. Both sides read this one function so the
  * fingerprint they compare cannot be a fingerprint of two different lists.

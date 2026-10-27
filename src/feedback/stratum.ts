@@ -20,7 +20,7 @@ import {STRATA} from '../eval/calibrate.js'
 /** Where a candidate is headed. Not every vote is a threshold question. */
 export const TARGETS = ['calibration', 'golden', 'docs', 'none']
 
-/** Reasons the panel offers, in DocPilot.vue's stable order. */
+/** Reasons the panel offers, in Feedback.vue's stable order. */
 const DISPUTES_ABSENCE = ['wrong', 'incomplete']
 
 const ok = (key) => {

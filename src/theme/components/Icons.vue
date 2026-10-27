@@ -28,7 +28,7 @@ import { SYMBOLS } from '../docpilot/glyphs.js'
 /**
  * The icon set, as `<symbol>` definitions — ui-specs/001.
  *
- * A component of its own rather than a branch inside `DocPilot.vue` for two
+ * A component of its own rather than a branch inside `Panel.vue` for two
  * reasons. The panel is `v-if`-ed on `open` and the sprite has to outlive that;
  * and "the icon set exists" is not a fact about the answer panel, so it should
  * not be reachable only through it.

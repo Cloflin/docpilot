@@ -28,10 +28,10 @@ import type { DocPilotInstance, MountOptions } from '../types/mount.js'
 import * as session from './theme/docpilot/session.js'
 import { HOST_KEY, setHost, releaseHost, createStandaloneHost } from './theme/docpilot/host.js'
 import { setHighlighter } from './theme/docpilot/highlight.js'
-import DocPilot from './theme/components/DocPilot.vue'
-import DocPilotTrigger from './theme/components/DocPilotTrigger.vue'
-import DocPilotIcons from './theme/components/DocPilotIcons.vue'
-import DocPilotQuote from './theme/components/DocPilotQuote.vue'
+import Panel from './theme/components/Panel.vue'
+import Trigger from './theme/components/Trigger.vue'
+import Icons from './theme/components/Icons.vue'
+import Quote from './theme/components/Quote.vue'
 
 /**
  * What every method does when there is no document — an SSR pass, a prerender,
@@ -167,11 +167,11 @@ export function mountDocPilot(options: MountOptions = {}): DocPilotInstance {
       // The sprite FIRST and exactly once — every glyph in the panel is a `<use>`
       // into it. Two of it publishes two sets of the same ids; none of it renders
       // a panel with empty icon buttons.
-      h(DocPilotIcons),
-      h(DocPilot),
-      ...mounted.map((variant) => h(DocPilotTrigger, { variant, key: variant })),
+      h(Icons),
+      h(Panel),
+      ...mounted.map((variant) => h(Trigger, { variant, key: variant })),
       // Renders nothing unless `quote.fromDocs` is on, and decides that itself.
-      h(DocPilotQuote),
+      h(Quote),
     ],
   })
   app.provide(HOST_KEY, factory)
@@ -209,7 +209,7 @@ export function mountDocPilot(options: MountOptions = {}): DocPilotInstance {
   }
 }
 
-export { DocPilot, DocPilotTrigger, DocPilotIcons, DocPilotQuote }
+export { Panel as DocPilot, Trigger as DocPilotTrigger, Icons as DocPilotIcons, Quote as DocPilotQuote }
 export { setHighlighter, getHighlighter } from './theme/docpilot/highlight.js'
 // engine-spec 038: what runs a site tool in the browser.
 export { registerTool } from './theme/docpilot/tools.js'

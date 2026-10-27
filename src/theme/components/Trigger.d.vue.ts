@@ -1,5 +1,5 @@
 /**
- * See DocPilot.d.vue.ts for why this file exists.
+ * See Panel.d.vue.ts for why this file exists.
  *
  * The one component with a prop. The union is stated HERE and not in the SFC:
  * the component degrades on an unknown variant with a console error rather than

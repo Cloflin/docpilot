@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { srcText } from './helpers/source.js'
+import { srcText, panelFiles } from './helpers/source.js'
 import fs from 'node:fs'
 import { ref, watch, nextTick } from 'vue'
 import {
@@ -324,12 +324,14 @@ describe('hostConfig', () => {
  * bundler. `host-vitepress.js` is the one file allowed to name it.
  */
 describe('the VitePress specifier', () => {
+  // The panel's parts as well as the five a consumer imports: a part that named
+  // `vitepress` would carry it into the panel every host mounts.
   const COMPONENTS = [
-    'src/theme/components/DocPilot.vue',
-    'src/theme/components/DocPilotTrigger.vue',
-    'src/theme/components/DocPilotCta.vue',
-    'src/theme/components/DocPilotQuote.vue',
-    'src/theme/components/DocPilotIcons.vue',
+    ...panelFiles(),
+    'src/theme/components/Trigger.vue',
+    'src/theme/components/Cta.vue',
+    'src/theme/components/Quote.vue',
+    'src/theme/components/Icons.vue',
   ]
 
   it.each(COMPONENTS)('%s imports no framework', (file) => {
@@ -346,7 +348,7 @@ describe('the VitePress specifier', () => {
   })
 
   it('reaches the panel through the binding, not through an import', () => {
-    const vue = read('src/theme/components/DocPilot.vue')
+    const vue = read('src/theme/components/Panel.vue')
     expect(vue).toContain("import { useHost, hostConfig } from '../docpilot/host.js'")
     expect(vue).toContain('const { theme, route, lang, router } = useHost()')
   })

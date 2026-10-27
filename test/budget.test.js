@@ -1424,8 +1424,8 @@ describe('hasDailyAllowance — the two arms of a ceiling', () => {
    * one-armed test that caused this is gone rather than merely joined.
    */
   it('gates the panel line on the predicate, not on the free pool alone', () => {
-    const panel = srcText('src/theme/components/DocPilot.vue')
-    expect(panel).toContain("import { hasDailyAllowance } from '../docpilot/budget.js'")
+    const panel = srcText('src/theme/components/panel/limits.js')
+    expect(panel).toContain("import { hasDailyAllowance } from '../../docpilot/budget.js'")
     expect(panel).toContain(
       "if (!s.config.budget.showRemaining || !hasAllowance.value) return ''",
     )

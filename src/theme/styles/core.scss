@@ -408,7 +408,7 @@ html.docpilot-dark {
 /**
  * The icon sprite — ui-specs/001.
  *
- * `DocPilotIcons` teleports one 0×0 `<svg>` of `<symbol>` definitions into
+ * `Icons.vue` teleports one 0×0 `<svg>` of `<symbol>` definitions into
  * `<body>`, and every icon in the panel is a `<use>` into it. It is taken out
  * of flow and clipped rather than hidden: `display: none` is the one way to
  * make a sprite that some engines decline to resolve references into.
@@ -3098,7 +3098,7 @@ html.docpilot-light .docpilot__passage .shiki span {
   /**
    * The floating button: same component, same base class, a third placement.
    *
-   * Keeping `.docpilot-nav-trigger` as the base is what lets `DocPilot.vue` find a
+   * Keeping `.docpilot-nav-trigger` as the base is what lets `Panel.vue` find a
    * button to return focus to with one selector. It used to be able to assume the
    * match was unique — in `fab` mode the navbar instance did not render — and it
    * cannot any more: `trigger` is a list, and `['nav','fab']` puts two of them on

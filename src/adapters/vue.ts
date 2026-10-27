@@ -25,24 +25,30 @@ import { computed } from 'vue'
 
 import { HOST_KEY, setHost, createStandaloneHost } from '../theme/docpilot/host.js'
 import { setHighlighter } from '../theme/docpilot/highlight.js'
-import DocPilot from '../theme/components/DocPilot.vue'
-import DocPilotTrigger from '../theme/components/DocPilotTrigger.vue'
-import DocPilotCta from '../theme/components/DocPilotCta.vue'
-import DocPilotIcons from '../theme/components/DocPilotIcons.vue'
-import DocPilotQuote from '../theme/components/DocPilotQuote.vue'
+import Panel from '../theme/components/Panel.vue'
+import Trigger from '../theme/components/Trigger.vue'
+import Cta from '../theme/components/Cta.vue'
+import Icons from '../theme/components/Icons.vue'
+import Quote from '../theme/components/Quote.vue'
 
-export { DocPilot, DocPilotTrigger, DocPilotCta, DocPilotIcons, DocPilotQuote }
+export {
+  Panel as DocPilot,
+  Trigger as DocPilotTrigger,
+  Cta as DocPilotCta,
+  Icons as DocPilotIcons,
+  Quote as DocPilotQuote,
+}
 export { mountDocPilot } from '../mount.js'
 export { setHighlighter, getHighlighter } from '../theme/docpilot/highlight.js'
 export { registerTool } from '../theme/docpilot/tools.js'
 export { setHost, useHost, createStandaloneHost, HOST_KEY, routeOf } from '../theme/docpilot/host.js'
 
 const COMPONENTS = {
-  DocPilot,
-  DocPilotTrigger,
-  DocPilotCta,
-  DocPilotIcons,
-  DocPilotQuote,
+  DocPilot: Panel,
+  DocPilotTrigger: Trigger,
+  DocPilotCta: Cta,
+  DocPilotIcons: Icons,
+  DocPilotQuote: Quote,
 }
 
 /**

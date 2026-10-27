@@ -1,7 +1,7 @@
 /**
  * Cmd/Ctrl+I, bound once no matter how many triggers are mounted.
  *
- * THE BUG THIS REPLACES. Every `DocPilotTrigger` used to add its own `keydown`
+ * THE BUG THIS REPLACES. Every `Trigger.vue` used to add its own `keydown`
  * listener to `window` in `onMounted`, and `docPilotSlots()` mounts two of them —
  * the navbar button and the mobile nav-screen row. That only ever worked
  * because `VPNavScreen` is behind a `v-if` and the second instance is rarely

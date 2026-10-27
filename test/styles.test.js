@@ -11,7 +11,7 @@ import { srcText } from './helpers/source.js'
  *   · the core names nothing VitePress-specific — the reason for the split;
  *   · the adapter re-declares the WHOLE colour set — the reason the override
  *     works at all, since it wins by cascade order and not by specificity;
- *   · `$sheet` and the `matchMedia` string in DocPilot.vue are the same width.
+ *   · `$sheet` and the `matchMedia` string in Panel.vue are the same width.
  *
  * The bash checks and these overlap on purpose. `grep -P` and awk behave
  * differently across platforms, and the rule that matters most — "no VitePress
@@ -255,7 +255,7 @@ describe('stylesheet split', () => {
   it('pins the sheet breakpoint to the one the component watches', () => {
     const sheet = BREAKS.match(/\$sheet:\s*(\d+)px/)?.[1]
     expect(sheet).toBe('960')
-    const vue = read('src/theme/components/DocPilot.vue')
+    const vue = read('src/theme/components/Panel.vue')
     expect(vue).toContain(`matchMedia('(min-width: ${sheet}px)')`)
   })
 })

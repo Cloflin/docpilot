@@ -1965,7 +1965,7 @@ export function themeDocPilot(docPilot, env = {}) {
         scope: resolveScope(docPilot),
         history: resolveHistory(docPilot),
         // Was missing, and its absence is why `docPilot.suggestions` looked like a
-        // setting that did nothing: DocPilot.vue has read `config.suggestions` with
+        // setting that did nothing: the panel has read `config.suggestions` with
         // a built-in fallback since it shipped, and UI-SPEC §13 has documented
         // the key — but nothing ever put it in the object the client receives,
         // so the fallback was the only branch that could ever run.

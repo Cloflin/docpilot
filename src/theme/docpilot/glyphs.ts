@@ -3,9 +3,9 @@
  *
  * Fifteen glyphs, 16×16, stroke 1.5, currentColor. No emoji anywhere.
  *
- * It lives here rather than inside DocPilot.vue because two consumers have no
+ * It lives here rather than inside a component because two consumers have no
  * component instance to reach a component from: the fence renderer emits a copy
- * button as an HTML STRING, and `DocPilotIcons.vue` builds the sprite from this
+ * button as an HTML STRING, and `Icons.vue` builds the sprite from this
  * table as data.
  *
  * A value may be an array of paths. Four are — `history`, `sparkle`, `compose`
@@ -81,7 +81,7 @@ export const GLYPH_DEFAULTS = { box: '0 0 16 16', size: 16 }
 
 /**
  * The id a `<symbol>` is published under, and the only place that string is
- * built. `DocPilotIcons.vue` defines them; `DocPilot.vue` and the string-built
+ * built. `Icons.vue` defines them; `panel/Icon.vue` and the string-built
  * copy button reference them — three call sites that would otherwise agree by
  * matching literals.
  */

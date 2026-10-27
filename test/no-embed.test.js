@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { srcText } from './helpers/source.js'
+import { srcText, panelText } from './helpers/source.js'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -1203,7 +1203,7 @@ describe('calibrate — a subset run merges into the raw cache', () => {
  * this one either.
  */
 describe('embed: false — the panel may say so under the composer', () => {
-  const panel = srcText('src/theme/components/DocPilot.vue')
+  const panel = panelText()
 
   it('is silent on the shipped defaults', () => {
     const client = themeDocPilot(cfg({ chat: { provider: 'ollama', model: 'x' }, embed: false }))

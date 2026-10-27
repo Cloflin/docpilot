@@ -1900,7 +1900,7 @@ function makeTurn(question, frozen, quote = ''): Turn {
     // A true multi-select: a wrong answer is often also an incomplete one, and
     // forcing the reader to pick the single most wrong thing throws away the
     // rest. The VALUES are stable and compared across runs — see REASONS in
-    // DocPilot.vue.
+    // panel/Feedback.vue.
     reasons: [],
     comment: '',
     reasonOpen: false,
