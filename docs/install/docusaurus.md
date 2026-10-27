@@ -21,7 +21,7 @@ On Yarn, pnpm, Bun or Deno, take that line from
 export const docPilot = {
   product: 'Acme Editor',
   docsDir: 'docs',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
   embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
 }
 ```

@@ -9,7 +9,7 @@ It is a chat, not a search box with better typography: scope a question to one s
 
 **Two installs, one panel.** In the **static** install (`runtime: 'browser'`, the default) retrieval runs in the reader's browser against an index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. In the **server** install (`runtime: 'server'`) the whole turn runs on your server and the page receives only the answer stream: the corpus, the instructions and the keys stay with you, behind rate limits, a turn deadline and a metrics endpoint. `npx docpilot init` asks which; the reader's chat is the same in both.
 
-In the static install, retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **one sign bit per dimension** — 404 KB for this project's own 807-chunk index, where int8 would be 3.2 MB and float32 12.6 MB — scored against the question's full-precision vector, and the build measures the error and refuses to ship above `0.03` mean |Δcos|. A relevance floor on retrieval is scored on every turn and, opt-in (`guard.mode: 'calibrated'`), refuses **before the model is called** so an off-topic question costs zero tokens — off by default, because that threshold has to be calibrated per corpus **and per language**, and a reader's language is not something a threshold can see; the model's own citation contract is what handles it otherwise. Every citation the reader sees is checked against what the host actually retrieved during that turn.
+In the static install, retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **one sign bit per dimension** — 405 KB for this project's own 809-chunk index, where int8 would be 3.2 MB and float32 12.6 MB — scored against the question's full-precision vector, and the build measures the error and refuses to ship above `0.03` mean |Δcos|. A relevance floor on retrieval is scored on every turn and, opt-in (`guard.mode: 'calibrated'`), refuses **before the model is called** so an off-topic question costs zero tokens — off by default, because that threshold has to be calibrated per corpus **and per language**, and a reader's language is not something a threshold can see; the model's own citation contract is what handles it otherwise. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
 ## Install
 
@@ -88,7 +88,7 @@ To pin a provider, pass settings — and then export them **by name**:
 ```js
 export const docPilot = {
   product: 'Acme Editor',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
 }
 
 const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
@@ -194,7 +194,7 @@ covers rebuilding the index. See
 |---|---|---|
 | Where retrieval runs | the reader's browser | the vendor's cloud |
 | Where the index lives | a static file on the host already serving your site | the vendor's platform |
-| Index the reader downloads | 1-bit vectors, one bit per dimension — 404 KB for this site's 807 chunks | n/a — the index is theirs |
+| Index the reader downloads | 1-bit vectors, one bit per dimension — 405 KB for this site's 809 chunks | n/a — the index is theirs |
 | An off-topic question costs | zero model calls, zero tokens | not documented by any of them |
 | Citations checked against what was retrieved | yes, by host code no message can reach | not documented by any of them |
 | Refusal threshold measured on **your** corpus | `npx docpilot calibrate` | not documented by any of them |

@@ -84,7 +84,7 @@ OPENAI_API_KEY=sk-…
 ```js
 export const docPilot = {
   product: 'Acme Editor',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
 }
 
 const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))

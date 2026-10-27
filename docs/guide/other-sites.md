@@ -37,7 +37,7 @@ with no VitePress uses the last two. Either way the file has to export
 export const docPilot = {
   product: 'Acme Editor',
   docsDir: 'docs',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
   embed: 'auto',
 }
 ```

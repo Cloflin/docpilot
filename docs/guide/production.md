@@ -58,7 +58,7 @@ Two rules follow, and they are the same rule:
 `npx docpilot doctor` names the chosen provider and, when the environment was what chose it, prints the whole chain with the member that answered marked. Pin the provider in your config if you would rather the environment had no say:
 
 ```js
-chat: { provider: 'openai', model: 'gpt-4o-mini' }
+chat: { provider: 'openai', model: 'gpt-6-luna' }
 ```
 
 ## Why each rule is there

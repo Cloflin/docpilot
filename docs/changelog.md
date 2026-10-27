@@ -13,6 +13,18 @@ Each release in a few lines. The full notes — every change, every migration st
 
 <div class="cl">
 
+## 2.0.1
+
+<div class="cl-date">Oct 27, 2026</div>
+
+### `gpt-6-luna` answers, and it is the default OpenAI model
+
+- **A model that DocPilot has not heard of works when you name it.** When a refusal names its cause — `max_tokens`, `temperature`, or function tools that need `reasoning_effort: 'none'` — DocPilot asks the same model again with that one change, once, and keeps the change. See [A model this table has never heard of](/guide/providers#a-model-this-table-has-never-heard-of).
+- **`gpt-6-luna` is the default `openai` model**, in place of `gpt-4o-mini`. OpenAI removes `gpt-4o-mini` from its API on January 14, 2027. A config that names its model does not change.
+- **OpenAI gets `max_completion_tokens` for every model**, and `doctor` prints the field that each request carries.
+
+<a class="cl-more" :href="gh('201--2026-10-27')">Full notes</a>
+
 ## 2.0.0
 
 <div class="cl-date">Oct 26, 2026</div>

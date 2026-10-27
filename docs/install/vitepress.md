@@ -47,7 +47,7 @@ With settings, the shape is the same plus a **named `docPilot` export**:
 ```js [docs/.vitepress/config.mjs]
 export const docPilot = {
   product: 'Acme Editor',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
   embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
 }
 

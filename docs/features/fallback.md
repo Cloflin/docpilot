@@ -34,7 +34,7 @@ docPilot: {
 // providers, in order — each member names its own key variable
 chat: {
   chain: [
-    { provider: 'openai', model: 'gpt-4o-mini' },
+    { provider: 'openai', model: 'gpt-6-luna' },
     { provider: 'anthropic', model: 'claude-haiku-4-5', apiKeyEnv: 'ANTHROPIC_API_KEY' },
   ],
 }

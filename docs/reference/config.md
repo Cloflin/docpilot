@@ -14,7 +14,7 @@ import { defineDocPilot } from '@cloflin/docpilot'
 
 export const docPilot = {
   product: 'Acme Editor',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
 }
 
 const ai = defineDocPilot(docPilot, loadEnv('', process.cwd(), ''))
@@ -89,7 +89,7 @@ Four things the block cannot say on its own:
   environment resolves to a local Ollama on `qwen3:8b`, which is what this
   package shipped with before the chain existed.
 - **A model name never crosses providers.** `qwen3:8b` is a statement about
-  Ollama and `gpt-4o-mini` is one about OpenAI, so each lives on its provider's
+  Ollama and `gpt-6-luna` is one about OpenAI, so each lives on its provider's
   row in the table rather than in this block. Naming a provider with no model
   gets that provider's default; naming one that has neither a default nor a free
   pool — `custom` — is still a build-stopping error.
@@ -406,7 +406,7 @@ the environment selects:
 
 | # | id | Selected by | Embeds? | Model when you name none |
 |---|---|---|---|---|
-| 1 | `openai` | `OPENAI_API_KEY` | yes | `gpt-4o-mini` |
+| 1 | `openai` | `OPENAI_API_KEY` | yes | `gpt-6-luna` |
 | 2 | `gemini` | `GEMINI_API_KEY` | yes | `gemini-2.5-flash` |
 | 3 | `mistral` | `MISTRAL_API_KEY` | yes | `mistral-small-latest` |
 | 4 | `together` | `TOGETHER_API_KEY` | yes | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
@@ -487,7 +487,7 @@ provider's** own default, listed in the table above and in
 [Choosing providers](/guide/providers).
 
 A model name never crosses providers. `qwen3:8b` is a statement about Ollama and
-`gpt-4o-mini` is one about OpenAI, so each lives on its provider's row rather
+`gpt-6-luna` is one about OpenAI, so each lives on its provider's row rather
 than as a single shipped value that the next provider inherits — which is what
 used to happen, and what used to make `chat: { provider: 'openai' }` a
 build-stopping error for want of a name everybody could guess.

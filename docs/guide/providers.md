@@ -24,7 +24,7 @@ and `embed: 'auto'` follows it into the retrieval half.
 
 | # | id | Selected by | Embeds? | Model when you name none |
 |---|---|---|---|---|
-| 1 | `openai` | `OPENAI_API_KEY` | yes | `gpt-4o-mini` |
+| 1 | `openai` | `OPENAI_API_KEY` | yes | `gpt-6-luna` |
 | 2 | `gemini` | `GEMINI_API_KEY` | yes | `gemini-2.5-flash` |
 | 3 | `mistral` | `MISTRAL_API_KEY` | yes | `mistral-small-latest` |
 | 4 | `together` | `TOGETHER_API_KEY` | yes | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
@@ -155,7 +155,7 @@ none of them answers is [The answer ladder](/concepts/the-ladder).
 
 ```js
 export const docPilot = {
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
   // embed: 'auto' is the default — it follows chat.provider
 }
 ```
@@ -391,7 +391,7 @@ Cells name the **field that actually goes on the wire**. `—` means the service
 
 | provider | reasoning | levels it accepts | budget | verbosity | temperature | topP | seed | token ceiling |
 |---|---|---|---|---|---|---|---|---|
-| `openai` | `reasoning_effort` | all six † | — | `verbosity` | ✓ | `top_p` | `seed` | `max_completion_tokens` on o-series and GPT-5, `max_tokens` elsewhere |
+| `openai` | `reasoning_effort` | all six † | — | `verbosity` | ✓ | `top_p` | `seed` | `max_completion_tokens` |
 | `openrouter` | `reasoning: {…}` | all six † | `max_tokens` | `verbosity` | ✓ | `top_p` | `seed` | `max_tokens` |
 | `anthropic` | `thinking` | low → max | `budget_tokens` ‡ | — | — | — | — | `max_tokens` |
 | `ollama` | `think` | low, medium, high, max | — | — | `options.temperature` | `options.top_p` | `options.seed` | `options.num_predict` |
@@ -413,15 +413,27 @@ Cells name the **field that actually goes on the wire**. `—` means the service
 
 Two knobs are refused everywhere for reasons of their own: `chat.stop`, because a stop sequence inside a pinned JSON reply truncates the object, and `top_k`, which only one transport has. Both are one line of `chat.extraBody` if you want them anyway.
 
+### A model this table has never heard of
+
+The table is per service, and a new model can still refuse a field its service takes. OpenAI's reasoning models are the case: they reject `max_tokens`, they take `temperature` and `top_p` only with reasoning off, and `gpt-6-luna` takes function tools on Chat Completions only with `reasoning_effort: 'none'`. When a refusal names its cause, DocPilot asks the same model again with that one change, and the model keeps the change until the page reloads — on a server install, until the server restarts:
+
+| the refusal names | the next request |
+|---|---|
+| `max_tokens` or `max_completion_tokens` | spells the ceiling the other way |
+| `temperature` or `top_p` | carries neither |
+| `reasoning_effort` `'none'` | says `'none'` on each search step; the answer keeps your `chat.reasoning` |
+
+Each change costs one extra request, once. `gpt-6-luna` needs two of them on a reader's first question and none after. So a model released after this version works when you name it in `chat.model`. OpenAI itself gets `max_completion_tokens` from the first request, because its endpoint takes that field from every model it serves.
+
 ### Thinking, turned up
 
 ```js
 export const docPilot = {
-  chat: { provider: 'openai', model: 'gpt-5-mini', reasoning: 'high' },
+  chat: { provider: 'openai', model: 'gpt-6-luna', reasoning: 'high' },
 }
 ```
 
-Costs more and answers better on questions with several moving parts. Note the model: on GPT-5 and the o-series this package posts `max_completion_tokens`, because those models reject the field every other model wants — a request naming `max_tokens` there fails with a 400, which the panel renders as "I couldn't find this in the docs".
+Costs more and answers better on questions with several moving parts. The search steps still run with reasoning off. `high` goes on the answer, and that answer goes without `temperature`, which `gpt-6-luna` refuses while it reasons.
 
 ### Thinking, turned off
 

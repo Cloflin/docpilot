@@ -19,7 +19,7 @@ import { defineDocPilot, type DocPilotSettings } from '@cloflin/docpilot'
 
 const docPilot: DocPilotSettings = {
   product: 'Acme Editor',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
   host: { base: '/docs/', search: false },
 }
 

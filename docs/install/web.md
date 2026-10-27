@@ -70,7 +70,7 @@ host:
   window.__DOCPILOT__ = {
     enabled: true,
     product: 'Acme Editor',
-    llm: { provider: 'openai', baseURL: '/ai/chat', model: 'gpt-4o-mini' },
+    llm: { provider: 'openai', baseURL: '/ai/chat', model: 'gpt-6-luna' },
     embed: { provider: 'ollama', baseURL: '/ai/embed', model: 'bge-m3' },
     ui: { trigger: 'fab' },
   }
@@ -103,7 +103,7 @@ export const docPilot = {
   product: 'Acme Editor',
   docsDir: 'content',
   indexDir: 'static/rag',
-  chat: { provider: 'openai', model: 'gpt-4o-mini' },
+  chat: { provider: 'openai', model: 'gpt-6-luna' },
   embed: { provider: 'ollama', model: 'bge-m3', baseURL: 'http://localhost:11434' },
 }
 ```
