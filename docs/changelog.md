@@ -13,6 +13,20 @@ Each release in a few lines. The full notes — every change, every migration st
 
 <div class="cl">
 
+## 2.1.1
+
+<div class="cl-date">Oct 27, 2026</div>
+
+### A claim links to its source again
+
+- **The citation rule is clearer.** With `gpt-6-luna` at `reasoning: 'low'`, most answers printed a section id in brackets where the link marker goes. The Sources list was right, and the claim had no link. The instruction now asks for numbers in the text and keeps section ids in the citations list. Measured on one production turn: 13 of 16 answers before, 0 of 24 after.
+- **The markers are settled in code.** When a model still writes an id, the turn rewrites it to its `[n]` before the answer is shown, stored or signed. `[1, 2]` now links both, and a number after a dropped invented citation no longer links the source one row down.
+- **`eval` checks the links.** An answer to a covered question, shown with sources and no working link in its text, now fails the run, like a hallucinated citation. A small model that writes no markers can fail it on the first run. See [Measure](/guide/measure#citations).
+
+Run `docpilot index` after the upgrade: the instruction changed, so the baked opener answers are baked again.
+
+<a class="cl-more" :href="gh('211--2026-10-27')">Full notes</a>
+
 ## 2.1.0
 
 <div class="cl-date">Oct 27, 2026</div>

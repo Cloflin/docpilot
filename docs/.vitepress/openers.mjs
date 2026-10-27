@@ -19,6 +19,10 @@
  * ship. A renamed heading therefore costs this answer and prints why — it does
  * not silently ship an answer with no sources under it.
  *
+ * `[1]` IS THE FIRST ID IN `cite`. The markers are what turn a claim into a
+ * link, as in a model's answer; without them the Sources rows sit under prose
+ * that points at none of them, and `index` warns (engine-spec 039).
+ *
  * PLAIN MARKDOWN ONLY. The panel renders fences, tables and links; it does not
  * render VitePress containers, so `::: warning` here would reach the reader as
  * three colons and a word. Where the docs use a container, these use bold.
@@ -27,7 +31,7 @@ export const openers = [
   {
     q: 'How do I get started?',
     cite: ['install#', 'install#installing-it', 'guide/production#ask-what-the-contract-is'],
-    answer: `**1) Install and initialise.**
+    answer: `**1) Install and initialise.** [2]
 
 \`\`\`bash
 npm i @cloflin/docpilot
@@ -36,7 +40,7 @@ npx docpilot init
 
 Yarn, pnpm, Bun and Deno all work — \`yarn docpilot init\`, \`pnpm exec docpilot init\`, \`bunx docpilot init\`.
 
-**2) Wire up the plugin and the theme.** Two files, no settings to write.
+**2) Wire up the plugin and the theme.** Two files, no settings to write [1].
 
 \`\`\`js
 // docs/.vitepress/config.mjs
@@ -59,7 +63,7 @@ import { withDocPilot } from '@cloflin/docpilot/theme'
 export default withDocPilot(DefaultTheme)
 \`\`\`
 
-**3) Put the key in \`.env.local\` — there and nowhere else.** One key configures both the answers and the embeddings: \`chat.provider\` defaults to \`'auto'\` and takes the first provider whose key it finds in the environment.
+**3) Put the key in \`.env.local\` — there and nowhere else.** One key configures both the answers and the embeddings [1]: \`chat.provider\` defaults to \`'auto'\` and takes the first provider whose key it finds in the environment.
 
 \`\`\`bash
 OPENROUTER_API_KEY=sk-or-…
@@ -75,11 +79,11 @@ npx docpilot calibrate   # refusal thresholds, measured on YOUR corpus
 npx docpilot doctor      # what resolved, what answers, what embeds
 \`\`\`
 
-Without \`calibrate\` the thresholds stay provisional — they were measured on somebody else's corpus and they do not transfer.
+Without \`calibrate\` the thresholds stay provisional — they were measured on somebody else's corpus and they do not transfer [1].
 
 **5) Run it.** \`npx vitepress dev docs\` — the dev server also proxies \`/ai/*\`. The panel opens from the button in the corner, from the navbar, or with ⌘I.
 
-**6) Production is one reverse-proxy rule.** A built site does not proxy \`/ai/*\` and \`vitepress preview\` does not proxy at all, which is not a reason to move the key into the browser.
+**6) Production is one reverse-proxy rule.** A built site does not proxy \`/ai/*\` and \`vitepress preview\` does not proxy at all, which is not a reason to move the key into the browser [3].
 
 \`\`\`bash
 npx docpilot doctor --proxy
@@ -98,7 +102,7 @@ Run that on the build machine with its environment. The route has to match paths
     ],
     answer: `Three levels, cheapest first. Almost everything is settled by the first one.
 
-**1. The \`ui\` settings — shape, place, scheme.**
+**1. The \`ui\` settings — shape, place, scheme.** [3]
 
 \`\`\`js
 export const docPilot = {
@@ -115,7 +119,7 @@ export const docPilot = {
 
 \`trigger\` is a list, not an either/or: \`'nav'\` is \`['nav', 'screen']\` and \`'both'\` is all three. \`'none'\` removes the buttons and leaves ⌘I working. \`panel: 'auto'\` follows the trigger — the bar with a \`fab\`, a drawer without one; \`'popup'\` brings back the corner button. An invalid value never breaks the build; it is printed and falls back.
 
-**2. The \`--dp-*\` CSS tokens — colour and geometry.** Everything the panel paints goes through one. Override them *after* the panel's styles:
+**2. The \`--dp-*\` CSS tokens — colour and geometry.** Everything the panel paints goes through one [1]. Override them *after* the panel's styles:
 
 \`\`\`css
 :root {
@@ -129,7 +133,7 @@ Three surface levels decide which token you want: \`--dp-surface\` (the panel, t
 
 **Order beats specificity.** Core declares every token with a real value and the adapter re-declares the colours on \`:root\` at the same specificity, winning by being loaded second — so your \`:root\` has to come after the adapter.
 
-**3. Your own styles.** Take the theme without its CSS and load your token table last:
+**3. Your own styles.** Take the theme without its CSS and load your token table last [2]:
 
 \`\`\`js
 import { withDocPilot } from '@cloflin/docpilot/theme-without-styles'
@@ -145,7 +149,7 @@ import './my-docpilot-tokens.css'
   {
     q: 'What are the CLI and the skill for?',
     cite: ['reference/cli#', 'reference/cli#exit-codes', 'reference/cli#update', 'reference/skills#'],
-    answer: `**The CLI is the only place where anything is computed.** The panel in the reader's browser builds nothing and measures nothing — it reads static files you built. \`npx docpilot\` builds the index, measures the refusal thresholds, checks answer quality, and says whether any of it is fit to deploy. **The skill is the written-down half of the same loop**: what to measure, what has already been measured, and what an edit is not allowed to break.
+    answer: `**The CLI is the only place where anything is computed.** The panel in the reader's browser builds nothing and measures nothing — it reads static files you built. \`npx docpilot\` builds the index, measures the refusal thresholds, checks answer quality, and says whether any of it is fit to deploy [1]. **The skill is the written-down half of the same loop**: what to measure, what has already been measured, and what an edit is not allowed to break [4].
 
 Every command reads the named export \`docPilot\` from \`.vitepress/config.mjs\`. There is no second place saying what embeds and where the docs are — a copy of that decision drifts, and the failure is silent.
 
@@ -173,7 +177,7 @@ Every command reads the named export \`docPilot\` from \`.vitepress/config.mjs\`
 
 **\`doctor\` is what CI gates on.** The build never fails because of DocPilot — the panel switches itself off and prints a block — so the place where the same facts become a non-zero exit is a separate command. Only the *name* of the key variable is ever printed.
 
-**Four exit codes:** \`0\` done, \`1\` attempted and failed, \`2\` a bad command line (nothing ran, retrying will not help), \`130\` cancelled at a prompt. Diagnostics go to stderr and the product to stdout, which is why \`doctor --json | jq\` works with the report still on screen.
+**Four exit codes:** \`0\` done, \`1\` attempted and failed, \`2\` a bad command line (nothing ran, retrying will not help), \`130\` cancelled at a prompt. Diagnostics go to stderr and the product to stdout, which is why \`doctor --json | jq\` works with the report still on screen [2].
 
 **A flag with a value needs \`=\`.** \`--level low\` is read as *absent*, the run takes the default and reports it as fact. Write \`--level=low\`. \`import\` and \`feedback\` are the two exceptions.
 
@@ -187,7 +191,7 @@ npx docpilot tune && npx docpilot index                         # the lever ship
 
 **The skills.** \`init\` copies \`docs-rag\` and \`docs-import\` into your agent tool — Claude Code, Codex, Cursor, Copilot or a vendor-neutral \`.agents/\` — and generates a \`/docpilot-<command>\` for every command. \`docs-rag\` carries nine modes and two sections that matter more than the modes: **Binding rules** (thresholds are not levers; an LLM judge may not gate; anything that drops a metric by more than two points is reverted) and **Things already measured**, so the next person does not spend a day rediscovering a negative result.
 
-\`init\` writes a file only where there is nothing, which is right for your eval sets and wrong for the skills — so \`npx docpilot update\` is what refreshes them after an upgrade. \`--check\` is its CI form.
+\`init\` writes a file only where there is nothing, which is right for your eval sets and wrong for the skills — so \`npx docpilot update\` is what refreshes them after an upgrade [3]. \`--check\` is its CI form.
 
 You do not need Claude Code for any of this: these are markdown files under an open standard, and the rules in them hold for whoever reads them.`,
   },

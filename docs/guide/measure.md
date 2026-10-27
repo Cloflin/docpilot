@@ -90,17 +90,20 @@ question ─► retrieve ─► prime ─► model ─► answer + citations
 
 ## citations {#citations}
 
-Three numbers describe the citations of an answer.
+Four numbers describe the citations of an answer.
 
 | number | what it counts |
 |---|---|
 | citation precision | The share of the cited chunks that are gold |
 | citation recall | The share of the gold entries that some citation covers |
 | hallucinated citations | The share of citations that point at a chunk nobody retrieved |
+| answers without a link | The share of answers to covered questions, shown with sources, whose text links to none of them |
 
 **Read precision and recall together.** Precision divides by how many citations the answer chose. An answer with one correct citation scores 1.0 whether or not it named the passage the reader needs. Recall asks whether the evidence was named at all. An answer with no citations covers nothing and scores 0 recall.
 
 **A hallucinated citation fails the run.** The panel removes a citation that points at an unretrieved chunk before the reader sees it. The eval counts them anyway, because a nonzero count means the model invented a source. Scope containment works the same way: a chunk outside the turn's scope fails the run.
+
+**An answer without a link fails the run.** The three numbers above read the citations list, which fills the Sources rows under an answer. The link on a claim comes from a `[1]` marker in the answer's text. An answer can cite the right chunk and still show the reader no link: the text has no marker that resolves, or it prints a section id in brackets, `[guide/setup#install]`, where the marker goes. The eval renders every answer to a question the docs cover with the panel's own renderer, and one shown with sources and no working link fails the run. The report names the records. Answers to negative records are counted on a separate line and fail nothing. A small model often writes no marker at all — `gpt-4o-mini` in about 30 % of its answers in earlier runs — so read this gate first when such a run fails.
 
 ## negatives caught {#negatives}
 

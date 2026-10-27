@@ -10,7 +10,7 @@ Four things are true of every answer, for every model, under every prompt — in
 
 **Every citation shown corresponds to a chunk the host itself put in front of the model during that turn** — or to a reply from one of the site's own [tools](/features/tools) that the host received and passed on in that turn — checked against a set the host maintains, never by searching the text of what the model was sent.
 
-Three further things are true of the product rather than of an answer: the instruction, the tool descriptions and the active scope are visible to the reader; a reader's own added instruction is delivered as a separate user message and can reach none of the four mechanisms above; and a hallucinated-citation rate of zero is a hard gate on every evaluation run.
+Three further things are true of the product rather than of an answer: the instruction, the tool descriptions and the active scope are visible to the reader; a reader's own added instruction is delivered as a separate user message and can reach none of the four mechanisms above; and every evaluation run fails on a hallucinated citation, or on an answer to a covered question shown with sources whose text links to none of them.
 
 **What is written down, and where.** Conversations are kept in the reader's own `localStorage` and are never sent anywhere; the reader can delete one or all of them from the panel, and a site can switch the store off, which also clears it. The redaction that catches a pasted key runs before a turn exists, so a key never reaches what is stored. See [Conversation history](/guide/history).
 
