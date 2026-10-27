@@ -219,6 +219,21 @@ mountDocPilot({
 
 See [`ui.font`](/reference/config#ui-font-ui-fontmono).
 
+## Site tools
+
+A [site tool](/features/tools) whose `run` is code registers its handler on the global the panel came from, before the panel mounts:
+
+```html
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    DocPilot.registerTool('plan_limits', async ({ plan }) => (await fetch(`/api/plans/${plan}`)).json())
+    DocPilot.mountDocPilot({ config: window.__DOCPILOT__ })
+  })
+</script>
+```
+
+With modules, `import { registerTool } from '@cloflin/docpilot/web'`.
+
 ## The key
 
 The one thing this page cannot make simple. `llm.baseURL` above is a **same-origin

@@ -128,3 +128,13 @@ Same API, described on [JavaScript](./javascript).
 — and nowhere else. Routes and citation hrefs are base-less everywhere, which is
 what lets the citation validator compare them literally. See
 [`host`](/reference/config#host).
+
+## Site tools
+
+```js
+import { registerTool } from '@cloflin/docpilot/vue'
+
+registerTool('plan_limits', async ({ plan }) => (await fetch(`/api/plans/${plan}`)).json())
+```
+
+It returns the function that removes the handler. Call that from `onBeforeUnmount` when a component owns the tool. See [Tools and actions](/features/tools).

@@ -130,7 +130,9 @@ with no model call. A greeting attached to a real question is not claimed. See
 
 The status line says which of six things is happening rather than spinning:
 *Loading the docs index*, *Searching the docs*, *Looking at the page list*,
-*Reading `guide/indexing`*, *Thinking*, *Writing the answer*.
+*Reading `guide/indexing`*, *Thinking*, *Writing the answer*. A site with its
+own [tools](/features/tools) adds a seventh while one runs: *Checking Plan
+limits*, with the tool's title.
 
 - **Reasoning** collapses behind *Thought for 4s* on providers that emit it.
   It opens itself while thinking is the only thing happening, and pressing it
@@ -167,7 +169,8 @@ back by itself instead of waiting, or `false` to abandon the turn on close.
 ## Reading the answer
 
 **Citations are checked, not trusted.** Every marker corresponds to a chunk the
-host itself put in front of the model that turn, verified against a set the host
+host itself put in front of the model that turn — or to a reply from one of the
+site's own [tools](/features/tools) — verified against a set the host
 maintains — never by searching the text of what the model was sent. A link to a
 route that does not exist in the index is de-linked before anything renders.
 The full statement, and its limits, is
@@ -180,6 +183,14 @@ The full statement, and its limits, is
 | **Pages read** — what "read 3 pages" was actually reading | [`citations.pagesRead`](/reference/config#citations-pagesread) |
 | Sources appended to a copied answer, under a `Sources:` heading | [`citations.inCopy`](/reference/config#citations-incopy) |
 | A deep link into the cited chunk | [`composer.deepLink`](/reference/config#composer-deeplink) |
+| A source **from the site** — a reply from one of the site's own tools, with no link | [`tools`](/reference/config#tools) |
+| **Actions** — a button, or a form, for a next step the site offers | [`tools`](/reference/config#tools) |
+
+**An action never runs by itself.** The answer may offer up to three of the
+site's actions under it: a button with the site's own label, or one that opens a
+form with the model's suggestions filled in. Nothing is sent until the reader
+presses the button or sends the form, and the outcome replaces the button. See
+[Tools and actions](/features/tools#an-action).
 
 Code in an answer is highlighted by whichever highlighter you plug in — Shiki,
 Prism or highlight.js, none of them installed by default. See

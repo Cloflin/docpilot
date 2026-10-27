@@ -107,6 +107,18 @@ a link means loading a page — but you almost certainly have one.
 `selectors.article` is what bounds the offer to quote a passage; the neutral
 default is `main`. See [`host`](/reference/config#host).
 
+## Site tools
+
+`registerTool` comes from the same entry. It returns the function that removes the handler, which is what an effect's cleanup wants:
+
+```jsx
+import { registerTool } from '@cloflin/docpilot/react'
+
+useEffect(() => registerTool('plan_limits', async ({ plan }) => (await fetch(`/api/plans/${plan}`)).json()), [])
+```
+
+See [Tools and actions](/features/tools).
+
 ## Syntax highlighting
 
 The web bundle installs Shiki itself, so code in an answer is coloured with no

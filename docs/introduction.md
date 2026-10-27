@@ -13,6 +13,7 @@ const features = [
   { title: 'Conversation history', body: 'Past threads stay in localStorage, on the reader’s device.', link: '/features/history' },
   { title: 'Conversation memory', body: 'The last answer goes to the model whole, older ones as summaries.', link: '/features/memory' },
   { title: 'Model fallback', body: 'A 429 or an outage moves the question to the next model.', link: '/features/fallback' },
+  { title: 'Tools and actions', body: 'Live data the answer cites, and next steps the reader runs with one press.', link: '/features/tools' },
   { title: 'Every language', body: 'The panel follows the page language; the model answers in the reader’s.', link: '/features/i18n' },
 ]
 </script>
@@ -62,7 +63,7 @@ In the static install, steps 1 and 2 run without a server, so the only thing you
 
 ## How small the index is
 
-An embedding model returns 4,096 numbers per chunk, each a 32-bit float. DocPilot keeps one bit of each: its sign. This site's own index is 411 KB for 821 chunks at 4096 dimensions — the whole documentation you are reading.
+An embedding model returns 4,096 numbers per chunk, each a 32-bit float. DocPilot keeps one bit of each: its sign. This site's own index is 418 KB for 835 chunks at 4096 dimensions — the whole documentation you are reading.
 
 <Compression />
 

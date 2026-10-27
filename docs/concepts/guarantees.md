@@ -6,9 +6,9 @@ Four things are true of every answer, for every model, under every prompt — in
 
 **When retrieval finds nothing above the threshold, no answer is generated, because the model is never called.** There is no text to be wrong.
 
-**The assistant is shown only chunks from the active scope** — through priming, search, fetch, listing and section expansion alike. The tools carry no argument in which a wider scope could be expressed, and an id enters the citable set only after the scope filter has run.
+**The assistant is shown only chunks from the active scope** — through priming, search, fetch, listing and section expansion alike. The tools carry no argument in which a wider scope could be expressed, and an id enters the citable set only after the scope filter has run. A site's own [tools](/features/tools) return the site's data, not chunks, and are outside this statement.
 
-**Every citation shown corresponds to a chunk the host itself put in front of the model during that turn**, checked against a set the host maintains — never by searching the text of what the model was sent.
+**Every citation shown corresponds to a chunk the host itself put in front of the model during that turn** — or to a reply from one of the site's own [tools](/features/tools) that the host received and passed on in that turn — checked against a set the host maintains, never by searching the text of what the model was sent.
 
 Three further things are true of the product rather than of an answer: the instruction, the tool descriptions and the active scope are visible to the reader; a reader's own added instruction is delivered as a separate user message and can reach none of the four mechanisms above; and a hallucinated-citation rate of zero is a hard gate on every evaluation run.
 
@@ -18,7 +18,7 @@ Three further things are true of the product rather than of an answer: the instr
 
 It is a control against a weak, badly-behaved or injected **model** — a small model inventing an id, emitting malformed arguments, or drifting after four steps.
 
-**It is not a security boundary and cannot be one.** Everything runs in the reader's browser, the corpus is a public website, the model is the reader's own, and no answer triggers any server-side action. A reader who wants an out-of-scope answer gets one faster by talking to the model directly than by attacking anything here. The scope has a one-click widen affordance precisely because a fence the reader can open is honest, while one they cannot is a support ticket.
+**It is not a security boundary and cannot be one.** Everything runs in the reader's browser, the corpus is a public website, the model is the reader's own, and no answer triggers an action by itself: a site's function tool can only read, and an [action](/features/tools#an-action) runs only when the reader presses it. A reader who wants an out-of-scope answer gets one faster by talking to the model directly than by attacking anything here. The scope has a one-click widen affordance precisely because a fence the reader can open is honest, while one they cannot is a support ticket.
 
 **Scope is focus, not containment.**
 

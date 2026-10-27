@@ -100,6 +100,8 @@ By default a server turn goes straight to the answer call with the evidence the 
 
 On Harborline with a local `qwen3:8b`, the default brings the first token from 25.0 s to 8.3 s at the median and the whole answer from 25.0 s to 19.5 s, with answer F1 and citations inside the noise of the loop — see the [benchmark page](/guide/benchmarks). The cost is that the model cannot search again inside a turn. With a fast hosted model the trade reverses: on `deepseek-v4-flash` the agentic loop showed the first token sooner (9.8 s against 13.3 s) and answered the Russian questions one-shot refused, for about three times the prompt tokens. There, set `turn.loop: 'agentic'`. A long local generation is bounded only by the step timeout, so set `chat.maxTokens` on a server that answers with a local model.
 
+A site's [function tools](/features/tools) run on search steps, so a one-shot turn offers none of them. Actions ride the answer call and work under every policy.
+
 Measure a policy before you adopt it. `eval --runtime=server` scores the golden set through the server turn, so you compare answer quality and latency between policies on your own questions — see [Measure](/guide/measure). The [benchmark page](/guide/benchmarks) shows the policies compared on the Harborline corpus.
 
 ## The metrics endpoint {#metrics}
@@ -193,6 +195,7 @@ With `log`, every turn writes one `docpilot.turn/1` line. 2.0 adds these fields:
 | `historySigned` | Whether the history verified |
 | `leakBlocked` | Whether the leak guard stopped the answer |
 | `cached` | Whether the answer came from the answer cache |
+| `tools` | Each [site function call](/features/tools) as `{tool, ok, ms}`, never its arguments or its reply. Absent on a turn that called none |
 
 The log still has no IP address, user agent or cookie. [Improving answers](/guide/improving) reads it.
 

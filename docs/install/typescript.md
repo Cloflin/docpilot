@@ -41,6 +41,8 @@ is a panel that refuses every question with a message about the corpus.
 | `HostBinding`, `HostSelectors` | `@cloflin/docpilot/host` | what a host supplies |
 | `DocPilotDocusaurusOptions` | `@cloflin/docpilot/docusaurus` | the plugin's options |
 | `DocPilotPanelProps` | `@cloflin/docpilot/react` | the React component |
+| `ToolsSettings`, `ToolDefinition`, `ToolParameter` | `@cloflin/docpilot` | the [`tools`](/features/tools) key, one tool, one parameter |
+| `ToolHandler` | `@cloflin/docpilot/mount` | what `registerTool` takes |
 
 ## Mounting, typed
 
@@ -75,6 +77,21 @@ setHighlighter(mine)
 declaration says why it may not be async: the answer is re-rendered on a timer
 while it streams. The rest of the contract is on
 [Syntax highlighting](/reference/highlighting).
+
+## A tool handler, typed
+
+```ts
+import { registerTool, type ToolHandler }  from '@cloflin/docpilot/mount'
+
+const planLimits: ToolHandler = async (args, { signal }) => {
+  const res = await fetch(`/api/plans/${args.plan}`, { signal })
+  return res.json()
+}
+
+registerTool('plan_limits', planLimits)
+```
+
+`args` has already passed the tool's own schema. The second argument carries the reader's `question`, the `page` and a `signal` that ends at the tool's time limit and, during a turn, when the reader presses Stop.
 
 ## Module resolution
 

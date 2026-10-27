@@ -38,6 +38,7 @@ DocPilot has four things worth protecting and four kinds of attacker.
 | The instruction and thresholds are read | The page downloads both | They stay on the server. The [leak guard](/guide/server-operations#leak-guard) stops the owner's text leaving in an answer |
 | A hostile question overrides the instruction | The instruction constrains the model, but it is not a control. [Attack probes](/guide/security-probes) measure the result | The same, and the leak guard is a control outside the model for the owner's text |
 | A hostile page injects an instruction | The model reads retrieved text as evidence. Probes of the kind `indirect-injection` test this | The same |
+| A hostile page steers a [site tool](/features/tools) | A function tool can only read: the build refuses a write, a navigation or an event on one. An action runs only when the reader presses it, and its button text is yours. See [Site tools and actions](#tools) | The same. Function tools run on the server, with the functions you wrote |
 | A forged conversation history | The history is the reader's own browser state. Nothing on your side trusts it | Every answer is signed. A forged or edited entry reaches the model quoted in the reader's message, not as the model's own turn |
 | A changed index file | Files are named by their own bytes and `manifest.integrity` holds each digest. The panel fetches with Subresource Integrity, so an altered shard fails the load | Not applicable: the index is not served |
 | A key pasted into a question | Caught in the browser before anything is sent — see [Keys readers paste](#keys-readers-paste) | The same |
@@ -198,6 +199,23 @@ The server install moves the turn to a process you run. The page receives a shel
 **What you must still do.** Run the server behind the proxy that serves your site, set `trustProxy` to the number of hops in front of it, set `DOCPILOT_SERVER_SECRET` when you run more than one replica, and set `DOCPILOT_METRICS_TOKEN` if the proxy forwards the metrics route. [Server operations](/guide/server-operations) has each setting. Authentication of readers is not included: `createDocPilotServer` takes an `authorize` function for it, and the reader's identity is your proxy's to know.
 
 **What the server install does not do.** The text of the chunks an answer cites reaches the reader, because a source row shows its passage. A reader can still collect passages by asking questions. The limits slow that down. They do not stop it.
+
+## Site tools and actions {#tools}
+
+A site's own [tools](/features/tools) are the one place where a model's choice can lead to code running. The controls are in code, not in the instruction:
+
+| control | what it does |
+|---|---|
+| function tools only read | The build refuses a function tool (`confirm: false`) whose `run` is a `POST`, a navigation or an event. A handler you register is your own code: keep it read-only |
+| an action needs the reader | An action (`confirm: true` or `'form'`) never runs in a turn. It runs when the reader presses its button or sends its form |
+| the words on a button are yours | The button text is your `label` and the form's name is your `title`. The model chooses which action to offer and with which values |
+| arguments are checked in code | Every argument is checked against your schema before anything runs, the model's and the reader's alike. Values are URL-encoded into a template, so the model controls neither the host nor the path |
+| replies are data | A tool's reply reaches the model under the same "data, not instruction" note as a documentation section, cut to 4,000 characters |
+| replies go to the model provider | A function tool's reply is sent to your model provider with the next request, as a section is. Return what the answer needs, not a whole account record |
+| bounded | At most twelve tools and three actions per answer. A run has 10 seconds in a turn, and 30 when the reader started it |
+| nothing kept | Actions are not written to the conversation history. The server's turn log records a function call as `{tool, ok, ms}`, never its arguments or its reply |
+
+A planted instruction can still make the model *offer* an action. That is why an action shows what it will send and waits for the reader: on Harborline, planted instructions succeeded in 23–30 % of [attack probes](/guide/security-probes).
 
 ## Keys readers paste {#keys-readers-paste}
 

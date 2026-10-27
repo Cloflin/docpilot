@@ -42,6 +42,8 @@ When that call does not come back, [the answer ladder](/concepts/the-ladder) is 
 
 `expand_section` is the one that exists for a shape of failure rather than for a capability: an answer that begins at the end of one section and finishes at the start of the next. It takes an id the model already has and returns the section immediately before or after it, on the same page. Two per turn — enough to cross a boundary in either direction, not enough to read a page a chunk at a time — and it always costs a step, because a free one is a walk with nothing to stop it.
 
+**A site can add its own.** A function tool from [`tools`](/features/tools) joins this list on every search step. DocPilot checks its arguments against the site's schema, runs it, and returns the reply as an observation with an id the answer may cite, such as `tool:plan_limits:1`. A site tool takes the arguments the site declared, and none of them is a scope either: the reply is the site's data, not a chunk. An action is never in this list. The answer offers it, and the reader runs it.
+
 **Observations are appended, never rewritten.** Step two's prompt is step one's prompt plus new results at the end. This is what keeps a provider-side prefix cache valid across the steps of a turn; rewriting the head to save tokens trades a small saving here for a much larger loss there.
 
 An excerpt is spelled out once per turn. A chunk two searches both return carries its id and title the second time, without the body the model has already read.
@@ -52,7 +54,9 @@ The answer is checked before it renders:
 
 - Citations are compared against the set of ids the **host** emitted this turn. An id the model invented is stripped, and its marker with it; surviving markers renumber.
 - Links are checked against the page set in the token stream, before rendering. An invented route is de-linked and left as plain text.
+- A citation of a site tool's reply passes the same check: the host handed out its id this turn. Its source row has no link.
 - An answer with no surviving citations is not shown. It becomes a refusal — an uncited answer is exactly what the guardrail exists to withhold.
+- `actions` are checked against the site's own schemas. An action the site does not have, an argument that fails its schema and a duplicate are dropped, and at most three remain. None of them runs: the reader decides.
 
 A low-confidence answer that **is** cited is kept and marked tentative. Confidence is the weakest signal in the system: a number the model writes about its own work. Deleting a checkable answer on that basis costs the whole turn and replaces something useful with a claim about the corpus that is not true.
 

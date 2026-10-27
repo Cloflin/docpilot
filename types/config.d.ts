@@ -395,7 +395,7 @@ export type ToolRun =
   | { fetch: string; method?: 'GET' | 'POST' }
   | { href: string }
   | { event: string }
-  /** Node only — `docpilot serve`, the eval runner. A static install refuses it. */
+  /** Server only — `docpilot serve`, `createDocPilotServer`. A static install refuses it. */
   | ((args: Record<string, unknown>, ctx: ToolContext) => unknown)
 
 export interface ToolContext {

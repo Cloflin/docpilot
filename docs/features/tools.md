@@ -134,6 +134,17 @@ export default withDocPilot(DefaultTheme)
 
 A function `run` cannot reach a static page, because `themeConfig` is JSON. The build stops on one, and the message names `registerTool` instead.
 
+## Writing a tool the model uses well
+
+The model chooses a tool by its `description` and fills it by its `parameters`. The rules that make it choose well are the ones OpenAI and Anthropic publish for function calling:
+
+- **Say when to use it, and when not to.** "Live limits of one plan. Use it for a question about current limits; the pricing page covers what each plan includes." A description that says only "Gets plan limits" leaves the model to guess when it applies.
+- **Use `enum` for every closed set.** `plan: {enum: ['free', 'pro', 'team']}` cannot be called with `'premium'`.
+- **Do not ask for what your code already knows.** The page and the question reach your handler, and a same-origin `fetch` carries the reader's cookies. A parameter for any of them is a value the model can get wrong.
+- **One tool per question it answers.** If two tools are always called one after the other, make them one.
+- **Keep the set small.** Twelve is the ceiling. A handful the model can tell apart works better than twelve it confuses.
+- **Return what the answer needs.** The reply goes to the model and to your model provider. A short JSON object with the numbers the answer will quote is better than a whole account record.
+
 ## Parameters
 
 `parameters` is a flat JSON Schema object. Each property is a `string`, `number`, `integer` or `boolean`, with these optional keys:
@@ -162,6 +173,14 @@ The page receives only the actions, without their descriptions, because the desc
 - A function call is one search step. It is charged like a search and capped by [`maxIterations`](/reference/config#maxiterations). A turn that runs one-shot, which is the default on a server and on a nearly spent free tier, offers no function tools.
 - Actions ride on the answer call and cost no extra request in either mode.
 - Models without native tool calling get the tools as text, in the same protocol as the built-in ones. gpt-6-luna takes function tools only with reasoning off, and DocPilot sends that on search steps by itself.
+
+## Not yet
+
+- **An approval in the middle of a search.** Every write is an action at the end of an answer. A turn does not pause for the reader and then continue.
+- **Nested parameters.** A parameter is a string, a number, an integer or a boolean.
+- **Reasoning together with tools on GPT-6.** That needs the Responses API, which DocPilot does not use yet. Search steps run with reasoning off.
+- **Measuring your tools.** `docpilot eval` runs its probes without them.
+- **Keeping actions.** A restored conversation shows its answers and sources, not their actions.
 
 ## Safety
 

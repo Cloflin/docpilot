@@ -148,9 +148,11 @@ Three sources, asked in this order:
    `Symbol.for('docpilot.tools')` on `globalThis`, so the IIFE and the ESM copies
    of the runtime share it. `ctx` is `{question, page, signal}`.
 2. **A function in the config.** It can exist only where the config is not
-   serialised: `docpilot serve`, the eval runner and any Node caller. In a static
-   install, `themeConfig` is JSON, so the build refuses a function `run` there
-   and names `registerTool` instead.
+   serialised: `docpilot serve`, `createDocPilotServer` and any Node caller that
+   hands the harness the config itself. In a static install, `themeConfig` is
+   JSON, so the build refuses a function `run` there and names `registerTool`
+   instead. The eval runner builds its own config and passes no tools — see
+   "Not in this spec".
 3. **A declarative `run`:**
    - `{fetch: '/api/plans/{plan}', method: 'GET'}` — `{name}` is replaced by the
      URL-encoded argument; a `POST` sends `{args, context}` as JSON. The response

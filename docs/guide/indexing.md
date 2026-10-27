@@ -209,14 +209,14 @@ The blob is a single file, `vectors.<hash>.bin`, exactly `chunkCount × dims / 8
 **The error is measured, not assumed.** Every build samples up to 200 vector pairs, compares the exact float cosine against the 1-bit score, and prints the mean absolute difference:
 
 ```
-quantisation err 0.01029 mean |Δcos| (1-bit)
+quantisation err 0.01068 mean |Δcos| (1-bit)
 ```
 
 Above `0.03` the build **dies** instead of writing the index. That is a hard gate rather than a warning, because a quantisation that has drifted produces a ranking that is subtly wrong everywhere and looks fine.
 
 **The bit is taken only where it holds.** By default (`--quantize=auto`) the build measures the 1-bit error first and writes the bit only when it is at most `0.015`; otherwise it writes **int8** — one signed byte per dimension, `round(v × 127)`, under a `0.01` gate — and says so. The error tracks width: at 4096 dimensions it is about `0.010` and ranking holds; at 1024 (`bge-m3`) it is about `0.023`, and MRR on the golden set falls from 0.57 to 0.54. `--quantize=binary` or `--quantize=int8` overrides the choice. Re-run `calibrate` after the format changes: the scale is fitted, but a threshold calibrated on one format is a measurement of that format.
 
-For scale: this documentation site indexes 821 chunks at 4096 dimensions, so its vector blob is 420,352 bytes — 411 KB, where int8 would have been 3.2 MB and float32 12.8 MB.
+For scale: this documentation site indexes 835 chunks at 4096 dimensions, so its vector blob is 427,520 bytes — 418 KB, where int8 would have been 3.3 MB and float32 13.0 MB.
 
 ### How the format was chosen {#how-the-format-was-chosen}
 

@@ -69,6 +69,16 @@ panel.destroy()
 `ask` does not submit on purpose: the reader reads what somebody else wrote before
 it is asked on their behalf. The same rule the `?dp-ask=` deep link follows.
 
+## Site tools
+
+```js
+import { registerTool } from '@cloflin/docpilot/mount'
+
+const off = registerTool('plan_limits', async ({ plan }) => (await fetch(`/api/plans/${plan}`)).json())
+```
+
+There is one registry per page, whichever entry registered. The panel finds the handler by the tool's name in [`tools`](/reference/config#tools), and `off()` removes it again.
+
 ## Keeping it in step
 
 The panel needs to be told about navigation — that is what *this page* means when

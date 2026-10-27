@@ -129,6 +129,20 @@ block chrome under `[class*="language-"]`, which this panel never emits, and
 Docusaurus's inline styles win over a stylesheet anyway. See
 [Syntax highlighting](/reference/highlighting).
 
+## Site tools
+
+A [site tool](/features/tools) whose `run` is code needs a handler in the page. It goes in a client module of your own, for the reason the highlighter does:
+
+```js [src/docpilot-tools.js]
+import { registerTool } from '@cloflin/docpilot/web'
+
+registerTool('plan_limits', async ({ plan }) => (await fetch(`/api/plans/${plan}`)).json())
+```
+
+```js [docusaurus.config.js]
+clientModules: ['./src/docpilot-tools.js'],
+```
+
 ## Serving it
 
 Identical to any other deployment — the browser makes the same three requests: the

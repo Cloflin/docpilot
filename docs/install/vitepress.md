@@ -89,6 +89,23 @@ That import also pulls in `dist/docpilot.css`. To assemble the styles yourself,
 import `@cloflin/docpilot/theme-without-styles` and one of the halves in
 `style/` — see [Appearance](/guide/appearance).
 
+### Site tools
+
+A [site tool](/features/tools) whose `run` is code registers its handler in the same file:
+
+```js [docs/.vitepress/theme/index.js]
+import DefaultTheme from 'vitepress/theme'
+import { withDocPilot, registerTool } from '@cloflin/docpilot/theme'
+
+if (typeof window !== 'undefined') {
+  registerTool('plan_limits', async ({ plan }) => (await fetch(`/api/plans/${plan}`)).json())
+}
+
+export default withDocPilot(DefaultTheme)
+```
+
+The `window` check keeps it out of the server render, where there is no reader to run it for.
+
 ## What the theme does for you
 
 Three things you would otherwise supply by hand:

@@ -28,6 +28,7 @@ docPilot: {
 | *Searching the docs* | retrieval in the browser |
 | *Looking at the page list* | the model asked for the list of pages |
 | *Reading guide/webhooks* | the model opened a section |
+| *Checking Plan limits* | one of the site's own [tools](/features/tools) is running; the line names its `title` |
 | *Thinking* | a reasoning model before its first word |
 | *Writing the answer* | the answer is streaming |
 

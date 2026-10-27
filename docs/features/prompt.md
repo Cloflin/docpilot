@@ -34,4 +34,6 @@ docPilot: {
 | `prompt.extend` | `''` | Text you add after the shipped instruction, at build time. |
 | `prompt.override` | `null` | Replaces the shipped instruction entirely. |
 
+On a site with its own [tools](/features/tools), the disclosure lists them with the built-in ones, with the descriptions the model reads, because it publishes what is sent.
+
 More: [`prompt`](/reference/config#prompt) in the reference.

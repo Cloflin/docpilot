@@ -36,6 +36,7 @@ docPilot: {
 The sources are not whatever the model claims. Before an answer is shown, the browser compares every citation with the passages it actually retrieved for that turn:
 
 - A citation to a passage that was not retrieved is removed.
+- A citation of one of the site's own [tools](/features/tools) passes the same check, because the browser handed out its id that turn. It shows as *Plan limits · from the site*, with no link and no passage.
 - A link to a page that does not exist on your site is shown as text, not as a link.
 - If the model marks itself unsure, the answer says so: *The model was unsure of this one — check the sources below.*
 

@@ -111,6 +111,28 @@ No response carries a CORS header. The endpoint spends your model allowance, so 
 
 **History is the reader's, not yours, and it is signed.** The panel sends the earlier questions and answers of the conversation with each turn. Every answer leaves the server with a signature, and an entry that does not verify reaches the model quoted inside the reader's message, not as the model's own turn. Set `DOCPILOT_SERVER_SECRET` — see [Signed history](/guide/server-operations#signed-history). `dataset` never trains on earlier turns — see [Fine-tuning](/guide/fine-tuning#datasets).
 
+## Site tools
+
+A function tool from [`tools`](/features/tools) runs on the server, inside the turn. The page never sees it, so it can call what only the server may reach. Give it one of two runners:
+
+- a function, with your code and your credentials:
+
+  ```js
+  tools: {
+    plan_limits: {
+      description: 'Live limits of one plan: requests per day, seats and storage.',
+      parameters: { type: 'object', properties: { plan: { type: 'string', enum: ['free', 'pro'] } }, required: ['plan'] },
+      run: async ({ plan }, { signal }) => billing.limitsOf(plan, { signal }),
+    },
+  }
+  ```
+
+- a `fetch` to an absolute URL. A relative one has no page to resolve against here, and the build says so.
+
+The server's default turn is one-shot and has no search step, so a function tool is offered only with `server.turn.loop: 'agentic'`, or with `'adaptive'` on the turns that run the loop.
+
+Actions run in the page. The server proposes them with the answer, and `settle` carries them as `actions: [{tool, args}]`. The page receives each action's title, label, parameters and declarative `run`, but not the descriptions written for the model. A handler that runs an action is registered in the page with `registerTool`.
+
 ## The turn log
 
 With `log`, every turn writes one line of `docpilot.turn/1` to `turns-YYYY-MM-DD.jsonl`: the redacted question, the scope, the gate's scores, what was retrieved and cited, the answer, the model, tokens, latency, and the index and prompt hashes. No IP address, user agent or cookie is ever written.

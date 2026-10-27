@@ -18,12 +18,12 @@ the panel fetches the index once and caches it:
 
 | | |
 | --- | --- |
-| the vectors | **411 KB for this site's 821 chunks at 4096 dimensions** |
+| the vectors | **418 KB for this site's 835 chunks at 4096 dimensions** |
 | the chunk text, titles and breadcrumbs | the rest of the same directory |
 | when | on the reader's **first open of the panel**, not on page load |
 
 The vectors are one sign bit per dimension, which is what keeps that number
-in kilobytes: at `float32` the same blob would be 12.8 MB. A reader who never
+in kilobytes: at `float32` the same blob would be 13.0 MB. A reader who never
 opens the panel downloads none of it at all.
 
 That is the cost nobody budgets for and the one that scales with your corpus
@@ -112,6 +112,10 @@ reader waits on is the embedding and the model.
   roughly 138k tokens for one question.
 - **A pool that rotates.** A model that refuses, returns nothing, or times out
   costs its request anyway, and the next member is tried.
+- **Site function tools.** Each call is a search step: one more request, and
+  every later step re-sends its reply. A repeated call in the same turn is free,
+  and actions cost nothing, because they ride the answer call. See
+  [Tools and actions](/features/tools#what-it-costs).
 - **An off-topic question.** [`guard.mode`](/reference/config#guard-mode-guard-supportminidentifiers) ships
   as `'off'`, because no single threshold survives every language a site's
   readers type in — so today an unanswerable question still spends a request

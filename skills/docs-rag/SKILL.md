@@ -54,7 +54,10 @@ any model call, whether there is evidence to answer at all is `guard.mode`:
 `'off'` by default since 1.3, because the threshold needs calibrating per
 corpus **and** per language; `'calibrated'`/`'dense-only'` opt back in.
 `harness.js`
-then runs a short tool loop over the retriever and nothing else. `docpilot eval`
+then runs a short tool loop over the retriever — and, where the site declares
+`tools`, over its own read-only function tools (engine-spec 038) — and nothing
+else. Site actions are never in the loop: the answer offers them and the reader
+runs them. `docpilot eval`
 drives exactly those production modules; nothing is stubbed.
 
 ## Modes
@@ -1028,6 +1031,10 @@ agents, and fix a vocabulary gap in the section that answers.
   qwen3 threshold topK` may never appear in `DocPilot.vue`.
 - `systemText()` takes no addendum parameter, and the test suite asserts the
   system message is byte-identical with and without a reader instruction.
+- With `tools: null` the system message, the tool list and both answer schemas
+  are byte-identical to a build without the key (engine-spec 038). A site tool
+  cannot take a built-in name, and `docpilot eval` runs without site tools, so a
+  report measures retrieval and answers, not a site's API.
 - `assertWeights` throws unless `wLexical < tau`.
 - **A chunk never contains code outside an open fence, and never contains table
   rows without their header.** The ceiling wins over both, but it wins by

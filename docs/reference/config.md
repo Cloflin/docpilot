@@ -1984,14 +1984,36 @@ tools: {
 }
 ```
 
-Each tool takes `description` (required; the model reads it), `title` (the
-reader reads it), `label` (an action's button text), `parameters` (a flat JSON
-Schema object of `string`, `number`, `integer` and `boolean` properties),
-`confirm`, and `run`. `run` is one of `{fetch, method}`, `{href}` or `{event}`,
-or it is left out and the page registers a handler with `registerTool`. A
-function `run` works only where the config is not serialised: `docpilot serve`
-and the eval runner. The build stops on anything it cannot honour and names the
-tool. [Tools and actions](/features/tools) has the whole contract.
+Each tool is an object:
+
+| field | type | default | meaning |
+|---|---|---|---|
+| `description` | `string`, ≤ 1024 characters | required | what the tool does and when to use it; the model chooses by it |
+| `title` | `string`, ≤ 60 | the name, humanised | what the reader reads: the status line, the source row, an action's form |
+| `label` | `string`, ≤ 40 | the title | an action's button text |
+| `parameters` | JSON Schema object | no parameters | flat: each property a `string`, `number`, `integer` or `boolean` |
+| `confirm` | `false \| true \| 'form'` | `false` | the kind, from the table above |
+| `run` | runner \| function | none | what runs it when the page registered no handler |
+
+A property takes `description`, `enum` and `default`. A string also takes
+`format` (`email`, `uri`, `date` or `multiline`) and `maxLength`, and a number
+takes `minimum` and `maximum`. `required` lists the values a call must have.
+
+| `run` | what happens |
+|---|---|
+| `{fetch: '/api/plans/{plan}'}` | a `GET`; each `{name}` is replaced by that argument, URL-encoded |
+| `{fetch: '/api/support', method: 'POST'}` | sends `{tool, args, context: {question, page}}` as JSON; actions only |
+| `{href: '/pricing?plan={plan}'}` | navigates; another host opens a new tab without `window.opener`; actions only |
+| `{event: 'acme:open-demo'}` | dispatches a `CustomEvent` on `window` with `{tool, args, context}` in `detail`; actions only |
+| a function | a server install only — `docpilot serve` and `createDocPilotServer`; a static build refuses it |
+| left out | the page registers a handler: `registerTool('plan_limits', handler)` |
+
+The build stops on anything it cannot honour, and the message names the tool:
+an invalid or built-in name, more than twelve tools, a missing description, a
+nested parameter, a function tool that would write, navigate or fire an event,
+a `{placeholder}` that is not a parameter, a function `run` on a static install,
+and a relative `fetch` for a function tool on a server install.
+[Tools and actions](/features/tools) has the whole contract.
 
 ## guard
 

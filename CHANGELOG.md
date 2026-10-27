@@ -7,6 +7,37 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## Unreleased
+
+### Added
+
+**Your own tools in the chat** — engine-spec 038, ui-spec 018. A new `tools`
+key, `null` by default. Each tool has a `description`, flat JSON Schema
+`parameters`, `confirm` and a `run`.
+
+- **A function tool** (`confirm: false`) is offered to the model on every search
+  step. DocPilot checks its arguments against your schema, runs it, and returns
+  the reply to the model as an observation with an id the answer cites. The
+  source row reads "from the site". Use it for live data: a plan's limits, an
+  API's status, the reader's account.
+- **An action** (`confirm: true` or `'form'`) is offered with the answer, up to
+  three per answer. The panel draws a button with your `label`, or a form filled
+  with the model's suggestions. Nothing runs until the reader presses it.
+- **What runs a tool:** a handler from `registerTool(name, handler)`, exported
+  from every browser entry and from `window.DocPilot`; then a function `run`, on
+  a server install only; then `run: {fetch, method}`, `{href}` or `{event}`.
+- **Safety:** a function tool can only read — the build refuses a `POST`, a
+  navigation or an event on one. Every argument is checked in code, the model's
+  and the reader's. A reply is data, not instruction, cut at 4,000 characters.
+- **On a server install** function tools run on the server and actions in the
+  page, and the turn log records each call as `{tool, ok, ms}`.
+- With `tools: null`, the system message, the schemas and every request are
+  byte-identical to 2.0.1.
+
+Not yet: an approval in the middle of a search, nested parameters, the Responses
+API for reasoning with tools on GPT-6, and tool calls in `docpilot eval`. See
+[Tools and actions](https://docpilot-nine.vercel.app/features/tools).
+
 ## 2.0.1 — 2026-10-27
 
 `gpt-6-luna` is the model OpenAI names as the replacement for `gpt-4o-mini`.
