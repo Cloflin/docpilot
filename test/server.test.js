@@ -88,6 +88,43 @@ describe('parseTurnInput', () => {
   })
 })
 
+/**
+ * THE PANEL'S SSE FRAMING. A separator is two line ends and each is `\n` or
+ * `\r\n` on its own, so a hop that rewrites line ends can hand the panel either
+ * mixed form. The server writes LF; the other three are what a proxy may send.
+ * Fed whole, a character at a time, and split at every offset, because the
+ * search resumes across chunks rather than rescanning.
+ */
+describe('sseParser', () => {
+  const WANT = [
+    { event: 'delta', data: { text: 'a' } },
+    { event: 'message', data: { n: 2 } },
+    { event: 'settle', data: { ok: true } },
+  ]
+  // The last event names itself LAST: a cut one character short leaves a `\r`
+  // that `JSON.parse` forgives in `data` and an event name keeps.
+  const stream = (eol, sep) =>
+    `event: delta${eol}data: {"text":"a"}${sep}: keep-alive${sep}data: {"n":2}${sep}data: {"ok":true}${eol}event: settle${sep}`
+  const parse = (chunks) => {
+    const out = []
+    const feed = sseParser((event, data) => out.push({ event, data }))
+    for (const c of chunks) feed(c)
+    return out
+  }
+
+  it.each([
+    ['LF', '\n', '\n\n'],
+    ['CRLF', '\r\n', '\r\n\r\n'],
+    ['CRLF then LF', '\r\n', '\r\n\n'],
+    ['LF then CRLF', '\n', '\n\r\n'],
+  ])('reads %s separators, however the stream is chunked', (_, eol, sep) => {
+    const s = stream(eol, sep)
+    expect(parse([s])).toEqual(WANT)
+    expect(parse([...s])).toEqual(WANT)
+    for (let i = 1; i < s.length; i++) expect(parse([s.slice(0, i), s.slice(i)]), `split at ${i}`).toEqual(WANT)
+  })
+})
+
 describe('shellManifest', () => {
   it('keeps navigation and drops the server’s business', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(INDEX, 'manifest.json'), 'utf8'))

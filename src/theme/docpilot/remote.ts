@@ -24,15 +24,28 @@ export async function loadShell(endpoint: string) {
   return { manifest, chunks: [], byId: new Map(), shell: true }
 }
 
-/** Split an SSE byte stream into `{event, data}` objects. Exported for the tests. */
+/**
+ * Split an SSE byte stream into `{event, data}` objects. Exported for the tests.
+ *
+ * A separator is two line ends, and each is `\n` or `\r\n` on its own, so it is
+ * two, three or four characters. The block is cut at the MATCHED length: a
+ * length read off the first character took four from `\r\n\n` and the first
+ * letter of the next event with them. The search resumes where the last one
+ * gave up, three characters back for a separator split across two chunks,
+ * rather than rescanning the whole buffer on every chunk.
+ */
 export function sseParser(onEvent: (event: string, data: any) => void) {
   let buffer = ''
+  const separator = /\r?\n\r?\n/g
   return (chunk: string) => {
     buffer += chunk
-    let at
-    while ((at = buffer.search(/\r?\n\r?\n/)) !== -1) {
-      const block = buffer.slice(0, at)
-      buffer = buffer.slice(at + (buffer[at] === '\r' ? 4 : 2))
+    let m
+    while ((m = separator.exec(buffer)) !== null) {
+      // Consumed before `onEvent` runs, so a handler that throws cannot hand
+      // the same event to the next chunk.
+      const block = buffer.slice(0, m.index)
+      buffer = buffer.slice(separator.lastIndex)
+      separator.lastIndex = 0
       let event = 'message'
       const data = []
       for (const line of block.split(/\r?\n/)) {
@@ -52,6 +65,9 @@ export function sseParser(onEvent: (event: string, data: any) => void) {
       }
       onEvent(event, parsed)
     }
+    // `exec` found no separator and reset `lastIndex` to 0. What is left holds
+    // none, bar the start of one in its last three characters.
+    separator.lastIndex = Math.max(0, buffer.length - 3)
   }
 }
 
