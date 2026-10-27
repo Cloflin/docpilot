@@ -801,7 +801,18 @@ function runs() {
     const noise = Math.max(spread(a), spread(b))
     // A difference inside the wider config's own run-to-run spread is not
     // separable from resampling the same config — say so rather than rank it.
-    const verdict = Math.abs(d) <= noise ? 'within noise' : d > 0 ? `${labelB} +` : `${labelA} +`
+    //
+    // ONE RUN HAS NO SPREAD, not a spread of zero (t8 R6). The range of a single
+    // value is 0, so the rule above ranked every non-zero Δ — 0.512 against
+    // 0.513 read "B +" — on an instrument whose noise this run never measured.
+    const verdict =
+      a.length < 2 || b.length < 2
+        ? 'noise unknown (< 2 runs)'
+        : Math.abs(d) <= noise
+          ? 'within noise'
+          : d > 0
+            ? `${labelB} +`
+            : `${labelA} +`
     console.log(
       `  ${name.padEnd(20)} ${num(ma).padStart(8)} ${num(noise === 0 ? 0 : spread(a)).padStart(8)}   ` +
         `${num(mb).padStart(8)} ${num(spread(b)).padStart(8)}   ${(d >= 0 ? '+' : '') + d.toFixed(3)}  ${verdict}`,

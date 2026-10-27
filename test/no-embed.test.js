@@ -1134,6 +1134,59 @@ describe('the eval commands — all three loaders, not two', () => {
 })
 
 /**
+ * t8 R2 — a `--limit` or `--transfer` run rewrote `calibration.raw.jsonl` with
+ * its own subset, and every other row — the rest of the set, and another
+ * embedder's whole set — was gone. RUN, not read: a lexical-only index is the
+ * one calibration that needs no endpoint, and the cache is written before the
+ * verdict, so a three-probe set that fails calibration still writes it.
+ */
+describe('calibrate — a subset run merges into the raw cache', () => {
+  const BIN = path.resolve('bin/docpilot.js')
+
+  it('keeps the rows it did not measure, and drops only the dead ones', async () => {
+    const { spawnSync } = await import('node:child_process')
+    const fs = await import('node:fs')
+    const root = mkdtempSync(path.join(tmpdir(), 'dp-raw-'))
+    fs.mkdirSync(path.join(root, 'docs', 'guide'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'docpilot'))
+    writeFileSync(path.join(root, 'docpilot.config.mjs'), "export const docPilot = { embed: false, chat: false }\nexport default {}\n")
+    writeFileSync(path.join(root, 'docs', 'index.md'), `# Acme\n\n${'intro '.repeat(160)}\n`)
+    writeFileSync(path.join(root, 'docs', 'guide', 'retries.md'), `# Retries\n\n## Backoff\n\n${'backoff '.repeat(160)}\n`)
+    const probes = [
+      { id: 'u-1', question: 'How does backoff work?', stratum: 'U' },
+      { id: 'u-2', question: 'What does the intro say?', stratum: 'U' },
+      { id: 'n-1', question: 'What is the weather in Paris?', stratum: 'N4' },
+    ]
+    writeFileSync(path.join(root, 'docpilot', 'calibration.jsonl'), probes.map((p) => JSON.stringify(p)).join('\n') + '\n')
+    const run = (...args) => spawnSync(process.execPath, [BIN, ...args], { cwd: root, encoding: 'utf8' })
+    const RAW = path.join(root, 'docpilot', 'calibration.raw.jsonl')
+    const raw = () => fs.readFileSync(RAW, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+    const sigs = () => raw().map((r) => r.sig).sort()
+    try {
+      expect(run('index', '--no-embed', '--yes').status).toBe(0)
+      const hash = JSON.parse(fs.readFileSync(path.join(root, 'docs', 'public', 'rag', 'manifest.json'), 'utf8')).hash
+      run('calibrate')
+      const measured = sigs()
+      expect(measured).toHaveLength(3)
+      expect(raw().every((r) => r.indexHash === hash)).toBe(true)
+
+      const line = (row) => fs.appendFileSync(RAW, JSON.stringify(row) + '\n')
+      line({ id: 'u-1', sig: 'feedfacefeedface', indexHash: hash }) // another embedder, this corpus
+      line({ id: 'u-1', sig: 'deadbeefdeadbeef', indexHash: '00000000' }) // a corpus no index has now
+      line({ id: 'u-9', sig: '0123456789abcdef' }) // written before the stamp
+
+      run('calibrate', '--limit=1')
+      expect(sigs()).toEqual([...measured, 'feedfacefeedface', '0123456789abcdef'].sort())
+
+      run('calibrate')
+      expect(sigs()).toEqual([...measured, 'feedfacefeedface'].sort())
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }, 30000)
+})
+
+/**
  * Saying it out loud — the one place a reader is told this site has no embedder.
  *
  * Every other assertion in this file is about NOT reporting the declared mode as

@@ -66,7 +66,7 @@ import {
   percentile,
   hardGatesFailed,
 } from './metrics.js'
-import { writeReport } from './report.js'
+import { writeReport, knobChanges, KNOBS, ARM_KNOBS } from './report.js'
 import { filterByLevel, parseLevelArg, splitOf, DEFAULT_RUN_LEVEL } from './levels.js'
 import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 import { chainTexts, resolveChain } from './conversation.js'
@@ -1778,6 +1778,29 @@ export function leverFingerprint(tuning = null) {
 }
 
 /**
+ * The knobs a saved report was run under that this run would not use — t8 R7.
+ *
+ * `--resume` found the report by name and took it whole, and the name does not
+ * carry the seed, the levers or the A/B arm: after `DOCPILOT_EVAL_SEED=` or a
+ * `DOCPILOT_MMR_LAMBDA` set since, the saved numbers came back as this run's.
+ * Each value is the expression `main()` writes into `meta`, so a resumed report
+ * and a fresh one answer to the same fields; an empty list means resume.
+ *
+ * EXPORTED for the reason `provenance` is: `main()` is a run, and calling this
+ * is the only way to ask the question without one.
+ */
+export function resumeRefusal(saved, tuning = null) {
+  const now = {
+    maxIterations: MAX_ITERATIONS ?? 4,
+    numCtx: PROVIDER === 'ollama' ? NUM_CTX : null,
+    levers: leverFingerprint(tuning),
+    ...abKnobs(),
+    ...provenance(),
+  }
+  return knobChanges(saved?.meta, now, [...KNOBS, ...ARM_KNOBS])
+}
+
+/**
  * `--runtime=server` — the same records, answered by `runServerTurn`.
  *
  * One report per model like the browser half, and the same summary, so the two
@@ -1965,9 +1988,14 @@ async function main() {
         }),
       )
       if (RESUME && fs.existsSync(reportPath)) {
-        console.log(`\n── ${model} — resumed from ${path.basename(reportPath)}, not re-run`)
-        runs.push(JSON.parse(fs.readFileSync(reportPath, 'utf8')))
-        continue
+        const saved = JSON.parse(fs.readFileSync(reportPath, 'utf8'))
+        const moved = resumeRefusal(saved, index.manifest.tuning)
+        if (!moved.length) {
+          console.log(`\n── ${model} — resumed from ${path.basename(reportPath)}, not re-run`)
+          runs.push(saved)
+          continue
+        }
+        console.log(`\n── ${model} — ${path.basename(reportPath)} was run under other ${moved.join(', ')}; running again`)
       }
 
       console.log(

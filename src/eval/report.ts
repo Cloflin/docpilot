@@ -89,6 +89,38 @@ export const LOWER_IS_BETTER = new Set([
 
 const TRACKED = [...HIGHER_IS_BETTER, ...LOWER_IS_BETTER]
 
+/**
+ * THE KNOBS A REPORT NAME DOES NOT CARRY — t8 R7.
+ *
+ * `reportName` spells the index, the model, the flags, the level and the
+ * prompt; the sampling knobs and the retrieval levers live only in `meta`. Two
+ * runs under one name and different knobs are two measurements — a seed that
+ * was switched off, a `DOCPILOT_MMR_LAMBDA` set since, a `--max-iterations` —
+ * and both `--resume` and `previousReport` used to take the saved one as this
+ * run's own, or as its baseline, without reading them.
+ *
+ * `numCtx` and `maxIterations` are inside `levers` as well (`leverFingerprint`),
+ * and are named on their own so a refusal can say which one moved.
+ */
+export const KNOBS = ['levers', 'seed', 'temperature', 'numCtx', 'maxIterations']
+
+/** The A/B arms `abKnobs` records — labelled when a pair differs, and never resumed across. */
+export const ARM_KNOBS = ['historyCondense', 'lastAnswerFull', 'antecedentHops']
+
+/**
+ * The knobs whose recorded values differ, by name.
+ *
+ * ABSENT READS AS UNKNOWN, the rule `goldenSha` set: a report written before a
+ * knob was recorded carries no value for it and pairs, or the day this lands
+ * every reader's history goes dark at once. `null` is a value — `seed: null` is
+ * a run that sent no seed — so the test is `undefined`, not truthiness.
+ */
+export function knobChanges(saved, meta, keys = KNOBS) {
+  return keys.filter(
+    (k) => saved?.[k] !== undefined && meta?.[k] !== undefined && JSON.stringify(saved[k]) !== JSON.stringify(meta[k]),
+  )
+}
+
 const fmt = (v) => {
   if (v == null) return '—'
   if (typeof v !== 'number') return String(v)
@@ -161,6 +193,13 @@ export function previousReport(dir, meta) {
        */
       if (doc.meta?.embedModel && meta.embedModel && doc.meta.embedModel !== meta.embedModel)
         continue
+      // t8 R7 — and not a run under another seed or temperature. The name does
+      // not carry them, so a resampled rerun lands on the same file and was
+      // diffed against it as "changes since the previous run". Levers, numCtx
+      // and maxIterations still pair: engine-spec 011 decision 3 makes a lever
+      // change a marker (`Levers changed`, `num_ctx changed`), not a filter, so
+      // a lever A/B on one build keeps its table of changes.
+      if (knobChanges(doc.meta, meta, ['seed', 'temperature']).length) continue
       return doc
     } catch {
       // A half-written report is not a comparison; skip it.
@@ -511,6 +550,21 @@ function siblingMismatches(dir, meta) {
     }
     if (m.maxIterations !== meta.maxIterations) {
       diffs.push(`maxIterations ${m.maxIterations} vs ${meta.maxIterations}`)
+    }
+    // t8 R7 — the rest of `KNOBS`. A matrix row sampled with another seed or
+    // ranked by other levers differs by more than its model. The lever list
+    // leaves out the two keys named one line up, which `levers` also carries.
+    if (knobChanges(m, meta, ['levers']).length) {
+      const a = m.levers || {}
+      const b = meta.levers || {}
+      const moved = [...new Set([...Object.keys(a), ...Object.keys(b)])]
+        .filter((k) => k !== 'numCtx' && k !== 'maxIterations' && JSON.stringify(a[k]) !== JSON.stringify(b[k]))
+        .sort()
+      if (moved.length) diffs.push(`levers ${moved.join(', ')}`)
+    }
+    if (knobChanges(m, meta, ['seed']).length) diffs.push(`seed ${m.seed ?? 'off'} vs ${meta.seed ?? 'off'}`)
+    if (knobChanges(m, meta, ['temperature']).length) {
+      diffs.push(`temperature ${m.temperature} vs ${meta.temperature}`)
     }
     if (diffs.length) out.push(`Not comparable with ${m.model}: ${diffs.join(', ')}`)
   }

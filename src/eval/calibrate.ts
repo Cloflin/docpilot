@@ -538,6 +538,38 @@ const sigOf = (rec, indexHash, lev, embedIdentity) =>
     .digest('hex')
     .slice(0, 16)
 
+/**
+ * The raw cache after a run — MERGED into what is on disk, never replaced by
+ * the run's own rows (t8 R2).
+ *
+ * The file is one cache for every vector space this project measures: `sigOf`
+ * carries `embedIdentity`, so a second embedder's rows sit beside the first's
+ * and hit nothing of theirs. Rewritten with the run alone, a `--transfer` (the
+ * new embedder's ~300 anchors) or a `--limit=N` run WAS the file afterwards,
+ * and the source embedder's 597 rows were gone: its next full run re-embedded
+ * the set on a metered endpoint, and `--sweep-only` died on its first probe.
+ *
+ * So a row stays unless it is known to be dead:
+ *   · this run's rows replace their own sig, stamped with the corpus they were
+ *     measured on (`indexHash`);
+ *   · a row of another corpus goes — no index on disk can hit it again — and
+ *     with it a row whose probe left the set, once the corpus next moves;
+ *   · a row of another embedder on this corpus stays, whatever this run was;
+ *   · a row written before the stamp cannot say where it is from: a subset run
+ *     keeps it, and a full run treats it as every full run did before — kept if
+ *     its probe is in the set, dropped if not.
+ */
+export function mergeRaw(previous, rows, { indexHash, derivable, subset }) {
+  const out = new Map()
+  for (const row of previous) {
+    if (!row?.sig) continue
+    const live = derivable.has(row.sig) || (row.indexHash != null ? row.indexHash === indexHash : subset)
+    if (live) out.set(row.sig, row)
+  }
+  for (const row of rows) out.set(row.sig, { ...row, indexHash })
+  return [...out.values()]
+}
+
 // ── step 2: retrieval only, once per probe ───────────────────────────────────
 
 /**
@@ -1320,17 +1352,21 @@ async function main() {
   }
 
   // ── cache ──────────────────────────────────────────────────────────────────
-  const cache = new Map()
-  if (!REFRESH && fs.existsSync(RAW)) {
+  // Read under `--refresh` too, and only not USED: a refresh re-measures this
+  // run's probes, and the rows of every other probe and embedder are still
+  // written back beside them — see `mergeRaw`.
+  const onDisk = []
+  if (fs.existsSync(RAW)) {
     for (const line of fs.readFileSync(RAW, 'utf8').split('\n').filter(Boolean)) {
       try {
         const row = JSON.parse(line)
-        if (row.sig) cache.set(row.sig, row)
+        if (row.sig) onDisk.push(row)
       } catch {
         /* a truncated cache line is a cache miss, not an error */
       }
     }
   }
+  const cache = new Map(REFRESH ? [] : onDisk.map((row) => [row.sig, row]))
 
   /**
    * Every text the loop below is about to embed, fetched in batches, once.
@@ -1413,7 +1449,11 @@ async function main() {
 
   // Rewrite the cache with every row currently known, so a partial run still
   // leaves the file usable and a probe removed from the set stops costing.
-  fs.writeFileSync(RAW, rows.map((r) => JSON.stringify(r)).join('\n') + '\n')
+  // `allProbes` and not `probes`: a transfer's anchors are a subset of the set,
+  // and the rows of the probes it skipped are still rows of this vector space.
+  const derivable = new Set(allProbes.map((rec) => sigOf(rec, hash, lev, embedIdentity)))
+  const kept = mergeRaw(onDisk, rows, { indexHash: hash, derivable, subset: Boolean(source) || LIMIT > 0 })
+  fs.writeFileSync(RAW, kept.map((r) => JSON.stringify(r)).join('\n') + '\n')
 
   // ── step 3 + 4 ─────────────────────────────────────────────────────────────
   const positives = rows.filter((r) => STRATA[r.stratum].positive)

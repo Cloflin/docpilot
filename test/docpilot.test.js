@@ -10560,6 +10560,43 @@ describe('golden-set levels — report comparability and lint (W3 consumers)', (
     expect(previousReport(dir, meta()).meta.model).toBe('m1')
   })
 
+  /**
+   * t8 R7 — the name carries no knob, so a run reseeded or re-levered since
+   * landed on the same file and was diffed against it as its baseline.
+   */
+  it('never pairs a run under another seed or temperature, and pairs a report that predates them', () => {
+    const dir = fresh()
+    put(dir, 'report-abc12345-m1-x.json', meta({ seed: 20260829, temperature: 0.2 }))
+
+    expect(previousReport(dir, meta({ seed: null, temperature: 0.2 }))).toBeNull()
+    expect(previousReport(dir, meta({ seed: 20260829, temperature: 0.7 }))).toBeNull()
+    expect(previousReport(dir, meta({ seed: 20260829, temperature: 0.2 }))).not.toBeNull()
+    // Absent is unknown: a report from before `seed` was recorded still pairs.
+    expect(previousReport(dir, meta({}))).not.toBeNull()
+  })
+
+  it('pairs a run under other levers and marks it, as engine-spec 011 decision 3 has it', () => {
+    const dir = fresh()
+    put(dir, 'report-abc12345-m1-x.json', meta({ seed: 20260829, temperature: 0.2, levers: { MMR_LAMBDA: 1 } }))
+    const lever = meta({ seed: 20260829, temperature: 0.2, levers: { MMR_LAMBDA: 0.5 } })
+    expect(previousReport(dir, lever)).not.toBeNull()
+
+    const name = 'report-abc12345-m1-y.json'
+    quietly(() => writeReport({ dir, name, meta: lever, summary: summary(), rows: [] }))
+    expect(JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')).incomparable).toContain('Levers changed')
+  })
+
+  it('names the levers, seed and temperature a sibling row ran under', () => {
+    const dir = fresh()
+    put(dir, 'report-abc12345-m2-other.json', meta({ model: 'm2', seed: 1, temperature: 0.7, levers: { MMR_LAMBDA: 0.5 } }))
+    const name = 'report-abc12345-m1-a.json'
+    quietly(() =>
+      writeReport({ dir, name, meta: meta({ seed: null, temperature: 0.2 }), summary: summary(), rows: [] }),
+    )
+    const { incomparable } = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+    expect(incomparable).toContain('Not comparable with m2: levers MMR_LAMBDA, seed 1 vs off, temperature 0.7 vs 0.2')
+  })
+
   it('still calls a golden set that grew inside one level incomparable', () => {
     const dir = fresh()
     put(dir, 'report-abc12345-m1-old.json', meta({ level: 'low', records: 10 }), 1e9)
@@ -11774,6 +11811,25 @@ describe('eval run.js — --level and the lever fingerprint', () => {
       expect(tuned.CANDIDATES).toBe(base.CANDIDATES)
       expect(tuned.RRF_K).toBe(base.RRF_K)
     })
+  })
+
+  /**
+   * t8 R7 — `--resume` took the saved report by name alone, so a seed switched
+   * off or a lever set since came back as this run's numbers.
+   */
+  it('refuses to resume a report run under other knobs', async () => {
+    const BASE = { DOCPILOT_EVAL_SEED: undefined, DOCPILOT_GATE_K: undefined, DOCPILOT_HISTORY_CONDENSE: undefined }
+    const saved = await withRun(BASE, ({ leverFingerprint, provenance, abKnobs }) => ({
+      meta: { levers: leverFingerprint(null), ...abKnobs(), ...provenance() },
+    }))
+    const refusal = (env) => withRun({ ...BASE, ...env }, ({ resumeRefusal }) => resumeRefusal(saved, null))
+
+    expect(await refusal({})).toEqual([])
+    expect(await refusal({ DOCPILOT_EVAL_SEED: '' })).toEqual(['seed'])
+    expect(await refusal({ DOCPILOT_GATE_K: String(saved.meta.levers.GATE_K + 2) })).toEqual(['levers'])
+    expect(await refusal({ DOCPILOT_HISTORY_CONDENSE: '0' })).toEqual(['historyCondense'])
+    // A report from before the knobs were recorded resumes, as it always has.
+    expect(await withRun(BASE, ({ resumeRefusal }) => resumeRefusal({ meta: {} }, null))).toEqual([])
   })
 
   it('refuses a guard threshold that reached the tuning object', async () => {
@@ -13042,6 +13098,45 @@ describe('the eval commands — a value-taking flag written without its =', () =
       // A value nobody could have meant is a usage error too — `codeFor` carries
       // that off the throw, four frames from the exit that reads it.
       expect(r.status).toBe(2)
+    })
+
+    /**
+     * t8 R6 — one run per side has a spread of 0, so `noise` was 0 and every
+     * non-zero Δ was ranked. The verdict now says the noise was not measured,
+     * and two runs per side still rank exactly as before.
+     */
+    it('gives no runs verdict on one run per side, and ranks two as before', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-runs-'))
+      const put = (name, rows) => {
+        fs.writeFileSync(path.join(dir, name), rows.map((r) => JSON.stringify(r)).join('\n') + '\n')
+        return path.join(dir, name)
+      }
+      const task = (config) => ({
+        id: 't1',
+        config,
+        scored: true,
+        question: 'How do retries back off?',
+        gold_answer: 'retries back off exponentially',
+        identifiers: [],
+        citable: ['guide/retries#backoff'],
+        gold_chunks: ['guide/retries#backoff'],
+        sources: [],
+      })
+      const answer = (text) => [{ id: 't1', text, citations: ['guide/retries#backoff'] }]
+      const tasks = `--tasks=${put('a.jsonl', [task('a')])},${put('b.jsonl', [task('b')])}`
+      const a1 = put('a1.jsonl', answer('retries back off'))
+      const a2 = put('a2.jsonl', answer('retries back off'))
+      const b1 = put('b1.jsonl', answer('retries back off exponentially'))
+      const b2 = put('b2.jsonl', answer('retries back off exponentially'))
+      const f1 = (out) => out.split('\n').find((l) => l.includes('answer token-F1'))
+
+      const one = await bench('runs', tasks, `--runs-a=${a1}`, `--runs-b=${b1}`)
+      expect(one.status, one.out).toBe(0)
+      expect(f1(one.out)).toContain('noise unknown (< 2 runs)')
+      expect(f1(one.out)).not.toMatch(/\bb \+/)
+
+      const two = await bench('runs', tasks, `--runs-a=${a1},${a2}`, `--runs-b=${b1},${b2}`)
+      expect(f1(two.out)).toMatch(/\bb \+$/)
     })
 
     /** The usage names the COMMAND. Nobody types `answer-bench.js`. */
