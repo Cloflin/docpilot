@@ -27,7 +27,7 @@ import { detectSocial } from './social.js'
 import { resolveI18n, t, normaliseLocale } from './i18n.js'
 import { hostConfig } from './host.js'
 import { resolveUi } from './ui.js'
-import { checkArgs, pageOf, resultMessage, runTool, runnerFor } from './tools.js'
+import { checkArgs, normaliseTools, pageOf, resultMessage, runTool, runnerFor } from './tools.js'
 // ui-specs/009 — rule 11's resolvers. Re-run here for the same reason `ui` is:
 // `configure` also receives the `{enabled: false}` payload, which never met
 // `themeDocPilot` and therefore carries none of these blocks at all.
@@ -558,6 +558,12 @@ export function configure(themeConfig, path, lang) {
     // resolved changes nothing, and a hand-written themeConfig with a typo in
     // `send` gets the default rather than an endpoint that never fires.
     feedback: feedback.resolveFeedback(cfg),
+    // Resolved, not spread — engine-spec 038. `themeDocPilot` hands over the
+    // ordered array; a hand-written config carries the settings map, and every
+    // reader of this key calls `.map` on it. `keepRun`, because a config that
+    // reaches here as a live object (`mountDocPilot({config})`) can still carry a
+    // function, and one that was serialised has none left to keep.
+    tools: Array.isArray(cfg.tools) ? cfg.tools : cfg.tools ? normaliseTools(cfg.tools, { keepRun: true }) : null,
   }
   // scope.default keeps a rejected value in the schema deliberately: a build-time
   // default of `page` would silently narrow every reader's first question.
@@ -3426,7 +3432,9 @@ function writeFeedback(turn, {retracted = null} = {}) {
       // subject of "why is that?" is in this field and nowhere else.
       quote: turn.quote || null,
       answer: turn.answerText,
-      citations: turn.sources.map((s) => s.href),
+      // A site tool's row has no route — engine-spec 038 — so it is named by its
+      // id, `tool:<name>:<n>`, which carries no part of the reply.
+      citations: turn.sources.map((s) => s.href || s.id),
       ...(retrievedIds.length ? {retrievedIds} : {}),
       ...(turn.restored ? {restored: true} : {}),
       // Read off the TURN, not off live state — frozen in finishTurn. The `??`

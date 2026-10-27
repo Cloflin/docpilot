@@ -1322,6 +1322,16 @@ html.docpilot-dark {
   }
 }
 
+// An action pill's second line: the arguments the model chose — ui-specs/018.
+// Dim at every state, so the author's label stays the thing the pill says, and
+// broken anywhere, because a model-filled value has no word boundary to wait for.
+.docpilot__suggestion-args {
+  display: block;
+  font-size: 13px;
+  color: var(--dp-text-dim);
+  overflow-wrap: anywhere;
+}
+
 .docpilot__turn + .docpilot__turn {
   margin-block-start: 32px;
 }
@@ -1557,7 +1567,10 @@ html.docpilot-dark {
   // `position: relative` is REQUIRED: without it the ::after resolves against
   // .docpilot__panel, which is fixed, and becomes a full-panel invisible overlay
   // that swallows every click in the drawer.
-  a.docpilot__cite {
+  //
+  // The class, not `a.`: a site tool's reply has nowhere to link, and its marker
+  // is a `<span>` that must read as the same superscript — engine-spec 038.
+  .docpilot__cite {
     position: relative;
     font-size: 0.75em;
     font-weight: 500;
@@ -1572,16 +1585,16 @@ html.docpilot-dark {
   }
   // Invisible hit-area expansion, zero layout impact — the glyph itself is
   // roughly 11px tall and is not a target.
-  a.docpilot__cite::after {
+  .docpilot__cite::after {
     content: '';
     position: absolute;
     inset-block: -8px;
     inset-inline: -3px;
   }
-  a.docpilot__cite + a.docpilot__cite {
+  .docpilot__cite + .docpilot__cite {
     margin-inline-start: 8px;
   }
-  a.docpilot__cite:hover,
+  .docpilot__cite:hover,
   a.docpilot__cite:focus-visible {
     color: var(--dp-text);
   }

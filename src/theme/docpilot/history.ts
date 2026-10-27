@@ -171,6 +171,9 @@ export function slimTurn(turn, limits = LIMITS) {
     origin: s.origin || null,
     title: s.title,
     tail: s.tail,
+    // A site tool's row — engine-spec 038. Without it a reopened thread draws
+    // the row as a link with no href.
+    ...(s.kind === 'tool' ? { kind: 'tool' } : {}),
   }))
 
   const out: StoredTurn = { id: turn.id, question: turn.question, state, answerText, sources }

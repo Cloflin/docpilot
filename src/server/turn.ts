@@ -676,6 +676,9 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
     // Each site function call — engine-spec 038 — as `{tool, ok, ms}`: never its
     // arguments or its reply, which may be the reader's own data.
     if (result.tools?.length) record.tools = result.tools
+    // The ids those calls handed out, which the answer may cite beside
+    // `emitted`. Kept apart from it: `pagesRead` splits `emitted` on '#'.
+    if (result.toolIds?.length) record.toolIds = result.toolIds
     record.usage = {
       promptTokens: result.cost.promptTokens,
       outputTokens: result.cost.outputTokens,
@@ -738,7 +741,10 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
       actions: result.actions || [],
       sig: sign(result.text, result.citations),
     }
-    if (cacheKey && !notAnswerable) ctx.answers.set(cacheKey, answered)
+    // Never a turn that called a site function — engine-spec 038. Its reply is
+    // live and may be the reader's own data, and `answerKey` names none of it,
+    // so a hit would hand one reader another reader's answer.
+    if (cacheKey && !notAnswerable && !result.tools?.length) ctx.answers.set(cacheKey, answered)
     return settle(answered)
   } catch (e) {
     record.latencyMs = now() - started

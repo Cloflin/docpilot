@@ -91,6 +91,10 @@ export interface TurnRecord {
   leakBlocked?: boolean
   /** 2.0 — served from `server.cache.answers`. */
   cached?: boolean
+  /** Each site function call — engine-spec 038 — never its arguments or its reply. */
+  tools?: Array<{ tool: string; ok: boolean; ms: number }>
+  /** The citable ids those calls handed out, `tool:<name>:<n>`. */
+  toolIds?: string[]
   messages?: Array<{ role: string; content: unknown }>
   error: string | null
 }

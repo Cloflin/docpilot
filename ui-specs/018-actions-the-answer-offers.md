@@ -51,9 +51,12 @@ is a next step *from an answer*, and there is no answer to step from.
 One pill per action — the existing `.docpilot__suggestion`, inside a
 `.docpilot__suggestions--inline` group with `role="group"` and
 `aria-label` = `tools.groupLabel`. The pill's text is the tool's `label` from the
-config, which is author text and never model text. Its accessible description
-names the arguments the model chose — `plan: pro` — because "Open pricing" for
-the wrong plan is a different action from the one the reader read.
+config, which is author text and never model text. Under the label, in
+`.docpilot__suggestion-args` (13px, `--dp-text-dim`), the pill shows the
+arguments the model chose as `tools.argsLabel` — `With plan: pro` — because
+"Open pricing" for the wrong plan is a different action from the one the reader
+read. The line is visible and part of the pill's name. A press sends these
+arguments, and a reader who cannot see them has not agreed to them.
 
 A press runs it. While it runs, the pill is `aria-disabled` and reads
 `tools.running`.
@@ -100,8 +103,14 @@ A `href` action leaves the page. That is its result, and it needs no line.
 A cited tool result is a row in `.docpilot__sources` like any other: its
 number, the tool's `title`, then ` · ` and `tools.fromSite`. It has no link,
 because there is no page to open, and the marker in the answer renders as the
-same number without an anchor. The row has no passage disclosure, because the
-result was data and not a passage the reader can check against a page.
+same number without an anchor — a `<span class="docpilot__cite">`, styled as
+the same superscript, so the marker rules select the class and not `a.`. The
+row has no passage disclosure, because the result was data and not a passage
+the reader can check against a page.
+
+The row keeps `kind: 'tool'` in the history archive, so a reopened thread draws
+it the same way. A copied answer and an exported thread list it as
+`1. Plan limits · from the site`, with no URL.
 
 ### While a function tool runs
 

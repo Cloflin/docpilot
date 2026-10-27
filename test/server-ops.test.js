@@ -283,6 +283,63 @@ describe('the server under its operator settings', () => {
   })
 })
 
+describe('the answer cache and a site tool — engine-spec 038', () => {
+  /** Calls `plan_limits` until its reply is in the messages, then cites it. */
+  const toolStub = () => {
+    const server = createServer((req, res) => {
+      let body = ''
+      req.on('data', (c) => (body += c))
+      req.on('end', () => {
+        const parsed = JSON.parse(body)
+        const answered = JSON.stringify(parsed.messages).includes('tool:plan_limits:1')
+        const call = answered
+          ? { name: 'answer', arguments: JSON.stringify({ text: 'Pro allows 5000 requests a day [1].', citations: ['tool:plan_limits:1'], confidence: 0.9 }) }
+          : { name: 'plan_limits', arguments: JSON.stringify({ plan: 'pro' }) }
+        if (parsed.stream) {
+          const frame = { choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: call }] } }] }
+          res.writeHead(200, { 'content-type': 'text/event-stream' })
+          res.end(`data: ${JSON.stringify(frame)}\n\ndata: [DONE]\n\n`)
+          return
+        }
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ choices: [{ message: { content: '', tool_calls: [{ id: 'c1', type: 'function', function: call }] }, finish_reason: 'tool_calls' }] }))
+      })
+    })
+    const ready = new Promise((r) => server.listen(0, '127.0.0.1', r)).then(() => `http://127.0.0.1:${server.address().port}`)
+    return { ready, close: () => server.close() }
+  }
+  const stub = toolStub()
+  afterAll(() => stub.close())
+
+  it('never stores an answer built on a live reply, which may be the reader’s own data', async () => {
+    const base = await stub.ready
+    let n = 0
+    const run = async () => ({ requestsPerDay: 5000, reader: ++n })
+    const dp = await createDocPilotServer({
+      settings: {
+        ...chatOf(base),
+        budget: { mode: 'agentic', probe: 'never' },
+        server: { turn: { loop: 'agentic' }, cache: { answers: { ttlMs: 60000 } } },
+        tools: {
+          plan_limits: {
+            description: 'Live limits of one plan.',
+            parameters: { type: 'object', properties: { plan: { type: 'string', enum: ['free', 'pro'] } }, required: ['plan'] },
+            run,
+          },
+        },
+      },
+      env: { CUSTOM_BASE_URL: base },
+      index: INDEX,
+    })
+    const ask = async () => (await events(await dp.handle(post({ question: 'How many requests does Pro allow?' })))).find((e) => e.event === 'settle').data
+    const a = await ask()
+    expect(a.citations).toEqual(['tool:plan_limits:1'])
+    const b = await ask()
+    expect(b.cached).toBeUndefined()
+    expect(n).toBe(2)
+  })
+})
+
 describe('the turn deadline', () => {
   const slow = stubModel({ delayMs: 3000 })
   afterAll(() => slow.close())

@@ -415,8 +415,8 @@ const UI_EN = {
     required: 'required',
     invalid: 'Check this value.',
     fromSite: 'from the site',
-    // The pill's accessible description: which arguments the model chose, so
-    // "Open pricing" for the wrong plan reads as a different action.
+    // The pill's second line, seen and announced: which arguments the model
+    // chose, so "Open pricing" for the wrong plan reads as a different action.
     argsLabel: 'With {args}',
   },
   cta: {

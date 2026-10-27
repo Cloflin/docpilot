@@ -4,7 +4,7 @@ import { assembleIndex } from '../src/theme/docpilot/store.js'
 import { createRetrieval } from '../src/theme/docpilot/retriever.js'
 import { runTurn } from '../src/theme/docpilot/harness.js'
 import { BUDGET_DEFAULTS } from '../src/theme/docpilot/switches.js'
-import { createHistory } from '../src/theme/docpilot/history.js'
+import { createHistory, slimTurn } from '../src/theme/docpilot/history.js'
 import { resetCaps, resetPools, toolSchemas } from '../src/theme/docpilot/llm.js'
 import { TOOLS_DOC, promptDocument, siteToolsDoc, systemText, toolsDocFor } from '../src/theme/docpilot/prompt.js'
 import { renderAnswer } from '../src/theme/docpilot/markdown.js'
@@ -354,6 +354,10 @@ describe('a function call, end to end — engine-spec 038 §5', () => {
     expect(r.citations).toEqual(['tool:plan_limits:1'])
     expect(r.sources[0]).toMatchObject({ kind: 'tool', tool: 'plan_limits', title: 'Plan limits' })
     expect(r.tools).toEqual([{ tool: 'plan_limits', ok: true, ms: expect.any(Number) }])
+    // Citable, but not a page: kept out of `emitted`, which the eval and
+    // `pagesRead` take for page sections, and handed out beside it.
+    expect(r.emitted).not.toContain('tool:plan_limits:1')
+    expect(r.toolIds).toEqual(['tool:plan_limits:1'])
   })
 
   it('checks the arguments before anything runs', async () => {
@@ -563,6 +567,37 @@ describe('the panel — ui-specs/018', () => {
     expect(t.state).toBe('complete')
     expect(t.actions).toEqual([])
     expect(JSON.stringify(chats[0])).not.toContain('"d"')
+  })
+
+  it('takes a hand-written config’s settings map, and archives a tool row as a tool row', async () => {
+    vi.resetModules()
+    const s = await import('../src/theme/docpilot/session.js')
+    s.__setHistoryForTests(createHistory({ local: fakeStorage(), session: fakeStorage(), now: () => 1 }))
+    // Never through `themeDocPilot`: `tools` arrives as the map the settings
+    // take, the shape a `mountDocPilot({config})` payload carries.
+    s.configure({
+      docPilot: {
+        llm: { provider: 'openai', baseURL: '/ai', model: 'm', apiKey: 'k' },
+        guard: { mode: 'off' },
+        budget: { mode: 'agentic', probe: 'never' },
+        tools: { ...PLAN, ...SUPPORT },
+      },
+    })
+    expect(s.state.config.tools.map((t) => t.name)).toEqual(['plan_limits', 'contact_support'])
+    s.state.index = oneChunkIndex()
+    s.state.degraded = false
+    s.state.busy = false
+    registerTool('plan_limits', async () => ({ requestsPerDay: 5000 }))
+    transport((body, i) =>
+      i === 1
+        ? toolReply('plan_limits', { plan: 'pro' })
+        : answering(['tool:plan_limits:1'], { actions: [{ tool: 'contact_support', args: { message: 'Pro limits' } }] }),
+    )
+    await s.submit('How many requests does Pro allow?')
+    const t = s.state.turns.at(-1)
+    expect(t.state).toBe('complete')
+    expect(t.actions).toHaveLength(1)
+    expect(slimTurn(t).sources).toEqual([{ n: 1, id: 'tool:plan_limits:1', href: null, origin: null, title: 'Plan limits', tail: '', kind: 'tool' }])
   })
 
   it('renders a marker for a row with nowhere to go as a number, not a link', () => {

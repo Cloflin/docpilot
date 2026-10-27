@@ -254,7 +254,14 @@ an uncited answer is withdrawn with its actions.
 | actions | in the browser | proposed by the server's model, run in the browser |
 
 The server's settle payload carries `actions`, and its `sources` carry the tool
-rows. The server turn log records each function call as `{tool, ok, ms}`.
+rows. The server turn log records each function call as `{tool, ok, ms}`, and
+the ids those calls handed out as `toolIds`. The eval counts a citation of one
+of those ids as observed, not as hallucinated.
+
+The answer cache (engine-spec 031) never stores a turn that called a site
+function. The reply is live and can be the reader's own data, and the cache key
+names none of it. A hit would give one reader the answer that another reader's
+data built.
 
 ### 9. Cost
 

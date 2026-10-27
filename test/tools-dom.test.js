@@ -151,11 +151,14 @@ describe('the panel draws what an answer offers — ui-specs/018', () => {
     expect(row.textContent).toContain('from the site')
     expect(row.querySelector('a')).toBe(null)
 
-    // The pill: the author's label, the model's arguments as its description.
+    // The pill: the author's label, and under it the model's arguments, on the
+    // pill itself — a sighted reader sees what one press sends.
     const group = document.querySelector('[role="group"][aria-label="Actions"]')
     const pill = group.querySelector('button.docpilot__suggestion')
-    expect(pill.textContent.trim()).toBe('Write to support')
-    expect(document.getElementById(pill.getAttribute('aria-describedby')).textContent).toContain('message: Pro limits')
+    expect(pill.textContent).toContain('Write to support')
+    const args = pill.querySelector('.docpilot__suggestion-args')
+    expect(args.textContent.trim()).toBe('With message: Pro limits')
+    expect(args.classList.contains('docpilot__sr')).toBe(false)
 
     // Pressed: a form from the schema, filled with what the model offered.
     pill.click()

@@ -1177,6 +1177,9 @@ export async function runTurn(options: RunTurnOptions) {
       // site's own schemas — never run here — and what the turn ran itself.
       actions: validActions(args.actions, siteActions),
       tools: toolLog,
+      // The other half of the citable set. Not folded into `emitted`, whose
+      // readers take every id for a page section.
+      toolIds: [...toolSources.keys()],
       // Outside `cost`, beside it: everything in there is measured in tokens or
       // characters and sweepable against answer quality, and this is the number
       // a free tier actually meters. `cost.steps` stays the count of calls this

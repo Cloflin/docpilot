@@ -741,14 +741,16 @@
                     class="docpilot__suggestion"
                     :aria-disabled="String(a.state === 'running' || a.state === 'unavailable')"
                     :aria-expanded="a.confirm === 'form' ? String(a.open) : null"
-                    :aria-describedby="argsLine(a) ? `dp-args-${turn.id}-${a.id}` : null"
                     @click="pressAction(turn, a)"
                   >
                     {{ a.state === 'running' ? T('tools.running') : a.label }}
+                    <!-- The model's arguments, ON the pill and so in its name —
+                         ui-specs/018. One press sends them, and a reader who
+                         cannot see them has not agreed to them. -->
+                    <span v-if="argsLine(a)" class="docpilot__suggestion-args">
+                      {{ T('tools.argsLabel', { args: argsLine(a) }) }}
+                    </span>
                   </button>
-                  <span v-if="a.state !== 'done' && argsLine(a)" :id="`dp-args-${turn.id}-${a.id}`" class="docpilot__sr">
-                    {{ T('tools.argsLabel', { args: argsLine(a) }) }}
-                  </span>
                 </template>
               </div>
               <template v-for="a in turn.actions" :key="`said-${a.id}`">
@@ -2962,6 +2964,9 @@ function withSources(turn) {
   if (!s.config.citations.inCopy || !turn.sources?.length) return text
   const origin = typeof location === 'undefined' ? '' : location.origin
   const lines = turn.sources.map((src) => {
+    // A site tool's reply has no address to paste — engine-spec 038 — so the
+    // line says where it came from, as its row does.
+    if (src.kind === 'tool') return `${src.n}. ${src.title} · ${T('tools.fromSite')}`
     const href = src.origin || `${origin}${src.href}`
     return `${src.n}. [${src.title}](${href})`
   })

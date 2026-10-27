@@ -1065,7 +1065,7 @@ async function runRecords({ model, probes, guard, fallback, thinkSupported, rows
     )
     row.reSearch = searched.filter((q) => !ownQuery.has(normaliseAnswer(q)))
     row.reSearchLang = [...new Set(row.reSearch.map((q) => langOf({ question: q })))]
-    row.hallucinated = hallucinatedCitationRate(res.citations, res.emitted)
+    row.hallucinated = hallucinatedCitationRate(res.citations, [...res.emitted, ...(res.toolIds || [])])
     row.emittedContainment = scopeContainment(res.emitted, probe.scope)
 
     const answered = res.text.trim() && res.citations.length && res.confidence >= 0.4

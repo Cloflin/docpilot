@@ -301,7 +301,7 @@ export async function serverRows(o: ServerEvalOptions) {
       error: s ? null : r.failure?.message || 'no settle',
     })
     if (record) {
-      row.hallucinated = hallucinatedCitationRate(row.citations, record.emitted || [])
+      row.hallucinated = hallucinatedCitationRate(row.citations, [...(record.emitted || []), ...(record.toolIds || [])])
       row.emittedContainment = scopeContainment(record.emitted || [], scope)
     }
     const wantRefusal = rec.expect.startsWith('refuse') || scoredAsNegative
