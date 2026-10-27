@@ -5,7 +5,26 @@
  */
 import type { DocPilotSettings, DocPilotThemeConfig, Readiness, ProviderId } from './config.js'
 
-export * from './config.js'
+/**
+ * Every TYPE of the config surface, and only the VALUES `src/index.ts` actually
+ * re-exports. A bare `export *` here promised `DEFAULTS`, `indexDirOf` and 26
+ * more names this entry never had: the import type-checked, and Node threw
+ * "does not provide an export named" at load. The rest are on
+ * `@cloflin/docpilot/config`. test/packaging.test.js holds the two lists equal.
+ */
+export type * from './config.js'
+export {
+  PROVIDER_IDS,
+  providerKey,
+  nodeEmbedTarget,
+  resolveEmbed,
+  resolveDocPilot,
+  resolveSuggestions,
+  readiness,
+  themeDocPilot,
+  devProxy,
+  logDocPilot,
+} from './config.js'
 
 /** Whatever the host's bundler calls a plugin. Vite's shape, structurally. */
 export interface DocPilotVitePlugin {

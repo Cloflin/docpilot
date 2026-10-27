@@ -191,6 +191,97 @@ describe('packaging', () => {
     }
   })
 
+  /**
+   * The VALUE names a hand-written declaration file promises: what an
+   * `import { x }` may name and expect to find at runtime. Types are erased and
+   * promise nothing, so `interface`, `type` and `export type …` add no name;
+   * `export *` is followed into the file it names. Comments are stripped
+   * first — the headers quote import lines.
+   */
+  function declaredValues(file, seen = new Set()) {
+    if (seen.has(file)) return new Set()
+    seen.add(file)
+    const text = fs
+      .readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+    const names = new Set()
+    const decl = /^export\s+(?:declare\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|enum|namespace)\s+([\w$]+)/gm
+    for (const m of text.matchAll(decl)) names.add(m[1])
+    if (/^export\s+default\b/m.test(text)) names.add('default')
+    for (const m of text.matchAll(/^export\s+\{([^}]*)\}/gm)) {
+      for (const part of m[1].split(',').map((p) => p.trim())) {
+        if (part && !part.startsWith('type ')) names.add(part.split(/\s+as\s+/).pop())
+      }
+    }
+    for (const m of text.matchAll(/^export\s+\*\s+as\s+([\w$]+)/gm)) names.add(m[1])
+    for (const m of text.matchAll(/^export\s+\*\s+from\s+['"]([^'"]+)['"]/gm)) {
+      const next = path.resolve(path.dirname(file), m[1].replace(/\.js$/, '.d.ts'))
+      for (const n of declaredValues(next, seen)) if (n !== 'default') names.add(n)
+    }
+    return names
+  }
+
+  /**
+   * Subpaths this runner cannot load, each for a reason outside the package.
+   * Checked whenever the import DOES succeed (a full build, an installed peer);
+   * a failure to load anything not named here fails the test.
+   */
+  const UNLOADABLE = {
+    './theme': "imports a stylesheet — its own, built by `build:css`, and VitePress's",
+    './theme-without-styles': "imports VitePress's default-theme stylesheets",
+    './web': 'a bundle `build:web` writes, which `build:js` does not',
+    './react': 'needs `react`, which this repository does not install',
+    './docusaurus/client': 'imports `./web` by the package name, so it needs the same bundle',
+  }
+
+  /**
+   * Exported at runtime with no declaration yet. Each is a decision still owed
+   * — declare it, or stop exporting it from a public subpath — so the list may
+   * only shrink: a new undeclared export fails below.
+   */
+  const UNDECLARED = {
+    './config': ['RUNTIMES', 'assertRuntime', 'assertTools', 'serverTurnConfig'],
+    './server': [
+      'SERVER_DEFAULTS', 'clientKey', 'createLimiter', 'createMetrics', 'createTurnLog', 'parseTurnInput',
+      'readCapped', 'readIndexDir', 'resolveServerOptions', 'runServerTurn', 'shellManifest', 'sourceChunk',
+      'startToolProbe',
+    ],
+    './host': ['__resetHostForTests', 'releaseHost'],
+    './highlight': ['__setHighlighterForTests'],
+  }
+
+  /**
+   * Every subpath's types name exactly what its module exports.
+   *
+   * `types/index.d.ts` once said `export * from './config.js'` while the `.`
+   * entry re-exported twelve names of the forty it declared:
+   * `import { DEFAULTS } from '@cloflin/docpilot'` type-checked and died at load
+   * with "does not provide an export named". `typings/conformance.d.ts` checks
+   * the SHAPE of the names it lists, never that a declared name exists, so
+   * nothing caught it.
+   */
+  it('declares exactly the names each subpath exports at runtime', async () => {
+    if (!distBuilt) return
+    for (const [name, target] of Object.entries(pkg.exports)) {
+      if (typeof target !== 'object' || !target.types || !/\.m?js$/.test(target.default)) continue
+      let mod
+      try {
+        mod = await import(new URL(target.default, root).href)
+      } catch (e) {
+        expect(Object.hasOwn(UNLOADABLE, name), `${name} does not load: ${e.message}`).toBe(true)
+        continue
+      }
+      const declared = declaredValues(abs(target.types))
+      const actual = Object.keys(mod)
+      const phantom = [...declared].filter((n) => !actual.includes(n))
+      expect(phantom, `${name} declares names its module does not export`).toEqual([])
+      const owed = new Set(UNDECLARED[name] ?? [])
+      const undeclared = actual.filter((n) => !declared.has(n) && !owed.has(n))
+      expect(undeclared, `${name} exports names ${target.types} does not declare`).toEqual([])
+    }
+  })
+
   // The three stylesheets are a public contract: a consumer who wants the core
   // without the VitePress mapping has to be able to name it.
   it('exports all three stylesheets and the styleless theme', () => {
