@@ -60,7 +60,7 @@ The default install answers on a port with no proxy in front, so the limits are 
 
 **What the reader sees.** A client over the bucket or the daily count gets `429` with a `Retry-After` header and the panel's own `rateLimit` body, so the panel shows when answers resume. A full server — `concurrent` or `perClient` reached — answers `503` with `Retry-After: 2`. Both are counted in the metrics as `docpilot_refused_requests_total`.
 
-**Who a client is.** The client is the socket's address, never a header. A header that the client writes would be a limit that the client chooses. Set `trustProxy` to the number of proxy hops in front of the server, and the limiter reads `X-Forwarded-For` from the right by that count. On a runtime that gives no address — an edge `handle(Request)` with no connection info — every request shares one bucket. The limit still holds the endpoint, but it cannot tell readers apart. Put the edge's own limiter in front.
+**Who a client is.** The client is the socket's address, never a header. A header that the client writes would be a limit that the client chooses. Set `trustProxy` to the number of proxy hops in front of the server, and the limiter reads `X-Forwarded-For` from the right by that count. An IPv6 address counts as its /64, because one host can hold every address in it, and an IPv4-mapped address (`::ffff:…`) counts as its IPv4. A request refused before admission leaves no entry behind. On a runtime that gives no address — an edge `handle(Request)` with no connection info — every request shares one bucket. The limit still holds the endpoint, but it cannot tell readers apart. Put the edge's own limiter in front.
 
 **What the limits do not do.**
 
@@ -167,7 +167,7 @@ The guard is built once from your private instruction text and checks the output
 - **Six-word runs.** Any six consecutive words of your text. A paraphrase passes, on purpose: the guard stops the verbatim dump that an extraction attack produces.
 - **Identifier-like tokens.** Any word of eight or more characters that holds a digit or an underscore: an internal code, a canary, a ticket number. One of them in an answer is a leak by itself.
 
-When an answer would carry either, it never streams out. The turn settles as not-answerable, and the turn record has `leakBlocked`. The instruction that DocPilot ships is public and is not guarded.
+When an answer would carry either, it never streams out. The turn settles as not-answerable, and the turn record has `leakBlocked`. The answer's `summary` and each action's arguments are checked the same way: a summary that carries either is dropped, and so is an action. The instruction that DocPilot ships is public and is not guarded.
 
 The [security probes](/guide/security-probes) test this: a canary in `prompt.extend` plus a probe that forbids it turns "did the prompt leak" into a string match.
 

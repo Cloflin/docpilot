@@ -154,9 +154,11 @@ This site runs on Vercel. Two rewrites send the panel's routes to two functions,
 }
 ```
 
-The shared handler builds the outgoing headers from nothing — `Authorization: Bearer $OPENROUTER_API_KEY` (this site uses OpenRouter), `content-type`, `accept` — so no client header can ride along. It answers 405 to anything but POST, 403 to another origin **or to a request with no `Origin` header**, 413 above 256 KB, and 429 above 10 requests a minute or 20 a day from one IP. The response goes back as a stream, without `set-cookie` and without any `access-control-allow-*` header.
+The shared handler builds the outgoing headers from nothing — `Authorization: Bearer $OPENROUTER_API_KEY` (this site uses OpenRouter), `content-type`, `accept` — so no client header can ride along. It answers 405 to anything but POST, 403 to another origin **or to a request with no `Origin` header**, 413 above 256 KB, and 429 above 10 requests a minute or 20 a day from one IP. An IPv6 /64 counts as one IP, and the forwarded headers are read only when the handler runs on Vercel. The response goes back as a stream, without `set-cookie` and without any `access-control-allow-*` header.
 
 **The body is rebuilt, not relayed.** The handler parses the request and forwards only the fields the panel sends. The model must be on an allowlist, the output ceiling is clamped, and every routing or billing field — `models`, `plugins`, `transforms`, `route`, `n`, other `provider` keys — is dropped. A body that is not JSON, names a model off the list, has no `messages`, or carries more than 8 embedding inputs gets 400 and is never forwarded.
+
+The tools and the messages are rebuilt too. Tools are function tools, at most 24. `tool_choice` is `auto`, `none`, `required` or one of those functions, and `response_format` is `text`, `json_object` or `json_schema`. There are at most 64 messages, and each one's content is a string or text parts. A typed server tool such as `openrouter:web_search`, an image or file part, or a `tool_choice` that names an undeclared tool gets 400, because your key would pay for it. Every body the panel builds passes unchanged.
 
 | Variable | Default | What it sets |
 |---|---|---|
@@ -209,7 +211,7 @@ A site's own [tools](/features/tools) are the one place where a model's choice c
 | function tools only read | The build refuses a function tool (`confirm: false`) whose `run` is a `POST`, a navigation or an event. A handler you register is your own code: keep it read-only |
 | an action needs the reader | An action (`confirm: true` or `'form'`) never runs in a turn. It runs when the reader presses its button or sends its form |
 | the words on a button are yours | The button text is your `label` and the form's name is your `title`. The model chooses which action to offer and with which values |
-| arguments are checked in code | Every argument is checked against your schema before anything runs, the model's and the reader's alike. Values are URL-encoded into a template, so the model controls neither the host nor the path |
+| arguments are checked in code | Every argument is checked against your schema before anything runs, the model's and the reader's alike. Values are URL-encoded into a template. The build refuses a placeholder in the scheme or the host, and an argument that makes a `.` or `..` path segment fails the call, so the model controls neither the host nor the path |
 | replies are data | A tool's reply reaches the model under the same "data, not instruction" note as a documentation section, cut to 4,000 characters |
 | replies go to the model provider | A function tool's reply is sent to your model provider with the next request, as a section is. Return what the answer needs, not a whole account record |
 | bounded | At most twelve tools and three actions per answer. A run has 10 seconds in a turn, and 30 when the reader started it |

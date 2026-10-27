@@ -259,10 +259,13 @@ export const docPilot = {
 }
 ```
 
-That is the whole of it. `base` is applied at exactly two points — the index fetch
-and following a citation — so `/rag/manifest.json` becomes `/docs/rag/manifest.json`
-and a citation click lands on `/docs/guide/install`. On VitePress the theme reads
-the base from your build and you set nothing at all.
+That is the whole of it. `base` is applied at exactly three points — the index fetch,
+following a citation, and the route the host hands the panel — so
+`/rag/manifest.json` becomes `/docs/rag/manifest.json`, a citation click lands on
+`/docs/guide/install`, and `/docs/guide/install` read from `location.pathname` is
+the page `/guide/install` with its *this page* and *section* scopes. On VitePress
+the theme reads the base from your build and you set nothing at all; Docusaurus
+`baseUrl` and `base` given to `mountDocPilot` work the same way.
 
 If the index lives somewhere else entirely — a CDN, a separate origin — name it
 outright and the base is not consulted:
@@ -340,7 +343,7 @@ The rate limit still has to come from somewhere — the platform's own, or a cou
 
 ## Collecting feedback {#collecting-feedback}
 
-Set [`feedbackEndpoint`](/reference/config#feedbackendpoint) and every vote is POSTed to it as JSON. **This package ships no database driver and no receiver** — the endpoint is yours, the storage is yours, and what you keep is your decision. What follows is the contract, not a component.
+Set [`feedbackEndpoint`](/reference/config#feedbackendpoint) and every vote is POSTed to it as JSON. **This package ships no database driver** — the endpoint is yours, the storage is yours, and what you keep is your decision. What follows is the contract. `npx docpilot init` also copies a reference receiver into `docpilot/feedback-receiver.mjs`, with no dependencies and an NDJSON or SQLite store, for you to read and edit — see [The reference receiver](#reference-receiver).
 
 ### Make it same-origin
 
@@ -388,7 +391,7 @@ on conflict (message_id) do update set
   ts            = excluded.ts,
   verdict       = excluded.verdict,
   reasons       = excluded.reasons,
-  comment       = coalesce(excluded.comment,       docpilot_feedback.comment),
+  comment       = excluded.comment,
   answer        = coalesce(excluded.answer,        docpilot_feedback.answer),
   retrieved_ids = coalesce(excluded.retrieved_ids, docpilot_feedback.retrieved_ids),
   gate          = coalesce(excluded.gate,          docpilot_feedback.gate)
@@ -398,9 +401,9 @@ where excluded.revision >= docpilot_feedback.revision;
 **Both halves are load-bearing, and both are easy to leave out:**
 
 - `where excluded.revision >= …` — `keepalive` POSTs can arrive out of order. Without the guard a slow revision 0 landing after revision 1 **erases the sentence the reader just wrote**.
-- `coalesce(…)` on `answer`, `retrieved_ids` and `gate` — this is what makes an amendment from a restored turn non-destructive. Without it, an absent key becomes a null that overwrites a good value.
+- `coalesce(…)` on `answer`, `retrieved_ids` and `gate` — this is what makes an amendment from a restored turn non-destructive. Without it, an absent key becomes a null that overwrites a good value. `comment` is the exception: the panel always sends it, and `null` when the reader cleared the sentence, so a coalesce there would bring back words the reader removed.
 
-A withdrawn vote arrives as `verdict: null` under a raised revision. Treat it as a retraction, not as a row to ignore: it is the reader taking back what they said, including their own words.
+A withdrawn vote arrives as `verdict: null` under a raised revision. Treat it as a retraction, not as a row to ignore: it is the reader taking back what they said, including their own words. A switched vote can arrive the same way: when the reader changes a sent verdict to one that [`feedback.send`](/reference/config#feedback-send) does not collect, the panel withdraws the sent one and does not send the new one.
 
 ### A receiver
 
@@ -415,6 +418,11 @@ const CORS = {
 export default async function handler(request) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
   if (request.method !== 'POST') return new Response('Not found', { status: 404 })
+  // The panel sends JSON. A text/plain POST needs no preflight, so without this
+  // check another site could write a vote.
+  if (!request.headers.get('content-type')?.startsWith('application/json')) {
+    return new Response('Unsupported media type', { status: 415, headers: CORS })
+  }
 
   const row = await request.json().catch(() => null)
   if (!row?.messageId || typeof row.question !== 'string') {
@@ -434,6 +442,20 @@ export default async function handler(request) {
 ```
 
 The `CORS` block is dead weight on a same-origin path, and required the moment the endpoint is on another host.
+
+### The reference receiver {#reference-receiver}
+
+`docpilot/feedback-receiver.mjs`, written by `npx docpilot init`, is this contract as a Node server with no dependencies. It takes votes on `/ai/feedback`, stores them as NDJSON or in SQLite (`DOCPILOT_FEEDBACK_STORE`), and serves `/ai/feedback/export` to `docpilot feedback pull` when `DOCPILOT_FEEDBACK_TOKEN` is set. Nothing authenticates a vote, so it limits who can write before it reads a byte:
+
+| limit | what it does |
+|---|---|
+| `application/json` only | Anything else is 415, so another site cannot write a vote with a `text/plain` POST |
+| `DOCPILOT_FEEDBACK_ORIGINS` | Optional. A comma-separated list of origins; a POST from any other origin, or with no `Origin`, is 403 |
+| 30 a minute, 1000 a day | Per client, in memory. The client is the socket's address, or, with `DOCPILOT_FEEDBACK_TRUST_PROXY` set to the hops in front, the `X-Forwarded-For` entry that many hops from the right. An IPv6 /64 is one client |
+| `revision` up to 1000 | A higher one is refused, so one row cannot win every later tie for its `messageId` |
+| 32 MB a day | Rows stored in one UTC day, for every client together. Past it, a vote is 507 |
+
+It sends no CORS header. Add one at the reverse proxy if the endpoint is on another host.
 
 ### Cross-origin, and what it costs {#cross-origin-feedback}
 

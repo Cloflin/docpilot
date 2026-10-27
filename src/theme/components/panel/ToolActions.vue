@@ -134,7 +134,7 @@
  * The answer's actions — ui-specs/018, engine-spec 038. Between the answer and
  * its sources, on a settled answer only: an action is a next step FROM an
  * answer. Every word on a pill is the author's `label`; what the model chose is
- * the pill's description, read as data. Nothing here runs until the reader
+ * the pill's second line, read as data. Nothing here runs until the reader
  * presses it.
  */
 import type { PropType } from 'vue'
@@ -147,7 +147,7 @@ defineProps({ turn: { type: Object as PropType<Turn>, required: true } })
 const s = session.state
 const { T, focusIn, closeAction } = usePanel()
 
-/** The model's arguments, as the pill's description reads them. */
+/** The model's arguments, as the pill's second line reads them. */
 function argsLine(a) {
   return Object.entries(a.args || {})
     .map(([k, v]) => `${k}: ${v}`)

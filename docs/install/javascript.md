@@ -69,6 +69,10 @@ panel.destroy()
 `ask` does not submit on purpose: the reader reads what somebody else wrote before
 it is asked on their behalf. The same rule the `?dp-ask=` deep link follows.
 
+`setConfig` gives the trigger and the panel the new settings, and the
+conversation on screen stays. A new `budget.dailyLimit` takes effect at once, and
+what the reader spent today still counts.
+
 ## Site tools
 
 ```js

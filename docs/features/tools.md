@@ -98,7 +98,7 @@ open_pricing: {
 
 The model never runs an action. It may offer up to three with its answer, each with arguments it took from the conversation, and the reader decides:
 
-- **A button** (`confirm: true`) shows your `label`. A screen reader also announces the model's arguments with it, such as "plan: pro", because "Open pricing" for the wrong plan is a different action.
+- **A button** (`confirm: true`) shows your `label`, and on a second line the model's arguments, such as "With plan: pro", because "Open pricing" for the wrong plan is a different action. The arguments are part of the button's name, so a screen reader reads them too.
 - **A form** (`confirm: 'form'`) opens under the answer. It has one field per parameter, labelled with the parameter's `description`, and the model's suggestions are filled in. The reader can change any value. DocPilot checks what the reader sends against your schema before anything is sent.
 - **The outcome** appears where the button was. It is your endpoint's own words when the reply is a string or has a `message` field, and **Done.** otherwise. If the action fails, the button comes back so the reader can try again.
 
@@ -111,7 +111,7 @@ DocPilot asks three places, in this order:
 1. **A handler you register in the page.** It wins over the config, so you can replace a `fetch` with code without touching the definition.
 2. **A function in the config.** This works only on a [server install](#on-a-server-install), where the config is never sent to a browser.
 3. **The declarative `run`:**
-   - `{fetch: '/api/plans/{plan}'}`. Each `{name}` is replaced by that argument, URL-encoded. A `GET` sends nothing else. A `POST` sends `{tool, args, context: {question, page}}` as JSON. A JSON reply is parsed, and any other reply is read as text.
+   - `{fetch: '/api/plans/{plan}'}`. Each `{name}` is replaced by that argument, URL-encoded. A placeholder goes in the path or the query, never in the scheme or the host, and an argument that would make a `.` or `..` path segment fails the call before anything is sent. A `GET` sends nothing else. A `POST` sends `{tool, args, context: {question, page}}` as JSON. A JSON reply is parsed, and any other reply is read as text.
    - `{href: '/pricing?plan={plan}'}`. A link to your own host opens in place. A link to another host opens in a new tab without `window.opener`.
    - `{event: 'acme:open-demo'}`. DocPilot dispatches a `CustomEvent` on `window` with `{tool, args, context}` in `detail`. This is the way to open **your own** modal or form.
 
@@ -153,6 +153,7 @@ The model chooses a tool by its `description` and fills it by its `parameters`. 
 |---|---|---|
 | `description` | every type | tells the model what the value is, and labels the form field |
 | `enum` | every type | the allowed values; a form shows them as buttons |
+| `default` | every type | the value an empty field takes; the model is told it, and a form starts from it. The build refuses a default that the parameter itself would refuse |
 | `format` | `string` | `email`, `uri` or `date` set the input type; `multiline` asks for a text area |
 | `maxLength` | `string` | the longest allowed value |
 | `minimum`, `maximum` | `number`, `integer` | the allowed range |
@@ -186,7 +187,7 @@ The page receives only the actions, without their descriptions, because the desc
 
 - **Nothing that changes anything runs without the reader.** A function tool can only read, and an action needs a press or a sent form.
 - **Every word on a button is yours.** The model chooses which action to offer and with which values. The text on the button is your `label`.
-- **The arguments are checked in code** against your schema, and they are URL-encoded into a template. The model controls neither the host nor the path.
+- **The arguments are checked in code** against your schema, and they are URL-encoded into a template. The build refuses a placeholder in the scheme or the host, and an argument that makes a `.` or `..` segment fails the call, so the model controls neither the host nor the path.
 - **A tool's reply is data, not instruction.** It reaches the model under the same rule as a documentation section, cut to 4,000 characters.
 - **A page that tries to steer the model can at most propose a button.** DocPilot's own [security bench](/guide/benchmarks) measured 23–30 % success for planted instructions. That is why a model never decides alone what runs.
 

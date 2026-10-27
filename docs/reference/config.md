@@ -29,6 +29,11 @@ Nested objects merge with their defaults one level deep. Two do not: `embed` is 
 union rather than an object, and `sources` is assigned whole — a half-merged
 allowlist is one whose contents nobody wrote.
 
+A key that nothing reads — `chatt`, `topk`, `chat.modle` — prints one warning,
+with the nearest known key when exactly one is close. The check covers the top
+level and one level into each group. `tools`, `vocabulary` and `openapi` are not
+checked, because their keys are your own names.
+
 ## All defaults
 
 Every shipped value, in one block. Write none of it and this is what you get; the
@@ -1997,7 +2002,8 @@ Each tool is an object:
 
 A property takes `description`, `enum` and `default`. A string also takes
 `format` (`email`, `uri`, `date` or `multiline`) and `maxLength`, and a number
-takes `minimum` and `maximum`. `required` lists the values a call must have.
+takes `minimum` and `maximum`. `required` lists the values a call must have. An
+empty value takes the `default`, and the model is told it.
 
 | `run` | what happens |
 |---|---|
@@ -2010,9 +2016,12 @@ takes `minimum` and `maximum`. `required` lists the values a call must have.
 
 The build stops on anything it cannot honour, and the message names the tool:
 an invalid or built-in name, more than twelve tools, a missing description, a
-nested parameter, a function tool that would write, navigate or fire an event,
-a `{placeholder}` that is not a parameter, a function `run` on a static install,
-and a relative `fetch` for a function tool on a server install.
+nested parameter, a `default` that its parameter would refuse, a function tool
+that would write, navigate or fire an event, a `{placeholder}` that is not a
+parameter, a `{placeholder}` in the scheme or the host of a `fetch` or `href`, a
+function `run` on a static install, and a relative `fetch` for a function tool on
+a server install. At run time, an argument that makes a `.` or `..` path segment
+fails the call before anything is sent.
 [Tools and actions](/features/tools) has the whole contract.
 
 ## guard
@@ -2860,7 +2869,9 @@ promise false. A key in a comment is replaced with `YOUR_SECRET_KEY` in
 The thumb POSTs immediately — a reader who closes the tab has still been heard —
 and the form POSTs again when it is submitted, under the **same `messageId`** with
 `revision` raised. Withdrawing a vote posts too, with `verdict: null`, so a reader
-can take back what they said.
+can take back what they said. So does changing a sent verdict to one that
+`feedback.send` does not collect: the panel withdraws the sent one (`verdict:
+null`, no reasons, no comment) and does not send the new one.
 
 **Your receiver must upsert on `messageId` and keep the higher revision.** The SQL
 that does it is on [Production](/guide/production#collecting-feedback), along with

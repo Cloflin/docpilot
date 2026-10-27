@@ -13,6 +13,20 @@ Each release in a few lines. The full notes — every change, every migration st
 
 <div class="cl">
 
+## 2.1.0
+
+<div class="cl-date">Oct 27, 2026</div>
+
+### Your own tools in the chat, citations that land on their heading, and a review pass
+
+- **Your own tools.** A `tools` key adds functions the model calls for live data — a plan's limits, an API's status — cited as a source "from the site", and actions the answer offers as a button or a form, which run only when the reader presses them. Off by default; with `tools: null` every request is byte-identical to 2.0.1. See [Tools and actions](/features/tools).
+- **A citation lands on its heading.** Anchors are now VitePress's own: a heading with `.`, `_`, `'`, an accent or a leading digit linked to the top of its page. HTML comments are no longer indexed. Rebuild your index after the upgrade, and run `docpilot lint` if your golden set pins section ids.
+- **Security fixes from a full review.** The `/ai` proxy rebuilds tools and messages, the server's leak guard also reads the summary and an action's arguments, the reference feedback receiver limits who can write, and a tool's URL template keeps its path. See [Security](/guide/security).
+- **Fixes on every host.** `setConfig()` and the React `config` prop reach the panel, Docusaurus highlights code again, and a site under a base path keeps its scopes and its links. A misspelled setting prints a warning that names the nearest key.
+- **The panel is in parts.** The component files are `Panel.vue`, `Trigger.vue`, `Cta.vue`, `Icons.vue` and `Quote.vue`. The exported names do not change, and the old file paths still resolve until 3.0. The tarball no longer carries 808 KB of unused chunks.
+
+<a class="cl-more" :href="gh('210--2026-10-27')">Full notes</a>
+
 ## 2.0.1
 
 <div class="cl-date">Oct 27, 2026</div>

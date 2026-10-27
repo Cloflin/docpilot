@@ -13,7 +13,7 @@ A conversation appears in the list once it has an answer in it. The row is title
 - **Open** a row to switch the panel to that conversation and carry on in it.
 - **New chat** — the compose button in the header — lets go of the conversation on screen without deleting it. It is still in the list.
 - **Delete** a row with the bin beside it. Deleting the conversation currently on screen empties the panel too. Pointing at the bin lights it as a darker chip inside the lighter row, so the thing under the cursor is unambiguous — `×` in this panel always means *dismiss*, and this is the one control with nothing behind it.
-- **Delete all** clears the list and the panel in one step. It asks twice, and never through a browser dialog.
+- **Delete all** clears the list, the panel and the local feedback log in one step. It asks twice, and never through a browser dialog.
 
 Reloading the page brings back the conversation that tab was in, **including an answer that was still being written** — it comes back as a stopped turn, with the text that had arrived and an *Ask again* under it. The request itself cannot be resumed, and nothing here pretends otherwise: what is kept is what had already reached the browser, which is the half that was paid for. [`history.saveOnUnload`](/reference/config#history-saveonunload) turns that off.
 
@@ -28,7 +28,9 @@ Per turn:
 - the question **as it was redacted** — a pasted key is caught before the turn exists, so the mask is what is written, and the mask is what titles the row (see [Credentials in questions](/guide/credentials));
 - the passage it was asked about, if the reader quoted one — without it a restored thread shows "what does this mean?" above an answer with no *this* on screen. It is redacted on the same rule and capped at 500 characters. The row is still titled by the first **question**: a title taken from a quote would be a title the reader did not write;
 - the answer text, its source links, and whether the reader voted on it;
-- the scope the question was asked in, and the gate numbers a feedback report reads.
+- the scope the question was asked in, and the gate numbers a feedback report reads;
+- on a turn answered with search results — a `chat: false` site, or a model that failed mid-thread — the result list the panel drew;
+- on a server install, the citation list the server signed, so a reopened answer is still trusted on a follow-up.
 
 What is **not** stored:
 
@@ -41,15 +43,16 @@ Losing the excerpts does not cost a reopened conversation its evidence. A follow
 
 ## Where
 
-Two keys, in two different storages:
+Four keys, in two different storages:
 
 | key | storage | what |
 |---|---|---|
 | `docpilot:history` | `localStorage` | the archive — every conversation, shared by every tab of the site |
 | `docpilot:conversation` | `sessionStorage` | which conversation *this tab* is showing |
 | `docpilot:draft` | `sessionStorage` | the question half-typed in *this tab*'s composer, redacted before it is written |
+| `docpilot:feedback` | `localStorage` | each vote: the verdict, its reasons and sentence, and the question, quote and answer it was cast on — the last 200. With `history.enabled: false` it keeps the vote and no text |
 
-Both are on the reader's device, under your site's origin, and neither is ever sent anywhere. The one thing that leaves the browser is a vote — with whatever reasons and sentence the reader attached to it — and only when you have configured `feedbackEndpoint`. Which verdicts travel is [`feedback.send`](/reference/config#feedback-send); `'none'` keeps the thumbs on screen and sends nothing at all.
+All four are on the reader's device, under your site's origin, and none is ever sent anywhere. The one thing that leaves the browser is a vote — with whatever reasons and sentence the reader attached to it — and only when you have configured `feedbackEndpoint`. Which verdicts travel is [`feedback.send`](/reference/config#feedback-send); `'none'` keeps the thumbs on screen and sends nothing at all.
 
 ## Two tabs {#two-tabs}
 
