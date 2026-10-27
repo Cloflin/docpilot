@@ -289,6 +289,49 @@ describe('the index — which /reference/ routes a spec claims', () => {
   })
 })
 
+/**
+ * t6 R1-R2 — two inputs the pipeline read wrong before any pass ran.
+ *
+ * R1: on CRLF text `FENCE`'s `(.*)$` never matched (`.` refuses `\r`), so no
+ * fence was seen and a sample's `<script>` deleted the page to end of file.
+ * R2: a leading U+FEFF hid the frontmatter — raw YAML indexed, title lost.
+ */
+describe('normalise — line endings and byte-order mark', () => {
+  const sample = [
+    '## A',
+    '',
+    'Text',
+    '',
+    '```js',
+    'import x from "y"',
+    '<script>',
+    '<llm-exclude>',
+    '  npm   i',
+    '```',
+    '',
+    'after paragraph',
+  ].join('\n')
+  const crlf = (s) => s.replace(/\n/g, '\r\n')
+  const chunk = (src) => chunkMarkdown({ src, path: '/p', kind: 'guide' })
+
+  it('reads a CRLF file exactly as its LF twin', () => {
+    expect(normaliseMarkdown(crlf(sample)).text).toBe(normaliseMarkdown(sample).text)
+    expect(normaliseMarkdown(crlf(sample)).text).toContain('after paragraph')
+    expect(normaliseMarkdown(crlf(sample)).text).toContain('  npm   i')
+    const twin = (src) => chunk(src).chunks.map((c) => [c.id, c.text])
+    expect(twin(crlf(`# P\n\n${sample}\n\n## B\n\nmore`))).toEqual(twin(`# P\n\n${sample}\n\n## B\n\nmore`))
+  })
+
+  it('reads frontmatter behind a byte-order mark', () => {
+    const page = '---\ntitle: T\ndescription: D\n---\n\n# H\n\n## One\n\nbody\n'
+    const out = normaliseMarkdown(`\uFEFF${page}`)
+    expect([out.title, out.description]).toEqual(['T', 'D'])
+    expect(out.text).toBe(normaliseMarkdown(page).text)
+    expect(out.text).not.toContain('title:')
+    expect(chunk('\uFEFF---\r\nlayout: home\r\n---\r\n\r\n# Home\r\n\r\nhero').chunks).toEqual([])
+  })
+})
+
 describe('normalise — images and whitespace', () => {
   it('drops a data: URI image and keeps its alt', () => {
     const src = `| \`accordion\` | <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E" alt="accordion"> |`

@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import zlib from 'node:zlib'
@@ -38,6 +39,7 @@ import {
   CONFIG,
   VOCABULARY_OUT,
   EMBED_CACHE_DIR,
+  DOCPILOT_DIR,
 } from '../cli-context.js'
 import { openEmbedCache } from './lib/embed-cache.js'
 import { l2normalise, toInt8, quantisationError, packSigns, binaryScale, binaryQuantisationError } from './lib/quantize.js'
@@ -1198,8 +1200,62 @@ export function tuningFor(hash, opts: {
   return { ...levers, source: 'tuned', tunedAt: doc.tunedAt }
 }
 
+/**
+ * `indexDir` IS DELETED WHOLE on every build, so it may hold nothing else.
+ *
+ * Nothing checked that. `indexDir: 'docs'`, `'.'` or `'..'` resolves without
+ * complaint, and the build then removed the docs source, the project or its
+ * parent recursively before writing shards into the hole. So the directory is
+ * refused when it is the filesystem root, the home directory or above it, or
+ * when it IS or CONTAINS something the project cannot rebuild: the root, the
+ * docs, the config, the eval artefacts, the imported pages. A directory
+ * outside the project — `../site/public/rag` — is a legitimate target and
+ * passes.
+ *
+ * Compared by real path where one exists, so a case-only typo on a
+ * case-insensitive disk (`Docs`) is read as the directory it will delete.
+ */
+function indexDirRefusal() {
+  const real = (p) => {
+    try {
+      return fs.realpathSync.native(p)
+    } catch {
+      return path.resolve(p)
+    }
+  }
+  const out = real(OUT)
+  const holds = (p) => {
+    const r = path.relative(out, real(p))
+    return r === '' || (r !== '..' && !r.startsWith(`..${path.sep}`) && !path.isAbsolute(r))
+  }
+  if (out === path.parse(out).root) return 'the filesystem root'
+  if (holds(os.homedir())) return 'your home directory, or a directory above it'
+  const kept = [
+    ['the project root', ROOT],
+    ['docsDir', DOCS],
+    ['the config file', CONFIG],
+    ['evalDir', DOCPILOT_DIR],
+    ['importDir', KB],
+  ]
+  for (const [what, p] of kept) {
+    if (p && holds(p)) return `${what} (${path.relative(ROOT, p) || '.'}) or a directory above it`
+  }
+  return null
+}
+
 async function main() {
   console.log(`\nDocPilot index${DRY ? ' (dry run — no embeddings)' : ''}\n`)
+
+  // First, and in a dry run too: a config that would delete the project is
+  // wrong in every mode, and `--dry` is how a config is tried out.
+  const refusal = indexDirRefusal()
+  if (refusal) {
+    die(
+      `indexDir resolves to ${OUT}, which is ${refusal}.\n` +
+        `        \`docpilot index\` deletes that directory whole on every build. Point\n` +
+        `        docPilot.indexDir at a directory of its own (the default is ${path.join(docPilot.docsDir, 'public', 'rag')}).`,
+    )
+  }
 
   // ── sidebar ────────────────────────────────────────────────────────────────
   // `?? {}` because the DEFAULT export is optional: the settings come from the
@@ -1313,10 +1369,38 @@ async function main() {
   }
   const specRoutes = new Set([...specByName.keys()].map((n) => `/reference/${n}`))
 
+  /**
+   * TWO FILES, ONE ROUTE: `guide.md` beside `guide/index.md`, or `guide.md`
+   * beside `guide.mdx`. `routeOf` maps both to `/guide`, and `pages.set` below
+   * kept the second file's entry while the chunks of BOTH stayed in the index —
+   * one page row with one file's title and chunk count over two files' text,
+   * or, when both had a `## Setup`, a `duplicate chunk id` death far from the
+   * cause.
+   *
+   * The answer `readHtmlDir` gives a built site: warn, keep one. Which one is
+   * decided by the path, never by `readdirSync`, whose order is the
+   * filesystem's: the first in code-unit order, which puts `guide.md` before
+   * `guide.mdx` and `guide/index.md` — and `guide.md` is the page VitePress
+   * serves at `/guide`.
+   */
+  const ownerOf = new Map()
+  for (const file of files) {
+    const route = routeFor(file)
+    const prior = ownerOf.get(route)
+    if (!prior || path.relative(DOCS, file) < path.relative(DOCS, prior)) ownerOf.set(route, file)
+  }
+
   for (const file of files) {
     const route = routeFor(file)
     if (EXCLUDE.has(route)) continue
     if (specRoutes.has(route)) continue
+    const owner = ownerOf.get(route)
+    if (owner !== file) {
+      warn(
+        `two files claim ${route}: ${path.relative(ROOT, owner)} and ${path.relative(ROOT, file)} — the second is skipped`,
+      )
+      continue
+    }
 
     const src = fs.readFileSync(file, 'utf8')
     rawBytes += src.length
@@ -1698,7 +1782,7 @@ async function main() {
     .slice(0, 8)
 
   /**
-   * The bundle the LAST build wrote, read before the directory is wiped.
+   * The bundle the LAST build wrote, read before the stage replaces it.
    *
    * It is the answer cache and nothing else: an answer whose question, corpus,
    * prompt and model are all unchanged is the same answer, and regenerating it
@@ -1706,7 +1790,7 @@ async function main() {
    * fifty-a-day allowance that is the difference between the openers pass being
    * something you run and something you avoid running.
    *
-   * Read here rather than after `rmSync` for the obvious reason, and wrapped
+   * Read here rather than after the swap for the obvious reason, and wrapped
    * because every way this can fail — no previous build, a hand-deleted file,
    * half-written JSON — means the same thing: no cache, bake everything.
    */
@@ -1720,8 +1804,23 @@ async function main() {
     previousOpeners = null
   }
 
-  fs.rmSync(OUT, { recursive: true, force: true })
-  fs.mkdirSync(OUT, { recursive: true })
+  /**
+   * BUILT BESIDE `indexDir`, SWAPPED IN LAST.
+   *
+   * The directory used to be wiped here and rewritten in place, and three checks
+   * that can still fail come after this line: the openers pass (a model, the
+   * network), the manifest ceiling and the 5 MB ceiling. Any of them left a
+   * directory of shards with no `manifest.json` where the last good index had
+   * been — and `docs/public/rag` is committed, so the deploy shipped it. Now the
+   * files go to a sibling (same filesystem, so the swap is two renames) and
+   * `indexDir` is touched only once every check has passed. A failed build
+   * leaves the old index exactly as it was; the `exit` hook clears the stage.
+   */
+  const STAGE = path.join(path.dirname(OUT), `.${path.basename(OUT)}.staging`)
+  const RETIRED = path.join(path.dirname(OUT), `.${path.basename(OUT)}.retired`)
+  fs.rmSync(STAGE, { recursive: true, force: true })
+  fs.mkdirSync(STAGE, { recursive: true })
+  process.once('exit', () => fs.rmSync(STAGE, { recursive: true, force: true }))
 
   /**
    * EVERY FILE BELOW IS NAMED BY ITS OWN BYTES — engine-spec 034.
@@ -1739,7 +1838,7 @@ async function main() {
   const named = (prefix, ext, bytes) => `${prefix}.${digest(bytes).toString('hex').slice(0, 8)}${ext}`
   const integrity = {}
   const write = (name, bytes) => {
-    fs.writeFileSync(path.join(OUT, name), bytes)
+    fs.writeFileSync(path.join(STAGE, name), bytes)
     integrity[name] = `sha256-${digest(bytes).toString('base64')}`
     return name
   }
@@ -1935,14 +2034,17 @@ async function main() {
 
   ;(manifest as any).integrity = integrity
   const manifestJson = JSON.stringify(manifest)
-  if (manifestJson.length > MANIFEST_MAX_BYTES) {
-    die(`manifest is ${manifestJson.length} bytes, over the ${MANIFEST_MAX_BYTES} ceiling`)
+  // Bytes, not UTF-16 units: the ceiling is what the reader downloads, and a
+  // page title outside ASCII is two or three bytes a character.
+  const manifestBytes = Buffer.byteLength(manifestJson)
+  if (manifestBytes > MANIFEST_MAX_BYTES) {
+    die(`manifest is ${manifestBytes} bytes, over the ${MANIFEST_MAX_BYTES} ceiling`)
   }
-  fs.writeFileSync(path.join(OUT, 'manifest.json'), manifestJson)
+  fs.writeFileSync(path.join(STAGE, 'manifest.json'), manifestJson)
 
   const total = fs
-    .readdirSync(OUT)
-    .reduce((a, f) => a + fs.statSync(path.join(OUT, f)).size, 0)
+    .readdirSync(STAGE)
+    .reduce((a, f) => a + fs.statSync(path.join(STAGE, f)).size, 0)
 
   /**
    * WHAT A READER DOWNLOADS, not what the disk holds — engine-spec 034. Static
@@ -1952,10 +2054,22 @@ async function main() {
    * browser; computed here once, for the line, in a few milliseconds.
    */
   const wire = fs
-    .readdirSync(OUT)
-    .reduce((a, f) => a + zlib.brotliCompressSync(fs.readFileSync(path.join(OUT, f)), {
+    .readdirSync(STAGE)
+    .reduce((a, f) => a + zlib.brotliCompressSync(fs.readFileSync(path.join(STAGE, f)), {
       params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
     }).length, 0)
+
+  // The last check that can fail, so it runs on the stage — and the swap after
+  // it is the only line in this file that changes `indexDir`.
+  if (total > FAIL_BYTES) die(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB, over the 5 MB ceiling`)
+  fs.rmSync(RETIRED, { recursive: true, force: true })
+  try {
+    fs.renameSync(OUT, RETIRED)
+  } catch (e) {
+    if (e?.code !== 'ENOENT') throw e
+  }
+  fs.renameSync(STAGE, OUT)
+  fs.rmSync(RETIRED, { recursive: true, force: true })
 
   console.log(
     `\n  written to ${path.relative(ROOT, OUT)}/  ${(total / 1024).toFixed(0)} KB total · ${(wire / 1024).toFixed(0)} KB on the wire (brotli)`,
@@ -1972,7 +2086,6 @@ async function main() {
   }
   console.log(`  hash ${hash}`)
 
-  if (total > FAIL_BYTES) die(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB, over the 5 MB ceiling`)
   if (total > WARN_BYTES) warn(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB — Plan B applies (RAG-SPEC 2.4)`)
   flushWarnings()
   console.log('')

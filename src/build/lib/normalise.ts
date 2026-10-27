@@ -709,7 +709,17 @@ export function stripHtml(src) {
  * Returns { title, description, layout, source, faq, text, warnings }.
  */
 export function normaliseMarkdown(src) {
-  const { title, description, layout, source, body } = splitFrontmatter(src)
+  // ONE LINE ENDING AND NO BYTE-ORDER MARK, ONCE, HERE. Every pass below reads
+  // lines through `eachLine`, which splits on `\n`, and `FENCE` ends in `(.*)$`,
+  // which a trailing `\r` defeats — so on a CRLF file (a Windows checkout,
+  // `core.autocrlf`) no fence was ever seen, and one `<script>` in a sample sent
+  // `stripVue` deleting to end of file. A leading U+FEFF, which some editors
+  // write, hid the `---` from `splitFrontmatter`: raw YAML indexed as prose,
+  // title and description lost. Normalised at the entry rather than in each
+  // pass for the argument `eachLine` makes: one reading of the text, not six.
+  const { title, description, layout, source, body } = splitFrontmatter(
+    String(src).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'),
+  )
   const warnings = []
   // Before stripVue and, critically, before stripHtml: an unknown tag reaching
   // stripHtml loses its brackets and keeps its content.

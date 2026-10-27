@@ -15,12 +15,14 @@ import path from 'node:path'
 
 const BIN = path.resolve('bin/docpilot.js')
 
-function project() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-static-'))
+// The project sits one level inside its temp directory, so a test that points
+// `indexDir` at `..` can only ever reach a directory the test made.
+function project(extra = '') {
+  const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dp-static-')), 'site')
   fs.mkdirSync(path.join(root, 'docs', 'guide'), { recursive: true })
   fs.writeFileSync(
     path.join(root, 'docpilot.config.mjs'),
-    "export const docPilot = { product: 'Acme', embed: false, chat: false }\nexport default {}\n",
+    `export const docPilot = { product: 'Acme', embed: false, chat: false${extra} }\nexport default {}\n`,
   )
   const para = (w) => `${w} `.repeat(160)
   fs.writeFileSync(path.join(root, 'docs', 'index.md'), `# Acme\n\n${para('intro')}\n`)
@@ -65,6 +67,108 @@ describe('the static index — content-addressed and integrity-checked', () => {
     expect(build(root).status).toBe(0)
     const again = JSON.parse(fs.readFileSync(path.join(rag, 'manifest.json'), 'utf8'))
     expect(JSON.stringify([again.shards, again.df, again.integrity])).toBe(before)
+  })
+})
+
+/** Every file of a directory, by name, with the hash of its bytes. */
+const snapshot = (dir) =>
+  Object.fromEntries(
+    fs.readdirSync(dir).sort().map((f) => [f, crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f))).digest('hex')]),
+  )
+const output = (r) => `${r.stdout}\n${r.stderr}`
+
+/**
+ * t6 R4 — the index was wiped BEFORE the checks that can still fail. A site
+ * whose `pages[]` alone passes the 64 KB manifest ceiling died after the old
+ * index was gone, leaving shards and no `manifest.json` in a committed dir.
+ */
+describe('a failed build leaves the last index as it was', () => {
+  it('keeps every file of the previous index when the manifest ceiling fails', () => {
+    const root = project()
+    expect(build(root).status).toBe(0)
+    const pub = path.join(root, 'docs', 'public')
+    const rag = path.join(pub, 'rag')
+    const before = snapshot(rag)
+    // Nothing left beside the index by a build that succeeded.
+    expect(fs.readdirSync(pub)).toEqual(['rag'])
+
+    const title = 'A long page title '.repeat(12)
+    for (let i = 0; i < 400; i++) {
+      fs.writeFileSync(path.join(root, 'docs', 'guide', `p${i}.md`), `---\ntitle: ${title}${i}\n---\n\nbody of page ${i}\n`)
+    }
+    const r = build(root)
+    expect(r.status).not.toBe(0)
+    expect(output(r)).toMatch(/manifest is \d+ bytes, over the 65536 ceiling/)
+    expect(snapshot(rag)).toEqual(before)
+    expect(fs.readdirSync(pub)).toEqual(['rag'])
+  })
+})
+
+/**
+ * t6 R5 — `indexDir` is deleted whole on every build, and nothing checked what
+ * it pointed at: `'docs'` deleted the docs, `'.'` the project.
+ */
+describe('indexDir is never a directory the project needs', () => {
+  for (const [what, dir] of [
+    ['the project root', '.'],
+    ['docsDir', 'docs'],
+    ['a directory above the project', '..'],
+  ]) {
+    it(`refuses ${what}, and deletes nothing`, () => {
+      const root = project(`, indexDir: ${JSON.stringify(dir)}`)
+      const r = build(root)
+      expect(r.status).not.toBe(0)
+      expect(output(r)).toMatch(/deletes that directory whole on every build/)
+      expect(fs.existsSync(path.join(root, 'docs', 'guide', 'retries.md'))).toBe(true)
+      expect(fs.existsSync(path.join(root, 'docpilot.config.mjs'))).toBe(true)
+    })
+  }
+
+  it('builds into a directory outside the project', () => {
+    const root = project(", indexDir: '../site-out/rag'")
+    const r = build(root)
+    expect(r.status, output(r)).toBe(0)
+    expect(fs.existsSync(path.join(root, '..', 'site-out', 'rag', 'manifest.json'))).toBe(true)
+  })
+})
+
+/**
+ * t6 R9 — `guide.md` and `guide/index.md` are both `/guide`. The page entry was
+ * overwritten while both files' chunks stayed; with a shared `## Setup` the
+ * build died on a duplicate chunk id far from the cause.
+ */
+describe('two files, one route', () => {
+  const chunksOf = (root, route) => {
+    const rag = path.join(root, 'docs', 'public', 'rag')
+    const manifest = JSON.parse(fs.readFileSync(path.join(rag, 'manifest.json'), 'utf8'))
+    const chunks = manifest.shards.flatMap((f) => JSON.parse(fs.readFileSync(path.join(rag, f), 'utf8')))
+    return { pages: manifest.pages.filter((p) => p.path === route), chunks: chunks.filter((c) => c.path === route) }
+  }
+
+  it('keeps guide.md over guide/index.md, warns, and indexes one page', () => {
+    const root = project()
+    fs.writeFileSync(path.join(root, 'docs', 'guide.md'), '# Flat\n\n## Setup\n\nflat body text\n')
+    fs.writeFileSync(path.join(root, 'docs', 'guide', 'index.md'), '# Nested\n\n## Setup\n\nnested body text\n')
+    const r = build(root)
+    expect(r.status, output(r)).toBe(0)
+    expect(output(r)).toContain('two files claim /guide: docs/guide.md and docs/guide/index.md — the second is skipped')
+    const { pages, chunks } = chunksOf(root, '/guide')
+    expect(pages).toHaveLength(1)
+    expect(pages[0].title).toBe('Flat')
+    expect(chunks).toHaveLength(pages[0].chunks)
+    expect(chunks.map((c) => c.text).join('\n')).not.toContain('nested body')
+  })
+
+  it('keeps .md over .mdx whichever the directory lists first', () => {
+    const root = project()
+    fs.writeFileSync(path.join(root, 'docs', 'guide', 'retries.mdx'), '# Retries again\n\n## Other\n\nmdx body text\n')
+    const r = build(root)
+    expect(r.status, output(r)).toBe(0)
+    expect(output(r)).toContain('two files claim /guide/retries: docs/guide/retries.md and docs/guide/retries.mdx')
+    const { pages, chunks } = chunksOf(root, '/guide/retries')
+    expect(pages).toHaveLength(1)
+    expect(chunks).toHaveLength(pages[0].chunks)
+    expect(chunks.map((c) => c.text).join('\n')).not.toContain('mdx body')
   })
 })
 
