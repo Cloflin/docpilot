@@ -175,6 +175,35 @@ API for reasoning with tools on GPT-6, and tool calls in `docpilot eval`. See
   levers, seed, temperature, `num_ctx`, `maxIterations`, the A/B arm. A previous
   report under another seed or temperature is no longer the baseline; a lever
   change still pairs and is marked, as engine-spec 011 has it.
+- **Pointing at a citation marker lights its row in that answer only.** Every
+  answer numbers its sources from 1, so the marker lit the row with its number
+  under every answer in the thread.
+- **A dock closed with its own button forgets what Esc and × make it forget** —
+  the scope picker's filter and row, and an unsaved edit of the prompt
+  document. So does a dock left for another one, and a dock closed with the
+  panel, by New chat or by opening a past conversation.
+- **The tarball carries only what the current sources build.** No build step
+  deleted anything, so a publish from a working tree shipped every output that
+  tree had ever built: 2.0.1 carries twelve unused grammar chunks, 808 KB, in
+  `dist/web/`. `build:js` now removes outputs whose source is gone, and
+  `build:web` removes the chunks it did not write.
+
+### Changed
+
+**The component files carry their own names.** `DocPilot.vue` is now
+`Panel.vue`, and `DocPilotTrigger.vue`, `DocPilotCta.vue`, `DocPilotIcons.vue`
+and `DocPilotQuote.vue` are `Trigger.vue`, `Cta.vue`, `Icons.vue` and
+`Quote.vue`. The exported names do not change: `DocPilot`, `DocPilotTrigger` and
+the other three, from `/theme`, `/vue` and `/mount`. An import of an old file
+path, such as `@cloflin/docpilot/theme/components/DocPilot.vue`, still resolves
+to the new file. These five aliases go in the next major.
+
+**The panel is in parts.** The 3,900-line component is now a 1,000-line
+`Panel.vue` and 19 components and 11 modules under `theme/components/panel/`.
+The markup it renders and its behaviour do not change. The parts are not
+exported — they read the panel's context and work nowhere else — so `exports`
+names the five components instead of the `./theme/components/*.vue` pattern,
+whose `*` matched `panel/Turn.vue` as well.
 
 ## 2.0.1 — 2026-10-27
 
