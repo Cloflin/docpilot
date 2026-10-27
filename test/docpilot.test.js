@@ -5658,6 +5658,113 @@ describe('absoluteSidebar', () => {
   })
 })
 
+/**
+ * t7 R3 — `chatt`, `topk` and `chat.modle` resolved to the defaults with
+ * nothing said. A bad value warned; a bad key was silent.
+ */
+describe('config — a key nothing reads', () => {
+  /** The unknown-key lines a call printed, and nothing else it printed. */
+  const unknownWarned = async (fn) => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      await fn()
+      return spy.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('unknown setting'))
+    } finally {
+      spy.mockRestore()
+    }
+  }
+
+  it('warns once per unknown key, naming the one known key it is close to', async () => {
+    // Both from ONE module instance: `vi.resetModules()` elsewhere in this file
+    // gives a dynamic import a fresh `config.js`, with its own once-only set.
+    const { defineDocPilot } = await import('../src/index.js')
+    const { resolveDocPilot: resolveAgain } = await import('../src/config.js')
+    const typo = { chatt: {}, topk: 3, chat: { modle: 'gpt-6-luna', temprature: 0.7 }, ui: { zzWidth: 3 } }
+    let ai
+    const lines = await unknownWarned(() => {
+      ai = defineDocPilot(typo, {})
+      // The launcher resolves the same settings again for an override: still one line each.
+      resolveAgain(typo, {})
+    })
+    expect(lines).toEqual([
+      '[docpilot] unknown setting "chatt" — ignored. Did you mean "chat"?',
+      '[docpilot] unknown setting "topk" — ignored. Did you mean "topK"?',
+      '[docpilot] unknown setting "chat.modle" — ignored. Did you mean "chat.model"?',
+      '[docpilot] unknown setting "chat.temprature" — ignored. Did you mean "chat.temperature"?',
+      '[docpilot] unknown setting "ui.zzWidth" — ignored',
+    ])
+    // Warned, not thrown, and not applied.
+    expect(ai.settings.chat.temperature).toBe(DEFAULTS.chat.temperature)
+  })
+
+  it('reads no key inside the groups whose keys are the author’s own names', async () => {
+    const lines = await unknownWarned(() =>
+      resolveDocPilot(
+        {
+          tools: { zz_open_ticket: { description: 'Open a ticket' } },
+          vocabulary: { zzCheckout: ['payment page'] },
+          suggestions: ['How do I start?'],
+          budget: false,
+          embed: 'auto',
+        },
+        {},
+      ),
+    )
+    expect(lines).toEqual([])
+  })
+
+  /**
+   * The direction that matters more: a valid key warned about. Every key the
+   * public type declares, top level and one level down, with an `undefined`
+   * value the resolvers read as absent.
+   */
+  it('accepts every key types/config.d.ts declares', async () => {
+    const dts = fs.readFileSync('types/config.d.ts', 'utf8')
+    const keysOf = (name) => {
+      const body = dts.match(new RegExp(`export interface ${name}\\b[^{]*\\{([\\s\\S]*?)\\n\\}`))[1]
+      return [...body.matchAll(/^ {2}(\w+)\??:/gm)].map((m) => m[1])
+    }
+    const GROUPS = {
+      chat: 'ChatSettings',
+      embed: 'EmbedSettings',
+      server: 'ServerSettings',
+      budget: 'BudgetSettings',
+      suggestions: 'SuggestionsSettings',
+      quote: 'QuoteSettings',
+      citations: 'CitationsSettings',
+      composer: 'ComposerSettings',
+      feedback: 'FeedbackSettings',
+      guard: 'GuardSettings',
+      scope: 'ScopeSettings',
+      history: 'HistorySettings',
+      prompt: 'PromptSettings',
+      ui: 'UiSettings',
+      host: 'HostSettings',
+      i18n: 'I18nSettings',
+    }
+    const all = {}
+    for (const key of keysOf('DocPilotSettings')) {
+      all[key] = GROUPS[key] ? Object.fromEntries(keysOf(GROUPS[key]).map((k) => [k, undefined])) : undefined
+    }
+    all.sources = { allow: undefined }
+    expect(Object.keys(all).length).toBeGreaterThan(25)
+    expect(Object.keys(all.chat)).toContain('extraBody')
+    expect(await unknownWarned(() => resolveDocPilot(all, {}))).toEqual([])
+    // A resolved record is a legal input, and carries fields nobody writes.
+    expect(await unknownWarned(() => resolveDocPilot(resolveDocPilot({ chat: false }, {}), {}))).toEqual([])
+  })
+
+  it('warns nothing for the repository’s own configs', async () => {
+    const lines = await unknownWarned(async () => {
+      const site = await import('../docs/.vitepress/config.mjs')
+      resolveDocPilot(site.docPilot, {})
+      const bench = await import('../bench/harborline/docpilot.config.mjs')
+      resolveDocPilot(bench.docPilot, {})
+    })
+    expect(lines).toEqual([])
+  })
+})
+
 describe('config — sources and importDir', () => {
   it('assigns the allowlist whole; a half-merge would keep a deleted origin', () => {
     const resolved = resolveDocPilot({ sources: { allow: ['https://example.com'] } })

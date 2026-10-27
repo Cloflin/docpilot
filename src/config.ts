@@ -4083,10 +4083,129 @@ function resolveChat(chat = {}, env = {}) {
     }
 }
 
+/**
+ * THE KEYS AN AUTHOR MAY WRITE, as far as anything here reads them — t7 R3.
+ *
+ * `resolveDocPilot` spreads the settings whole, so `chatt`, `topk` and
+ * `chat.modle` resolved to the defaults with nothing said, and the author
+ * believed the model was set. A bad VALUE already warns (`budget.mode`,
+ * `ui.trigger`) or throws (`chat.provider`); a bad KEY was the one mistake that
+ * passed in silence.
+ *
+ * `DEFAULTS` is most of the list. These are the rest — keys something reads
+ * that ship no value. A name here that nothing reads is a typo waved through; a
+ * read key missing from here is a valid setting complained about, which is the
+ * worse of the two, so the suite resolves every key `types/config.d.ts`
+ * declares, and the repository's own configs, and expects silence.
+ *
+ *   ''       `docpilot llms` reads `outDir` and `description`.
+ *   chat     `extraBody`, and the four fields `resolveChat` and `chat: false`
+ *            add — a resolved record is a legal input to this function.
+ *   embed    the object form, and what `resolveEmbed` adds, for the same reason.
+ *   server   `resolveServerOptions`'s keys; `DEFAULTS.server` holds one of them.
+ *   sources  `{allow}`; the default is `null`.
+ */
+const SETTING_EXTRAS = {
+    '': ['outDir', 'description'],
+    chat: ['extraBody', 'providerAuto', 'modelAuto', 'poolNamed', 'searchOnly'],
+    embed: ['provider', 'model', 'baseURL', 'fallback', 'models', 'modelAuto', 'lexicalOnly', 'auto', 'borrowed'],
+    server: ['metrics', 'limits', 'trustProxy', 'turnTimeoutMs', 'embedTimeoutMs', 'cache', 'allowedOrigins', 'turn'],
+    sources: ['allow'],
+}
+
+/** Groups whose keys are the AUTHOR's own names — a tool, a vocabulary term — or that hold a list. */
+const OPEN_SETTINGS = new Set(['tools', 'vocabulary', 'openapi'])
+
+const isPlainObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v)
+
+const knownSettings = (group) => {
+    const shipped = group ? DEFAULTS[group] : DEFAULTS
+    return new Set([...(isPlainObject(shipped) ? Object.keys(shipped) : []), ...(SETTING_EXTRAS[group] ?? [])])
+}
+
+/**
+ * Levenshtein plus an adjacent swap at cost one (optimal string alignment).
+ * The swap is the commonest typo and plain Levenshtein charges it two, which is
+ * exactly enough for `chat.modle` to tie `model` with `models` and name neither.
+ */
+function editDistance(a, b) {
+    const d = Array.from({length: a.length + 1}, (_, i) => [i, ...Array(b.length).fill(0)])
+    for (let j = 1; j <= b.length; j++) d[0][j] = j
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+                d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
+            }
+        }
+    }
+    return d[a.length][b.length]
+}
+
+/**
+ * The one known key a typo is close to, or null. Case first — `topk` is `topK`
+ * — then one edit for a key of four letters or fewer and two above that, so
+ * `ui` is not offered for every two-letter word. A tie names nothing: a guess
+ * between two settings is a guess the author has to undo.
+ */
+function nearestSetting(key, known) {
+    const lower = key.toLowerCase()
+    const limit = key.length <= 4 ? 1 : 2
+    let best = null
+    let bestD = Infinity
+    let tie = false
+    for (const k of known) {
+        const d = k.toLowerCase() === lower ? 0 : editDistance(k, key)
+        if (d < bestD) [best, bestD, tie] = [k, d, false]
+        else if (d === bestD) tie = true
+    }
+    return bestD <= limit && !tie ? best : null
+}
+
+/**
+ * One sentence per key nothing reads — at the top level, and one level down in
+ * each group the author wrote as an object. PURE: the warning, and the
+ * once-only, are the caller's. Not exported: `./config` declares every name it
+ * exports, and this is an implementation of `resolveDocPilot`, not an API.
+ */
+function unknownSettings(settings) {
+    if (!isPlainObject(settings)) return []
+    const out = []
+    const check = (obj, group) => {
+        const known = knownSettings(group)
+        const at = (k) => (group ? `${group}.${k}` : k)
+        for (const key of Object.keys(obj)) {
+            if (known.has(key)) continue
+            const near = nearestSetting(key, known)
+            out.push(`[docpilot] unknown setting "${at(key)}" — ignored${near ? `. Did you mean "${at(near)}"?` : ''}`)
+        }
+    }
+    check(settings, '')
+    const top = knownSettings('')
+    for (const [group, value] of Object.entries(settings)) {
+        if (top.has(group) && !OPEN_SETTINGS.has(group) && isPlainObject(value)) check(value, group)
+    }
+    return out
+}
+
+/**
+ * ONCE PER KEY, PER PROCESS. The launcher resolves the same settings two or
+ * three times (an `--embed` override is a second resolve) and a dev server
+ * re-runs the config on every edit of it; one typo is one line.
+ */
+const unknownWarned = new Set<string>()
+
 export function resolveDocPilot(
     settings: DocPilotSettings | ResolvedDocPilot = {},
     env: Record<string, string | undefined> = {},
 ) {
+    // Warned, never thrown: a typo in a docs build's config must not be able to
+    // fail the build, the rule `readiness` and the `ui` resolvers keep.
+    for (const line of unknownSettings(settings)) {
+        if (unknownWarned.has(line)) continue
+        unknownWarned.add(line)
+        console.warn(line)
+    }
     return {
         ...DEFAULTS,
         ...settings,
