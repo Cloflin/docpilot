@@ -117,6 +117,11 @@ const openaiCompatible = (
      *   visible    how "think, but do not send it to me" is spelled, or false
      *   verbosity / temperature / topP / seed   accepted at all
      *   maxTokensField  'auto' lets the adapter decide from the model id
+     *   explicitOff  leaving the reasoning field out does NOT turn reasoning
+     *              off, so a step that asks for no thinking has to say so
+     *   samplingWithEffort  false: `temperature` and `top_p` are refused
+     *              beside any effort but the off word — and, where silence is
+     *              not off, beside silence too — so they are not sent
      *
      * LIKE `chatModel`, THESE ARE MEASUREMENTS AND NOT PROMISES. Providers add
      * and retire parameters; `npx docpilot doctor` prints what this table
@@ -142,6 +147,8 @@ const openaiCompatible = (
         topP: true,
         seed: true,
         maxTokensField: 'auto',
+        explicitOff: false,
+        samplingWithEffort: true,
         ...extra.caps,
     },
 })
@@ -162,7 +169,15 @@ const PROVIDERS = {
         // from every model it serves and its reasoning models take nothing else.
         // Left to the pattern, each new family was a 400 until the pattern
         // learned its name: gpt-6-luna was, in 2.0.0.
-        caps: {verbosity: true, maxTokensField: 'max_completion_tokens'},
+        //
+        // The two rules every reasoning model here shares, from OpenAI's own
+        // migration guide rather than from a refusal (engine-spec 040). "When
+        // reasoning effort is not `none`, remove `temperature`, `top_p`", and
+        // since GPT-5.4 Chat Completions takes function tools only at `none`
+        // while an omitted effort means the model's default, `medium`. Learned
+        // instead, they were two 400s on the first question of every page load:
+        // 0.4 s and a request each, measured on gpt-6-luna.
+        caps: {verbosity: true, maxTokensField: 'max_completion_tokens', explicitOff: true, samplingWithEffort: false},
     }),
     together: openaiCompatible('https://api.together.xyz', ['TOGETHER_API_KEY'], {
         chatModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
@@ -852,6 +867,13 @@ export function resolveTuning(docPilot, id = docPilot.chat?.provider) {
         // sources for one value; `assertChatKnobs` is where a temperature set
         // beside a provider that ignores it gets said out loud.
         maxTokensField: caps.maxTokensField ?? 'auto',
+        // engine-spec 040. Whatever `chat.reasoning` says, a search step asks for
+        // no thinking — 'auto' promises "never on a search step" in so many
+        // words — and on these services that has to be said. A model with no
+        // reasoning surface refuses the word once, as a parameter, and the
+        // transport stops writing the field for it.
+        explicitOff: Boolean(askable && caps.explicitOff),
+        samplingWithEffort: caps.samplingWithEffort !== false,
     }
 }
 

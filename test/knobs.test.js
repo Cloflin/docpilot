@@ -514,4 +514,63 @@ describe('what a model has said it will not take', () => {
     expect(learned.temperature).toBe(undefined)
     expect(learned.reasoning_effort).toBe('none')
   })
+
+  /**
+   * engine-spec 040 — what OpenAI's migration guide states for every reasoning
+   * model, read off the service table instead of learned from two 400s per
+   * page load.
+   */
+  it('knows the openai rules before any refusal, where the author set reasoning', () => {
+    const set = resolveTuning(cfg({ provider: 'openai', reasoning: 'low' }))
+    expect(set.explicitOff).toBe(true)
+    expect(set.samplingWithEffort).toBe(false)
+    // Unset too: 'auto' promises no thinking on a search step, and here that has
+    // to be said. Its answer stays silent — the model's own default effort — so
+    // it goes without sampling as well.
+    const auto = resolveTuning(cfg({ provider: 'openai' }))
+    expect(auto.explicitOff).toBe(true)
+    expect(bodyFor('openai', { tuning: auto, enableThink: false }).reasoning_effort).toBe('none')
+    const silent = bodyFor('openai', { tuning: auto, enableThink: true })
+    expect(silent.reasoning_effort).toBe(undefined)
+    expect(silent.temperature).toBe(undefined)
+    // A model that refused the reasoning field has no effort to be silent about.
+    expect(bodyFor('openai', { tuning: auto, enableThink: true, degrade: { reasoning: true } }).temperature).toBe(0.2)
+    // A service that takes sampling beside an effort keeps it.
+    const groq = resolveTuning(cfg({ provider: 'groq', reasoning: 'low' }))
+    expect(groq.explicitOff).toBe(false)
+    expect(groq.samplingWithEffort).toBe(true)
+
+    // A search step says off out loud, and keeps its temperature at `none`.
+    const step = bodyFor('openai', { model: 'gpt-6-luna', tuning: set, enableThink: false })
+    expect(step.reasoning_effort).toBe('none')
+    expect(step.temperature).toBe(0.2)
+    // The answer keeps the effort and drops sampling beside it.
+    const answer = bodyFor('openai', { model: 'gpt-6-luna', tuning: { ...set, topP: 0.9 }, enableThink: true })
+    expect(answer.reasoning_effort).toBe('low')
+    expect(answer.temperature).toBe(undefined)
+    expect(answer.top_p).toBe(undefined)
+    // `reasoning: false` is the off word on the answer too, and it takes sampling.
+    const off = resolveTuning(cfg({ provider: 'openai', reasoning: false }))
+    expect(bodyFor('openai', { tuning: off, enableThink: true }).temperature).toBe(0.2)
+    expect(bodyFor('openai', { tuning: off, enableThink: false }).reasoning_effort).toBe('none')
+    // And the probe, which is a search step by another name.
+    const tools = [{ type: 'function', function: { name: 'list_pages' } }]
+    const probe = providerFor('openai').probeBody('gpt-6-luna', tools, { tuning: set })
+    expect(probe.reasoning_effort).toBe('none')
+    expect(probe.temperature).toBe(0)
+  })
+
+  it('takes the off word out wherever a model refused it', () => {
+    const set = { style: 'effort', effort: 'low', explicitOff: true, samplingWithEffort: false }
+    const degrade = { noOff: true }
+    const step = bodyFor('openai', { tuning: set, degrade, enableThink: false })
+    expect(step.reasoning_effort).toBe(undefined)
+    // Silent now, and silence is that model's default effort: no sampling.
+    expect(step.temperature).toBe(undefined)
+    expect(bodyFor('openai', { tuning: set, degrade, enableThink: true }).reasoning_effort).toBe('low')
+    const off = { style: 'effort', off: true }
+    expect(bodyFor('openai', { tuning: off, degrade, enableThink: true }).reasoning_effort).toBe(undefined)
+    const tools = [{ type: 'function', function: { name: 'list_pages' } }]
+    expect(providerFor('openai').probeBody('o3', tools, { tuning: set, degrade }).reasoning_effort).toBe(undefined)
+  })
 })

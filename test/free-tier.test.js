@@ -1982,9 +1982,12 @@ describe('a turn on a metered service', () => {
      * says otherwise. 2.0.0 failed every turn on it, three ways at once.
      *
      * The brand row sends `max_completion_tokens` to every OpenAI model, so the
-     * first refusal never happens. The other two are learned on the first turn
-     * — the search step says `none` out loud, the answer drops `temperature` and
-     * keeps the model's own depth — and the second turn pays nothing.
+     * first refusal never happens, and since engine-spec 040 it states the other
+     * two as well — the rows below. A tuning record that states nothing, which
+     * is what an OpenAI-shaped `custom` endpoint gets, still learns them on the
+     * first turn — the search step says `none` out loud, the answer drops
+     * `temperature` and keeps the model's own depth — and the second turn pays
+     * nothing.
      */
     const luna = () => {
       const step = searching()
@@ -2017,7 +2020,7 @@ describe('a turn on a metered service', () => {
       }
     })
 
-    it('gpt-6-luna pays two refusals on its first turn and none after', async () => {
+    it('gpt-6-luna behind a row that states nothing pays two refusals on its first turn and none after', async () => {
       const llm = {
         model: 'gpt-6-luna',
         maxTokens: 2048,
@@ -2039,6 +2042,111 @@ describe('a turn on a metered service', () => {
       expect(final.response_format?.type).toBe('json_schema')
       expect(final.reasoning_effort).toBeUndefined()
       expect(final.temperature).toBeUndefined()
+    })
+
+    /**
+     * engine-spec 040 — the same model with `chat.reasoning` set, which is how a
+     * site that cares about answer depth configures it. The openai row states
+     * both rules up front, so the first turn of a page pays nothing either:
+     * 0.4 s and a request saved twice, on every page load, for every reader.
+     */
+    it('gpt-6-luna with chat.reasoning set pays no refusal on its first turn', async () => {
+      const llm = {
+        model: 'gpt-6-luna',
+        maxTokens: 2048,
+        tuning: {
+          style: 'effort',
+          effort: 'low',
+          maxTokensField: 'max_completion_tokens',
+          explicitOff: true,
+          samplingWithEffort: false,
+        },
+      }
+      const first = await turn({ remaining: 50, llm, onChat: luna() })
+      expect(first.text).toContain('manifest')
+      expect(first.requests).toBe(3)
+      const [lap, , final] = first.chats
+      // A search step says `none`, and at `none` the model takes a temperature.
+      expect(lap.reasoning_effort).toBe('none')
+      expect(lap.temperature).toBe(0.2)
+      // The answer keeps the author's depth and sends no sampling beside it.
+      expect(final.reasoning_effort).toBe('low')
+      expect(final.temperature).toBeUndefined()
+    })
+
+    /**
+     * The model the up-front rule is wrong for: gpt-5 and the o-series publish
+     * efforts and no `none`, and refuse `temperature` outright. Its refusal of
+     * the word is a refusal of the WORD — the answer keeps `low`, where the
+     * `reasoning` rung would have dropped it from every answer of the session.
+     */
+    it('a model with no off word pays for the word once and keeps the answer’s effort', async () => {
+      const step = searching()
+      const noNone = (body) => {
+        if (body.reasoning_effort === 'none') {
+          return openaiRefusal(
+            'reasoning_effort',
+            "Unsupported value: 'reasoning_effort' does not support 'none' with this model. Supported values are: 'low', 'medium', and 'high'.",
+            'unsupported_value',
+          )
+        }
+        if (body.temperature !== undefined) return REFUSED.temperature()
+        return step(body)
+      }
+      const llm = { model: 'o3', tuning: { style: 'effort', effort: 'low', explicitOff: true, samplingWithEffort: false } }
+      const first = await turn({ remaining: 50, llm, onChat: noNone })
+      expect(first.text).toContain('manifest')
+      // The word on lap one, and nothing else: its retry is silent, and on this
+      // service silence is the model's own effort, which takes no temperature.
+      expect(first.requests).toBe(4)
+      expect(first.chats.at(-1).reasoning_effort).toBe('low')
+
+      const again = await turn({ remaining: 50, llm, onChat: noNone })
+      expect(again.requests).toBe(3)
+      expect(again.chats[0].reasoning_effort).toBeUndefined()
+      expect(again.chats[0].temperature).toBeUndefined()
+      expect(again.chats.at(-1).reasoning_effort).toBe('low')
+    })
+
+    /**
+     * The default configuration — `chat.reasoning` unset, which resolves to
+     * nothing on the answer. The search steps still say `none`, because 'auto'
+     * promises no thinking on a search step; the answer stays silent, which on
+     * this service is the model's own effort, so it goes without sampling.
+     */
+    it('gpt-6-luna on the default reasoning pays no refusal either', async () => {
+      const llm = { model: 'gpt-6-luna', tuning: { style: 'effort', explicitOff: true, samplingWithEffort: false } }
+      const first = await turn({ remaining: 50, llm, onChat: luna() })
+      expect(first.text).toContain('manifest')
+      expect(first.requests).toBe(3)
+      const [lap, , final] = first.chats
+      expect(lap.reasoning_effort).toBe('none')
+      expect(lap.temperature).toBe(0.2)
+      expect(final.reasoning_effort).toBeUndefined()
+      expect(final.temperature).toBeUndefined()
+    })
+
+    /**
+     * And the model the up-front word costs: one with no reasoning surface at
+     * all refuses the FIELD, which is a different refusal from refusing its
+     * value. The field goes for good, and sampling stays — that model has no
+     * effort for it to clash with.
+     */
+    it('a model with no reasoning at all pays for the field once and keeps its temperature', async () => {
+      const step = searching()
+      const plain = (body) =>
+        body.reasoning_effort !== undefined
+          ? openaiRefusal('reasoning_effort', "Unsupported parameter: 'reasoning_effort' is not supported with this model.")
+          : step(body)
+      const llm = { model: 'gpt-4.1', tuning: { style: 'effort', explicitOff: true, samplingWithEffort: false } }
+      const first = await turn({ remaining: 50, llm, onChat: plain })
+      expect(first.text).toContain('manifest')
+      expect(first.requests).toBe(4)
+      expect(first.chats.at(-1).temperature).toBe(0.2)
+      const again = await turn({ remaining: 50, llm, onChat: plain })
+      expect(again.requests).toBe(3)
+      expect(again.chats.every((c) => c.reasoning_effort === undefined)).toBe(true)
+      expect(again.chats.every((c) => c.temperature === 0.2)).toBe(true)
     })
 
     it('unrationed agentic, answered on lap one: 1 request', async () => {

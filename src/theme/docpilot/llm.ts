@@ -37,6 +37,10 @@ type TransportError = Error & {
   wantsOff?: boolean
   /** Whether the refused request was a step that asks for no thinking. */
   noThink?: boolean
+  /** Whether it carried the off word itself — see `escalateCaps`. */
+  sentOff?: boolean
+  /** Whether the refusal is of a field's VALUE rather than of the field. */
+  valueRefused?: boolean
 }
 
 /**
@@ -470,6 +474,30 @@ function refusedParam(payload, text) {
 }
 
 /**
+ * Is this a refusal of a field's VALUE — "Unsupported value: … does not support
+ * 'none'" — rather than of the field — "Unsupported parameter: … is not
+ * supported with this model"? OpenAI says which in `error.code`, and in the
+ * sentence. A model that has no `none` is the first; a model with no reasoning
+ * surface at all is the second, and the two want different concessions.
+ */
+function valueRefusal(payload, text) {
+  const code = payload?.error?.code
+  if (code === 'unsupported_value') return true
+  if (code === 'unsupported_parameter') return false
+  return /unsupported value/i.test(String(payload?.error?.message || text || ''))
+}
+
+/**
+ * Did this body carry the off word — `reasoning_effort: 'none'` or OpenRouter's
+ * `reasoning: {enabled: false}`? A refusal of the reasoning field after one is a
+ * refusal of the WORD, not of reasoning: gpt-5 and the o-series publish efforts
+ * and no `none`. See `escalateCaps`.
+ */
+function sentOffWord(body) {
+  return body?.reasoning_effort === 'none' || body?.reasoning?.enabled === false
+}
+
+/**
  * A refusal that asks for reasoning `'none'` — the sentence OpenAI sends when a
  * model takes function tools on Chat Completions only with reasoning off. Its
  * docs spell the field with and without the underscore and quote the word both
@@ -514,6 +542,7 @@ function degradeFor(provider, baseURL, model) {
     ceiling: known.ceiling === false,
     sampling: known.sampling === false,
     explicitOff: known.implicitOff === false,
+    noOff: known.offWord === false,
   }
 }
 
@@ -539,6 +568,13 @@ const RUNG_FOR = {
  *     spells it the other way: `max_tokens` ↔ `max_completion_tokens`.
  *   · `sampling` — it refused `temperature` or `top_p` by name. The next
  *     request carries neither.
+ *   · `offWord` — it refused the VALUE of the reasoning field on a request
+ *     that carried the off word (engine-spec 040). The word is what it cannot
+ *     take — gpt-5 and the o-series publish efforts and no `none` — so the word
+ *     goes and the answer keeps its effort. Checked FIRST: the same sentence
+ *     also reads as a request for `'none'` to `WANTS_OFF`, and `reasoning`
+ *     would drop the author's effort from every answer. A refusal of the FIELD
+ *     — a model with no reasoning surface — is the `reasoning` rung below.
  *
  * THEN TWO RUNGS, IN THIS ORDER, AND THE ORDER IS THE MEASUREMENT — for the
  * refusal that names nothing, which is OpenRouter's. `reasoning` is dropped
@@ -552,10 +588,18 @@ const RUNG_FOR = {
  * them a model that never sent a reasoning field would still "spend" the first
  * rung on it and reach the schema rung one request later than it should.
  */
-function escalateCaps(provider, baseURL, model, { sentReasoning, sentSchema, refused = null, wantsOff = false, noThink = false }) {
+function escalateCaps(
+  provider,
+  baseURL,
+  model,
+  { sentReasoning, sentSchema, refused = null, wantsOff = false, noThink = false, sentOff = false, valueRefused = false },
+) {
   const key = capsKey(provider, baseURL, model)
   const known = CAPS.get(key) || {}
-  const named = [wantsOff && noThink ? 'implicitOff' : null, RUNG_FOR[refused]].find((r) => r && known[r] !== false)
+  const offRefused = sentOff && valueRefused && /^reasoning/.test(String(refused || ''))
+  const named = [offRefused ? 'offWord' : null, wantsOff && noThink && !offRefused ? 'implicitOff' : null, RUNG_FOR[refused]].find(
+    (r) => r && known[r] !== false,
+  )
   if (named) {
     CAPS.set(key, { ...known, [named]: false })
     return named
@@ -1294,12 +1338,13 @@ export async function chat(options: ChatOptions) {
      * for no better reason than that it happened to publish `response_format`.
      *
      * So the first move is to drop what was refused and ask the SAME model
-     * again. Five rungs exist (`escalateCaps`) — three a refusal names, two
+     * again. Six rungs exist (`escalateCaps`) — four a refusal names, two
      * walked in order when it names nothing — each concession is remembered for
      * the rest of the session, and a model that runs out of rungs falls through
      * to exactly the rotation it would have had. Worst case per model is
-     * therefore five extra requests ONCE, against a pool walk on every turn;
-     * gpt-6-luna, which needs two of them, pays two.
+     * therefore six extra requests ONCE, against a pool walk on every turn.
+     * gpt-6-luna needed two of them on every page load until the service table
+     * stated both up front (engine-spec 040); on `openai` it now pays none.
      *
      * `affordable()` gates each retry the way it gates each rotation: a turn
      * with no request left to spend does not spend one here either.
@@ -1316,6 +1361,8 @@ export async function chat(options: ChatOptions) {
             refused: e.refused,
             wantsOff: e.wantsOff,
             noThink: e.noThink,
+            sentOff: e.sentOff,
+            valueRefused: e.valueRefused,
           })
           if (!rung) throw e
           onDegrade?.({ model: chosen, dropped: rung, reason: e.reason })
@@ -1524,6 +1571,8 @@ export async function chat(options: ChatOptions) {
         err.refused = refusedParam(payload, text)
         err.wantsOff = WANTS_OFF.test(String(text || ''))
         err.noThink = enableThink === false
+        err.sentOff = sentOffWord(body)
+        err.valueRefused = valueRefusal(payload, text)
         throw err
       }
       return streaming && res.body ? await p.readStream(res, onFrame) : p.parse(await res.json())
@@ -1728,6 +1777,8 @@ function learnsFrom(provider, baseURL, model, status, text, body) {
       refused: refusedParam(payload, text),
       wantsOff: WANTS_OFF.test(text),
       noThink: true,
+      sentOff: sentOffWord(body),
+      valueRefused: valueRefusal(payload, text),
     }),
   )
 }

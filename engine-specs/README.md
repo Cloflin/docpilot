@@ -66,6 +66,7 @@ The rule this directory exists to enforce:
 | [037](037-two-installs.md) | the install is the first question: `init --runtime=browser\|server`, the docs open with the choice, and 2.0's breaking defaults are listed with the setting that restores 1.x |
 | [038](038-tools-the-site-adds.md) | `tools` — a site's own function tools, run on a search step and cited as a source, and actions the answer offers and the reader runs |
 | [039](039-the-link-in-the-text.md) | the citation rule as two bullets (13/16 → 0/24), `[id]` rewritten to `[n]` in `finish()`, and a third eval hard gate: an answer shown with sources and no link in its text |
+| [040](040-what-the-first-question-pays-for.md) | the `openai` row states OpenAI's reasoning rules up front — no refusals on the first question of a page load (34 requests and 8 refusals → 27 and 0 on ten live turns); a refused `'none'` is not a refused reasoning field; a search names its query and one that finds nothing new is one line |
 
 ## Shape of a spec
 

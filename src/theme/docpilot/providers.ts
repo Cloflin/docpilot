@@ -368,20 +368,44 @@ export function maxTokensFieldFor(model, tuning, degrade = null) {
  *     which asks for no thinking by writing nothing, has to say so. Only on a
  *     step that asks for no thinking, and never once the model has refused the
  *     reasoning field itself.
+ *   · `noOff` — the model refused the off word itself: gpt-5 and the o-series
+ *     publish no `none`. It is taken out wherever it was written, and the
+ *     answer keeps the author's effort.
+ *
+ * TWO OF THEM ARE KNOWN BEFORE ANY REFUSAL, where the service table says so —
+ * engine-spec 040. `tuning.explicitOff` is the first, stated up front; and
+ * `tuning.samplingWithEffort === false` is the second, read off the body this
+ * request actually carries. Sampling is dropped beside a real effort, and beside
+ * SILENCE where silence is not off — the model's own default is an effort too —
+ * and kept beside the off word, which takes it. A model that refused the
+ * reasoning field itself has no effort to be silent about, so it keeps it.
  */
 function concede(body, tuning, degrade, noThink) {
-  if (!degrade) return body
-  if (degrade.explicitOff && noThink && !degrade.reasoning && tuning?.style && tuning.style !== 'none') {
+  const style = tuning?.style && tuning.style !== 'none' ? tuning.style : null
+  const sayOff = noThink && style && !degrade?.reasoning && !degrade?.noOff && (degrade?.explicitOff || tuning?.explicitOff)
+  if (sayOff) {
     // The style's own word for off — `reasoning_effort: 'none'` or
     // `reasoning: {enabled: false}` — and nothing else from the record.
-    applyTuning(body, { style: tuning.style, off: true }, true)
+    applyTuning(body, { style, off: true }, true)
   }
-  if (degrade.sampling) {
+  if (degrade?.noOff) {
+    if (body.reasoning_effort === 'none') delete body.reasoning_effort
+    if (body.reasoning?.enabled === false) delete body.reasoning
+  }
+  const silent = style && tuning?.explicitOff && !degrade?.reasoning && !reasoningOnWire(body)
+  if (degrade?.sampling || (tuning?.samplingWithEffort === false && (effortOn(body) || silent))) {
     delete body.temperature
     delete body.top_p
   }
   return body
 }
+
+const reasoningOnWire = (body) => body.reasoning_effort !== undefined || body.reasoning !== undefined
+
+/** A reasoning effort on the wire that is not the off word. */
+const effortOn = (body) =>
+  (body.reasoning_effort !== undefined && body.reasoning_effort !== 'none') ||
+  (body.reasoning !== undefined && body.reasoning?.enabled !== false)
 
 /**
  * The neutral knobs, in the OpenAI-shaped spelling — the whole translation for
