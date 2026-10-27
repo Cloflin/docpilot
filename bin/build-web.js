@@ -28,7 +28,7 @@
  * artifact. Vite's library mode gives both formats, CSS extraction, minification
  * and the `process.env.NODE_ENV` define that Vue requires, from one config.
  */
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -169,3 +169,22 @@ for (const name of REQUIRED) {
   }
   console.log(`[docpilot] dist/${name}  ${(size / 1024).toFixed(1)} KB`)
 }
+
+/**
+ * The chunks this build did not write, deleted.
+ *
+ * Their names carry a content hash and `emptyOutDir` is off, so every build that
+ * changed a grammar left the previous build's chunks beside the new ones —
+ * imported by nothing, and published by `files` all the same. 2.0.1 shipped
+ * twelve of them, 808 KB. `web/` is this file's alone, so what this build did
+ * not write there is stale by definition.
+ */
+const chunkDir = path.join(outDir, 'web')
+const fresh = new Set(bundles.map((chunk) => chunk.fileName))
+let pruned = 0
+for (const name of existsSync(chunkDir) ? readdirSync(chunkDir) : []) {
+  if (fresh.has(`web/${name}`)) continue
+  rmSync(path.join(chunkDir, name))
+  pruned += 1
+}
+if (pruned) console.log(`[docpilot] removed ${pruned} stale chunk${pruned === 1 ? '' : 's'} from dist/web/`)

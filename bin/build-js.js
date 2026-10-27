@@ -100,16 +100,71 @@ const copyComponents = () => {
   return copied
 }
 
+/**
+ * What this file wrote once and would not write now, deleted.
+ *
+ * Neither half above removes anything: tsc writes what it compiles and the copy
+ * writes what it finds, so a renamed or deleted source leaves its last output
+ * in `dist/` — and `files` publishes `dist/` whole. A fresh clone never has one,
+ * so CI's tarball is clean; a publish from a working tree ships whatever that
+ * tree ever built — after the components' rename, the five `DocPilot*.vue`
+ * beside the files that replaced them.
+ *
+ * STALE MEANS NO SOURCE, not "not written this run": a file is judged by the one
+ * under `src/` that would produce it, so the answer does not depend on what tsc
+ * happened to emit. The other two builders write into the same directory and
+ * are not this file's to judge — `build-css.js` writes only stylesheets, which
+ * `sourcesOf` never matches, and `build-web.js` the two names below.
+ */
+const NOT_OURS = new Set(['docpilot.web.js', 'web'])
+
+/** The files under `src/` that would produce `dist/<rel>`; none when this file writes nothing like it. */
+const sourcesOf = (rel) => {
+  if (rel.endsWith('.vue') || rel.endsWith('.d.vue.ts')) return [rel]
+  const stem = rel.match(/^(.*)\.(?:js|js\.map|d\.ts)$/)?.[1]
+  return stem ? [`${stem}.ts`, `${stem}.js`] : []
+}
+
+const pruneStale = () => {
+  const dist = path.join(root, 'dist')
+  let removed = 0
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(path.join(dist, dir), { withFileTypes: true })) {
+      const rel = path.join(dir, entry.name)
+      if (!dir && NOT_OURS.has(entry.name)) continue
+      if (entry.isDirectory()) {
+        walk(rel)
+        // A source directory deleted whole leaves an empty one here.
+        if (!fs.readdirSync(path.join(dist, rel)).length) fs.rmdirSync(path.join(dist, rel))
+        continue
+      }
+      const sources = sourcesOf(rel)
+      if (!sources.length || sources.some((s) => fs.existsSync(path.join(root, 'src', s)))) continue
+      fs.rmSync(path.join(dist, rel))
+      removed += 1
+    }
+  }
+  if (fs.existsSync(dist)) walk('')
+  return removed
+}
+
+const reportPruned = (n) => {
+  if (n) console.log(`[docpilot] removed ${n} stale file${n === 1 ? '' : 's'} from dist/ — their source is gone`)
+}
+
 if (watch) {
   // Two watchers, because the two halves are watched by different things: tsc
   // owns the modules and knows their dependency graph, and `fs.watch` is enough
-  // for files that import nothing at build time.
+  // for files that import nothing at build time. A module deleted under watch
+  // keeps its output until a component changes or the next full build.
   const { spawn } = await import('node:child_process')
   copyComponents()
+  reportPruned(pruneStale())
   for (const dir of new Set(components().map((rel) => path.dirname(path.join(root, rel))))) {
     fs.watch(dir, () => {
       const n = copyComponents()
       if (n) console.log(`[docpilot] copied ${n} component${n === 1 ? '' : 's'} to dist/`)
+      reportPruned(pruneStale())
     })
   }
   const tsc = spawn(process.execPath, [tscBin, '-p', 'tsconfig.build.json', '--watch', '--preserveWatchOutput'], {
@@ -124,5 +179,6 @@ if (watch) {
   })
   if (r.status !== 0) process.exit(r.status ?? 1)
   const copied = copyComponents()
+  reportPruned(pruneStale())
   console.log(`[docpilot] dist/ built — modules compiled, ${copied} component${copied === 1 ? '' : 's'} copied`)
 }

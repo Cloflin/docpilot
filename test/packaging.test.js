@@ -189,6 +189,52 @@ describe('packaging', () => {
   })
 
   /**
+   * Nothing in `dist/` that the current sources no longer build.
+   *
+   * No builder deleted anything, and `files` publishes `dist/` whole: a renamed
+   * or removed source left its last output behind, and 2.0.1 went out with an
+   * earlier build's twelve grammar chunks beside the twelve its bundle imports.
+   * `build-js.js` and `build-web.js` remove what they no longer write; these two
+   * say they still do. CI's tree is always fresh, so the place they can fail is
+   * the one that matters — `verify` before a publish from a working tree.
+   */
+  it('holds no compiled module or copied component whose source is gone', () => {
+    if (!distBuilt) return
+    const stale = []
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(abs(`dist/${dir}`), { withFileTypes: true })) {
+        const rel = `${dir}${entry.name}`
+        // The other two builders' — stylesheets match nothing below.
+        if (rel === 'web' || rel === 'docpilot.web.js') continue
+        if (entry.isDirectory()) {
+          walk(`${rel}/`)
+          continue
+        }
+        const stem = rel.match(/^(.*)\.(?:js|js\.map|d\.ts)$/)?.[1]
+        const from = /\.vue$|\.d\.vue\.ts$/.test(rel) ? [rel] : stem ? [`${stem}.ts`, `${stem}.js`] : []
+        if (from.length && !from.some((f) => fs.existsSync(abs(`src/${f}`)))) stale.push(`dist/${rel}`)
+      }
+    }
+    walk('')
+    expect(stale, 'outputs with no source — `npm run build:js` removes them').toEqual([])
+  })
+
+  it('holds no chunk the web bundle does not import', () => {
+    if (!fs.existsSync(abs('dist/docpilot.web.mjs'))) return
+    const reached = new Set()
+    const follow = (file) => {
+      for (const m of fs.readFileSync(abs(file), 'utf8').matchAll(/["']\.\/(?:web\/)?([\w-]+\.js)["']/g)) {
+        if (reached.has(m[1]) || !fs.existsSync(abs(`dist/web/${m[1]}`))) continue
+        reached.add(m[1])
+        follow(`dist/web/${m[1]}`)
+      }
+    }
+    follow('dist/docpilot.web.mjs')
+    const unreached = fs.readdirSync(abs('dist/web')).filter((f) => !reached.has(f))
+    expect(unreached, 'chunks nothing imports — `npm run build:web` removes them').toEqual([])
+  })
+
+  /**
    * Every JavaScript entry point is typed.
    *
    * The declarations under `types/` are hand-written and are the package's
