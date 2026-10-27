@@ -387,6 +387,28 @@ describe('the harness decides when, the author decides how deep', () => {
   })
 })
 
+/**
+ * WHICH THINKING SHAPE AN ANTHROPIC ID GETS. Each side rejects the other's shape
+ * with a 400, so the version read out of the id is the request. A date suffix is
+ * not a minor version: `claude-opus-4-20250514` read as 4.20250514 was "after
+ * 4.6", and a model that rejects `adaptive` was sent it.
+ */
+describe('the thinking shape follows the model id', () => {
+  const shape = (model) => bodyFor('anthropic', { model, tuning: { effort: 'high' } }).thinking?.type
+  it.each([
+    ['claude-opus-4-20250514', 'enabled'],
+    ['claude-sonnet-4-20250514', 'enabled'],
+    ['claude-opus-4-1-20250805', 'enabled'],
+    ['claude-3-5-sonnet-20241022', 'enabled'],
+    ['claude-sonnet-4-5-20250929', 'enabled'],
+    ['claude-sonnet-4-6', 'adaptive'],
+    // No version at all reads as current: new models keep arriving, old ones do not.
+    ['claude-next', 'adaptive'],
+  ])('%s takes %s', (model, type) => {
+    expect(shape(model)).toBe(type)
+  })
+})
+
 describe('the ceiling field that turns every request into a 400', () => {
   /**
    * `max_tokens` is deprecated on this endpoint and REJECTED outright by

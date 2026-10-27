@@ -1697,8 +1697,11 @@ export async function detectTools({
           else if (learnsFrom(provider, baseURL, chosen, res.status, text, body)) continue
           break
         }
+        // Parsed BEFORE it counts as an answer: a proxy's or a captive portal's
+        // page comes back 200, and a false latched from it is for the page's life.
+        const json = await res.json()
         answered = true
-        if (p.probeHasToolCall(await res.json())) return true
+        if (p.probeHasToolCall(json)) return true
         break
       } catch {
         if (signal?.aborted) return null

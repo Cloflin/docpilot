@@ -1159,6 +1159,19 @@ describe('the capability probe has three answers', () => {
     expect(await detectTools({ provider: 'openai', baseURL: '/ai', models: ['a', 'b'] })).toBe(null)
   })
 
+  /** A proxy's or a captive portal's page with a 200 is nobody, not a model saying no. */
+  it('says null when a 200 carried no JSON', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => {
+        throw new SyntaxError('Unexpected token < in JSON at position 0')
+      },
+    }))
+    expect(await detectTools({ provider: 'openai', baseURL: '/ai', models: ['a', 'b'] })).toBe(null)
+  })
+
   it('says null when the reader stopped before an answer', async () => {
     const ctrl = new AbortController()
     vi.stubGlobal('fetch', async () => {

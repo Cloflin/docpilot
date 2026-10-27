@@ -737,11 +737,13 @@ function anthropicTools(tools) {
  * list grows every few weeks and a stale one fails closed on exactly the newest
  * models. Both id styles are covered — `claude-sonnet-4-6` and the older
  * `claude-3-5-sonnet-20241022` — by taking the first `<major>[-<minor>]` group.
+ * A version number is one or two digits and a date is eight, so the date after
+ * an id with no minor — `claude-opus-4-20250514` — is not read as 4.20250514.
  * An id with no version in it is treated as CURRENT: new models keep arriving
  * and old ones do not, so that is the direction to be wrong in.
  */
 function legacyThinking(model) {
-  const m = String(model || '').match(/(?:^|-)(\d+)(?:-(\d+))?(?=-|$)/)
+  const m = String(model || '').match(/(?:^|-)(\d{1,2})(?:-(\d{1,2}))?(?=-|$)/)
   if (!m) return false
   const major = Number(m[1])
   const minor = Number(m[2] || 0)
