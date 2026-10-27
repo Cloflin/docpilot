@@ -16,6 +16,12 @@ link marker goes. The Sources list under the answer was right, and the claim had
 no link. This release fixes the instruction, settles the markers in code for any
 model, and makes `eval` fail on an answer without a link. Engine-spec 039.
 
+It also stops a reader's first question from paying for what the package could
+have known: two refused requests on every page load with OpenAI's reasoning
+models, and a search step that brought back only what the turn already had.
+Measured on ten live turns of one production site: 34 requests and 8 refusals
+before, 27 and none after. Engine-spec 040.
+
 ### Fixed
 
 **The citation rule is two sentences.** The system prompt said: "Mark every
@@ -49,6 +55,40 @@ turn checks every bracket in the text against the list it validated:
 A reply in prose, without the `answer` tool, that names known ids in brackets
 now keeps them as citations and shows as a tentative answer. Before, it was
 withdrawn as "I couldn't find this in the docs".
+
+**The first question of a page load spends no refusal on OpenAI.** The
+`openai` row now states the two rules OpenAI's migration guide gives for every
+reasoning model, where 2.0.1 learned them from a 400 on each new page:
+
+- a search step sends `reasoning_effort: 'none'`, because function tools on
+  Chat Completions take nothing else since GPT-5.4, and an omitted effort means
+  the model's own default, `medium`. `chat.reasoning: 'auto'` promises no
+  thinking on a search step, and on this service that has to be said;
+- `temperature` and `top_p` are not sent beside any effort but `'none'`, and
+  not beside silence either, which is the model's default effort.
+
+`gpt-6-luna` pays nothing on its first question now, where it paid two refused
+requests on every page load — 0.4 s and a request each. A model the up-front
+word does not fit pays one: `gpt-4.1` refuses the reasoning field, and the
+transport stops sending it; `gpt-5` and the o-series refuse the value `'none'`,
+and the transport stops writing the word while the answer keeps your
+`chat.reasoning`. That second refusal used to drop the reasoning field from
+every answer of the session.
+
+**A search that finds nothing new says so.** Every result already shown came
+back as a row of its own — id, title, path and "shown in an earlier result" —
+and that list was re-sent on every step after it. It is now one line with the
+ids. The priming result names the query the gate ran, and the model asking for
+that same search, by name or by leaving `query` out, is answered from the turn
+like any repeated call. On the 2.1.0 prompt one step of every live turn ran a
+search that returned exactly the primed excerpts; in ten live turns after the
+fix none did, and the one question whose search found nothing new got the one
+line, in both its turns.
+
+**An id is not painted while the answer streams.** A section id the model
+writes where `[n]` goes is turned into its marker when the turn settles; every
+frame before it showed the id as plain text. It is now hidden until then, and
+after a stop. ui-specs/020.
 
 ### Added
 

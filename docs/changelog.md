@@ -17,11 +17,14 @@ Each release in a few lines. The full notes — every change, every migration st
 
 <div class="cl-date">Oct 27, 2026</div>
 
-### A claim links to its source again
+### A claim links to its source again, and the first question costs less
 
 - **The citation rule is clearer.** With `gpt-6-luna` at `reasoning: 'low'`, most answers printed a section id in brackets where the link marker goes. The Sources list was right, and the claim had no link. The instruction now asks for numbers in the text and keeps section ids in the citations list. Measured on one production turn: 13 of 16 answers before, 0 of 24 after.
 - **The markers are settled in code.** When a model still writes an id, the turn rewrites it to its `[n]` before the answer is shown, stored or signed. `[1, 2]` now links both, and a number after a dropped invented citation no longer links the source one row down.
 - **`eval` checks the links.** An answer to a covered question, shown with sources and no working link in its text, now fails the run, like a hallucinated citation. A small model that writes no markers can fail it on the first run. See [Measure](/guide/measure#citations).
+- **No refusals on a reader's first question with OpenAI.** The `openai` row states what OpenAI's guide says of its reasoning models — search steps at `reasoning_effort: 'none'`, no `temperature` beside an effort — so `gpt-6-luna` no longer pays two refused requests on every page load. See [A model this table has never heard of](/guide/providers#a-model-this-table-has-never-heard-of).
+- **A search that finds nothing new says so** in one line instead of a row per repeat, and the model asking again for the search that primed the turn is answered from the turn. On ten live turns: 27 requests and no refusals, where the same questions cost 34 and 8.
+- **No section id flickers in a streaming answer.** It stays hidden until the turn settles and turns it into its marker.
 
 Run `docpilot index` after the upgrade: the instruction changed, so the baked opener answers are baked again.
 

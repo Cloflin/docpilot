@@ -391,7 +391,7 @@ Cells name the **field that actually goes on the wire**. `—` means the service
 
 | provider | reasoning | levels it accepts | budget | verbosity | temperature | topP | seed | token ceiling |
 |---|---|---|---|---|---|---|---|---|
-| `openai` | `reasoning_effort` | all six † | — | `verbosity` | ✓ | `top_p` | `seed` | `max_completion_tokens` |
+| `openai` | `reasoning_effort` | all six † | — | `verbosity` | ✓ § | `top_p` § | `seed` | `max_completion_tokens` |
 | `openrouter` | `reasoning: {…}` | all six † | `max_tokens` | `verbosity` | ✓ | `top_p` | `seed` | `max_tokens` |
 | `anthropic` | `thinking` | low → max | `budget_tokens` ‡ | — | — | — | — | `max_tokens` |
 | `ollama` | `think` | low, medium, high, max | — | — | `options.temperature` | `options.top_p` | `options.seed` | `options.num_predict` |
@@ -409,21 +409,27 @@ Cells name the **field that actually goes on the wire**. `—` means the service
 
 † **Support varies by model on these services**, so nothing static can be asserted about it and nothing here refuses your configuration — the knob is sent and `doctor` prints the caveat. `minimal` on OpenAI is GPT-5-only and gone again at 5.1; Groq's Qwen models take `none` and `default` where its GPT-OSS models take the three levels; Cerebras treats all three as equivalent on some models. `custom` is a **host** rather than a service, so this package cannot know what your gateway accepts and says so instead of guessing.
 
+§ **Not beside a reasoning effort.** OpenAI's reasoning models refuse `temperature` and `top_p` unless reasoning is `'none'`, and on this service an answer that names no effort runs at the model's own default, `medium`. So both go on the search steps, which run at `'none'`, and on an answer you set to `reasoning: false`. Any other answer goes without them — except on a model with no reasoning at all, which gets them everywhere once it has refused the reasoning field.
+
 ‡ Anthropic's budget belongs to the older thinking shape. Models after Opus 4.6 reject it and take adaptive thinking steered by an effort instead; models at 4.5 and earlier reject adaptive. The adapter picks the shape from the model name, and an effort you write is converted to a budget where the older shape is the one in play.
 
 Two knobs are refused everywhere for reasons of their own: `chat.stop`, because a stop sequence inside a pinned JSON reply truncates the object, and `top_k`, which only one transport has. Both are one line of `chat.extraBody` if you want them anyway.
 
 ### A model this table has never heard of
 
-The table is per service, and a new model can still refuse a field its service takes. OpenAI's reasoning models are the case: they reject `max_tokens`, they take `temperature` and `top_p` only with reasoning off, and `gpt-6-luna` takes function tools on Chat Completions only with `reasoning_effort: 'none'`. When a refusal names its cause, DocPilot asks the same model again with that one change, and the model keeps the change until the page reloads — on a server install, until the server restarts:
+The table is per service, and a new model can still refuse a field its service takes. When a refusal names its cause, DocPilot asks the same model again with that one change, and the model keeps the change until the page reloads — on a server install, until the server restarts:
 
 | the refusal names | the next request |
 |---|---|
 | `max_tokens` or `max_completion_tokens` | spells the ceiling the other way |
 | `temperature` or `top_p` | carries neither |
-| `reasoning_effort` `'none'` | says `'none'` on each search step; the answer keeps your `chat.reasoning` |
+| `reasoning_effort` `'none'`, asked for | says `'none'` on each search step; the answer keeps your `chat.reasoning` |
+| `'none'` itself, refused as a value | stops writing `'none'`; the answer keeps your `chat.reasoning` |
+| the `reasoning_effort` field | carries no reasoning field at all |
 
-Each change costs one extra request, once. `gpt-6-luna` needs two of them on a reader's first question and none after. So a model released after this version works when you name it in `chat.model`. OpenAI itself gets `max_completion_tokens` from the first request, because its endpoint takes that field from every model it serves.
+Each change costs one extra request, once, so a model released after this version works when you name it in `chat.model`.
+
+On `openai` itself the rules its reasoning models share are stated up front rather than learned, from OpenAI's own migration guide: `max_completion_tokens` for every model, `temperature` and `top_p` only at `'none'`, and function tools on Chat Completions only at `'none'`. `gpt-6-luna` therefore pays nothing on a reader's first question, where it used to pay two refusals on every page load. Two kinds of OpenAI model pay one instead: a model with no reasoning at all, such as `gpt-4.1`, refuses the field, and `gpt-5` and the o-series, which have no `'none'`, refuse the word.
 
 ### Thinking, turned up
 
