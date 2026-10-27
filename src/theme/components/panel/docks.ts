@@ -59,15 +59,24 @@ export function useDocks(panel: Ref<HTMLElement | null>) {
     if (s.dockPanel === 'picker' || s.dockPanel === 'history') resetDock()
   }
 
-  // Focused by id, not by class: the conversation list also carries the picker's
-  // class, so a class selector would focus the wrong node the day both exist.
+  /**
+   * Every press starts from `resetDock`. A dock closed by its own toggle forgets
+   * what Esc and × make it forget, and so does one left for another dock. The
+   * closes that never come through here — the panel shut, a new chat, a
+   * conversation picked from the list — leave their state behind, and the next
+   * open clears it: only this function opens a dock, and it clears first.
+   *
+   * Focused by id, not by class: the conversation list also carries the picker's
+   * class, so a class selector would focus the wrong node the day both exist.
+   */
   function toggleDock(which) {
-    s.dockPanel = s.dockPanel === which ? null : which
-    confirmClear.value = false
+    const next = s.dockPanel === which ? null : which
+    resetDock()
+    s.dockPanel = next
     // What stands in for a `storage` event: another tab may have added or removed
     // a conversation since this list was last drawn.
-    if (s.dockPanel === 'history') session.refreshHistory()
-    if (s.dockPanel) nextTick(() => panel.value?.querySelector<HTMLElement>(`#dp-${which}`)?.focus())
+    if (next === 'history') session.refreshHistory()
+    if (next) nextTick(() => panel.value?.querySelector<HTMLElement>(`#dp-${which}`)?.focus())
   }
 
   return { draft, editing, confirmClear, pickFilter, activePick, closeDock, dismissDock, toggleDock }

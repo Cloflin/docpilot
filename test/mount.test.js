@@ -1463,7 +1463,7 @@ describe('the docks let go — ui-specs/019', () => {
 
 /**
  * A thread of one settled turn, opened — the lens suite's fixture, shared by the
- * three suites below. `open()` rejects the index offline and degrades the panel
+ * suites below. `open()` rejects the index offline and degrades the panel
  * a microtask later, so the flag is cleared after a macrotask (the composer
  * suite's reason). `extra` is merged into the turn.
  */
@@ -1719,5 +1719,118 @@ describe('the sheet below 960px — t4 R-5', () => {
     const stops = stopsOf(sheet())
     stops.at(-1).focus()
     expect(tab(stops.at(-1)).defaultPrevented).toBe(false)
+  })
+})
+
+/**
+ * Pointing at a citation marker lights the row it goes to — ui-specs/009 — in
+ * the answer the marker is part of. Every answer numbers its sources from 1, and
+ * a number held by the panel lit that row under every answer in the thread.
+ */
+describe('a citation marker lights its own row', () => {
+  const cited = (id, title) => ({
+    id,
+    question: `what are ${title}?`,
+    answerText: `${title} [1]`,
+    answerHtml: `<p>${title} <a href="/${id}" class="docpilot__cite" data-cite="1">1</a></p>`,
+    sources: [{ id: `${id}#intro`, n: 1, title, path: `/${id}`, url: `/${id}` }],
+  })
+  const lit = (turn) => turn.querySelector('.docpilot__source').classList.contains('is-linked')
+  const point = (el, type) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerType: 'mouse' }))
+
+  afterEach(() => {
+    session.state.turns.length = 0
+    session.state.open = false
+  })
+
+  it('in its own answer, and in no other answer with a source of that number', async () => {
+    await openWithTurn(cited('keys', 'Keys'))
+    session.state.turns.push({ ...cited('tokens', 'Tokens'), state: 'complete', startedAt: 0 })
+    await nextTick()
+    const [first, second] = document.querySelectorAll('.docpilot__turn')
+
+    point(second.querySelector('.docpilot__cite'), 'pointerover')
+    await nextTick()
+    expect(lit(second)).toBe(true)
+    expect(lit(first)).toBe(false)
+
+    point(second.querySelector('.docpilot__cite'), 'pointerout')
+    await nextTick()
+    expect(lit(second)).toBe(false)
+  })
+})
+
+/**
+ * A dock opens as it did the first time, whichever way it was closed — the
+ * picker without its filter, the prompt document without an unsaved edit.
+ * Esc and × always made it so; its own button, another dock's, and the panel
+ * closing under it did not.
+ */
+describe('a dock forgets what it held, however it closed', () => {
+  const config = { ...CONFIG, scope: { filter: true }, prompt: { show: true, allowAppend: true } }
+  const press = async (selector) => {
+    document.querySelector(selector).click()
+    await nextTick()
+    await nextTick()
+  }
+  const filter = () => document.querySelector('#dp-pick-filter')
+  const typeFilter = async (text) => {
+    filter().value = text
+    filter().dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+  }
+  const editPrompt = async () => {
+    await press('.docpilot__prompt-toggle')
+    document.querySelector('#dp-prompt .docpilot__text-btn').click()
+    await nextTick()
+    expect(document.querySelector('.docpilot__prompt-edit')).not.toBe(null)
+  }
+
+  afterEach(() => {
+    session.state.turns.length = 0
+    session.state.dockPanel = null
+    session.state.open = false
+  })
+
+  it('the picker, closed with its own button', async () => {
+    await openWithTurn({}, { config })
+    await press('#dp-scope-btn')
+    await typeFilter('keys')
+    await press('#dp-scope-btn')
+    expect(session.state.dockPanel).toBe(null)
+    await press('#dp-scope-btn')
+    expect(filter().value).toBe('')
+  })
+
+  it('the picker, left for the prompt document', async () => {
+    await openWithTurn({}, { config })
+    await press('#dp-scope-btn')
+    await typeFilter('keys')
+    await press('.docpilot__prompt-toggle')
+    expect(session.state.dockPanel).toBe('prompt')
+    await press('#dp-scope-btn')
+    expect(filter().value).toBe('')
+  })
+
+  it('the picker, closed with the panel', async () => {
+    await openWithTurn({}, { config })
+    await press('#dp-scope-btn')
+    await typeFilter('keys')
+    panel.close()
+    await nextTick()
+    panel.open()
+    await nextTick()
+    await nextTick()
+    await press('#dp-scope-btn')
+    expect(filter().value).toBe('')
+  })
+
+  it('the prompt document, closed with its own button', async () => {
+    await openWithTurn({}, { config })
+    await editPrompt()
+    await press('.docpilot__prompt-toggle')
+    await press('.docpilot__prompt-toggle')
+    expect(document.querySelector('#dp-prompt')).not.toBe(null)
+    expect(document.querySelector('.docpilot__prompt-edit')).toBe(null)
   })
 })

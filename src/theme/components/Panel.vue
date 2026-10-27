@@ -929,10 +929,6 @@ const settledLine = (turn) => {
 // the stop a reader left survives the window closing and opening again.
 const resultCursor = ref({})
 
-// The citation row a pointer on a marker lights — Turn.vue writes it, Sources.vue
-// reads it.
-const linkedCite = ref<number | null>(null)
-
 const { onSourceClick, onAnswerClick, hasSearch, openSearch } = useLinks({ mobile, close, router, T })
 
 provide(PANEL, {
@@ -960,7 +956,6 @@ provide(PANEL, {
   turnScope,
   withSources,
   openPassage,
-  linkedCite,
   resultCursor,
   feedbackLive,
   submitFeedback,

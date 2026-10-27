@@ -72,7 +72,7 @@
     <!-- what the answer offers the reader to do — ui-specs/018 -->
     <ToolActions v-if="turn.state === 'complete' && turn.actions?.length" :turn="turn" />
 
-    <Sources v-if="turn.sources.length" :turn="turn" />
+    <Sources v-if="turn.sources.length" :turn="turn" :linked="linkedCite" />
 
     <AnswerActions
       v-if="turn.state === 'complete' || turn.state === 'no-answer' || turn.state === 'aborted'"
@@ -119,7 +119,7 @@
  * settles in each have a part of their own; what every state shares — the
  * question, the status line, the reasoning, the answer — is drawn here.
  */
-import type { PropType } from 'vue'
+import { ref, type PropType } from 'vue'
 import * as session from '../../docpilot/session.js'
 import type { Turn } from '../../docpilot/session.js'
 import { usePanel } from './context.js'
@@ -135,13 +135,16 @@ import Feedback from './Feedback.vue'
 defineProps({ turn: { type: Object as PropType<Turn>, required: true } })
 
 const s = session.state
-const { T, fresh, statusLabel, thoughtLabel, onThoughtScroll, onAnswerClick, linkedCite, submitText } =
-  usePanel()
+const { T, fresh, statusLabel, thoughtLabel, onThoughtScroll, onAnswerClick, submitText } = usePanel()
 // A press outranks the stream for the rest of the turn — session.js/autoThought.
 const toggleThought = session.toggleThought
 
 // Pointing at a marker lights the row it goes to. UI-SPEC 573: no timer, no
 // coarse-pointer branch — a touch that lands on the marker navigates anyway.
+// The turn's own, not the panel's: every answer numbers its sources from 1, so
+// a number held by the panel lit that row under every answer in the thread.
+const linkedCite = ref<number | null>(null)
+
 function onCiteEnter(e: MouseEvent) {
   const cite = e.target.closest?.('.docpilot__cite')
   linkedCite.value = cite ? Number(cite.dataset.cite) : null

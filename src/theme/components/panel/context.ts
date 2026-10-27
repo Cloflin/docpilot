@@ -53,7 +53,6 @@ export interface PanelContext {
   turnScope: (turn: Turn) => string
   withSources: (turn: Turn) => string
   openPassage: Ref<string | null>
-  linkedCite: Ref<number | null>
   resultCursor: Ref<Record<string, number>>
   feedbackLive: ComputedRef<boolean>
   submitFeedback: (turn: Turn) => void

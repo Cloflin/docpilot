@@ -12,7 +12,7 @@
       v-for="src in turn.sources"
       :key="src.id"
       class="docpilot__source"
-      :class="{ 'is-linked': linkedCite === src.n, 'has-passage': passage(turn, src) }"
+      :class="{ 'is-linked': linked === src.n, 'has-passage': passage(turn, src) }"
     >
       <span class="docpilot__source-n">{{ src.n }}</span>
       <!-- A site tool's reply — ui-specs/018: no page to open, so no
@@ -98,9 +98,13 @@ import type { Turn } from '../../docpilot/session.js'
 import { usePanel } from './context.js'
 import Icon from './Icon.vue'
 
-defineProps({ turn: { type: Object as PropType<Turn>, required: true } })
+defineProps({
+  turn: { type: Object as PropType<Turn>, required: true },
+  // The row a pointer on one of this turn's markers lights — Turn.vue's.
+  linked: { type: Number, default: null },
+})
 
-const { T, linkedCite, openPassage, onSourceClick, onAnswerClick } = usePanel()
+const { T, openPassage, onSourceClick, onAnswerClick } = usePanel()
 
 const passage = (turn, src) => session.passageFor(turn, src)
 const passageHtml = (turn, src) => session.passageHtml(turn, src)
