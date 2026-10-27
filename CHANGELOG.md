@@ -7,7 +7,7 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
-## Unreleased
+## 2.1.1 — 2026-10-27
 
 A claim links to its source again. With `gpt-6-luna` at `reasoning: 'low'`,
 most answers printed a section id in brackets —
