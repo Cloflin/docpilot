@@ -7,7 +7,15 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
-## Unreleased
+## 2.1.0 — 2026-10-27
+
+A site's own tools in the chat: functions the model calls for live data, and
+actions the answer offers that run only when the reader presses them. Off by
+default, and with `tools: null` every request is byte-identical to 2.0.1. The
+rest is a review of the whole package: security fixes in the proxy, the server
+and the feedback receiver, citation anchors that match VitePress, and the panel
+split into parts with its exported names unchanged. Rebuild your index after the
+upgrade so its citation anchors move with it.
 
 ### Added
 
@@ -110,6 +118,19 @@ API for reasoning with tools on GPT-6, and tool calls in `docpilot eval`. See
 - **A CRLF file is read like its LF twin, and a byte-order mark no longer hides
   the frontmatter.** In a CRLF file no fence was found, so one `<script>` in a
   code sample deleted the rest of the page from the index.
+- **A citation anchor is the one VitePress renders.** `slug()` is now
+  VitePress's own slugify, so a heading with `.`, `_`, `'`, an accent or a
+  leading digit links to its passage instead of the top of its page:
+  `budget.dailyLimit` → `#budget-dailylimit`, `1. Start` → `#_1-start`. 134
+  citations on this site moved. The chunk ids of such headings change with them:
+  rebuild the index after the upgrade, and repoint gold pinned at an old id
+  (`docpilot lint` lists them). OpenAPI operation anchors do not change.
+  Docusaurus takes its anchors from github-slugger, which drops a `.`: there a
+  heading such as `foo.bar` now misses its anchor, as one with `_` did before.
+- **HTML comments are not indexed.** `<!-- … -->` is removed before any other
+  pass, on one line or many; one in a code fence or inline code stays. Comment
+  text went into the public index, and a heading inside a comment became a
+  section.
 - **A failed `docpilot index` keeps the old index.** The build writes to a
   sibling directory and swaps it in after the last check. The 64 KB manifest
   ceiling now counts bytes.
