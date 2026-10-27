@@ -80,7 +80,7 @@ describe('the provider chain', () => {
 
   it('takes the provider a single key names, and its model with it', () => {
     const cases = [
-      [{ OPENAI_API_KEY: 'k' }, 'openai', 'gpt-4o-mini'],
+      [{ OPENAI_API_KEY: 'k' }, 'openai', 'gpt-6-luna'],
       [{ GEMINI_API_KEY: 'k' }, 'gemini', 'gemini-2.5-flash'],
       [{ MISTRAL_API_KEY: 'k' }, 'mistral', 'mistral-small-latest'],
       [{ ANTHROPIC_API_KEY: 'k' }, 'anthropic', 'claude-sonnet-4-6'],

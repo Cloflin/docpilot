@@ -2579,6 +2579,9 @@ export async function submit(question, { quote = '' } = {}) {
         models: cfg.llm.models,
         apiKey: cfg.llm.apiKey,
         signal,
+        // Only for the spelling of "reasoning off", which differs by service and
+        // which a model that takes tools only with reasoning off has to be told.
+        tuning: cfg.llm.tuning,
         // The probe is a model request like any other and comes out of the same
         // daily allowance, so it is counted like any other. Unreported it was
         // the one request a turn spends that the ledger could not see, and on a

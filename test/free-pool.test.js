@@ -13,7 +13,7 @@ import {
   FREE_ROUTER,
   CATALOGUE,
 } from '../src/theme/docpilot/openrouter.js'
-import { chat, detectTools, orderCandidates, resetPools } from '../src/theme/docpilot/llm.js'
+import { chat, detectTools, orderCandidates, resetCaps, resetPools } from '../src/theme/docpilot/llm.js'
 import { createEmbedder, embeddingsOf } from '../src/build/build-rag-index.js'
 import { openEmbedCache } from '../src/build/lib/embed-cache.js'
 import { embedQuery } from '../src/theme/docpilot/embed.js'
@@ -514,7 +514,7 @@ describe('the configuration a free pool resolves from', () => {
    */
   it('gives each provider its own model and carries none across', () => {
     expect(cfg({ chat: { provider: 'openrouter' } }).chat.model).toBe(FREE_ROUTER) // the router answers
-    expect(cfg({ chat: { provider: 'openai' } }).chat.model).toBe('gpt-4o-mini')
+    expect(cfg({ chat: { provider: 'openai' } }).chat.model).toBe('gpt-6-luna')
     expect(cfg({ chat: { provider: 'anthropic' } }).chat.model).toBe('claude-sonnet-4-6')
     expect(cfg({ chat: { provider: 'ollama' } }).chat.model).toBe('qwen3:8b')
     // The author's own name outranks the table on every provider.
@@ -982,7 +982,7 @@ describe('a provider named without a model', () => {
 
   it('does not, where the provider table can', () => {
     expect(() => themeDocPilot(cfg({ chat: { provider: 'openai' } }), ENV)).not.toThrow()
-    expect(cfg({ chat: { provider: 'openai' } }).chat.model).toBe('gpt-4o-mini')
+    expect(cfg({ chat: { provider: 'openai' } }).chat.model).toBe('gpt-6-luna')
   })
 
   it('does not, where a pool can', () => {
@@ -1168,6 +1168,51 @@ describe('the capability probe has three answers', () => {
     expect(
       await detectTools({ provider: 'openai', baseURL: '/ai', models: ['a', 'b'], signal: ctrl.signal }),
     ).toBe(null)
+  })
+
+  /**
+   * A PROBE REFUSED BY NAME IS NOT "NOBODY WAS HOME". gpt-6-luna takes function
+   * tools on Chat Completions only with `reasoning_effort: 'none'`, and the probe
+   * is a tool call that says nothing about reasoning. It read that 400 as no
+   * answer, so it asked again on every turn and never got one.
+   */
+  it('asks the same model again with what its refusal named, and the turn opens with it', async () => {
+    resetCaps()
+    const said = {
+      error: {
+        message:
+          "Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.",
+        type: 'invalid_request_error',
+        param: 'tools',
+        code: 'unsupported_parameter',
+      },
+    }
+    const called = {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        choices: [{ message: { tool_calls: [{ function: { name: 'list_pages', arguments: '{}' } }] } }],
+      }),
+    }
+    const bodies = []
+    vi.stubGlobal('fetch', async (url, init) => {
+      const body = JSON.parse(init.body)
+      bodies.push(body)
+      if (body.reasoning_effort === 'none') return called
+      return { ok: false, status: 400, headers: new Headers(), text: async () => JSON.stringify(said) }
+    })
+    const target = { provider: 'openai', baseURL: '/ai', model: 'gpt-6-luna', tuning: { style: 'effort' } }
+
+    expect(await detectTools(target)).toBe(true)
+    expect(bodies.map((b) => b.reasoning_effort)).toEqual([undefined, 'none'])
+
+    // The concession lives in the one map the transport reads, so the turn's
+    // first search step is already a request this model takes.
+    await ask({ ...target, enableThink: false })
+    expect(bodies.at(-1).reasoning_effort).toBe('none')
+    expect(bodies).toHaveLength(3)
+    resetCaps()
   })
 })
 

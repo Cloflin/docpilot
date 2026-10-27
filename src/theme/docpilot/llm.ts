@@ -30,6 +30,12 @@ type TransportError = Error & {
   sentReasoning?: boolean
   /** Whether it carried the strict `json_schema` response format. */
   sentSchema?: boolean
+  /** The field the refusal names, when it names one — see `refusedParam`. */
+  refused?: string | null
+  /** Whether the refusal asks for reasoning `'none'` — see `escalateCaps`. */
+  wantsOff?: boolean
+  /** Whether the refused request was a step that asks for no thinking. */
+  noThink?: boolean
 }
 
 /**
@@ -402,7 +408,13 @@ function classifyRefusal(status, payload, text) {
   // `does not support thinking` is Ollama's sentence for a `think` it cannot
   // honour (llama3.2, phi4). Unmatched, the 400 skipped the reasoning rung below
   // and every turn on such a model failed where one concession would answer.
-  if (/unsupported[_ ]parameter|unrecognized request argument|is not supported with this model|unknown (?:field|parameter)|does not support thinking/i.test(blob)) {
+  // `unsupported value` and reasoning `'none'` are OpenAI's reasoning models:
+  // `temperature: 0.2` is a value they refuse, and gpt-6-luna takes function
+  // tools only with `reasoning_effort` set to `'none'`.
+  if (
+    /unsupported[_ ](?:parameter|value)|unrecognized request argument|is not supported with this model|unknown (?:field|parameter)|does not support thinking/i.test(blob) ||
+    WANTS_OFF.test(blob)
+  ) {
     return 'params'
   }
   if (/zdr|data policy|guardrail|ineligibility/i.test(blob)) return 'policy'
@@ -427,6 +439,30 @@ function hasReasoningField(body) {
     body.thinking !== undefined
   )
 }
+
+/**
+ * THE FIELD A REFUSAL NAMES, when it names one.
+ *
+ * OpenAI's 400 says which field it refused — `error.param`, and the same name
+ * quoted in the sentence — and that is enough to make the one concession it
+ * asks for instead of walking the rungs in their measured order. OpenRouter's
+ * `Filter by Parameters` names nothing, which is the case the order is for.
+ */
+function refusedParam(payload, text) {
+  const param = payload?.error?.param
+  if (typeof param === 'string' && param) return param
+  const said = String(payload?.error?.message || text || '')
+  return /(?:unsupported (?:parameter|value)|unrecognized request argument supplied)\s*:\s*'?([\w.]+)/i.exec(said)?.[1] || null
+}
+
+/**
+ * A refusal that asks for reasoning `'none'` — the sentence OpenAI sends when a
+ * model takes function tools on Chat Completions only with reasoning off. Its
+ * docs spell the field with and without the underscore and quote the word both
+ * ways, so the pattern does too — and it reads the raw body, where a double
+ * quote arrives escaped.
+ */
+const WANTS_OFF = /reasoning[_ ]effort[^.]*\\?["'`]none\\?["'`]/i
 
 /** The service's own sentence, trimmed to something a panel can show. */
 function refusalReason(payload, text) {
@@ -461,26 +497,55 @@ function degradeFor(provider, baseURL, model) {
   return {
     reasoning: known.reasoning === false,
     schemaAsTool: known.structuredOutputs === false,
+    ceiling: known.ceiling === false,
+    sampling: known.sampling === false,
+    explicitOff: known.implicitOff === false,
   }
+}
+
+/** The concession a refusal asks for BY NAMING the field it refused. */
+const RUNG_FOR = {
+  max_tokens: 'ceiling',
+  max_completion_tokens: 'ceiling',
+  temperature: 'sampling',
+  top_p: 'sampling',
 }
 
 /**
  * The next concession to make to this model, or false when there are none left.
  *
- * TWO RUNGS, IN THIS ORDER, AND THE ORDER IS THE MEASUREMENT. `reasoning` is
- * dropped first because it is the field nothing downstream reads — the panel is
- * not showing a trace on a search step — so the request loses nothing. The
- * strict schema is dropped second and reluctantly: it is what makes the final
- * call's shape unforgeable, and the tool form that replaces it is a request the
- * model can still decline. A model that fails both is a model to rotate past.
+ * A REFUSAL THAT NAMES ITS CAUSE GETS THAT CONCESSION FIRST, because it is the
+ * only one that can answer it, and these are what lets a model this package has
+ * never heard of be configured at all:
+ *
+ *   · `implicitOff` — the service asked for reasoning `'none'`, on a step that
+ *     asks for no thinking. gpt-6-luna on Chat Completions takes function tools
+ *     only so, and leaving the field out leaves it thinking at `medium`.
+ *   · `ceiling` — it refused the ceiling field by name. The next request
+ *     spells it the other way: `max_tokens` ↔ `max_completion_tokens`.
+ *   · `sampling` — it refused `temperature` or `top_p` by name. The next
+ *     request carries neither.
+ *
+ * THEN TWO RUNGS, IN THIS ORDER, AND THE ORDER IS THE MEASUREMENT — for the
+ * refusal that names nothing, which is OpenRouter's. `reasoning` is dropped
+ * first because it is the field nothing downstream reads — the panel is not
+ * showing a trace on a search step — so the request loses nothing. The strict
+ * schema is dropped second and reluctantly: it is what makes the final call's
+ * shape unforgeable, and the tool form that replaces it is a request the model
+ * can still decline. A model that fails every rung is a model to rotate past.
  *
  * `sentReasoning` / `sentSchema` say what was actually ON THE WIRE. Without
  * them a model that never sent a reasoning field would still "spend" the first
  * rung on it and reach the schema rung one request later than it should.
  */
-function escalateCaps(provider, baseURL, model, { sentReasoning, sentSchema }) {
+function escalateCaps(provider, baseURL, model, { sentReasoning, sentSchema, refused = null, wantsOff = false, noThink = false }) {
   const key = capsKey(provider, baseURL, model)
   const known = CAPS.get(key) || {}
+  const named = [wantsOff && noThink ? 'implicitOff' : null, RUNG_FOR[refused]].find((r) => r && known[r] !== false)
+  if (named) {
+    CAPS.set(key, { ...known, [named]: false })
+    return named
+  }
   if (sentReasoning && known.reasoning !== false) {
     CAPS.set(key, { ...known, reasoning: false })
     return 'reasoning'
@@ -1213,10 +1278,12 @@ export async function chat(options: ChatOptions) {
      * for no better reason than that it happened to publish `response_format`.
      *
      * So the first move is to drop what was refused and ask the SAME model
-     * again. Two rungs exist (`escalateCaps`), each concession is remembered for
+     * again. Five rungs exist (`escalateCaps`) — three a refusal names, two
+     * walked in order when it names nothing — each concession is remembered for
      * the rest of the session, and a model that runs out of rungs falls through
      * to exactly the rotation it would have had. Worst case per model is
-     * therefore two extra requests ONCE, against a pool walk on every turn.
+     * therefore five extra requests ONCE, against a pool walk on every turn;
+     * gpt-6-luna, which needs two of them, pays two.
      *
      * `affordable()` gates each retry the way it gates each rotation: a turn
      * with no request left to spend does not spend one here either.
@@ -1230,6 +1297,9 @@ export async function chat(options: ChatOptions) {
           const rung = escalateCaps(target.provider, target.baseURL, chosen, {
             sentReasoning: e.sentReasoning,
             sentSchema: e.sentSchema,
+            refused: e.refused,
+            wantsOff: e.wantsOff,
+            noThink: e.noThink,
           })
           if (!rung) throw e
           onDegrade?.({ model: chosen, dropped: rung, reason: e.reason })
@@ -1433,6 +1503,11 @@ export async function chat(options: ChatOptions) {
         // `json_object` has none, so claiming it as a rung would spend a request
         // to send the identical body again.
         err.sentSchema = body?.response_format?.type === 'json_schema'
+        // And what it NAMED, when it named anything: the one concession that
+        // answers it, ahead of the rungs walked in order. See `escalateCaps`.
+        err.refused = refusedParam(payload, text)
+        err.wantsOff = WANTS_OFF.test(String(text || ''))
+        err.noThink = enableThink === false
         throw err
       }
       return streaming && res.body ? await p.readStream(res, onFrame) : p.parse(await res.json())
@@ -1550,6 +1625,7 @@ export async function detectTools({
   apiKey,
   signal,
   onHeaders = null,
+  tuning = null,
 }: {
   provider?: string
   baseURL?: string
@@ -1558,6 +1634,7 @@ export async function detectTools({
   apiKey?: string | null
   signal?: AbortSignal
   onHeaders?: ((...args: any[]) => void) | null
+  tuning?: unknown
 }) {
   const p = providerFor(provider)
   // The probe decides ONE thing for the whole session — native tools or the
@@ -1579,30 +1656,61 @@ export async function detectTools({
   // to every later question, caused by a rate limit that had already passed.
   let answered = false
   for (const chosen of candidates) {
-    try {
-      const res = await fetch(p.chatUrl(baseURL), {
-        method: 'POST',
-        headers: p.headers(apiKey),
-        body: JSON.stringify(p.probeBody(chosen, toolSchemas())),
-        signal,
-      })
-      reportHeaders(onHeaders, res)
-      if (!res.ok) {
-        // A refusal OF TOOLS is an answer, not an absence: Ollama says
-        // `gemma3:4b does not support tools` with a 400, and reading that as
-        // "nobody was home" kept the native path — and failed every turn on a
-        // model the fallback parser serves.
-        const text = await res.text().catch(() => '')
-        if (/does not support tools/i.test(text)) answered = true
-        continue
+    // The SAME model asked again with less, exactly as `onceOrSmaller` asks a
+    // turn's model — and what the probe learns is what the turn's first request
+    // opens with, because the concessions live in the one `CAPS` map. A model
+    // that refused the probe by name used to read as "nobody was home", so the
+    // probe asked again on every turn and never got an answer.
+    for (;;) {
+      try {
+        const body = p.probeBody(chosen, toolSchemas(), { tuning, degrade: degradeFor(provider, baseURL, chosen) })
+        const res = await fetch(p.chatUrl(baseURL), {
+          method: 'POST',
+          headers: p.headers(apiKey),
+          body: JSON.stringify(body),
+          signal,
+        })
+        reportHeaders(onHeaders, res)
+        if (!res.ok) {
+          // A refusal OF TOOLS is an answer, not an absence: Ollama says
+          // `gemma3:4b does not support tools` with a 400, and reading that as
+          // "nobody was home" kept the native path — and failed every turn on a
+          // model the fallback parser serves.
+          const text = await res.text().catch(() => '')
+          if (/does not support tools/i.test(text)) answered = true
+          else if (learnsFrom(provider, baseURL, chosen, res.status, text, body)) continue
+          break
+        }
+        answered = true
+        if (p.probeHasToolCall(await res.json())) return true
+        break
+      } catch {
+        if (signal?.aborted) return null
+        break
       }
-      answered = true
-      if (p.probeHasToolCall(await res.json())) return true
-    } catch {
-      if (signal?.aborted) return null
     }
   }
   return answered ? false : null
+}
+
+/** A probe's refusal, made into the concession it asks for — false when there is none. */
+function learnsFrom(provider, baseURL, model, status, text, body) {
+  let payload = null
+  try {
+    payload = text ? JSON.parse(text) : null
+  } catch {
+    /* a proxy's HTML page: nothing here names a field */
+  }
+  if (classifyRefusal(status, payload, text) !== 'params') return false
+  return Boolean(
+    escalateCaps(provider, baseURL, model, {
+      sentReasoning: hasReasoningField(body),
+      sentSchema: false,
+      refused: refusedParam(payload, text),
+      wantsOff: WANTS_OFF.test(text),
+      noThink: true,
+    }),
+  )
 }
 
 /**

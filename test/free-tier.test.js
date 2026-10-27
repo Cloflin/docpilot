@@ -101,6 +101,50 @@ const refusal = (kind, status = 404) => {
   }
 }
 
+/**
+ * OPENAI'S OWN REFUSAL, which NAMES the field — `error.param`, and the same name
+ * quoted in the sentence. The sentences are the API's: the `max_tokens` one as
+ * reported against gpt-6-luna, the `temperature` one as gpt-5 sends it, and the
+ * tools one as OpenAI documents it for the models that take function tools on
+ * Chat Completions only with reasoning off.
+ */
+const openaiRefusal = (param, message, code = 'unsupported_parameter') => {
+  const payload = { error: { message, type: 'invalid_request_error', param, code } }
+  const text = JSON.stringify(payload)
+  return {
+    ok: false,
+    status: 400,
+    headers: new Headers(),
+    body: new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(text))
+        c.close()
+      },
+    }),
+    json: async () => payload,
+    clone: () => ({ json: async () => payload }),
+  }
+}
+
+const REFUSED = {
+  max_tokens: () =>
+    openaiRefusal(
+      'max_tokens',
+      "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+    ),
+  temperature: () =>
+    openaiRefusal(
+      'temperature',
+      "Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.",
+      'unsupported_value',
+    ),
+  tools: () =>
+    openaiRefusal(
+      'tools',
+      "Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.",
+    ),
+}
+
 const sse = (frames) =>
   new ReadableStream({
     start(c) {
@@ -1859,6 +1903,112 @@ describe('a turn on a metered service', () => {
       expect(r.requests).toBe(2)
       expect(r.chats.map((c) => c.model)).toEqual(['a', 'b'])
       expect(r.text).toContain('manifest')
+    })
+
+    /**
+     * ── A REFUSAL THAT NAMES ITS CAUSE GETS THAT CONCESSION, AND ONLY THAT ────
+     *
+     * OpenAI's 400 names the field it refused. Each row below is one a model
+     * this package has never heard of can raise, and each costs ONE extra
+     * request, once — which is what lets a site configure next year's model
+     * without waiting for a release that knows its name.
+     */
+    it('a refused ceiling spelling is spelled the other way: 2 requests', async () => {
+      const r = await turn({
+        remaining: 50,
+        settings: { mode: 'one-shot' },
+        llm: { model: 'brand-new', maxTokens: 2048, tuning: { style: 'effort' } },
+        onChat: (body) => (body.max_tokens !== undefined ? REFUSED.max_tokens() : reply(FINAL_ANSWER)),
+      })
+      expect(r.requests).toBe(2)
+      expect(r.text).toContain('manifest')
+      expect(r.chats.map((c) => c.model)).toEqual(['brand-new', 'brand-new'])
+      expect(r.chats[1].max_completion_tokens).toBe(2048)
+      expect(r.chats[1].max_tokens).toBeUndefined()
+      // Nothing else was given up for it.
+      expect(r.chats[1].response_format?.type).toBe('json_schema')
+      expect(r.chats[1].temperature).toBe(0.2)
+    })
+
+    it('a refused sampling knob is dropped with its sibling: 2 requests', async () => {
+      const r = await turn({
+        remaining: 50,
+        settings: { mode: 'one-shot' },
+        llm: { model: 'reasoner', tuning: { style: 'effort', topP: 0.9 } },
+        onChat: (body) => (body.temperature !== undefined ? REFUSED.temperature() : reply(FINAL_ANSWER)),
+      })
+      expect(r.requests).toBe(2)
+      expect(r.text).toContain('manifest')
+      expect(r.chats[0].top_p).toBe(0.9)
+      expect(r.chats[1].temperature).toBeUndefined()
+      expect(r.chats[1].top_p).toBeUndefined()
+      expect(r.chats[1].response_format?.type).toBe('json_schema')
+    })
+
+    /**
+     * gpt-6-luna on Chat Completions, as OpenAI documents it: no `max_tokens`
+     * at all; function tools only with `reasoning_effort: 'none'`; `temperature`
+     * and `top_p` only with it too — and reasoning is `medium` unless the request
+     * says otherwise. 2.0.0 failed every turn on it, three ways at once.
+     *
+     * The brand row sends `max_completion_tokens` to every OpenAI model, so the
+     * first refusal never happens. The other two are learned on the first turn
+     * — the search step says `none` out loud, the answer drops `temperature` and
+     * keeps the model's own depth — and the second turn pays nothing.
+     */
+    const luna = () => {
+      const step = searching()
+      return (body) => {
+        if (body.max_tokens !== undefined) return REFUSED.max_tokens()
+        const off = body.reasoning_effort === 'none'
+        if (body.tools && !off) return REFUSED.tools()
+        if (!off && (body.temperature !== undefined || body.top_p !== undefined)) return REFUSED.temperature()
+        return step(body)
+      }
+    }
+
+    it('hears "reasoning off" however the sentence spells it', async () => {
+      const sentences = [
+        "Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.",
+        'Function calling on Chat Completions requires reasoning_effort: "none" for this model.',
+        'Function calling is supported only with reasoning effort `none`.',
+      ]
+      for (const sentence of sentences) {
+        resetCaps()
+        const step = searching()
+        const r = await turn({
+          remaining: 50,
+          llm: { model: 'gpt-6-luna', tuning: { style: 'effort' } },
+          onChat: (body) =>
+            body.tools && body.reasoning_effort !== 'none' ? openaiRefusal(null, sentence) : step(body),
+        })
+        expect(r.text, sentence).toContain('manifest')
+        expect(r.chats[1].reasoning_effort, sentence).toBe('none')
+      }
+    })
+
+    it('gpt-6-luna pays two refusals on its first turn and none after', async () => {
+      const llm = {
+        model: 'gpt-6-luna',
+        maxTokens: 2048,
+        tuning: { style: 'effort', maxTokensField: 'max_completion_tokens' },
+      }
+      const first = await turn({ remaining: 50, llm, onChat: luna() })
+      expect(first.text).toContain('manifest')
+      // Two laps and the final call is three; one refusal on the first lap and
+      // one on the final call is five.
+      expect(first.requests).toBe(5)
+
+      const again = await turn({ remaining: 50, llm, onChat: luna() })
+      expect(again.text).toContain('manifest')
+      expect(again.requests).toBe(3)
+      const [lap, , final] = again.chats
+      expect(lap.tools).toBeTruthy()
+      expect(lap.reasoning_effort).toBe('none')
+      expect(lap.max_completion_tokens).toBe(2048)
+      expect(final.response_format?.type).toBe('json_schema')
+      expect(final.reasoning_effort).toBeUndefined()
+      expect(final.temperature).toBeUndefined()
     })
 
     it('unrationed agentic, answered on lap one: 1 request', async () => {

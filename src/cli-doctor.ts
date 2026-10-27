@@ -46,7 +46,7 @@ import {
 import { embedChoices, indexCommandFor } from './embed-choices.js'
 import { probeEmbedEndpoint, probeLocalEmbedders } from './build/lib/embed-discovery.js'
 import { inspectChatTarget } from './build/lib/chat-preflight.js'
-import { providerFor } from './theme/docpilot/providers.js'
+import { maxTokensFieldFor, providerFor } from './theme/docpilot/providers.js'
 import { toolSchemas } from './theme/docpilot/llm.js'
 import { flagErrors, flagGiven } from './cli-flags.js'
 
@@ -324,20 +324,22 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
       }
     }
 
+    // The ceiling field is model-dependent, so it is the one line that can differ
+    // between two models on the SAME provider — and the one that turns every
+    // request into a 400 when it is wrong. Asked of the adapter's own rule, so it
+    // cannot drift from the request it describes the way a copy of the pattern
+    // here did: it stopped at gpt-5 too.
+    const shaped = adapter.id !== 'ollama' && adapter.id !== 'anthropic' && chat.model
+    const ceiling = shaped ? maxTokensFieldFor(chat.model, tuning) : adapter.supports?.maxTokens
+
     wire('temperature', chat.temperature, caps.temperature === false ? null : adapter.supports?.temperature)
-    wire('maxTokens', chat.maxTokens, adapter.supports?.maxTokens)
+    wire('maxTokens', chat.maxTokens, ceiling)
     wire('numCtx', chat.numCtx, adapter.supports?.numCtx)
     wire('verbosity', chat.verbosity, tuning.verbosity != null ? adapter.supports?.verbosity : null)
     wire('topP', chat.topP, tuning.topP != null ? adapter.supports?.topP : null)
     wire('seed', chat.seed, tuning.seed != null ? adapter.supports?.seed : null)
 
-    // The ceiling field is model-docPilot, so it is the one line that can differ
-    // between two models on the SAME provider — and the one that turns every
-    // request into a 400 when it is wrong.
-    if (adapter.id !== 'ollama' && adapter.id !== 'anthropic' && chat.model) {
-      const field = /(^|\/)(o[1-9](\b|-)|gpt-5|codex-mini)/i.test(chat.model) ? 'max_completion_tokens' : 'max_tokens'
-      if (field !== 'max_tokens') line(`${PAD}  ${chat.model} takes ${field}, not max_tokens`)
-    }
+    if (shaped && ceiling !== 'max_tokens') line(`${PAD}  ${chat.model} takes ${ceiling}, not max_tokens`)
 
     if (caps.unknown) {
       line(`${PAD}! ${docPilot.chat.provider} names a host, not a service — DocPilot cannot know what`)

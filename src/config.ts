@@ -148,13 +148,20 @@ const openaiCompatible = (
 const PROVIDERS = {
     // ── chat and embeddings: one provider is enough ──────────────────────────
     openai: openaiCompatible('https://api.openai.com', ['OPENAI_API_KEY'], {
-        chatModel: 'gpt-4o-mini',
+        // OpenAI names it as the replacement for gpt-4o-mini, which leaves the
+        // API on 2027-01-14, and it costs less per token than the model it replaces.
+        chatModel: 'gpt-6-luna',
         embedModel: 'text-embedding-3-small',
         // The full published scale, and `verbosity` — which is a real top-level
         // chat-completions field here and nowhere else this table knows. Support
         // is per-model (`minimal` is GPT-5-only and gone again at 5.1; `o1-mini`
         // takes no effort at all), so it stays `modelDependent`.
-        caps: {verbosity: true},
+        //
+        // `max_completion_tokens` for EVERY model, because this endpoint takes it
+        // from every model it serves and its reasoning models take nothing else.
+        // Left to the pattern, each new family was a 400 until the pattern
+        // learned its name: gpt-6-luna was, in 2.0.0.
+        caps: {verbosity: true, maxTokensField: 'max_completion_tokens'},
     }),
     together: openaiCompatible('https://api.together.xyz', ['TOGETHER_API_KEY'], {
         chatModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',

@@ -396,7 +396,8 @@ describe('the ceiling field that turns every request into a 400', () => {
    * question that never reached a model.
    */
   it('sends max_completion_tokens to the models that demand it', () => {
-    for (const model of ['gpt-5-mini', 'o3', 'o4-mini', 'codex-mini', 'openai/gpt-5']) {
+    const models = ['gpt-5-mini', 'o3', 'o4-mini', 'codex-mini', 'openai/gpt-5', 'gpt-6-luna', 'openai/gpt-6-luna', 'gpt-5.6-sol']
+    for (const model of models) {
       const b = bodyFor('openai', { model })
       expect(b.max_completion_tokens, model).toBe(2048)
       expect(b.max_tokens, model).toBe(undefined)
@@ -404,7 +405,7 @@ describe('the ceiling field that turns every request into a 400', () => {
   })
 
   it('leaves every other model on the field it has always taken', () => {
-    for (const model of ['gpt-4o', 'gpt-4o-mini', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b:free']) {
+    for (const model of ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b:free']) {
       expect(bodyFor('openai', { model }).max_tokens, model).toBe(2048)
     }
   })
@@ -412,5 +413,73 @@ describe('the ceiling field that turns every request into a 400', () => {
   it('lets a brand override the rule without a code change', () => {
     const b = bodyFor('openai', { model: 'gpt-5-mini', tuning: { maxTokensField: 'max_tokens' } })
     expect(b.max_tokens).toBe(2048)
+  })
+
+  /**
+   * OPENAI'S OWN ENDPOINT IS THAT BRAND. It takes `max_completion_tokens` from
+   * every model it serves, so the pattern is not asked at all there — a family
+   * it has not heard of yet is exactly the one a pattern gets wrong, and 2.0.0
+   * got gpt-6-luna wrong that way.
+   */
+  it('sends max_completion_tokens to every model on OpenAI itself', () => {
+    expect(resolveTuning(cfg({ provider: 'openai' })).maxTokensField).toBe('max_completion_tokens')
+    for (const model of ['gpt-4o-mini', 'gpt-6-luna', 'gpt-9-anything']) {
+      const tuning = resolveTuning(cfg({ provider: 'openai', model }))
+      expect(bodyFor('openai', { model, tuning }).max_completion_tokens, model).toBe(2048)
+      expect(bodyFor('openai', { model, tuning }).max_tokens, model).toBe(undefined)
+    }
+    // A service that only copied the endpoint keeps the pattern.
+    expect(resolveTuning(cfg({ provider: 'groq' })).maxTokensField).toBe('auto')
+  })
+
+  it('spells the ceiling the other way once a model has refused this spelling', () => {
+    const degrade = { ceiling: true }
+    expect(bodyFor('openai', { model: 'gpt-4o', degrade }).max_completion_tokens).toBe(2048)
+    expect(bodyFor('openai', { model: 'gpt-4o', degrade }).max_tokens).toBe(undefined)
+    const tuning = { maxTokensField: 'max_completion_tokens' }
+    expect(bodyFor('openai', { model: 'local', tuning, degrade }).max_tokens).toBe(2048)
+  })
+})
+
+describe('what a model has said it will not take', () => {
+  /**
+   * The two concessions a refusal that NAMES its cause buys. Both are body
+   * shapes, so both are pinned here at the adapter; when they are learned is
+   * the transport's business and is pinned in the request-count matrix.
+   */
+  it('sends no sampling knob to a model that refused one', () => {
+    const tuning = { style: 'effort', topP: 0.9 }
+    const b = bodyFor('openai', { model: 'gpt-6-luna', tuning, degrade: { sampling: true } })
+    expect(b.temperature).toBe(undefined)
+    expect(b.top_p).toBe(undefined)
+    expect(bodyFor('openai', { model: 'gpt-6-luna', tuning }).temperature).toBe(0.2)
+  })
+
+  it('says reasoning off out loud on a search step, where silence is not off', () => {
+    const tuning = { style: 'effort', effort: 'high', off: false }
+    const degrade = { explicitOff: true }
+    expect(bodyFor('openai', { tuning, degrade, enableThink: false }).reasoning_effort).toBe('none')
+    // The answer step keeps the author's depth: only a step that asks for no
+    // thinking is told to stop.
+    expect(bodyFor('openai', { tuning, degrade, enableThink: true }).reasoning_effort).toBe('high')
+    // OpenRouter's spelling of the same word.
+    const unified = { style: 'unified', off: false }
+    expect(bodyFor('openai', { tuning: unified, degrade, enableThink: false }).reasoning).toEqual({ enabled: false })
+    // And never once the model has refused the reasoning field itself.
+    const both = { explicitOff: true, reasoning: true }
+    expect(bodyFor('openai', { tuning, degrade: both, enableThink: false }).reasoning_effort).toBe(undefined)
+  })
+
+  it('makes the same concessions on the capability probe', () => {
+    const tools = [{ type: 'function', function: { name: 'list_pages' } }]
+    const plain = providerFor('openai').probeBody('gpt-6-luna', tools)
+    expect(plain.temperature).toBe(0)
+    expect(plain.reasoning_effort).toBe(undefined)
+    const learned = providerFor('openai').probeBody('gpt-6-luna', tools, {
+      tuning: { style: 'effort' },
+      degrade: { sampling: true, explicitOff: true },
+    })
+    expect(learned.temperature).toBe(undefined)
+    expect(learned.reasoning_effort).toBe('none')
   })
 })

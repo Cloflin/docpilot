@@ -305,7 +305,8 @@ const ollama = {
  * WHICH TOKEN-CEILING FIELD THIS ENDPOINT TAKES FOR THIS MODEL.
  *
  * `max_tokens` is deprecated on `/v1/chat/completions` and REJECTED outright by
- * OpenAI's reasoning families — o-series and the whole gpt-5 line answer
+ * OpenAI's reasoning families — the o-series and every gpt-5 and gpt-6 model
+ * answer
  *
  *   400 Unsupported parameter: 'max_tokens' is not supported with this model.
  *       Use 'max_completion_tokens' instead.
@@ -313,25 +314,73 @@ const ollama = {
  * which the panel renders as "I couldn't find this in the docs", because a
  * question that never reached a model looks exactly like a question the corpus
  * could not answer. `chat: {provider: 'openai', model: 'gpt-5-mini'}` was
- * therefore a configuration that could not answer anything.
+ * therefore a configuration that could not answer anything — and 2.0.0 shipped
+ * `gpt-6-luna` the same way, because this pattern stopped at `gpt-5`.
  *
  * DECIDED HERE, FROM THE MODEL STRING, AT REQUEST TIME, for two reasons. It is
  * not a brand fact — every service that copied this endpoint inherits the same
  * rule for the same ids, OpenRouter and Azure included — and it is not resolvable
  * at config time either, because a pool moves the model between requests. The
  * `(^|\/)` anchor is for exactly that: OpenRouter names the same model
- * `openai/gpt-5-mini`.
+ * `openai/gpt-5-mini`. `gpt-[5-9]` reads every later generation as keeping the
+ * rule, which every one since o1 has.
  *
- * A brand where the rule does not hold overrides it with `caps.maxTokensField`.
- * `gpt-4o` is deliberately NOT matched — it still takes `max_tokens`.
+ * A brand where the rule does not hold overrides it with `caps.maxTokensField`
+ * — OpenAI's own row does, because its endpoint takes `max_completion_tokens`
+ * from every model it serves. `gpt-4o` is deliberately NOT matched: the other
+ * services that serve it still want `max_tokens`. A model no rule here has heard
+ * of says so in that same 400, and `degrade.ceiling` is the refusal remembered —
+ * the next request spells the field the other way.
  */
-const NEEDS_MAX_COMPLETION = /(^|\/)(o[1-9](\b|-)|gpt-5|codex-mini)/i
+const NEEDS_MAX_COMPLETION = /(^|\/)(o[1-9](\b|-)|gpt-[5-9]|codex-mini)/i
 
-/** The ceiling field for this request: the brand's override, or the model's rule. */
-function maxTokensFieldFor(model, tuning) {
+const OTHER_CEILING = { max_tokens: 'max_completion_tokens', max_completion_tokens: 'max_tokens' }
+
+/**
+ * The ceiling field for this request: the brand's override, or the model's rule
+ * — and the other spelling once this model has refused that one. Exported for
+ * `doctor`, which prints the field and used to keep its own copy of the pattern.
+ */
+export function maxTokensFieldFor(model, tuning, degrade = null) {
   const named = tuning?.maxTokensField
-  if (named && named !== 'auto') return named
-  return NEEDS_MAX_COMPLETION.test(String(model || '')) ? 'max_completion_tokens' : 'max_tokens'
+  const field =
+    named && named !== 'auto'
+      ? named
+      : NEEDS_MAX_COMPLETION.test(String(model || ''))
+        ? 'max_completion_tokens'
+        : 'max_tokens'
+  return (degrade?.ceiling && OTHER_CEILING[field]) || field
+}
+
+/**
+ * WHAT A MODEL HAS SAID IT WILL NOT TAKE, applied to a body that is otherwise
+ * full strength. These are the concessions `escalateCaps` in llm.js learns from
+ * a refusal that names its cause; `degrade` is null for every model that has not
+ * refused anything, so a healthy endpoint never sees a smaller body.
+ *
+ *   · `sampling` — `temperature` and `top_p` are refused. OpenAI's reasoning
+ *     models take them only with reasoning off (gpt-6-luna) or not at all
+ *     (gpt-5, the o-series), and 0.2 is the temperature this package sends by
+ *     default — so every answer to them was a 400.
+ *   · `explicitOff` — leaving the reasoning field out does not turn reasoning
+ *     off. gpt-6-luna thinks at `medium` unless told otherwise and takes
+ *     function tools on Chat Completions only at `none`, so a search step,
+ *     which asks for no thinking by writing nothing, has to say so. Only on a
+ *     step that asks for no thinking, and never once the model has refused the
+ *     reasoning field itself.
+ */
+function concede(body, tuning, degrade, noThink) {
+  if (!degrade) return body
+  if (degrade.explicitOff && noThink && !degrade.reasoning && tuning?.style && tuning.style !== 'none') {
+    // The style's own word for off — `reasoning_effort: 'none'` or
+    // `reasoning: {enabled: false}` — and nothing else from the record.
+    applyTuning(body, { style: tuning.style, off: true }, true)
+  }
+  if (degrade.sampling) {
+    delete body.temperature
+    delete body.top_p
+  }
+  return body
 }
 
 /**
@@ -464,7 +513,7 @@ const openai = {
     // default ceiling whatever the site configured, which is also why an answer
     // truncated at that ceiling looked like a model failure rather than a
     // setting nobody was honouring.
-    if (maxTokens) body[maxTokensFieldFor(model, tuning)] = maxTokens
+    if (maxTokens) body[maxTokensFieldFor(model, tuning, degrade)] = maxTokens
     /**
      * WHETHER A REASONING FIELD IS WRITTEN AT ALL — two independent nos.
      *
@@ -479,6 +528,7 @@ const openai = {
      * field again buys the same 404. See `classifyResponse` in llm.js.
      */
     applyTuning(body, tuning, enableThink !== false && !degrade?.reasoning)
+    concede(body, tuning, degrade, enableThink === false)
     // A CONTINUATION finishes a reply the provider cut off: the partial text is
     // the last assistant message and the model is being asked to carry on from
     // mid-sentence. Forcing a response shape is exactly what breaks that — under
@@ -628,13 +678,23 @@ const openai = {
     }
   },
 
-  probeBody: (model, tools) => ({
-    model,
-    stream: false,
-    messages: [{ role: 'user', content: 'Call list_pages with prefix "/".' }],
-    tools,
-    temperature: 0,
-  }),
+  // The probe is a search step by construction — a tool call and no thinking —
+  // so it takes the same concessions one does. Without them a model that wants
+  // reasoning off before it takes tools refused every probe, and the probe asked
+  // again on every turn.
+  probeBody: (model, tools, { tuning = null, degrade = null } = {}) =>
+    concede(
+      {
+        model,
+        stream: false,
+        messages: [{ role: 'user', content: 'Call list_pages with prefix "/".' }],
+        tools,
+        temperature: 0,
+      },
+      tuning,
+      degrade,
+      true,
+    ),
   probeHasToolCall: (json) => (json.choices?.[0]?.message?.tool_calls?.length || 0) > 0,
 
   embedUrl: (baseURL) => `${baseURL}/v1/embeddings`,
