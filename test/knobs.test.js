@@ -402,6 +402,16 @@ describe('the thinking shape follows the model id', () => {
     ['claude-3-5-sonnet-20241022', 'enabled'],
     ['claude-sonnet-4-5-20250929', 'enabled'],
     ['claude-sonnet-4-6', 'adaptive'],
+    // The gateway spellings of the same versions: Vertex's `@date`, a dotted
+    // minor, a `:variant`. The first four were read as current, and `4-6@`
+    // lost its minor and was read as 4.0.
+    ['claude-sonnet-4@20250514', 'enabled'],
+    ['claude-3.5-sonnet', 'enabled'],
+    ['anthropic/claude-sonnet-4.5', 'enabled'],
+    ['claude-3.7-sonnet:thinking', 'enabled'],
+    ['claude-opus-4-1@20250805', 'enabled'],
+    ['claude-opus-4-6@20260115', 'adaptive'],
+    ['claude-opus-4.6', 'adaptive'],
     // No version at all reads as current: new models keep arriving, old ones do not.
     ['claude-next', 'adaptive'],
   ])('%s takes %s', (model, type) => {

@@ -739,11 +739,16 @@ function anthropicTools(tools) {
  * `claude-3-5-sonnet-20241022` — by taking the first `<major>[-<minor>]` group.
  * A version number is one or two digits and a date is eight, so the date after
  * an id with no minor — `claude-opus-4-20250514` — is not read as 4.20250514.
+ * The same version is spelled two more ways where an id passes through a
+ * gateway: Vertex ends it with `@` and the date (`claude-sonnet-4@20250514`),
+ * and OpenRouter dots the minor (`claude-3.5-sonnet`, `claude-sonnet-4.5`), or
+ * adds a `:variant`. Unread, `claude-sonnet-4@…` and a dotted 3.5 were current
+ * and sent `adaptive`, and `claude-opus-4-6@…` lost its minor and was legacy.
  * An id with no version in it is treated as CURRENT: new models keep arriving
  * and old ones do not, so that is the direction to be wrong in.
  */
 function legacyThinking(model) {
-  const m = String(model || '').match(/(?:^|-)(\d{1,2})(?:-(\d{1,2}))?(?=-|$)/)
+  const m = String(model || '').match(/(?:^|-)(\d{1,2})(?:[-.](\d{1,2}))?(?=[-@:]|$)/)
   if (!m) return false
   const major = Number(m[1])
   const minor = Number(m[2] || 0)
