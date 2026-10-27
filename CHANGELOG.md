@@ -38,6 +38,93 @@ Not yet: an approval in the middle of a search, nested parameters, the Responses
 API for reasoning with tools on GPT-6, and tool calls in `docpilot eval`. See
 [Tools and actions](https://docpilot-nine.vercel.app/features/tools).
 
+### Security
+
+- **The Vercel `/ai` proxy rebuilds tools and messages, not only the top-level
+  body.** A typed server tool such as `openrouter:web_search`, an image or file
+  part, a `tool_choice` naming an undeclared tool, more than 24 tools or more
+  than 64 messages is a 400 before the request reaches OpenRouter. Every body
+  the panel builds still passes unchanged.
+- **The proxy's limiter keeps its memory bounded in constant time**, counts an
+  IPv6 /64 as one address, and reads `x-vercel-forwarded-for` and the other
+  forwarded headers only when it runs on Vercel.
+- **On a server install the leak guard also reads the answer's `summary` and
+  its actions' arguments.** A summary that repeats the owner's private prompt is
+  dropped, and so is an action whose arguments do.
+- **The server's limiter counts an IPv6 /64 as one client** and an IPv4-mapped
+  address as its IPv4, and a request refused before admission no longer leaves
+  an entry behind.
+- **The reference feedback receiver limits who can write.** It answers 415 to
+  anything but `application/json`, so another site cannot write a vote with a
+  `text/plain` POST. Each client gets 30 records a minute and 1000 a day
+  (`DOCPILOT_FEEDBACK_TRUST_PROXY` names the proxy hops in front),
+  `DOCPILOT_FEEDBACK_ORIGINS` limits the origins, a `revision` above 1000 is
+  refused, and the store takes at most 32 MB a day.
+- **A site tool's `fetch` or `href` template stays on the path it was written
+  with.** The build refuses a placeholder in the scheme or the host, and an
+  argument that makes a `.` or `..` segment fails the call before anything is
+  sent.
+- **A link the model wrote with a number for its text is read as the citation it
+  shows.** `[1](/pricing)`, or `[1]` with a reference definition, rendered as a
+  citation that opened another page.
+
+### Fixed
+
+- **`panel.setConfig()` and the React adapter's `config` prop reach the panel.**
+  They changed the trigger and nothing else; the panel kept the config it was
+  mounted with. The conversation stays across a push.
+- **Code blocks on Docusaurus are highlighted again.** An explicit
+  `highlighter: undefined` replaced the bundled Shiki; now only `false` or an
+  adapter does.
+- **A site under a base path off VitePress keeps its scopes and its links.**
+  Docusaurus `baseUrl: '/docs/'`, or `base` given to `mountDocPilot`, lost the
+  *this page* and *section* scopes, and a citation click loaded a page outside
+  the site. The panel takes the base off the route and puts it back on a load.
+- **A question asked while a suggested answer is still appearing keeps the
+  panel.** The suggestion's last frame cleared the new question's busy state, so
+  Stop did nothing. Two submits in one tick no longer give a false refusal.
+- **On a server install, the first answer of a conversation stays trusted on
+  follow-ups.** Turn 1 went out under its own id and later turns under the
+  archive's, and the server's signature covers that id. A reply the panel
+  cannot read now ends the turn with an error instead of leaving it busy.
+- **"Delete all" also deletes the feedback log** (`docpilot:feedback`). With
+  `history.enabled: false`, the local copy keeps only the vote.
+- **Dated Claude 4 ids get the thinking shape they accept.**
+  `claude-opus-4-20250514` was read as version 4.20250514 and sent adaptive
+  thinking, which it refuses with a 400.
+- **A repeated search or tool call no longer puts its whole result into the
+  prompt again**; it gets a one-line note that points back at the first result.
+- **A list or an object as a `search_docs` query is a refused step, not a failed
+  turn.** The built-in tools check their arguments the way site tools do; `k:
+  null` now means the default.
+- **The tool-calling probe reads a 200 that is not JSON as no answer**, not as
+  "this model cannot call tools" for the rest of the page.
+- **`@cloflin/docpilot` no longer declares names it does not export.** Its types
+  re-exported all of `./config`, so `import { DEFAULTS } from
+  '@cloflin/docpilot'` type-checked and then threw. They stay on
+  `@cloflin/docpilot/config`.
+- **The CLI reads `.env` and `.env.local` on every site, not only on
+  VitePress.** They were read through `vitepress`, resolved from the package, so
+  a Docusaurus or plain site, or strict pnpm, silently got no key. Same files,
+  order and `$VAR` expansion as Vite; every command starts about 100 ms faster.
+- **A CRLF file is read like its LF twin, and a byte-order mark no longer hides
+  the frontmatter.** In a CRLF file no fence was found, so one `<script>` in a
+  code sample deleted the rest of the page from the index.
+- **A failed `docpilot index` keeps the old index.** The build writes to a
+  sibling directory and swaps it in after the last check. The 64 KB manifest
+  ceiling now counts bytes.
+- **`docpilot index` refuses an `indexDir` that holds the project** — the
+  filesystem root, the home directory, the project root, or a directory holding
+  the docs, the config, `evalDir` or `importDir`.
+- **Two files for one route no longer merge.** For `guide.md` and
+  `guide/index.md`, or `.md` and `.mdx`, the build keeps the first by path and
+  warns.
+- **`calibrate` fails when no positive probe was scored**, instead of writing tau
+  1.00 — a gate that refuses everything — as calibrated.
+- **`docpilot model compare` credits a refusal for any cause**, as `eval` does.
+- **`eval` no longer compares a run with another model's report.** `gpt` paired
+  with `gpt-5` by filename prefix.
+
 ## 2.0.1 — 2026-10-27
 
 `gpt-6-luna` is the model OpenAI names as the replacement for `gpt-4o-mini`.
