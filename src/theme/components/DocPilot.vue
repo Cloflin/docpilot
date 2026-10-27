@@ -221,6 +221,7 @@
           role="region"
           :aria-label="T('panel.conversation')"
           @scroll.passive="onThreadScroll"
+          @click="onThreadClick"
         >
           <!-- The docs were rebuilt since this conversation was written. The
                answers still render — every in-answer link is re-checked against
@@ -2203,6 +2204,11 @@ const OPENERS = {
 
 function closeDock() {
   const opener = OPENERS[s.dockPanel] || OPENERS.prompt
+  resetDock()
+  nextTick(() => panel.value?.querySelector(opener)?.focus())
+}
+
+function resetDock() {
   s.dockPanel = null
   editing.value = false
   confirmClear.value = false
@@ -2212,7 +2218,44 @@ function closeDock() {
   // control to keep.
   activePick.value = null
   pickFilter.value = ''
-  nextTick(() => panel.value?.querySelector(opener)?.focus())
+}
+
+/**
+ * The scope picker and the conversation list let go when the reader moves on —
+ * a press in the thread, or typing in the composer. ui-specs/019.
+ *
+ * Without the focus return `closeDock()` makes: focus is already where the
+ * reader put it, and handing it to the opener would pull the caret out of the
+ * field between two keystrokes. The prompt document is not one of the two: it
+ * is read beside the question it shapes.
+ */
+function dismissDock() {
+  if (s.dockPanel === 'picker' || s.dockPanel === 'history') resetDock()
+}
+
+/**
+ * A press in the thread, and only a press — ui-specs/019. Three clicks reach
+ * the thread with no press in it behind them:
+ *
+ *   · Enter or Space on a control inside it. The click that synthesises has
+ *     `detail` 0; a pointer's carries its count.
+ *   · The end of a drag that selected text. It lands on the common ancestor,
+ *     and the "Ask AI" button is already placed on that selection: moving the
+ *     thread up under it would leave the button over other lines.
+ *   · Chromium's own scrollbar, whose click reaches the element. Closing the
+ *     list there grows the thread under the thumb the reader is holding.
+ */
+function onThreadClick(e: MouseEvent) {
+  if (e.detail === 0) return
+  if (document.getSelection()?.isCollapsed === false) return
+  const el = e.currentTarget as HTMLElement
+  if (e.target === el) {
+    const box = el.getBoundingClientRect()
+    const x = e.clientX - box.left - el.clientLeft
+    const y = e.clientY - box.top - el.clientTop
+    if (x < 0 || y < 0 || x >= el.clientWidth || y >= el.clientHeight) return
+  }
+  dismissDock()
 }
 
 // Focused by id, not by class: the conversation list also carries the picker's
@@ -2685,6 +2728,7 @@ const grow = (e: Event) => fit(e.target as HTMLTextAreaElement)
 function onFieldInput(e: Event) {
   const el = e.target as HTMLTextAreaElement
   fit(el)
+  dismissDock()
   if (fieldInBar.value && !s.open && el.value.trim()) session.open()
 }
 

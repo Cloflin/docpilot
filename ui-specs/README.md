@@ -43,6 +43,7 @@ and a research pass first, and a change that moves a rule updates 000 and
 | [016](016-the-window-is-glass.md) | The window is frosted glass that yields to reduced transparency, contrast and forced colours; a row or a list has one hover fill that travels between its items |
 | [017](017-motion-by-default-and-one-layer.md) | `ui.motion` — the panel moves whatever the OS says, and `'auto'` defers to it; every stylesheet is in `@layer docpilot`, save three VitePress patches |
 | [018](018-actions-the-answer-offers.md) | The answer's actions: a pill per action, a form for `confirm: 'form'`, the outcome in place, and a source row that is the site |
+| [019](019-the-docks-let-go.md) | The scope picker and the conversation list close on a press in the thread and on typing in the composer |
 
 ## The rules
 

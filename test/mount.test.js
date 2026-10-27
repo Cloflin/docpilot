@@ -1189,3 +1189,101 @@ describe('the lens — ui-specs/016', () => {
     expect(lit(row)).toBe(false)
   })
 })
+
+/**
+ * The scope picker and the conversation list let go when the reader moves on —
+ * ui-specs/019. Set on the store rather than opened from their buttons: what is
+ * under test is the letting go, and the openers have tests of their own.
+ */
+describe('the docks let go — ui-specs/019', () => {
+  const openPanel = async () => {
+    panel = mountDocPilot({ config: CONFIG })
+    panel.open()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    session.state.degraded = false
+    await nextTick()
+    await nextTick()
+  }
+
+  afterEach(() => {
+    document.getSelection()?.removeAllRanges()
+    session.state.dockPanel = null
+    session.state.open = false
+  })
+
+  /**
+   * The thread with a box, which happy-dom does not lay out: 300 × 400 from the
+   * viewport's corner, so a press at x ≥ 300 is on its scrollbar. `detail: 1`
+   * is what a pointer's click carries; Enter and Space synthesise 0.
+   */
+  const threadWithBox = () => {
+    const thread = document.querySelector('.docpilot__thread')
+    Object.defineProperty(thread, 'clientWidth', { value: 300, configurable: true })
+    Object.defineProperty(thread, 'clientHeight', { value: 400, configurable: true })
+    return thread
+  }
+  const press = (el, init) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 100, clientY: 100, ...init }))
+
+  it.each(['picker', 'history'])('closes the %s on a press in the thread', async (which) => {
+    await openPanel()
+    session.state.dockPanel = which
+    await nextTick()
+    press(threadWithBox())
+    expect(session.state.dockPanel).toBe(null)
+  })
+
+  it('keeps the dock on Enter or Space in the thread: no press is behind that click', async () => {
+    await openPanel()
+    session.state.dockPanel = 'history'
+    await nextTick()
+    press(threadWithBox(), { detail: 0 })
+    expect(session.state.dockPanel).toBe('history')
+  })
+
+  it('keeps the dock when the click ends a drag that selected text', async () => {
+    await openPanel()
+    session.state.dockPanel = 'history'
+    await nextTick()
+    const thread = threadWithBox()
+    const range = document.createRange()
+    range.selectNodeContents(thread)
+    document.getSelection().addRange(range)
+    expect(document.getSelection().isCollapsed).toBe(false)
+    press(thread)
+    expect(session.state.dockPanel).toBe('history')
+  })
+
+  it('keeps the dock on a press on the thread’s own scrollbar', async () => {
+    await openPanel()
+    session.state.dockPanel = 'history'
+    await nextTick()
+    press(threadWithBox(), { clientX: 305 })
+    expect(session.state.dockPanel).toBe('history')
+  })
+
+  it('leaves the prompt document open on a press and on typing', async () => {
+    await openPanel()
+    session.state.dockPanel = 'prompt'
+    await nextTick()
+    press(threadWithBox())
+    const ta = document.querySelector('.docpilot__field textarea')
+    ta.value = 'how'
+    ta.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    expect(session.state.dockPanel).toBe('prompt')
+  })
+
+  it.each(['picker', 'history'])('closes the %s on typing, and leaves the caret in the field', async (which) => {
+    await openPanel()
+    session.state.dockPanel = which
+    await nextTick()
+    const ta = document.querySelector('.docpilot__field textarea')
+    ta.focus()
+    ta.value = 'how'
+    ta.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    await nextTick()
+    expect(session.state.dockPanel).toBe(null)
+    expect(document.activeElement).toBe(ta)
+  })
+})
