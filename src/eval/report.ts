@@ -114,6 +114,10 @@ export function previousReport(dir, meta) {
     try {
       const doc = JSON.parse(fs.readFileSync(path.join(dir, c.f), 'utf8'))
       if (!doc?.summary) continue
+      // The prefix is a PREFIX: model `gpt` matches `report-…-gpt-5-….json`,
+      // `llama3` matches `llama3-8b`, and `a/b` and `a_b` sanitise to one name.
+      // The newest of those won, and its deltas were another model's.
+      if (doc.meta?.model !== meta.model) continue
       // The prefix stops at the model, so it also matches the `-lexical-` files
       // written by `docpilot eval --lexical` — a diagnostic run with the dense
       // channel switched off. Diffing a hybrid run against one of those reports

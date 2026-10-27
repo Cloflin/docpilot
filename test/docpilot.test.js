@@ -3882,6 +3882,19 @@ describe('calibration — the sweep selection rule (RAG-SPEC 5.6 steps 3-5)', ()
     expect(chooseTau(TAU_STEPS.map((t) => sweepRow(rows, t, 'G')))).toBeNull()
   })
 
+  it('FAIL: no positive probe is no tau, never tau = 1.00', () => {
+    // Negatives only — or every positive excluded as a retrieval miss, which
+    // leaves the same set. Every row reads feasible, because a stratum with
+    // n = 0 does not object, and the largest is a gate that refuses everything.
+    const rows = [probe('n4-a', 'N4', 0.1), probe('n4-b', 'N4', 0.2), probe('n1-a', 'N1', 0.3)]
+    const sweep = TAU_STEPS.map((t) => sweepRow(rows, t, 'G'))
+    expect(sweep.every((r) => r.feasible)).toBe(true)
+    expect(chooseTau(sweep)).toBeNull()
+    expect(chooseTau([])).toBeNull()
+    // and `main()` names the cause rather than blaming the score function
+    expect(srcText('src/eval/calibrate.js')).toContain("name: 'no-positive-probes'")
+  })
+
   it('FAIL: no-feasible-tau when a stratum cannot meet its bound at any tau', () => {
     // This is the first of the five named RAG-SPEC 5.6 step 5 conditions, and
     // the one a too-small probe set triggers on its own.
@@ -10113,6 +10126,20 @@ describe('golden-set levels — report comparability and lint (W3 consumers)', (
     delete legacy.embedModel
     put(legacyDir, 'report-abc12345-m1-legacy.json', legacy)
     expect(previousReport(legacyDir, meta({ embedModel: 'bge-m3' }))).not.toBeNull()
+  })
+
+  /**
+   * The filename prefix stops at the model, so `m1` is a prefix of `m1-5` —
+   * `gpt` of `gpt-5`, `llama3` of `llama3-8b`. The newest file won, and the
+   * "changes since the previous run" were another model's numbers.
+   */
+  it('never pairs a model with another whose name it prefixes', () => {
+    const dir = fresh()
+    put(dir, 'report-abc12345-m1-5-new.json', meta({ model: 'm1-5' }), 2e9)
+    expect(previousReport(dir, meta())).toBeNull()
+
+    put(dir, 'report-abc12345-m1-old.json', meta(), 1e9)
+    expect(previousReport(dir, meta()).meta.model).toBe('m1')
   })
 
   it('still calls a golden set that grew inside one level incomparable', () => {

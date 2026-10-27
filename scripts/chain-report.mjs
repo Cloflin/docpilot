@@ -12,6 +12,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { mulberry32 } from '../dist/model/stats.js'
 
 const dir = process.argv[2]
 const argOf = (n, d) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3) ?? d
@@ -45,8 +46,11 @@ const val = (arm, id, run, kind, metric) => {
 const chains = [...new Set(rows.map((r) => r.id))].sort()
 const runs = [...new Set(rows.map((r) => r.run))].sort()
 
-let seed = 7
-const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+// Seeded, so a rerun prints the same interval — and 32-bit, which the LCG this
+// replaced was not: `seed * 1103515245` passes 2^53, the double drops the low
+// bits before the mask, and the stream repeated after 14 470 draws, inside
+// one interval of 4000 resamples.
+const rnd = mulberry32(7)
 function bootstrap(diffs, n = 4000) {
   if (diffs.length < 2) return [NaN, NaN]
   const ms = []

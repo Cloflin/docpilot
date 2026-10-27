@@ -6,7 +6,7 @@ import path from 'node:path'
 import {readSafetensorsHeader, readGgufHeader} from '../src/model/headers.js'
 import {fingerprint, verify, checksumLines} from '../src/model/fingerprint.js'
 import {mcnemarExact, mcnemarMinFlips, pairedBootstrap} from '../src/model/stats.js'
-import {compareReports, renderCompare} from '../src/model/compare.js'
+import {compareReports, renderCompare, isOk} from '../src/model/compare.js'
 import {ngramContamination, normalizeTokens, extractTrainTexts} from '../src/model/contamination.js'
 import {runModel, parseModelArgs} from '../src/model/cli.js'
 
@@ -275,6 +275,29 @@ describe('compare', () => {
     expect(r.verdict).toBe('no-significant-difference')
     expect(r.resolution.minFlips).toBe(6)
     expect(r.resolution.minDetectableOkDelta).toBeCloseTo(6 / 40)
+  })
+
+  /**
+   * `ok` is `eval`'s reading of the outcome: any refusal settles a negative.
+   * A model-side refusal — every one under `guard.mode: 'off'` — observes
+   * `refuse:not-answerable`, a cause no golden record is authored with, so an
+   * exact match scored every correct refusal not-ok on BOTH sides and a
+   * candidate that stopped refusing flipped nothing.
+   */
+  it('credits any refusal of a negative, the way eval scores it', () => {
+    expect(isOk({expect: 'refuse:no-evidence', observed: 'refuse:not-answerable'})).toBe(true)
+    expect(isOk({expect: 'refuse:out-of-scope', observed: 'refuse:no-evidence'})).toBe(true)
+    expect(isOk({expect: 'answer', scoredAsNegative: true, observed: 'refuse:out-of-scope'})).toBe(true)
+    expect(isOk({expect: 'answer', scoredAsNegative: true, observed: 'answer', citationPrecision: 1})).toBe(false)
+    expect(isOk({expect: 'refuse:no-evidence', observed: 'answer'})).toBe(false)
+    expect(isOk({expect: 'refuse:no-evidence', observed: 'error'})).toBe(false)
+
+    const neg = (id, observed) => ({...row(id, true, 0.6), expect: 'refuse:no-evidence', observed})
+    const refusing = report(ids.map((id) => neg(id, 'refuse:not-answerable')))
+    const answering = report(ids.map((id, i) => neg(id, i < 12 ? 'answer' : 'refuse:not-answerable')), {model: 'm2'})
+    const r = compareReports(refusing, answering, {resamples: 200})
+    expect(r.mcnemar).toMatchObject({b: 12, c: 0})
+    expect(r.verdict).toBe('regression')
   })
 
   it('a hallucinated citation makes an answer not ok, and unpaired rows are counted', () => {

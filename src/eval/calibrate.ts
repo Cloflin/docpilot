@@ -1212,8 +1212,15 @@ function sweepRow(rows, tau, field = 'G') {
  * — step 6 forbids negative-catch from justifying a higher tau, and the only way
  * to make that structural rather than aspirational is for the selector not to
  * receive the number.
+ *
+ * NO POSITIVE PROBE, NO TAU. `feasible` reads `n === 0` as "this stratum does
+ * not object", so a sweep with no positive at all — a set of negatives only,
+ * or every positive excluded as a retrieval miss — is feasible at every step,
+ * and the largest is 1.00: a gate that refuses everything, with nothing to
+ * say so, shipped as `calibrated`. Null instead, which `main()` fails loudly.
  */
 function chooseTau(sweep) {
+  if (!sweep.length || POSITIVE_STRATA.every((k) => sweep[0].byStratum[k].n === 0)) return null
   let chosen = null
   for (const row of sweep) {
     if (row.feasible) chosen = row
@@ -1548,11 +1555,26 @@ async function main() {
     : null
 
   const fails = []
+  // Named apart from `no-feasible-tau`, whose detail would blame the score
+  // function: with no positive scored there is nothing over-refusal can be
+  // measured on, and a transfer's anchors would clear its ceiling the same
+  // vacuous way. See `chooseTau`.
+  const positivesScored = scored.filter((r) => STRATA[r.stratum].positive).length
+  if (!LEXICAL_ONLY && positivesScored === 0) {
+    fails.push({
+      name: 'no-positive-probes',
+      detail:
+        `no positive probe (${POSITIVE_STRATA.join('/')}) was scored — ${positives.length} in the set, ` +
+        `${misses.length} excluded as retrieval misses. With nothing that should pass, every tau ` +
+        `meets the over-refusal bounds and the largest is 1.00, a gate that refuses everything. ` +
+        `Add positive probes, or fix the misses.`,
+    })
+  }
   // `no-feasible-tau` diagnoses a score function that cannot separate this corpus.
   // A null tau on a vectorless index diagnoses nothing — half the score function
   // is absent by construction — and failing the run for it would leave the one
   // threshold this index does use, `tauLexical`, unwritten.
-  if (!LEXICAL_ONLY && (tau === null || tau < 0.05)) {
+  if (!LEXICAL_ONLY && positivesScored > 0 && (tau === null || tau < 0.05)) {
     fails.push({
       name: 'no-feasible-tau',
       detail:

@@ -40,9 +40,21 @@ export const METRICS = [
   {key: 'promptTokens', get: (r) => r.cost?.promptTokens, better: 'lower'},
 ]
 
+/**
+ * `eval`'s own reading of "ended the way the golden set expected" — `expectEff`
+ * and the MISS line in `src/eval/run.ts`, restated because that module starts a
+ * CLI on import. Any refusal settles a negative: authored causes are
+ * `refuse:no-evidence` and `refuse:out-of-scope`, while a model-side refusal —
+ * every refusal under `guard.mode: 'off'` — observes `refuse:not-answerable`.
+ * Demanding the exact cause scored those correct refusals not-ok on both
+ * sides, so a candidate that stopped refusing showed no flip at all. A
+ * positive whose gold is outside its own scope (`scoredAsNegative`) is one.
+ */
 export function isOk(r) {
-  if (r.observed !== r.expect) return false
-  if (r.expect !== 'answer') return true
+  const expect = r.scoredAsNegative ? 'refuse:out-of-scope' : r.expect
+  if (String(expect).startsWith('refuse')) return String(r.observed).startsWith('refuse')
+  if (r.observed !== expect) return false
+  if (expect !== 'answer') return true
   return (r.citationPrecision ?? 0) >= 0.5 && !(r.hallucinated > 0)
 }
 
