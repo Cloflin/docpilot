@@ -101,6 +101,9 @@ export function sourceChunk(c) {
     title: c.title || '',
     breadcrumb: c.breadcrumb || '',
     text: String(c.text || ''),
+    // A site tool's reply — engine-spec 038. The panel draws it as a row with
+    // no link, and it needs the kind to know.
+    ...(c.kind === 'tool' ? { kind: 'tool', tool: c.tool } : {}),
   }
 }
 
@@ -670,6 +673,9 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
     record.support = result.support ?? null
     record.iterations = result.iterations
     record.requests = result.requests
+    // Each site function call — engine-spec 038 — as `{tool, ok, ms}`: never its
+    // arguments or its reply, which may be the reader's own data.
+    if (result.tools?.length) record.tools = result.tools
     record.usage = {
       promptTokens: result.cost.promptTokens,
       outputTokens: result.cost.outputTokens,
@@ -727,6 +733,9 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
       tentative: Boolean(notAnswerable),
       notAnswerable,
       sources: result.sources.map(sourceChunk),
+      // What the answer offers, checked against the site's schemas; the page
+      // runs them — engine-spec 038.
+      actions: result.actions || [],
       sig: sign(result.text, result.citations),
     }
     if (cacheKey && !notAnswerable) ctx.answers.set(cacheKey, answered)

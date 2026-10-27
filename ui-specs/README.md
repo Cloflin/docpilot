@@ -42,6 +42,7 @@ and a research pass first, and a change that moves a rule updates 000 and
 | [015](015-the-panel-opens-three-ways.md) | Three shapes — a sidebar that moves the page from either edge, the popup, and a bar at the bottom centre, the default — and motion that leaves as well as arrives, on springs written as `linear()` |
 | [016](016-the-window-is-glass.md) | The window is frosted glass that yields to reduced transparency, contrast and forced colours; a row or a list has one hover fill that travels between its items |
 | [017](017-motion-by-default-and-one-layer.md) | `ui.motion` — the panel moves whatever the OS says, and `'auto'` defers to it; every stylesheet is in `@layer docpilot`, save three VitePress patches |
+| [018](018-actions-the-answer-offers.md) | The answer's actions: a pill per action, a form for `confirm: 'form'`, the outcome in place, and a source row that is the site |
 
 ## The rules
 

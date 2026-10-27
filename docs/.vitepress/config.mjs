@@ -236,6 +236,7 @@ const groups = [
       { text: 'Conversation history', link: '/features/history' },
       { text: 'Conversation memory', link: '/features/memory', badge: 'new' },
       { text: 'Model fallback', link: '/features/fallback' },
+      { text: 'Tools and actions', link: '/features/tools', badge: 'new' },
       { text: 'Every language', link: '/features/i18n' },
       { text: 'Suggestions', link: '/features/suggestions' },
       { text: 'Status and reasoning', link: '/features/status' },

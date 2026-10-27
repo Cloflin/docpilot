@@ -27,6 +27,7 @@ import { detectSocial } from './social.js'
 import { resolveI18n, t, normaliseLocale } from './i18n.js'
 import { hostConfig } from './host.js'
 import { resolveUi } from './ui.js'
+import { checkArgs, pageOf, resultMessage, runTool, runnerFor } from './tools.js'
 // ui-specs/009 — rule 11's resolvers. Re-run here for the same reason `ui` is:
 // `configure` also receives the `{enabled: false}` payload, which never met
 // `themeDocPilot` and therefore carries none of these blocks at all.
@@ -1213,6 +1214,10 @@ function restoreConversation() {
  * A page-level chunk has no heading of its own and keeps the old two-part row.
  */
 function sourceRow(c) {
+  // A SITE TOOL'S REPLY — engine-spec 038, ui-specs/018. Not a page: no route
+  // and no origin, so no link, and the template says "from the site" where a
+  // page row names its page.
+  if (c.kind === 'tool') return { n: 0, id: c.id, href: null, origin: null, title: c.title, tail: '', kind: 'tool' }
   const page = state.index.manifest.pages.find((p) => p.path === c.path)
   const pageTitle = page?.title || c.breadcrumb || c.title
   const heading = c.title && c.title !== pageTitle ? c.title : null
@@ -1450,6 +1455,8 @@ export interface Turn {
   state: string
   answerHtml: string
   answerText: string
+  /** What the answer offers the reader to do — engine-spec 038, ui-specs/018. Never archived. */
+  actions?: any[]
   /** The chunk ids this answer cited, for the next turn to inherit (spec 013). */
   citationIds?: string[]
   /** The model's summary of this answer, sent in its place later (spec 026). */
@@ -1595,11 +1602,14 @@ function settleAnswer(turn, result, started, signal = null) {
   const byHref = new Map()
   const cited = result.sources.map((c) => {
     const row = sourceRow(c)
-    const seen = byHref.get(row.href)
+    // A tool row has no href, and two of them are two replies, not one page —
+    // so the id stands in for the destination they would otherwise share.
+    const key = row.href || row.id
+    const seen = byHref.get(key)
     if (seen) return seen
     row.n = rows.length + 1
     rows.push(row)
-    byHref.set(row.href, row)
+    byHref.set(key, row)
     return row
   })
   turn.sources = rows
@@ -1625,6 +1635,8 @@ function settleAnswer(turn, result, started, signal = null) {
   // engine-spec 026: the model's own one-line summary, sent in place of this
   // answer once a newer one exists. Never rendered.
   turn.answerSummary = result.summary || null
+  // engine-spec 038, ui-specs/018: what this answer offers the reader to do.
+  turn.actions = actionCards(result.actions)
   const settle = () => {
     const { html, delinked } = renderAnswer(result.text, knownPaths.value, cited)
     turn.answerText = result.text
@@ -1646,6 +1658,77 @@ function settleAnswer(turn, result, started, signal = null) {
   }
   settle()
   return undefined
+}
+
+/**
+ * The answer's actions as the panel holds them — ui-specs/018.
+ *
+ * The title and the label are the CONFIG's, never the model's: the model chose
+ * which action and with what, and the words on the button are the author's. An
+ * action this page cannot run — a server turn proposed one the page never
+ * registered — is kept and drawn disabled, so the answer says the same thing on
+ * every page and the reader is told why it does nothing here.
+ */
+function actionCards(actions) {
+  const defs = new Map<string, any>((state.config.tools || []).map((t) => [t.name, t]))
+  return (actions || [])
+    .map((a, i) => {
+      const def = defs.get(a?.tool)
+      if (!def) return null
+      return {
+        id: `${a.tool}-${i}`,
+        tool: a.tool,
+        title: def.title,
+        label: def.label,
+        confirm: def.confirm,
+        args: { ...a.args },
+        // What a form edits. The model's arguments stay in `args`, so a reader
+        // who cancels and opens it again starts from what was offered.
+        values: { ...a.args },
+        errors: {},
+        open: false,
+        state: runnerFor(def) ? 'idle' : 'unavailable',
+        message: '',
+      }
+    })
+    .filter(Boolean)
+}
+
+/** A reader-started action may take as long as a reader will watch a button say so. */
+const ACTION_TIMEOUT_MS = 30000
+
+/**
+ * Run one of an answer's actions — the reader pressed it, or sent its form.
+ * ui-specs/018.
+ *
+ * The check is the one the turn ran on the model's arguments, run again on
+ * what is actually being sent: a form is the one place the arguments change
+ * after the turn checked them. A field that fails it keeps the form open with
+ * its message, and nothing is sent.
+ */
+export async function runAction(turn, action) {
+  const def = (state.config.tools || []).find((t) => t.name === action?.tool)
+  if (!def || action.state === 'running' || action.state === 'unavailable') return
+  const checked = checkArgs(def, action.confirm === 'form' ? action.values : action.args)
+  if (!checked.ok) {
+    action.errors = checked.errors
+    return
+  }
+  action.errors = {}
+  action.state = 'running'
+  try {
+    const value = await runTool(def, checked.value, {
+      question: turn.question,
+      page: pageOf(),
+      timeoutMs: ACTION_TIMEOUT_MS,
+    })
+    action.message = resultMessage(value)
+    action.state = 'done'
+    action.open = false
+  } catch (e) {
+    if (state.debug) console.debug('[docpilot] action failed', action.tool, e)
+    action.state = 'failed'
+  }
 }
 
 function makeTurn(question, frozen, quote = ''): Turn {
@@ -3038,7 +3121,7 @@ async function submitRemote(q, frozen, selected) {
     }
     await settleAnswer(
       turn,
-      { text: p.text, summary: p.summary, citations: p.citations || [], sources },
+      { text: p.text, summary: p.summary, citations: p.citations || [], sources, actions: p.actions || [] },
       started,
       baked ? signal : null,
     )

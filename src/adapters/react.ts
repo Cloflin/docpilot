@@ -23,7 +23,7 @@
 
 // @ts-ignore — react is the CONSUMER's dependency, never this package's.
 import { createElement, useEffect, useRef, useState } from 'react'
-import { mountDocPilot } from '@cloflin/docpilot/web'
+import { mountDocPilot, registerTool } from '@cloflin/docpilot/web'
 
 /**
  * Mount the panel and keep it in step with the host's router.
@@ -124,4 +124,4 @@ export function useDocPilot() {
  */
 let panelHandle = null
 
-export { mountDocPilot }
+export { mountDocPilot, registerTool }

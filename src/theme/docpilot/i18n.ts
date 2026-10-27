@@ -110,6 +110,9 @@ const UI_EN = {
     writing: 'Writing the answer',
     reading: 'Reading a page',
     readingPage: 'Reading {label}',
+    // A site function tool running — engine-spec 038. `label` is the tool's
+    // title from the config, never a string the model wrote.
+    tool: 'Checking {label}',
     /**
      * The two escalation steps — ui-specs/012. Neither names a cause and
      * neither promises a next action, because a chain with one member never
@@ -396,6 +399,25 @@ const UI_EN = {
     // which half of the pair the button is wearing. Deliberately not a count:
     // the dot is not one either, and the thread is where the number lives.
     unread: 'Answer ready.',
+  },
+  /**
+   * An answer's actions, and a source that is the site — ui-specs/018. The
+   * button text itself is not here: it is each tool's `label`, the author's
+   * words in the config.
+   */
+  tools: {
+    groupLabel: 'Actions',
+    running: 'Working',
+    done: 'Done.',
+    failed: 'That did not work. Try again?',
+    unavailable: 'This action is not available on this page.',
+    cancel: 'Cancel',
+    required: 'required',
+    invalid: 'Check this value.',
+    fromSite: 'from the site',
+    // The pill's accessible description: which arguments the model chose, so
+    // "Open pricing" for the wrong plan reads as a different action.
+    argsLabel: 'With {args}',
   },
   cta: {
     label: "Didn't find it? Ask DocPilot",

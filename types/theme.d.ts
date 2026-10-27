@@ -7,6 +7,8 @@
 import type { Component } from 'vue'
 
 export * from './components.js'
+export { registerTool } from './tools.js'
+export type { ToolHandler } from './tools.js'
 
 /** The four layout slots the panel claims. */
 export declare function docPilotSlots(

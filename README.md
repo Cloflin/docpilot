@@ -9,7 +9,7 @@ It is a chat, not a search box with better typography: scope a question to one s
 
 **Two installs, one panel.** In the **static** install (`runtime: 'browser'`, the default) retrieval runs in the reader's browser against an index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. In the **server** install (`runtime: 'server'`) the whole turn runs on your server and the page receives only the answer stream: the corpus, the instructions and the keys stay with you, behind rate limits, a turn deadline and a metrics endpoint. `npx docpilot init` asks which; the reader's chat is the same in both.
 
-In the static install, retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **one sign bit per dimension** — 405 KB for this project's own 809-chunk index, where int8 would be 3.2 MB and float32 12.6 MB — scored against the question's full-precision vector, and the build measures the error and refuses to ship above `0.03` mean |Δcos|. A relevance floor on retrieval is scored on every turn and, opt-in (`guard.mode: 'calibrated'`), refuses **before the model is called** so an off-topic question costs zero tokens — off by default, because that threshold has to be calibrated per corpus **and per language**, and a reader's language is not something a threshold can see; the model's own citation contract is what handles it otherwise. Every citation the reader sees is checked against what the host actually retrieved during that turn.
+In the static install, retrieval runs **in the reader's browser** against a static index built at deploy time — no vector database, no search service, no server beyond the one already serving your site. It is **hybrid**: a BM25 pass over the chunk text and a cosine pass over the vectors, merged by Reciprocal Rank Fusion. The vectors are quantised at build time to **one sign bit per dimension** — 411 KB for this project's own 821-chunk index, where int8 would be 3.2 MB and float32 12.8 MB — scored against the question's full-precision vector, and the build measures the error and refuses to ship above `0.03` mean |Δcos|. A relevance floor on retrieval is scored on every turn and, opt-in (`guard.mode: 'calibrated'`), refuses **before the model is called** so an off-topic question costs zero tokens — off by default, because that threshold has to be calibrated per corpus **and per language**, and a reader's language is not something a threshold can see; the model's own citation contract is what handles it otherwise. Every citation the reader sees is checked against what the host actually retrieved during that turn.
 
 ## Install
 
@@ -156,6 +156,7 @@ Inside it:
 | **The thread** | edit a question and everything below it is discarded and answered again; ask again re-runs an answer that arrived; copy one turn, or the whole conversation as Markdown |
 | **Feedback** | two thumbs, four reasons, and a 500-character comment redacted before it leaves the browser — posted to an endpoint **you** own, or nowhere at all |
 | **The prompt** | `prompt.show` puts the assistant's own instruction, its tool definitions and the active scope in front of the reader, and `prompt.allowAppend` lets them add one of their own — sent with the question, never merged into the system prompt |
+| **Your tools** | off by default. `tools` adds functions the model calls for live data — a plan's limits, an API's status — cited as a source "from the site", and actions the answer offers — a button or a form — that run only when the reader presses them |
 
 Every one of them is a setting with a default and a reason, and all of them are
 in the docs under **The assistant panel**.
@@ -194,7 +195,7 @@ covers rebuilding the index. See
 |---|---|---|
 | Where retrieval runs | the reader's browser | the vendor's cloud |
 | Where the index lives | a static file on the host already serving your site | the vendor's platform |
-| Index the reader downloads | 1-bit vectors, one bit per dimension — 405 KB for this site's 809 chunks | n/a — the index is theirs |
+| Index the reader downloads | 1-bit vectors, one bit per dimension — 411 KB for this site's 821 chunks | n/a — the index is theirs |
 | An off-topic question costs | zero model calls, zero tokens | not documented by any of them |
 | Citations checked against what was retrieved | yes, by host code no message can reach | not documented by any of them |
 | Refusal threshold measured on **your** corpus | `npx docpilot calibrate` | not documented by any of them |
@@ -285,7 +286,7 @@ Point `importDir` at a directory outside your docs and the assistant will answer
 
 ## Translating it
 
-Every reader-facing string — 174 of them, in 25 groups — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
+Every reader-facing string — 185 of them, in 26 groups — is replaceable one at a time, in the same shape as VitePress's own local-search i18n:
 
 ```js
 i18n: {

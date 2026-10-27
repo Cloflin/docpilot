@@ -7803,6 +7803,7 @@ describe('i18n — the documented key table matches the shipped one', () => {
       'twenty-three': 23,
       'twenty-four': 24,
       'twenty-five': 25,
+      'twenty-six': 26,
     }
     expect(words[said[2]] ?? Number(said[2])).toBe(m.size)
   })

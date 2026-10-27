@@ -184,6 +184,19 @@ function linkMarkers(tokens, sources) {
         if (m.index > last) out.push(mkText(t.content.slice(last, m.index)))
         last = m.index + m[0].length
         if (!src) continue
+        // A row with nowhere to go — a site tool's reply, engine-spec 038 —
+        // keeps its number and its hover link to the row, and loses the anchor:
+        // an `<a>` without an href is not a link, and one to `#` is a lie.
+        if (!(src.origin || src.href)) {
+          const span = new Token('span_open', 'span', 1)
+          span.attrs = [
+            ['class', 'docpilot__cite'],
+            ['data-cite', String(src.n)],
+            ['aria-label', `Source ${src.n}: ${src.title}`],
+          ] as Array<[string, string]>
+          out.push(span, mkText(String(src.n)), new Token('span_close', 'span', -1))
+          continue
+        }
         const open = new Token('link_open', 'a', 1)
         // An imported page's marker opens the ORIGINAL, matching its row in the
         // source list — one destination per citation, not two. `rel` is not

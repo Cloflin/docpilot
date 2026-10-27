@@ -11,6 +11,7 @@
  */
 
 import { TOOLS, FALLBACK_DOC, answerSummary } from './prompt.js'
+import { actionsSchema, siteToolSchema } from './tools.js'
 import { providerFor } from './providers.js'
 import { readLimitHeaders, classifyLimit } from './budget.js'
 
@@ -53,6 +54,7 @@ export interface ChatOptions {
   temperature?: number
   messages?: unknown[]
   tools?: unknown
+  site?: { tools?: any[]; actions?: any[] } | null
   signal?: AbortSignal
   answerOnly?: boolean
   schema?: unknown
@@ -91,14 +93,14 @@ export interface ChatOptions {
  * models, applied one level down. Passing nothing keeps the open `string` shape,
  * so callers with no emitted set (the capability probe) are unaffected.
  */
-export function toolSchemas(citableIds = null) {
+export function toolSchemas(citableIds = null, site = null) {
   const ids = Array.isArray(citableIds) && citableIds.length ? citableIds : null
   const citationItems = ids ? { type: 'string', enum: ids } : { type: 'string' }
   // engine-spec 026: `summary` is a REQUIRED field of the answer. Asked for as a
   // line inside `text` it was written on half the turns; required by the schema,
   // on all of them. `DOCPILOT_ANSWER_SUMMARY=0` drops it.
   const summary = answerSummary()
-  return TOOLS.map((t) => ({
+  const builtins = TOOLS.map((t) => ({
     type: 'function',
     function: {
       name: t.name,
@@ -119,6 +121,18 @@ export function toolSchemas(citableIds = null) {
       },
     },
   }))
+  /**
+   * THE SITE'S TOOLS — engine-spec 038 — before `answer`, which stays last; and
+   * the answer's `actions`, where the site has any. Optional on the TOOL here,
+   * because nothing makes a tool call strict; the forced final call's schema is
+   * where it is required. A site with no tools gets the list it always got.
+   */
+  const fns = site?.tools || []
+  const acts = site?.actions || []
+  if (!fns.length && !acts.length) return builtins
+  const answer = builtins[builtins.length - 1]
+  if (acts.length) answer.function.parameters.properties.actions = actionsSchema(acts)
+  return [...builtins.slice(0, -1), ...fns.map(siteToolSchema), answer]
 }
 
 /**
@@ -947,6 +961,8 @@ export async function chat(options: ChatOptions) {
   temperature,
   messages,
   tools,
+  /** The site's function tools and actions — engine-spec 038. Null lists the built-ins alone. */
+  site = null,
   signal,
   answerOnly = false,
   schema = null,
@@ -1001,8 +1017,8 @@ export async function chat(options: ChatOptions) {
   // and prose carries no citations, so a good answer landed on a refusal.
   const toolSpec = tools
     ? answerOnly
-      ? toolSchemas(citableIds).filter((t) => t.function.name === 'answer')
-      : toolSchemas(citableIds)
+      ? toolSchemas(citableIds, site).filter((t) => t.function.name === 'answer')
+      : toolSchemas(citableIds, site)
     : null
 
   /**

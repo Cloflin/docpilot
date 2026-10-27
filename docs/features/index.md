@@ -18,6 +18,7 @@ const reader = [
 const engine = [
   { title: 'Conversation memory', body: 'The last answer goes to the model whole; older ones as summaries.', link: '/features/memory' },
   { title: 'Model fallback', body: 'A 429, a 5xx or a retired model moves the question to the next model.', link: '/features/fallback' },
+  { title: 'Tools and actions', body: 'Your own tools: live data the answer cites, and next steps the reader runs — opt-in.', link: '/features/tools' },
   { title: 'Relevance gate', body: 'Refuse off-topic questions before any model call — opt-in.', link: '/features/gate' },
   { title: 'Pasted keys', body: 'A key typed into a question never leaves the browser.', link: '/features/credentials' },
   { title: 'Feedback', body: 'Thumbs, reasons, a comment — to your endpoint or the reader’s device.', link: '/features/feedback' },

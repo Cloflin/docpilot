@@ -34,6 +34,7 @@ import DocPilotQuote from '../theme/components/DocPilotQuote.vue'
 export { DocPilot, DocPilotTrigger, DocPilotCta, DocPilotIcons, DocPilotQuote }
 export { mountDocPilot } from '../mount.js'
 export { setHighlighter, getHighlighter } from '../theme/docpilot/highlight.js'
+export { registerTool } from '../theme/docpilot/tools.js'
 export { setHost, useHost, createStandaloneHost, HOST_KEY, routeOf } from '../theme/docpilot/host.js'
 
 const COMPONENTS = {

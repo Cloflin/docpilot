@@ -23,4 +23,5 @@ export declare function useDocPilot(): {
   ask(question: string): void
 }
 
-export { mountDocPilot } from './mount.js'
+export { mountDocPilot, registerTool } from './mount.js'
+export type { ToolHandler } from './tools.js'

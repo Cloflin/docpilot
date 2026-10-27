@@ -37,6 +37,8 @@ import DocPilotIcons from './components/DocPilotIcons.vue'
 import DocPilotQuote from './components/DocPilotQuote.vue'
 
 export { DocPilot, DocPilotTrigger, DocPilotCta, DocPilotIcons, DocPilotQuote }
+// engine-spec 038: register what runs a site tool, from `enhanceApp` or any client module.
+export { registerTool } from './docpilot/tools.js'
 
 /**
  * The components ask `host.js` who the host is; this file is where VitePress

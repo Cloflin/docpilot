@@ -34,4 +34,6 @@ export function mountDocPilot(options = {}) {
 export { createShikiHighlighter }
 export { DocPilot, DocPilotTrigger, DocPilotIcons, DocPilotQuote } from './mount.js'
 export { setHighlighter, getHighlighter } from './theme/docpilot/highlight.js'
+// engine-spec 038 — and `window.DocPilot.registerTool` from the IIFE build.
+export { registerTool } from './theme/docpilot/tools.js'
 export { setHost, useHost, createStandaloneHost, HOST_KEY, routeOf } from './theme/docpilot/host.js'

@@ -377,6 +377,64 @@ export interface ComposerSettings {
   draft?: boolean
 }
 
+/** One parameter of a site tool — a flat JSON Schema property. engine-spec 038. */
+export interface ToolParameter {
+  type: 'string' | 'number' | 'integer' | 'boolean'
+  description?: string
+  enum?: Array<string | number | boolean>
+  default?: string | number | boolean
+  /** Strings only. `multiline` is not JSON Schema's: it asks the form for a textarea. */
+  format?: 'email' | 'uri' | 'date' | 'multiline'
+  maxLength?: number
+  minimum?: number
+  maximum?: number
+}
+
+/** What runs a site tool, when no handler is registered for it. */
+export type ToolRun =
+  | { fetch: string; method?: 'GET' | 'POST' }
+  | { href: string }
+  | { event: string }
+  /** Node only — `docpilot serve`, the eval runner. A static install refuses it. */
+  | ((args: Record<string, unknown>, ctx: ToolContext) => unknown)
+
+export interface ToolContext {
+  question: string
+  page: string
+  signal: AbortSignal
+}
+
+/**
+ * A site tool — engine-spec 038. `confirm: false` (the default) is a function
+ * tool the model calls on a search step and cites; `true` is an action behind a
+ * button, `'form'` one whose arguments the reader reviews first.
+ */
+export interface ToolDefinition {
+  description: string
+  title?: string
+  label?: string
+  parameters?: {
+    type: 'object'
+    properties?: Record<string, ToolParameter>
+    required?: string[]
+  }
+  confirm?: boolean | 'form'
+  run?: ToolRun
+}
+
+export type ToolsSettings = Record<string, ToolDefinition>
+
+/** A tool as the panel receives it: normalised, ordered, and without a function. */
+export interface ResolvedTool {
+  name: string
+  title: string
+  label: string
+  description?: string
+  parameters: { type: 'object'; properties: Record<string, ToolParameter>; required: string[] }
+  confirm: boolean | 'form'
+  run: { fetch: string; method: 'GET' | 'POST' } | { href: string } | { event: string } | null
+}
+
 /**
  * What a turn may SPEND, on a tier metered in requests rather than in tokens.
  *
@@ -707,6 +765,8 @@ export interface DocPilotSettings {
   quote?: QuoteSettings
   citations?: CitationsSettings
   composer?: ComposerSettings
+  /** The site's own tools — engine-spec 038. */
+  tools?: ToolsSettings | null
   feedbackEndpoint?: string | null
   feedback?: FeedbackSettings
   guard?: GuardSettings
@@ -784,6 +844,8 @@ export interface DocPilotThemeConfig {
   quote?: QuoteSettings
   citations?: CitationsSettings
   composer?: ComposerSettings
+  /** The site's tools, normalised and without functions; on a server install, its actions only. */
+  tools?: ResolvedTool[] | null
   feedbackEndpoint?: string | null
   feedback?: FeedbackSettings
   guard?: GuardSettings

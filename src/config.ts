@@ -24,6 +24,7 @@ import {
 // keeping a second, silently drifting copy. The module imports nothing and
 // touches the network only when a request function is called.
 import {providerFor} from './theme/docpilot/providers.js'
+import {normaliseTools, toolProblems} from './theme/docpilot/tools.js'
 import {norm} from './theme/docpilot/text.js'
 // The free tier, as a pool. Imported for its LISTS and its one predicate — the
 // module fetches nothing unless `fetchFreePool` is called, which nothing here
@@ -1976,6 +1977,12 @@ export function themeDocPilot(docPilot, env = {}) {
         quote: resolveQuote(docPilot),
         citations: resolveCitations(docPilot),
         composer: resolveComposer(docPilot),
+        // engine-spec 038. The definitions without their functions: this object
+        // is JSON by the time a reader has it, and `assertTools` has already
+        // refused a function `run` on this runtime rather than let it vanish.
+        // Null rather than `[]` with no tools, so a site that has none sends the
+        // page what it always did.
+        tools: docPilot.tools ? normaliseTools(docPilot.tools) : null,
         // Resolved here for the same reason and on the same terms — and this one
         // has a second job: `budget` is a union whose off form is the single
         // word `false`, and the browser must receive the finished object either
@@ -2021,6 +2028,12 @@ function serverShell(client, docPilot) {
         // instruction itself travels to the server with each turn. Everything
         // else in `prompt` is the owner's text for the model.
         prompt: {show: client.prompt?.show},
+        // The ACTIONS cross, because the reader runs them here; their
+        // descriptions do not, because those are written for the model. A
+        // function tool runs on the server and the page has no use for it.
+        tools: client.tools?.some((t) => t.confirm)
+            ? client.tools.filter((t) => t.confirm).map(({description, ...rest}) => rest)
+            : null,
         guard: {mode: 'off'},
         llm: {
             provider: null,
@@ -2056,7 +2069,19 @@ function serverShell(client, docPilot) {
  * from one key has no per-reader allowance to ration.
  */
 export function serverTurnConfig(docPilot, env = {}) {
-    const client = themeDocPilot({...docPilot, runtime: 'browser'}, env)
+    // The tools are checked as the SERVER's: the browser pass below would refuse
+    // a function `run`, which is valid here and nowhere else — so it is handed
+    // the definitions without one, and the functions come back on `tools` below.
+    assertTools({...docPilot, runtime: 'server'})
+    const browserTools = docPilot.tools
+        ? Object.fromEntries(
+              Object.entries(docPilot.tools).map(([name, t]: [string, any]) => [
+                  name,
+                  typeof t?.run === 'function' ? {...t, run: undefined} : t,
+              ]),
+          )
+        : docPilot.tools
+    const client = themeDocPilot({...docPilot, runtime: 'browser', tools: browserTools}, env)
     if (client.searchOnly) return {...client, runtime: 'server'}
     const head = nodeChatTarget(docPilot, env)
     const members = resolveChatChain(docPilot, env)
@@ -2082,6 +2107,9 @@ export function serverTurnConfig(docPilot, env = {}) {
             ? client.embed
             : {...client.embed, baseURL: embed.baseURL, apiKey: embed.apiKey},
         budget: resolveBudget({...docPilot, budget: false}),
+        // WITH their functions — engine-spec 038. This object never leaves Node,
+        // and a function `run` is the one way a function tool runs on the server.
+        tools: docPilot.tools ? normaliseTools(docPilot.tools, {keepRun: true}) : null,
     }
 }
 
@@ -2500,6 +2528,19 @@ function assertProviders(docPilot) {
     assertGuard(docPilot)
     assertChatTypes(docPilot)
     assertRuntime(docPilot)
+    assertTools(docPilot)
+}
+
+/**
+ * `tools` — engine-spec 038. Every sentence names its tool, because a set of
+ * twelve with one bad parameter would otherwise be a search, and the runtime is
+ * part of the question: a function `run` is valid in `docpilot serve` and
+ * deleted on its way into a static page.
+ */
+export function assertTools(docPilot) {
+    const problems = toolProblems(docPilot.tools, {runtime: docPilot.runtime ?? 'browser'})
+    if (!problems.length) return
+    throw new Error(`[docpilot] ${problems.join('\n[docpilot] ')}`)
 }
 
 /** Where a turn runs — engine-spec 028. A third value would silently mean `'browser'`. */
@@ -3594,6 +3635,14 @@ export const DEFAULTS = {
      * the composer and deliberately does not submit it.
      */
     composer: {editLastOnArrowUp: true, deepLink: true, draft: true},
+    /**
+     * The site's own tools — engine-spec 038. A map of name → definition: a
+     * function tool (`confirm: false`) runs on a search step and is cited; an
+     * action (`confirm: true | 'form'`) is offered with the answer and runs when
+     * the reader chooses it. Null: no tools, and every request is the one 2.0.1
+     * sent.
+     */
+    tools: null,
     /** Where a thumbs-up/down POSTs. Null keeps every vote in localStorage. */
     feedbackEndpoint: null,
     /**

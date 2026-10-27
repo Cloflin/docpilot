@@ -211,4 +211,6 @@ export function mountDocPilot(options: MountOptions = {}): DocPilotInstance {
 
 export { DocPilot, DocPilotTrigger, DocPilotIcons, DocPilotQuote }
 export { setHighlighter, getHighlighter } from './theme/docpilot/highlight.js'
+// engine-spec 038: what runs a site tool in the browser.
+export { registerTool } from './theme/docpilot/tools.js'
 export { setHost, useHost, createStandaloneHost, HOST_KEY, routeOf } from './theme/docpilot/host.js'

@@ -56,4 +56,6 @@ export declare const DocPilotIcons: Component
 export declare const DocPilotQuote: Component
 
 export { setHighlighter, getHighlighter } from './highlight.js'
+export { registerTool } from './tools.js'
+export type { ToolHandler } from './tools.js'
 export { setHost, useHost, createStandaloneHost, HOST_KEY, routeOf } from './host.js'

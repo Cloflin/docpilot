@@ -55,6 +55,7 @@ export const docPilot = {
   quote: { fromAnswer: true, fromDocs: false },
   citations: { passage: false, inCopy: true, pagesRead: false },
   composer: { editLastOnArrowUp: true, deepLink: true, draft: true },
+  tools: null,
   feedbackEndpoint: null,
   feedback: { send: 'both', comment: true, confirm: true },
   guard: { mode: 'off', tau: null, tauLexical: null, supportMinIdentifiers: 3 },
@@ -163,6 +164,7 @@ written by hand; only the values are mechanical.
 | [`composer.editLastOnArrowUp`](#composer-editlastonarrowup) | `boolean` | `true` | `↑` in an empty composer reopens the last question for editing, caret at the end — ChatGPT's behaviour and readline's before it |
 | [`composer.deepLink`](#composer-deeplink) | `boolean` | `true` | Reads `?dp-ask=` into the composer and deliberately does not submit, so a link can hand a reader a question and spend no turn — *`false` disables the companion `&dp-scope=page` as well* |
 | [`composer.draft`](#composer-draft) | `boolean` | `true` | Keeps the composer's text in `sessionStorage` so a reload does not empty it, redacted on the same rule a question is — *gated on `history.enabled` too: "record nothing" means nothing* |
+| [`tools`](#tools) | `object \| null` | `null` | The site's own tools: a function tool (`confirm: false`) the model calls on a search step and cites as "from the site", or an action (`confirm: true \| 'form'`) the answer offers and the reader runs — *with `null` every request is byte-identical to a site without the key; a function `run` is server-only* |
 | [`feedbackEndpoint`](#feedbackendpoint) | `string \| null` | `null` | Where a thumbs-up or thumbs-down POSTs as JSON; `null` keeps every vote in localStorage for console export |
 | [`feedback.send`](#feedback-send) | `'both' \| 'down' \| 'up' \| 'none'` | `'both'` | Which verdicts leave the device — `'down'` for complaints only, `'none'` keeps the thumbs on screen but sends nothing — *inert without `feedbackEndpoint`; an unrecognised value logs and falls back to `'both'`* |
 | [`feedback.comment`](#feedback-comment) | `boolean` | `true` | Offers a free-text box beside the down-vote reason buttons; `false` keeps the buttons and drops the box — *the box is hidden anyway when there is no `feedbackEndpoint` or `send` is `'none'`* |
@@ -1939,6 +1941,57 @@ they landed on. Both parameters are removed from the address bar once read, so a
 reload does not refill a composer they emptied.
 
 The names are prefixed because a documentation site may well own `ask` already.
+
+## tools
+
+- **Type:** `object | null`
+- **Default:** `null`
+- **Related:** [Tools and actions](/features/tools)
+
+The site's own tools, by name. Two kinds, and `confirm` decides which:
+
+| `confirm` | kind | what happens |
+|---|---|---|
+| `false` (default) | **function tool** | offered to the model on every search step; DocPilot runs it at once, the result goes back to the model, and the answer cites it as a source "from the site" |
+| `true` | **action** | the answer may offer it; the reader presses a button to run it |
+| `'form'` | **action** | as `true`, but the reader reviews and edits the arguments in a form first |
+
+```js
+tools: {
+  plan_limits: {
+    description: 'Live limits of one plan: requests per day, seats and storage.',
+    parameters: {
+      type: 'object',
+      properties: { plan: { type: 'string', enum: ['free', 'pro', 'team'] } },
+      required: ['plan'],
+    },
+    run: { fetch: '/api/plans/{plan}' },
+  },
+  contact_support: {
+    title: 'Contact support',
+    description: 'Send the question to the support team when the docs do not answer it.',
+    parameters: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', format: 'email', description: 'Where support replies' },
+        message: { type: 'string', format: 'multiline', description: 'The problem' },
+      },
+      required: ['email', 'message'],
+    },
+    confirm: 'form',
+    run: { fetch: '/api/support', method: 'POST' },
+  },
+}
+```
+
+Each tool takes `description` (required; the model reads it), `title` (the
+reader reads it), `label` (an action's button text), `parameters` (a flat JSON
+Schema object of `string`, `number`, `integer` and `boolean` properties),
+`confirm`, and `run`. `run` is one of `{fetch, method}`, `{href}` or `{event}`,
+or it is left out and the page registers a handler with `registerTool`. A
+function `run` works only where the config is not serialised: `docpilot serve`
+and the eval runner. The build stops on anything it cannot honour and names the
+tool. [Tools and actions](/features/tools) has the whole contract.
 
 ## guard
 

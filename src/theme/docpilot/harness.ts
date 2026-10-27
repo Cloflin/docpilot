@@ -14,6 +14,7 @@ import { chat, streamingAnswerText } from './llm.js'
 import { buildMessages, finalNote, OBS_NOTE, answerSummary } from './prompt.js'
 import { computeSupport } from './support.js'
 import { normalise } from './text.js'
+import { actionsSchema, checkArgs, describeErrors, pageOf, resultText, runTool, siteFor, validActions } from './tools.js'
 
 /**
  * Per-step ceiling. 30s is the right number for a hosted endpoint and far too
@@ -128,7 +129,10 @@ function seedFromHistory(retrieval, history) {
  */
 // `summary` — engine-spec 026, the same switch `toolSchemas` reads.
 const summarySchema = () => answerSummary()
-const answerSchema = (citableIds) => ({
+// `actions` — engine-spec 038, and only where the site has an action: required,
+// because a strict schema requires every property, and an empty list is how an
+// answer offers none.
+const answerSchema = (citableIds, actions = []) => ({
   type: 'object',
   properties: {
     text: { type: 'string' },
@@ -138,8 +142,15 @@ const answerSchema = (citableIds) => ({
     },
     confidence: { type: 'number' },
     ...(summarySchema() ? { summary: { type: 'string' } } : {}),
+    ...(actions.length ? { actions: actionsSchema(actions) } : {}),
   },
-  required: ['text', 'citations', 'confidence', ...(summarySchema() ? ['summary'] : [])],
+  required: [
+    'text',
+    'citations',
+    'confidence',
+    ...(summarySchema() ? ['summary'] : []),
+    ...(actions.length ? ['actions'] : []),
+  ],
   additionalProperties: false,
 })
 
@@ -286,6 +297,30 @@ export async function runTurn(options: RunTurnOptions) {
   const trace = []
   let iterations = 0
   let rejectedFetches = 0
+
+  /**
+   * THE SITE'S TOOLS FOR THIS TURN — engine-spec 038.
+   *
+   * A function tool is offered only where something here can run it: a handler
+   * the page registered, a function in a Node config, or a `fetch`. Offering one
+   * that cannot run would spend the model's step on a guaranteed `tool_error`.
+   * An action is offered where the browser can run it — or, on a server turn,
+   * wherever the config declares it, because the page that runs it is not here
+   * to ask.
+   *
+   * `site` stays null for a site with none, and null is what every builder of a
+   * prompt or a schema reads as "send what 2.0.1 sent".
+   */
+  const site = siteFor(config.tools, { server: config.runtime === 'server' })
+  const siteFns = site?.tools || []
+  const siteActions = site?.actions || []
+  const fnByName = new Map<string, any>(siteFns.map((t) => [t.name, t]))
+  /** What a function tool returned, by the id the answer may cite it with. */
+  const toolSources = new Map<string, any>()
+  const toolCache = new Map()
+  /** Each function call, for the turn log: `{tool, ok, ms}`. */
+  const toolLog = []
+  const citable = () => [...emittedIds, ...toolSources.keys()]
 
   /**
    * The failure that ended the loop, kept only so it can be re-thrown if the
@@ -657,6 +692,49 @@ export async function runTurn(options: RunTurnOptions) {
       return { observation: observation('list_pages', scopeLabel, retrieval.pages(args.prefix)) }
     }
 
+    /**
+     * A SITE FUNCTION TOOL — engine-spec 038.
+     *
+     * The arguments are checked against the site's own schema before anything
+     * runs, whoever's model wrote them; a call that fails it is a guess and is
+     * charged like one. A call repeated with the same arguments is served from
+     * this turn's cache and refunded, on the terms a repeated search is.
+     *
+     * The result comes back as an observation whose one entry carries a
+     * CITABLE id, `tool:<name>:<n>`. That is what keeps an answer from live data
+     * an answer: session.js withdraws an uncited one, and an answer that cites
+     * the site's own reply is exactly as traceable as one that cites a page.
+     */
+    const siteTool = fnByName.get(name)
+    if (siteTool) {
+      const checked = checkArgs(siteTool, args)
+      if (!checked.ok) return { error: `invalid arguments — ${describeErrors(checked.errors)}`, charge: true }
+      const key = `${name}|${JSON.stringify(checked.value)}`
+      if (toolCache.has(key)) {
+        debug('cached-tool', key)
+        return { observation: toolCache.get(key), free: true }
+      }
+      onPhase?.({ phase: 'tool', label: siteTool.title })
+      const t0 = Date.now()
+      try {
+        const value = await runTool(siteTool, checked.value, { question, page: pageOf(), signal })
+        const id = `tool:${name}:${toolLog.length + 1}`
+        const text = resultText(value)
+        toolSources.set(id, { id, kind: 'tool', tool: name, title: siteTool.title, path: null, anchor: '', text })
+        toolLog.push({ tool: name, ok: true, ms: Date.now() - t0 })
+        debug('tool', { tool: name, args: checked.value })
+        const obs = observation(name, scopeLabel, [{ id, title: siteTool.title, from: 'this site, live', text }])
+        toolCache.set(key, obs)
+        return { observation: obs }
+      } catch (e) {
+        // The reader pressed stop: that ends the turn, as it does everywhere.
+        if (signal?.aborted) throw e
+        toolLog.push({ tool: name, ok: false, ms: Date.now() - t0 })
+        debug('tool-failed', { tool: name, error: String(e?.message || e) })
+        return { error: `the tool failed — ${String(e?.message || e).slice(0, 200)}`, charge: true }
+      }
+    }
+
     // Charged. A name that is not in the tool list is a guess, and an uncharged
     // guess is one the model can repeat forever.
     return { error: `unknown tool ${name}`, charge: true }
@@ -772,6 +850,7 @@ export async function runTurn(options: RunTurnOptions) {
         // all land on the same string — and the model needs the fact more than
         // the cause: its re-searches are BM25-only on this turn either way.
         lexicalOnly: gateResult.mode === 'lexical-only',
+        site,
       }),
     )
 
@@ -858,7 +937,10 @@ export async function runTurn(options: RunTurnOptions) {
           maxRequests: loopAllowance(),
           messages,
           tools: !fallback,
-          citableIds: [...emittedIds],
+          // engine-spec 038: the site's function tools beside the built-ins, and
+          // the answer's `actions` when the model answers from a loop step.
+          site,
+          citableIds: citable(),
           enableThink: thinkable(false),
           onDelta: streamer(),
           onAbandon: abandoned,
@@ -922,6 +1004,7 @@ export async function runTurn(options: RunTurnOptions) {
         prompt: config.prompt,
         product: config.product,
         lexicalOnly: gateResult.mode === 'lexical-only',
+        site,
       }),
     )
     const timeout = AbortSignal.timeout(config.llm.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS)
@@ -961,8 +1044,10 @@ export async function runTurn(options: RunTurnOptions) {
         messages,
         tools: false,
         answerOnly: true,
-        schema: answerSchema([...emittedIds]),
-        citableIds: [...emittedIds],
+        site,
+        // A cited tool result is as citable here as a section — engine-spec 038.
+        schema: answerSchema(citable(), siteActions),
+        citableIds: citable(),
         // `thinkable(true)`, not `thinkable(config.llm.think ?? true)`. That
         // read had no writer anywhere — not in `themeDocPilot`, not in a
         // hand-written themeConfig, not in the eval runner's own llm object —
@@ -1051,8 +1136,11 @@ export async function runTurn(options: RunTurnOptions) {
 
     // Membership, never substring: searching serialised observation text would
     // let a chunk that documents this very format launder its own example id.
-    const phantom = citations.filter((id) => !emittedIds.has(id))
-    citations = citations.filter((id) => emittedIds.has(id))
+    // A site tool's result is citable by the same rule — its id was handed out
+    // this turn, by this module — engine-spec 038.
+    const known = (id) => emittedIds.has(id) || toolSources.has(id)
+    const phantom = citations.filter((id) => !known(id))
+    citations = citations.filter(known)
 
     // With a reader instruction active, model-reported confidence is discarded:
     // it is the one enforcement input living inside the model's output.
@@ -1060,8 +1148,11 @@ export async function runTurn(options: RunTurnOptions) {
 
     if (citations.length === 0 && confidence >= 0.4) confidence = 0.3
 
+    // POSITIONS MATTER: marker [n] is citation n, so a tool result takes its
+    // place in this list rather than being filtered out of it — `toolSources`
+    // answers for its own ids and the index answers for the rest.
     const sources = citations
-      .map((id) => retrieval.fetch(id))
+      .map((id) => (toolSources.has(id) ? { ok: true, section: toolSources.get(id) } : retrieval.fetch(id)))
       .filter((r) => r.ok)
       .map((r) => r.section)
 
@@ -1082,6 +1173,10 @@ export async function runTurn(options: RunTurnOptions) {
       support,
       trace,
       emitted: [...emittedIds],
+      // engine-spec 038. What the answer offers the reader, checked against the
+      // site's own schemas — never run here — and what the turn ran itself.
+      actions: validActions(args.actions, siteActions),
+      tools: toolLog,
       // Outside `cost`, beside it: everything in there is measured in tokens or
       // characters and sweepable against answer quality, and this is the number
       // a free tier actually meters. `cost.steps` stays the count of calls this
