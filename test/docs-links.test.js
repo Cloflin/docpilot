@@ -45,11 +45,12 @@ const RAG = path.join(DOCS, 'public', 'rag')
  * bundle's `src/slugify.ts` region instead, and it must stay verbatim — the
  * approximation is what makes this gate lie in either direction.
  *
- * Specifically NOT `slug()` from the chunker: that one deletes every character
- * outside `\p{L}\p{N}\s-`, so `### budget.dailyLimit` slugs to
- * `budgetdailylimit`, while VitePress folds `.` into `-` and publishes
- * `budget-dailylimit` — the anchor three real links in `free-tier.md` and
- * `config.md` use. Using the chunker's slug here would have failed all three.
+ * Specifically NOT `slug()` from the chunker, though that one is now the same
+ * port: an oracle that imports the code under test agrees with it by
+ * construction. While the chunker's slug deleted every character outside
+ * `\p{L}\p{N}\s-`, `### budget.dailyLimit` slugged to `budgetdailylimit`
+ * against VitePress's `budget-dailylimit` — the anchor three real links in
+ * `free-tier.md` and `config.md` use.
  */
 const rControl = /[\u0000-\u001f]/g
 const rSpecial = /[\s~`!@#$%^&*()\-_+=[\]{}|\\;:"'“”‘’<>,.?/]+/g
@@ -225,9 +226,9 @@ describe('docs — anchor links', () => {
     expect(broken).toEqual([])
   })
 
-  it('folds a dot into a dash, the way VitePress does and the chunker does not', () => {
+  it('folds a dot into a dash, the way VitePress does', () => {
     // `### budget.dailyLimit` in reference/config.md, linked from free-tier.md
-    // as `#budget-dailylimit`. The chunker's `slug()` deletes the dot instead.
+    // as `#budget-dailylimit`. The chunker's `slug()` used to delete the dot.
     expect(headingIds('### budget.dailyLimit')).toEqual(['budget-dailylimit'])
     expect(headingIds('## `--level=` {#level}')).toEqual(['level'])
     expect(headingIds('## Two tabs {#two-tabs}')).toEqual(['two-tabs'])

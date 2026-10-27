@@ -9,8 +9,25 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { slug } from './chunker.js'
 import { MAX_CHUNK_CHARS } from './normalise.js'
+
+/**
+ * An operation's anchor — the GitHub-style rule `chunker.slug()` used before it
+ * became VitePress's own slugify.
+ *
+ * Kept apart on purpose: an operation is not a markdown heading, so VitePress's
+ * heading slug says nothing about the fragment `<ReferenceContent>` renders, and
+ * moving these ids would orphan every gold entry pinned at one for no anchor
+ * that is known to be better.
+ */
+function slug(s) {
+  return s
+    .toLowerCase()
+    .replace(/[`*_~[\]()]/g, '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/\s+/g, '-')
+}
 
 /**
  * Which files are specs — `docPilot.openapi`, or the one directory that was

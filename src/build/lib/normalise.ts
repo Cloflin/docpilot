@@ -670,10 +670,10 @@ const ATX_HEADING = /^ {0,3}#{1,6}(\s|$)/
  * stripo-docs' `extensions/tutorials.md` cited fragments that exist nowhere,
  * under a citation label with the raw route printed inside it.
  *
- * The brackets go with the route rather than being left behind: `slug()` drops
- * `[`, `]`, `(` and `)` but not the slashes between them, so leaving the link
- * syntax in place would slug to `template-modificationsextensions…` — wrong the
- * same way, and with the markup showing in the label.
+ * The brackets go with the route rather than being left behind: `slug()` folds
+ * `[`, `]`, `(`, `)` and the slashes into hyphens, so leaving the link syntax in
+ * place would slug to `template-modifications-extensions-…` — wrong the same
+ * way, and with the markup showing in the label.
  *
  * Dropping the destination costs nothing: a heading's link is navigation, the
  * page it points at is indexed under its own route, and this is already exactly
@@ -705,6 +705,64 @@ export function stripHtml(src) {
 }
 
 /**
+ * HTML comments go, content and all — on one line or across many.
+ *
+ * VitePress renders none of a `<!-- … -->`, and `stripHtml` never matched one
+ * (its tag pattern wants a letter after the `<`), so an author's `<!-- INTERNAL:
+ * do not publish -->` was indexed, shipped in a public shard and handed to the
+ * model as page text — and a `## heading` inside a multi-line comment became a
+ * section with an anchor the rendered page does not have.
+ *
+ * A line machine on `eachLine`'s terms, like `applyLlmTags`: a fenced sample or
+ * an inline code span SHOWS a comment rather than writing one, and the page most
+ * likely to contain `<!--` is one documenting HTML, so both survive verbatim.
+ * Inside an open comment a fenced line goes with it — markdown-it reads that
+ * fence as comment text, not as code.
+ *
+ * The search for `-->` may overlap the opener, so `<!-->` and `<!--->` close
+ * themselves, as they do in an HTML parser. An unclosed comment runs to end of
+ * file — markdown-it's reading of one that opens a line, and the direction to
+ * err in for the reason `applyLlmTags` gives.
+ */
+export function stripComments(src, warn) {
+  const out = []
+  let open = false
+
+  eachLine(src, (line, fenced) => {
+    if (fenced) {
+      if (!open) out.push(line)
+      return
+    }
+    let touched = open
+    let rest = line
+    let kept = ''
+    while (rest) {
+      if (open) {
+        const end = rest.indexOf('-->')
+        if (end < 0) break
+        rest = rest.slice(end + 3)
+        open = false
+        continue
+      }
+      const at = blankCode(rest).indexOf('<!--')
+      if (at < 0) {
+        kept += rest
+        break
+      }
+      kept += rest.slice(0, at)
+      rest = rest.slice(at + 2)
+      open = touched = true
+    }
+    // A line the comment took whole leaves a blank, which is how markdown-it
+    // reads it too: the comment is a block of its own between two paragraphs.
+    out.push(touched && !kept.trim() ? '' : kept)
+  })
+
+  if (open) warn?.('unclosed <!-- comment — dropped to end of file')
+  return out.join('\n')
+}
+
+/**
  * The full pipeline, in the order RAG-SPEC 2.2 specifies.
  * Returns { title, description, layout, source, faq, text, warnings }.
  */
@@ -721,12 +779,16 @@ export function normaliseMarkdown(src) {
     String(src).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'),
   )
   const warnings = []
+  // Comments before anything that reads markup: a commented-out `<llm-exclude>`
+  // must not open that machine, and a commented-out FaqAccordion must not
+  // become a `#faq-n` chunk.
+  let t = stripComments(body, (m) => warnings.push(m))
   // Before stripVue and, critically, before stripHtml: an unknown tag reaching
   // stripHtml loses its brackets and keeps its content.
   // MDX first, and before applyLlmTags for the same reason applyLlmTags runs
   // before stripHtml: a module statement is not markup and must not reach a pass
   // that reads markup.
-  let t = stripMdx(body)
+  t = stripMdx(t)
   t = applyLlmTags(t, (m) => warnings.push(m))
   // THE FAQ COMES OFF applyLlmTags' OUTPUT, NEVER OFF `body`.
   //

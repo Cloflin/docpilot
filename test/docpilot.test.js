@@ -290,13 +290,15 @@ describe('the index — which /reference/ routes a spec claims', () => {
 })
 
 /**
- * t6 R1-R2 — two inputs the pipeline read wrong before any pass ran.
+ * t6 R1-R3 — three inputs the pipeline read wrong before any pass ran.
  *
  * R1: on CRLF text `FENCE`'s `(.*)$` never matched (`.` refuses `\r`), so no
  * fence was seen and a sample's `<script>` deleted the page to end of file.
  * R2: a leading U+FEFF hid the frontmatter — raw YAML indexed, title lost.
+ * R3: `<!-- … -->` was indexed and shipped, and a heading inside a comment cut
+ * a section.
  */
-describe('normalise — line endings and byte-order mark', () => {
+describe('normalise — line endings, byte-order mark and HTML comments', () => {
   const sample = [
     '## A',
     '',
@@ -329,6 +331,48 @@ describe('normalise — line endings and byte-order mark', () => {
     expect(out.text).toBe(normaliseMarkdown(page).text)
     expect(out.text).not.toContain('title:')
     expect(chunk('\uFEFF---\r\nlayout: home\r\n---\r\n\r\n# Home\r\n\r\nhero').chunks).toEqual([])
+  })
+
+  it('drops HTML comments, one line or many, and a heading inside one cuts no section', () => {
+    const src = [
+      '# P',
+      '',
+      'Intro <!-- INTERNAL: pricing is negotiable --> stays.',
+      '',
+      '<!--',
+      '## Hidden heading',
+      'multi-line secret',
+      '-->',
+      '',
+      '## Shown',
+      '',
+      'End',
+    ].join('\n')
+    const { chunks } = chunk(src)
+    const text = chunks.map((c) => c.text).join('\n')
+    for (const gone of ['INTERNAL', 'Hidden heading', 'secret', '<!--', '-->']) expect(text).not.toContain(gone)
+    expect(text).toContain('Intro stays.')
+    expect(chunks.map((c) => c.anchor)).not.toContain('hidden-heading')
+  })
+
+  it('keeps a comment shown in a fence or in inline code', () => {
+    const src = ['Write `<!-- note -->` to hide a line:', '', '```html', '<!-- note -->', '<p>shown</p>', '```', '', 'after'].join('\n')
+    expect(normaliseMarkdown(src).text).toBe(src)
+  })
+
+  it('removes a comment before any pass reads markup inside it', () => {
+    const island = `<FaqAccordion :items="[{ question: 'Internal?', answer: 'Not for publishing.' }]" />`
+    const out = normaliseMarkdown(['before', '<!--', '<llm-exclude>', island, '-->', 'after'].join('\n'))
+    expect(out.faq).toEqual([])
+    expect(out.text).toContain('after')
+    expect(out.warnings).toEqual([])
+  })
+
+  it('closes <!--> on itself, and drops an unclosed comment to end of file with a warning', () => {
+    expect(normaliseMarkdown('a <!--> b').text).toBe('a b')
+    const out = normaliseMarkdown(['kept', '<!-- never closed', 'gone'].join('\n'))
+    expect(out.text).toBe('kept')
+    expect(out.warnings[0]).toMatch(/unclosed <!--/)
   })
 })
 
@@ -413,6 +457,39 @@ describe('chunker', () => {
   })
 
   it('slugs headings', () => expect(slug('How-To: Build `x`')).toBe('how-to-build-x'))
+
+  /**
+   * t6 R6 — the anchor a citation links to is the id VitePress renders, so it
+   * is held against VitePress itself: the renderer this repo builds its own
+   * docs with, not a copy of its slugify. The first eight are headings the
+   * GitHub-style approximation got wrong (`foobar`, `snakecasename`, `dont`,
+   * `api-v20`, `1-start`, `café`, …).
+   */
+  it('slugs a heading to the id VitePress renders for it', async () => {
+    const { createMarkdownRenderer } = await import('vitepress')
+    const quiet = { info() {}, warn() {}, warnOnce() {}, error() {}, clearScreen() {}, hasErrorLogged: () => false }
+    const md = await createMarkdownRenderer(process.cwd(), {}, '/', quiet)
+    const rendered = (h) => /<h2 id="([^"]*)"/.exec(md.render(`## ${h}\n`))?.[1]
+    const headings = [
+      'foo.bar',
+      'snake_case_name',
+      "Don't",
+      'API v2.0',
+      'node.js setup',
+      '1. Start',
+      'Café',
+      'naïve résumé',
+      '`chat_model`',
+      'budget.dailyLimit',
+      'The ui settings — shape, place',
+      'Foo **bar** baz',
+      'How-To: Build `x`',
+      '🚀 Launch',
+      'a ~ b',
+      '?!',
+    ]
+    for (const h of headings) expect(slug(h), h).toBe(rendered(h))
+  })
 })
 
 describe('sections', () => {
@@ -14108,23 +14185,24 @@ describe('chunker — the two things `-N` used to mean', () => {
   })
 
   /**
-   * DEFECT 3 — a heading with no letters and no digits. `slug()` keeps only
-   * `\p{L}\p{N}\s-`, so `## 🚀` slugs to '' — the anchor an untitled lead section
-   * already carries. Skipping the `anchorSeen` bookkeeping for that one value
+   * DEFECT 3 — a heading with nothing `slug()` keeps. Every character of `## ?!`
+   * is in VitePress's `rSpecial`, so it slugs to '' — the anchor an untitled lead
+   * section already carries. (`## 🚀` did too while `slug()` kept only
+   * `\p{L}\p{N}\s-`; VitePress keeps the glyph, and so does `slug()` now.) Skipping the `anchorSeen` bookkeeping for that one value
    * gave both chunks the id `p#`, pointed the lead's `next` at itself, and killed
    * the build with `duplicate chunk id: /p#`.
    */
   it('registers the empty slug like any other anchor', () => {
-    const { chunks } = chunk('Lead paragraph here.\n\n## 🚀\n\nRocket section body.\n')
+    const { chunks } = chunk('Lead paragraph here.\n\n## ?!\n\nRocket section body.\n')
     expect(chunks).toHaveLength(2)
     expect(chunks.map((c) => c.id)).toEqual(['p#', 'p#-1'])
     expect(chunks[0].next).toBe('p#-1')
     expect(chunks[1].next).toBeNull()
   })
 
-  /** With no lead section to collide with, the emoji heading keeps the clean id. */
+  /** With no lead section to collide with, the empty-slug heading keeps the clean id. */
   it('leaves the first empty-slug section a fragment-less page link', () => {
-    const { chunks } = chunk('## 🚀\n\nRocket section body.\n')
+    const { chunks } = chunk('## ?!\n\nRocket section body.\n')
     expect(chunks).toHaveLength(1)
     expect(chunks[0].id).toBe('p#')
     expect(chunks[0].anchor).toBe('')
@@ -14161,7 +14239,7 @@ describe('chunker — the two things `-N` used to mean', () => {
   it('never emits a duplicate id on a page that stresses every rule', () => {
     const src = [
       'Lead.',
-      '## 🚀',
+      '## ?!',
       'Rocket.',
       '## Parameters',
       long,

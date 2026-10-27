@@ -15,14 +15,37 @@ export const TARGET_MAX_TOKENS = 500
 export const MERGE_BELOW_TOKENS = 120
 export const EMBED_CONTEXT_TOKENS = 8192
 
-/** GitHub-style heading slug, matching VitePress anchors closely enough to link to. */
+/**
+ * The anchor VitePress renders for a heading: its own `slugify`, ported verbatim.
+ *
+ * VitePress 2 inlines `@mdit-vue/shared`'s slugify into `dist/node/chunk-*.js`
+ * and hands it to markdown-it-anchor, so there is no module to import; the
+ * regexes are copied, and `test/docpilot.test.js` holds this against headings
+ * the real renderer anchors. The GitHub-style approximation it replaces DELETED
+ * what VitePress folds into a hyphen — `foo.bar`, `snake_case`, `Don't` and
+ * `v2.0` slugged to `foobar`, `snakecase`, `dont` and `v20`; `1. Start` lost the
+ * `_` prefix and `Café` kept its accent — so a citation of a config key or a
+ * version heading dropped the reader at the top of the page.
+ *
+ * This slugs the heading's SOURCE where VitePress slugs its rendered text. They
+ * agree because every inline marker `normalise.js` leaves — `*`, `_`, `` ` ``,
+ * `~`, `\` — is in `rSpecial` and folds into the separator either way; they
+ * part only on emphasis inside a word (`foo**bar**`) and on `:emoji:`
+ * shortcodes, which markdown-it renders as a glyph the anchor leaves out.
+ */
+const rControl = /[\u0000-\u001f]/g
+const rSpecial = /[\s~`!@#$%^&*()\-_+=[\]{}|\\;:"'“”‘’<>,.?/]+/g
+const rCombining = /[\u0300-\u036F]/g
 export function slug(s) {
-  return s
+  return String(s)
+    .normalize('NFKD')
+    .replace(rCombining, '')
+    .replace(rControl, '')
+    .replace(rSpecial, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/^(\d)/, '_$1')
     .toLowerCase()
-    .replace(/[`*_~[\]()]/g, '')
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .trim()
-    .replace(/\s+/g, '-')
 }
 
 // `openFence`/`closesFence` are imported rather than defined here. Both modules
@@ -496,8 +519,8 @@ export function chunkMarkdown({
     // A custom `{#id}` wins outright — it is the id VitePress renders — and only
     // a heading without one is slugged.
     //
-    // THE EMPTY ANCHOR IS REGISTERED LIKE ANY OTHER. `slug()` keeps only
-    // `\p{L}\p{N}\s-`, so a heading with no letters and no digits — `## 🚀` —
+    // THE EMPTY ANCHOR IS REGISTERED LIKE ANY OTHER. `slug()` folds every
+    // character of `rSpecial` away, so a heading made of nothing else — `## ?!` —
     // slugs to the empty string, which is also the anchor an untitled lead
     // section carries. The old `if (anchor)` guard skipped the bookkeeping for
     // exactly that value, so the two collided: both chunks got the id `p#`, the
@@ -566,10 +589,10 @@ export function chunkMarkdown({
         // citation precision were all credited for it, and `docpilot tune`
         // optimises against that objective.
         //
-        // `~` is the separator because `slug()` strips it (it is in the
-        // `[`*_~[\]()]` class), so the disambiguation path can never produce one
-        // and the two namespaces are disjoint by construction. It never reaches
-        // a URL either: the citation href is built from the `anchor` FIELD
+        // `~` is the separator because `slug()` never emits it (it is in
+        // `rSpecial`, which folds to `-`), so the disambiguation path can never
+        // produce one and the two namespaces are disjoint by construction. It
+        // never reaches a URL either: the citation href is built from the `anchor` FIELD
         // (`session.js`), which every part of a section shares — the suffix
         // lives in the id alone, and every other reader of an id treats it as an
         // opaque key or splits it at the FIRST `#` to get the page.
