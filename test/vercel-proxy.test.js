@@ -12,8 +12,11 @@ import { proxyContract } from '../src/config.js'
 import { classifyLimit, readLimitHeaders, DAILY_WINDOW_MS } from '../src/theme/docpilot/budget.js'
 import {
   BODY_LIMIT,
+  BUCKETS_MAX,
   BURST,
+  CHAT_MESSAGES,
   CHAT_MODELS_ENV,
+  CHAT_TOOLS,
   DAILY,
   DEFAULT_CHAT_MODELS,
   DEFAULT_EMBED_MODELS,
@@ -255,6 +258,119 @@ describe('vercel /ai proxy', () => {
       })
     })
 
+    /**
+     * The bodies the panel itself writes, built by the adapter that writes them
+     * (providers.ts) rather than restated: a loop step with the most tools a
+     * site may declare, the strict final step, the same step degraded to a
+     * forced tool, the json_object step, a continuation and the probe. Each
+     * must reach upstream as it was sent — the ceiling is the one field the
+     * proxy adds, and only where the panel named none.
+     */
+    it('forwards every body the panel builds, unchanged', async () => {
+      const { providerFor } = await import('../src/theme/docpilot/providers.js')
+      const { toolSchemas } = await import('../src/theme/docpilot/llm.js')
+      const { buildMessages } = await import('../src/theme/docpilot/prompt.js')
+      const { MAX_TOOLS } = await import('../src/theme/docpilot/tools.js')
+      const openai = providerFor('openai')
+      const site = {
+        tools: Array.from({ length: MAX_TOOLS }, (_, i) => ({
+          name: `site_${i}`,
+          description: 'A site tool.',
+          parameters: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
+        })),
+        actions: [],
+      }
+      const tools = toolSchemas(['a#one'], site)
+      const turn = buildMessages({
+        scope: { paths: [] },
+        question: 'How do I build the index?',
+        quote: 'npx docpilot index',
+        history: [1, 2, 3, 4].map((i) => ({ question: `q${i}`, answer: `a${i}` })),
+        observations: [{ tool: 'search_docs', results: [] }, { tool: 'fetch_section', text: 'x' }],
+        addendum: 'Be brief.',
+      })
+      const common = {
+        model: CHAT,
+        messages: turn,
+        temperature: 0.2,
+        maxTokens: 2048,
+        extraBody: { provider: { require_parameters: true } },
+        tuning: { style: 'unified', effort: 'low', hide: true, verbosity: 'low', topP: 0.9, seed: 7 },
+        enableThink: true,
+      }
+      const schemaBody = tools[tools.length - 1].function.parameters
+      const bodies = [
+        openai.body({ ...common, streaming: true, tools, enableThink: false }),
+        openai.body({ ...common, streaming: true, schemaBody }),
+        openai.body({ ...common, streaming: true, schemaBody, degrade: { schemaAsTool: true } }),
+        openai.body({ ...common, streaming: false }),
+        openai.body({ ...common, streaming: true, continuing: true, messages: [...turn, { role: 'assistant', content: 'Run npx' }] }),
+        openai.probeBody(CHAT, tools),
+      ]
+      expect(tools.length).toBeLessThanOrEqual(CHAT_TOOLS)
+      for (const sent of bodies) {
+        const wire = JSON.parse(JSON.stringify(sent))
+        const { body, error } = shapeChat(wire, {})
+        expect(error).toBeUndefined()
+        expect(body).toEqual('max_tokens' in wire ? wire : { ...wire, max_tokens: DEFAULT_MAX_TOKENS })
+      }
+      expect(bodies.some((b) => b.tool_choice)).toBe(true)
+      expect(bodies.some((b) => b.response_format?.type === 'json_schema')).toBe(true)
+    })
+
+    /**
+     * What the panel never sends and OpenRouter bills for: a typed server tool
+     * (`openrouter:web_search`), an image or file part the provider fetches, a
+     * tool choice naming a tool the body does not declare, and a transcript no
+     * turn produces.
+     */
+    it('refuses tools, tool choices, formats and message parts the panel never sends', () => {
+      const fn = (name) => ({ type: 'function', function: { name, parameters: { type: 'object', properties: {} } } })
+      const refused = {
+        'a server tool': { tools: [{ type: 'openrouter:web_search', parameters: { max_results: 50 } }] },
+        'a function with no name': { tools: [{ type: 'function', function: { parameters: {} } }] },
+        'a malformed name': { tools: [fn('two words')] },
+        'too many tools': { tools: Array.from({ length: CHAT_TOOLS + 1 }, (_, i) => fn(`t${i}`)) },
+        'tools that are not a list': { tools: { a: 1 } },
+        'a choice of an undeclared tool': { tools: [fn('answer')], tool_choice: { type: 'function', function: { name: 'web_search' } } },
+        'a function choice with no tools': { tool_choice: { type: 'function', function: { name: 'answer' } } },
+        'an unknown choice word': { tool_choice: 'any' },
+        'an image part': { messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'https://evil.example/x.png' } }] }] },
+        'a file part': { messages: [{ role: 'user', content: [{ type: 'file', file: { file_data: 'https://evil.example/a.pdf' } }] }] },
+        'a non-string content': { messages: [{ role: 'user', content: { text: 'hi' } }] },
+        'an unknown role': { messages: [{ role: 'developer', content: 'hi' }] },
+        'too many messages': { messages: Array.from({ length: CHAT_MESSAGES + 1 }, () => ({ role: 'user', content: 'hi' })) },
+        'an unknown response format': { response_format: { type: 'grammar', grammar: 'x' } },
+        'a schema format with no schema': { response_format: { type: 'json_schema', json_schema: { name: 'answer' } } },
+      }
+      for (const [what, extra] of Object.entries(refused)) {
+        expect(shapeChat({ model: CHAT, messages, ...extra }, {}).error, what).toBeTruthy()
+      }
+    })
+
+    it('rebuilds what it keeps: text parts stay text, a tool keeps its function and nothing else', () => {
+      const { body } = shapeChat(
+        {
+          model: CHAT,
+          messages: [
+            { role: 'system', content: 'sys', name: 'x' },
+            { role: 'user', content: [{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }] },
+          ],
+          tools: [{ type: 'function', function: { name: 'answer', description: 'd', parameters: { type: 'object' }, x: 1 }, cache_control: {} }],
+          tool_choice: 'required',
+          response_format: { type: 'json_schema', json_schema: { name: 'answer', strict: true, schema: { type: 'object' } }, plugins: [] },
+        },
+        {},
+      )
+      expect(body.messages).toEqual([
+        { role: 'system', content: 'sys' },
+        { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      ])
+      expect(body.tools).toEqual([{ type: 'function', function: { name: 'answer', description: 'd', parameters: { type: 'object' } } }])
+      expect(body.tool_choice).toBe('required')
+      expect(body.response_format).toEqual({ type: 'json_schema', json_schema: { name: 'answer', strict: true, schema: { type: 'object' } } })
+    })
+
     it('clamps the output and reasoning ceilings, and sets one when none is named', () => {
       expect(shapeChat({ model: CHAT, messages, max_tokens: 1e9 }, {}).body.max_tokens).toBe(DEFAULT_MAX_TOKENS)
       expect(shapeChat({ model: CHAT, messages }, {}).body.max_tokens).toBe(DEFAULT_MAX_TOKENS)
@@ -374,12 +490,72 @@ describe('vercel /ai proxy', () => {
       expect(buckets.has('b')).toBe(true)
     })
 
-    it('counts against the client, not the edge node in front of it', () => {
-      expect(clientIp(new Headers({ 'x-forwarded-for': '9.9.9.9, 10.0.0.1, 10.0.0.2' }))).toBe('9.9.9.9')
+    /**
+     * A flood of distinct addresses whose windows are all still open: the old
+     * sweep freed nothing and ran over the whole map on every new key, so the
+     * map grew without bound at O(n) per request. Bounded, the oldest window
+     * goes first.
+     */
+    it('holds at most BUCKETS_MAX windows, closed ones first and then the oldest', () => {
+      const flood = new Map()
+      for (let i = 0; i < 3 * BUCKETS_MAX; i++) take(flood, `k${i}`, 1, 60_000, 1_000)
+      expect(flood.size).toBe(BUCKETS_MAX)
+      expect(flood.has('k0')).toBe(false)
+      expect(flood.has(`k${3 * BUCKETS_MAX - 1}`)).toBe(true)
+
+      const small = new Map()
+      take(small, 'a', 1, 1_000, 0)
+      take(small, 'b', 1, 1_000, 0)
+      take(small, 'c', 1, 1_000, 500)
+      take(small, 'd', 1, 1_000, 1_200, 3) // a and b closed at 1000: dropped, c kept
+      expect([...small.keys()]).toEqual(['c', 'd'])
+      take(small, 'e', 1, 1_000, 1_300, 3)
+      take(small, 'f', 1, 1_000, 1_300, 3) // all open: the oldest, c, goes
+      expect([...small.keys()]).toEqual(['d', 'e', 'f'])
+      // a reopened window moves to the back, so the order stays the order windows opened
+      take(small, 'd', 1, 1_000, 2_200, 3)
+      expect([...small.keys()].at(-1)).toBe('d')
+    })
+
+    it('counts against the client, not the edge node in front of it — on Vercel', () => {
+      const vercel = { VERCEL: '1' }
+      expect(clientIp(new Headers({ 'x-forwarded-for': '9.9.9.9, 10.0.0.1, 10.0.0.2' }), vercel)).toBe('9.9.9.9')
       expect(
-        clientIp(new Headers({ 'x-vercel-forwarded-for': '9.9.9.9', 'x-forwarded-for': '1.1.1.1' })),
+        clientIp(new Headers({ 'x-vercel-forwarded-for': '9.9.9.9', 'x-forwarded-for': '1.1.1.1' }), vercel),
       ).toBe('9.9.9.9')
-      expect(clientIp(new Headers({}))).toBe('unknown')
+      expect(clientIp(new Headers({}), vercel)).toBe('unknown')
+    })
+
+    // Off Vercel nothing rewrites these headers, so each is the client's to
+    // choose — and a fresh value per request is a fresh bucket per request.
+    it('reads no forwarded header off Vercel, only the address it is handed', () => {
+      const forged = new Headers({ 'x-vercel-forwarded-for': '9.9.9.9', 'x-real-ip': '8.8.8.8', 'x-forwarded-for': '7.7.7.7' })
+      expect(clientIp(forged, {})).toBe('unknown')
+      expect(clientIp(forged, {}, '198.51.100.7')).toBe('198.51.100.7')
+    })
+
+    it('counts an IPv6 /64 as one client, and a mapped IPv4 as the IPv4', () => {
+      const ip = (v) => clientIp(new Headers({ 'x-vercel-forwarded-for': v }), { VERCEL: '1' })
+      expect(ip('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64')
+      expect(ip('2001:db8:1:2:bbbb:cccc:dddd:2')).toBe('2001:db8:1:2::/64')
+      expect(ip('::ffff:203.0.113.9')).toBe('203.0.113.9')
+      expect(clientIp(new Headers({}), {}, '2001:db8:7::1')).toBe('2001:db8:7:0::/64')
+    })
+
+    // Three copies of one rule — the server, this proxy and the receiver keep no
+    // dependency on each other — held to one table.
+    it('folds addresses exactly as the server limiter and the feedback receiver do', async () => {
+      const { addressKey } = await import('../src/server/limits.js')
+      const receiver = await import('../lib/feedback-receiver.mjs')
+      const table = [
+        '203.0.113.9', '::ffff:203.0.113.9', '::ffff:cb00:7109', '2001:db8:1:2:aaaa::1', '[2001:db8::1]',
+        'fe80::1%en0', '::1', '::', '64:ff9b::198.51.100.1', '1:2:3:4:5:6:7:8', 'not-an-address', '1::2::3', 'unknown',
+      ]
+      for (const a of table) {
+        const want = addressKey(a)
+        expect(clientIp(new Headers({}), {}, a), a).toBe(want || 'unknown')
+        expect(receiver.addressKey(a), a).toBe(want)
+      }
     })
 
     // A turn is 1 embedding request plus 2-3 model calls, and the free tier is
