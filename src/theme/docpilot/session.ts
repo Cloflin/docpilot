@@ -282,6 +282,7 @@ export interface SessionState {
   dockPanel: 'picker' | 'prompt' | 'history' | null
   instruction: string
   announce: string
+  announceSeq: number
   pendingQuestion: string
   pendingQuote: string
   pendingScope: any
@@ -329,6 +330,8 @@ export const state: SessionState = reactive({
   dockPanel: null, // 'picker' | 'prompt' | 'history' | null
   instruction: '',
   announce: '',
+  // Bumped by every `say()`, so a sentence said twice is two changes — see there.
+  announceSeq: 0,
   // ui-specs/009 — a question and a scope handed in from outside the panel: a
   // `?dp-ask=` link, or a passage quoted in the host's own article. Both are
   // drained by whichever surface owns the field they land in, and both are
@@ -785,8 +788,21 @@ export const offersSection = computed(
 
 export const currentPathIndexed = computed(() => knownPaths.value.has(state.currentPath))
 
-function say(message) {
+/**
+ * Into the polite region the component drains — and every call is NEWS.
+ *
+ * `announce` alone could not say so. A watcher fires on a change, and "Answer
+ * ready, 3 sources" after "Answer ready, 3 sources" is not one: the second
+ * answer settled in silence, with only the unread dot to tell anyone, and the
+ * same went for a second Copy or a second Delete. The count is what makes a
+ * repeat a change; `announce` keeps the sentence for whoever reads it.
+ *
+ * Exported because the component says things too — a copy, a quote — and two
+ * writers of one region that disagree about this rule are how it broke.
+ */
+export function say(message) {
   state.announce = message
+  state.announceSeq += 1
 }
 
 /**

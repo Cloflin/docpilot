@@ -652,6 +652,39 @@ describe('the live region', () => {
     await nextTick()
     expect(document.querySelectorAll('.docpilot__sr[aria-live="polite"]').length).toBe(1)
   })
+
+  /**
+   * t4 R-4. The same sentence said twice is two announcements: two answers with
+   * the same source count, a second Copy, a second Delete. The watcher fired on
+   * a CHANGE, so the repeat never reached the queue, and the zero-width space
+   * the drain adds to tell a repeat apart had nothing to act on. Said through
+   * the store, the way every one of those is said; fake timers for the drain's
+   * 500 ms throttle.
+   */
+  it('speaks a sentence said twice, twice', async () => {
+    vi.useFakeTimers()
+    try {
+      panel = mountDocPilot({ config: CONFIG })
+      await nextTick()
+      session.setInstruction('')
+      await nextTick()
+      vi.advanceTimersByTime(600)
+      await nextTick()
+      const first = live().textContent
+      expect(first).toBe('Instruction removed.')
+
+      session.setInstruction('')
+      await nextTick()
+      vi.advanceTimersByTime(600)
+      await nextTick()
+      // A different string that reads the same: that difference is what a
+      // polite region speaks on.
+      expect(live().textContent).not.toBe(first)
+      expect(live().textContent.replace(/\u200b/g, '')).toBe(first)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 /**
@@ -735,6 +768,17 @@ describe('the composer — ui-specs/012', () => {
     expect(e.defaultPrevented).toBe(false)
     // And the sentence is still there to go on composing into.
     expect(ta.value).toBe('にほんご')
+  })
+
+  /**
+   * t4 R-8. A name of its own rather than the placeholder fallback some screen
+   * readers skip — and the placeholder's words, because those are what a
+   * voice-control reader sees and says.
+   */
+  it('is named by the words it shows', async () => {
+    await openPanel()
+    expect(field().getAttribute('aria-label')).toBe('Ask about Acme Editor')
+    expect(field().getAttribute('aria-label')).toBe(field().getAttribute('placeholder'))
   })
 
   /** The control, so the test above is about composing rather than about Enter. */
@@ -1078,6 +1122,8 @@ describe('the bar — ui-specs/015', () => {
     expect(document.querySelector('.docpilot__panel')).toBe(null)
     // One field on the page, and it is the bar's.
     expect(document.querySelectorAll('.docpilot__field textarea')).toHaveLength(1)
+    // Named on the page at rest as well, where there is no window to name it — t4 R-8.
+    expect(barField().getAttribute('aria-label')).toBe('Ask about Acme Editor')
   })
 
   it('raises the window at the first character, not on focus', async () => {
@@ -1412,5 +1458,266 @@ describe('the docks let go — ui-specs/019', () => {
     await nextTick()
     expect(session.state.dockPanel).toBe(null)
     expect(document.activeElement).toBe(ta)
+  })
+})
+
+/**
+ * A thread of one settled turn, opened — the lens suite's fixture, shared by the
+ * three suites below. `open()` rejects the index offline and degrades the panel
+ * a microtask later, so the flag is cleared after a macrotask (the composer
+ * suite's reason). `extra` is merged into the turn.
+ */
+const openWithTurn = async (extra = {}, options = {}) => {
+  panel = mountDocPilot({ config: CONFIG, ...options })
+  session.state.turns.push({
+    id: 'a11y-1',
+    question: 'how do I authenticate?',
+    answerText: 'with a key',
+    state: 'complete',
+    startedAt: 0,
+    sources: [],
+    ...extra,
+  })
+  panel.open()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  session.state.degraded = false
+  await nextTick()
+  await nextTick()
+}
+
+/**
+ * The question editor's keys — ui-specs/008. Enter saves, Shift+Enter is a new
+ * line, and an Enter that commits an IME candidate is neither: the composer's
+ * guard from ui-specs/012, which the editor did not have (t4 R-6). An unchanged
+ * question is a cancel, so a save is visible here as the editor closing, with
+ * no turn run.
+ */
+describe('the question editor — ui-specs/008', () => {
+  const editor = () => document.querySelector('#dp-edit-field-a11y-1')
+  const openEditor = async () => {
+    await openWithTurn()
+    document.querySelector('#dp-edit-a11y-1').click()
+    await nextTick()
+    await nextTick()
+    expect(editor()).not.toBe(null)
+    return editor()
+  }
+  // `isComposing` on the instance — see the composer suite.
+  const enter = (el, { composing = false, shiftKey = false } = {}) => {
+    const e = new KeyboardEvent('keydown', { key: 'Enter', shiftKey, bubbles: true, cancelable: true })
+    Object.defineProperty(e, 'isComposing', { value: composing })
+    el.dispatchEvent(e)
+    return e
+  }
+
+  afterEach(() => {
+    session.state.turns.length = 0
+    session.state.open = false
+  })
+
+  it('does not save on Enter while an IME is composing', async () => {
+    const e = enter(await openEditor(), { composing: true })
+    await nextTick()
+    expect(e.defaultPrevented).toBe(false)
+    expect(editor()).not.toBe(null)
+  })
+
+  it('leaves Shift+Enter to the field, as a new line', async () => {
+    const e = enter(await openEditor(), { shiftKey: true })
+    await nextTick()
+    expect(e.defaultPrevented).toBe(false)
+    expect(editor()).not.toBe(null)
+  })
+
+  /** The control, so the two above are about the guard rather than about Enter. */
+  it('saves on a plain Enter', async () => {
+    const e = enter(await openEditor())
+    await nextTick()
+    expect(e.defaultPrevented).toBe(true)
+    expect(editor()).toBe(null)
+  })
+})
+
+/**
+ * A modified click is the browser's — t4 R-7. Ctrl/Cmd opens a new tab, Shift a
+ * new window, Alt downloads; the panel takes over a plain primary click only.
+ * The answer's delegation always checked; the source rows did not, so a
+ * Cmd-click on a citation navigated the tab the thread lives in.
+ *
+ * `defaultPrevented` is recorded on the document, after the panel's handlers
+ * have run, and the click is then cancelled there: happy-dom follows a link
+ * whose click nobody prevented, and this file goes nowhere.
+ */
+describe('a modified click on a link — t4 R-7', () => {
+  const go = vi.fn()
+  let taken = null
+  const record = (e) => {
+    taken = e.defaultPrevented
+    e.preventDefault()
+  }
+  const click = (el, init = {}) => {
+    taken = null
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...init }))
+    return taken
+  }
+  const MODIFIED = [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]
+
+  beforeEach(() => {
+    go.mockClear()
+    document.addEventListener('click', record)
+  })
+
+  afterEach(() => {
+    document.removeEventListener('click', record)
+    session.state.turns.length = 0
+    session.state.open = false
+  })
+
+  it.each(MODIFIED)('leaves a source row to the browser on %o', async (init) => {
+    await openWithTurn({ sources: [{ id: 's1', n: 1, title: 'Keys', href: '/keys' }] }, { router: { go } })
+    const a = document.querySelector('.docpilot__turn .docpilot__sources a')
+    expect(click(a, init)).toBe(false)
+    expect(go).not.toHaveBeenCalled()
+  })
+
+  it.each(MODIFIED)('leaves a link in the answer to the browser on %o', async (init) => {
+    await openWithTurn({ answerHtml: '<p>With a <a href="/keys">key</a>.</p>' }, { router: { go } })
+    const a = document.querySelector('.docpilot__answer a')
+    expect(click(a, init)).toBe(false)
+    expect(go).not.toHaveBeenCalled()
+  })
+
+  /** The control for both: a plain click is still the panel's, as SPA navigation. */
+  it('takes a plain click on either', async () => {
+    await openWithTurn(
+      { answerHtml: '<p>With a <a href="/tokens">token</a>.</p>', sources: [{ id: 's1', n: 1, title: 'Keys', href: '/keys' }] },
+      { router: { go } },
+    )
+    expect(click(document.querySelector('.docpilot__answer a'))).toBe(true)
+    expect(click(document.querySelector('.docpilot__turn .docpilot__sources a'))).toBe(true)
+    expect(go.mock.calls).toEqual([['/tokens'], ['/keys']])
+  })
+})
+
+/**
+ * Below 960px the panel is a full-screen sheet, and modal — t4 R-5, and the
+ * role switch no test held (M5). `aria-modal` was a promise to a screen reader
+ * only: Tab walked out from the last control to the page under the scrim, and
+ * the sheet's own Esc listener with it. Now the first and last stops wrap, and
+ * only there, and only while the window is narrow.
+ *
+ * happy-dom is 1024px wide, so the breakpoint's query is answered by hand, with
+ * a `change` the test can fire. happy-dom does not move focus on Tab, so the
+ * assertion is the cancelled key and where focus was put instead.
+ */
+describe('the sheet below 960px — t4 R-5', () => {
+  let widen = null
+  const sheet = () => document.querySelector('#dp-panel')
+  const stopsOf = (box) =>
+    [...box.querySelectorAll('a[href], button, textarea, [tabindex]')].filter((el) => el.tabIndex >= 0)
+  const tab = (el, shiftKey = false) => {
+    const e = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })
+    el.dispatchEvent(e)
+    return e
+  }
+
+  const narrow = () => {
+    const real = window.matchMedia.bind(window)
+    const listeners = new Set()
+    const wide = {
+      matches: false,
+      media: '(min-width: 960px)',
+      addEventListener: (_, fn) => listeners.add(fn),
+      removeEventListener: (_, fn) => listeners.delete(fn),
+    }
+    vi.spyOn(window, 'matchMedia').mockImplementation((q) => (q === wide.media ? wide : real(q)))
+    widen = async () => {
+      wide.matches = true
+      for (const fn of listeners) fn()
+      await nextTick()
+    }
+  }
+
+  // The open path focuses the sheet 60 ms after it renders; let that land, so
+  // it cannot move focus in the middle of an assertion.
+  const opened = async () => {
+    await openWithTurn({ sources: [{ id: 's1', n: 1, title: 'Keys', href: '/keys' }] })
+    await new Promise((resolve) => setTimeout(resolve, 80))
+  }
+
+  beforeEach(() => {
+    session.state.open = false
+    session.state.turns.length = 0
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    widen = null
+    session.state.turns.length = 0
+    session.state.open = false
+  })
+
+  it('is a modal dialog while narrow, and a sidebar again once wide', async () => {
+    narrow()
+    await opened()
+    expect(sheet().getAttribute('role')).toBe('dialog')
+    expect(sheet().getAttribute('aria-modal')).toBe('true')
+    expect(document.activeElement).toBe(sheet())
+
+    await widen()
+    expect(sheet().getAttribute('role')).toBe('complementary')
+    expect(sheet().hasAttribute('aria-modal')).toBe(false)
+  })
+
+  it('wraps Tab from the last stop to the first', async () => {
+    narrow()
+    await opened()
+    const stops = stopsOf(sheet())
+    expect(stops.length).toBeGreaterThan(2)
+    stops.at(-1).focus()
+    expect(tab(stops.at(-1)).defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(stops[0])
+  })
+
+  it('wraps Shift+Tab from the first stop, and from the sheet itself, to the last', async () => {
+    narrow()
+    await opened()
+    const stops = stopsOf(sheet())
+    // Where the open path left focus: the sheet, so the keyboard stays down.
+    expect(tab(sheet(), true).defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(stops.at(-1))
+
+    stops[0].focus()
+    expect(tab(stops[0], true).defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(stops.at(-1))
+  })
+
+  it('leaves a Tab that has somewhere to go to the browser', async () => {
+    narrow()
+    await opened()
+    const stops = stopsOf(sheet())
+    stops[0].focus()
+    expect(tab(stops[0]).defaultPrevented).toBe(false)
+    stops.at(-1).focus()
+    expect(tab(stops.at(-1), true).defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(stops.at(-1))
+  })
+
+  it('lets go once the window is wide', async () => {
+    narrow()
+    await opened()
+    await widen()
+    const stops = stopsOf(sheet())
+    stops.at(-1).focus()
+    expect(tab(stops.at(-1)).defaultPrevented).toBe(false)
+  })
+
+  it('never holds Tab in the desktop sidebar', async () => {
+    await opened()
+    expect(sheet().getAttribute('role')).toBe('complementary')
+    expect(sheet().hasAttribute('aria-modal')).toBe(false)
+    const stops = stopsOf(sheet())
+    stops.at(-1).focus()
+    expect(tab(stops.at(-1)).defaultPrevented).toBe(false)
   })
 })

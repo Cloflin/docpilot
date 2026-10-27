@@ -16,11 +16,15 @@
     <DefineField v-slot="{ inBar }">
       <div class="docpilot__field">
         <span v-if="inBar" class="docpilot__field-glyph" aria-hidden="true"><Icon name="sparkle" /></span>
+        <!-- Named, not left to the placeholder fallback some readers skip, and
+             named with the words on screen: a voice-control reader says what
+             they see, and the bar's button below 960px is labelled with them. -->
         <textarea
           v-model="input"
           rows="1"
           maxlength="1000"
           :placeholder="placeholder"
+          :aria-label="placeholder"
           aria-describedby="dp-quote dp-hint dp-counter dp-budget dp-footnote"
           @input="onFieldInput"
           @keydown="onKeydown"
@@ -72,7 +76,8 @@
       <!--
         Desktop is NON-MODAL: no scrim, no focus trap, docs stay readable beside
         the answer. Declaring aria-modal there would be a lie. Below 960px there
-        is no room to read anything else, so it is honestly modal.
+        is no room to read anything else, so it is honestly modal — and Tab is
+        held inside to make it so (`holdTab`).
 
         One transition for every shape: the stylesheet picks the exit from the
         shape's class, and below 960px every shape leaves as the sheet it is.
@@ -89,6 +94,7 @@
         :aria-modal="mobile ? 'true' : undefined"
         aria-labelledby="dp-title"
         @keydown.esc.stop.prevent="onEsc"
+        @keydown.tab="holdTab"
         @pointerover="aimLens"
         @pointerout="leaveLens"
       >
@@ -1727,7 +1733,7 @@ onMounted(() => {
         // turn through, so it queues behind "answer ready" instead of talking
         // over it. Once per session, on the same flag the visible note is
         // retired by: a mode change is news exactly once.
-        s.announce = T('error.budgetLow')
+        session.say(T('error.budgetLow'))
         try {
           sessionStorage.setItem(BUDGET_LOW_KEY, '1')
         } catch {
@@ -1882,9 +1888,12 @@ function drainAnnounce() {
   announceTimer = announceQueue.length ? setTimeout(drainAnnounce, ANNOUNCE_MS) : null
 }
 
+// The pair, not the sentence: a watcher fires on a change, and the same sentence
+// said twice is only a change in `announceSeq` — `session.say` bumps it on every
+// call. The text stays in the pair so a bare write to `announce` still speaks.
 watch(
-  () => s.announce,
-  (msg) => {
+  () => [s.announce, s.announceSeq],
+  ([msg]) => {
     if (!msg) return
     announceQueue.push(msg)
     if (!announceTimer) announceTimer = setTimeout(drainAnnounce, ANNOUNCE_MS)
@@ -1997,6 +2006,43 @@ watch(
     }
   },
 )
+
+/**
+ * THE SHEET IS MODAL, SO TAB STAYS IN IT — t4 R-5.
+ *
+ * Below 960px the section says `aria-modal="true"`, and that is a promise to a
+ * screen reader only: nothing held the keyboard. Tab from the last control
+ * walked out to the page under the scrim, and Esc — a listener on this section
+ * — stopped working the moment it had. So the sheet's last stop wraps to its
+ * first and the first, or the sheet itself, back to the last.
+ *
+ * A trap, not `inert` on the page. The panel is teleported into a host's
+ * `<body>`; marking the host's own nodes inert would also freeze a dialog the
+ * host opens over the sheet — its search, say — which is the host's to run.
+ *
+ * "Is there a stop left in this direction", not "is this the last stop": focus
+ * can sit on a `tabindex="-1"` node — the sheet, a dock, a picker row — that no
+ * list of stops contains. `getClientRects` is `visibleTrigger`'s test: a closed
+ * popover or a collapsed block is still in the DOM, and a node with no box is
+ * no stop.
+ *
+ * Read at the keystroke, from `mobile`, so a window widened past 960px lets go
+ * on the next Tab with nothing to undo, and the listener leaves with the section.
+ */
+const TAB_STOPS = 'a[href], button, input, select, textarea, summary, [tabindex]'
+
+function holdTab(e: KeyboardEvent) {
+  const box = panel.value
+  if (!mobile.value || !box) return
+  const stops = [...box.querySelectorAll<HTMLElement>(TAB_STOPS)].filter(
+    (el) => el.tabIndex >= 0 && !el.matches(':disabled') && el.getClientRects().length > 0,
+  )
+  const at = e.target as Node
+  const way = e.shiftKey ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING
+  if (stops.some((el) => at.compareDocumentPosition(el) & way)) return
+  e.preventDefault()
+  ;((e.shiftKey ? stops.at(-1) : stops[0]) ?? box).focus()
+}
 
 /**
  * Where focus lands when the element that opened the panel is gone — a route
@@ -2978,13 +3024,13 @@ function takeQuote() {
   const text = ask.take()
   if (!text) return
   quote.value = text
-  s.announce = T('announce.quoteAdded')
+  session.say(T('announce.quoteAdded'))
   nextTick(() => fieldEl()?.focus())
 }
 
 function dropQuote() {
   quote.value = ''
-  s.announce = T('announce.quoteRemoved')
+  session.say(T('announce.quoteRemoved'))
   nextTick(() => fieldEl()?.focus())
 }
 
@@ -3059,7 +3105,7 @@ async function copyThread() {
   }
   threadCopied.value = true
   setTimeout(() => (threadCopied.value = false), 2000)
-  s.announce = T('announce.threadCopied')
+  session.say(T('announce.threadCopied'))
 }
 
 async function copy(turn) {
@@ -3067,7 +3113,7 @@ async function copy(turn) {
     await navigator.clipboard.writeText(withSources(turn))
     turn.copied = true
     setTimeout(() => (turn.copied = false), 2000)
-    s.announce = T('announce.copied')
+    session.say(T('announce.copied'))
   } catch {
     /* clipboard denied — the answer is still selectable */
   }
@@ -3081,7 +3127,7 @@ async function copyQuestion(turn) {
     await navigator.clipboard.writeText(turn.question)
     turn.questionCopied = true
     setTimeout(() => (turn.questionCopied = false), 2000)
-    s.announce = T('announce.questionCopied')
+    session.say(T('announce.questionCopied'))
   } catch {
     /* clipboard denied — the question is still selectable */
   }
@@ -3173,7 +3219,11 @@ function retryTurn(turn) {
   session.retryTurn(turn)
 }
 
+// The composer's IME guard, and for the composer's reason — ui-specs/012. The
+// Enter that commits a candidate re-ran a half-typed question here, and that
+// re-run truncates the thread and spends a request from the shared allowance.
 function onEditKeydown(e: KeyboardEvent) {
+  if (e.isComposing || e.nativeEvent?.isComposing) return
   if (e.key !== 'Enter' || e.shiftKey) return
   e.preventDefault()
   const turn = s.turns.find((t) => t.id === editingId.value)
@@ -3652,12 +3702,25 @@ function goSource(href) {
   router.go(href)
 }
 
+/**
+ * A click the panel may take over: the primary button and no modifier.
+ *
+ * Ctrl/Cmd is a new tab, Shift a new window and Alt a download — the browser's,
+ * not ours — and a click something further in already handled is not ours
+ * either. The answer's delegation always asked this; the source rows did not,
+ * so a Cmd-click on a citation navigated the tab the thread lives in, which on a
+ * full-load host is the thread gone. ONE guard, because two copies are how the
+ * second handler came to have none.
+ */
+const isPlainClick = (e: MouseEvent) =>
+  !e.defaultPrevented && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
+
 // An imported page's row points at the original on another host: the browser
 // opens it in the new tab the markup already asks for, and the panel stays where
 // it is — closing the drawer for a tab the reader did not navigate to would lose
 // the thread for nothing. Everything else is SPA navigation, as before.
 function onSourceClick(e: MouseEvent, src: any) {
-  if (src.origin) return
+  if (src.origin || !isPlainClick(e)) return
   e.preventDefault()
   goSource(src.href)
 }
@@ -3742,7 +3805,7 @@ function onResultsKey(e: KeyboardEvent, turn: Turn) {
 const linkedCite = ref<HTMLElement | null>(null)
 
 function onAnswerClick(e: MouseEvent) {
-  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  if (!isPlainClick(e)) return
   const btn = e.target.closest?.('[data-copy-code]')
   if (btn) return copyCode(btn)
   const a = e.target.closest?.('a[href]')
@@ -3774,9 +3837,9 @@ async function copyCode(btn) {
   btn.classList.add('is-copied')
   clearTimeout(copiedTimers.get(btn))
   copiedTimers.set(btn, setTimeout(() => btn.classList.remove('is-copied'), 2000))
-  // A distinct string from the turn-level 'Copied': the polite region watcher
-  // fires on change, so reusing it would go unannounced right after one.
-  s.announce = T('announce.codeCopied')
+  // A distinct string from the turn-level 'Copied': it names WHAT was copied.
+  // It no longer has to differ to be heard — `say` makes a repeat a change.
+  session.say(T('announce.codeCopied'))
 }
 
 // Pointing at a marker lights the row it goes to. UI-SPEC 573: no timer, no
