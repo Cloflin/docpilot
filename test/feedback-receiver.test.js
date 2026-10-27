@@ -33,7 +33,11 @@ import {
     authorise,
     readBody,
     BODY_LIMIT,
+    BURST,
     COMMENT_MAX,
+    ORIGINS_ENV,
+    REVISION_MAX,
+    TRUST_PROXY_ENV,
     RECEIVED_AT,
     EXPORT_CONTENT_TYPE,
     TOKEN_ENV,
@@ -60,11 +64,11 @@ function tmp() {
 afterAll(() => temps.forEach((d) => rmSync(d, {recursive: true, force: true})))
 
 /** A live receiver on an ephemeral port. */
-async function up({store, env = {[TOKEN_ENV]: TOKEN}, now = Date.now} = {}) {
+async function up({store, env = {[TOKEN_ENV]: TOKEN}, now = Date.now, limits, dayBytes} = {}) {
     const dir = store ? null : path.join(tmp(), 'nested', 'missing')
     const warned = []
     const s = store || ndjsonStore({dir, warn: (m) => warned.push(m)})
-    const server = createServer(createHandler({store: s, env, now, warn: (...a) => warned.push(a.join(' '))}))
+    const server = createServer(createHandler({store: s, env, now, limits, dayBytes, warn: (...a) => warned.push(a.join(' '))}))
     await new Promise((r) => server.listen(0, '127.0.0.1', r))
     const port = server.address().port
     const base = `http://127.0.0.1:${port}`
@@ -78,9 +82,9 @@ async function up({store, env = {[TOKEN_ENV]: TOKEN}, now = Date.now} = {}) {
         post: (body, init = {}) =>
             fetch(`${base}/ai/feedback`, {
                 method: 'POST',
+                ...init,
                 headers: {'content-type': 'application/json', ...(init.headers || {})},
                 body: typeof body === 'string' || body instanceof ReadableStream ? body : JSON.stringify(body),
-                ...init,
             }),
         get: (p, init = {}) =>
             fetch(`${base}${p}`, {headers: {authorization: `Bearer ${TOKEN}`, ...(init.headers || {})}, ...init}),
@@ -234,6 +238,7 @@ it('every status this endpoint can produce', async () => {
         [200, () => fetch(`${r.base}/healthz`)],
         [204, () => r.post(ROW())],
         [400, () => r.post('nope')],
+        [415, () => r.post(ROW(), {headers: {'content-type': 'text/plain'}})],
         [404, () => fetch(`${r.base}/ai/feedback/`)], // exact match, never a prefix
         [404, () => fetch(`${r.base}/`)],
         [405, () => fetch(`${r.base}/ai/feedback`, {method: 'OPTIONS'})],
@@ -457,6 +462,18 @@ it('revision: missing / non-integer / string-of-digits / negative', async () => 
     assert.equal(JSON.parse(lines(r.dir).find((l) => l.includes('m-s'))).revision, 3, 'coerced to a number')
 })
 
+it(`revision: at most REVISION_MAX, so a forged row cannot outrank a reader's later ones forever`, async () => {
+    const r = await up()
+    onTestFinished(() => r.close())
+    assert.equal((await r.post(ROW({messageId: 'm-max', revision: REVISION_MAX}))).status, 204)
+    for (const v of [REVISION_MAX + 1, String(REVISION_MAX + 1), Number.MAX_SAFE_INTEGER]) {
+        const res = await r.post(ROW({messageId: `m-${v}`, revision: v}))
+        assert.equal(res.status, 400, `revision ${v}`)
+        assert.match((await res.json()).error.message, /revision is over/)
+    }
+    assert.equal(lines(r.dir).length, 1)
+})
+
 it('out-of-order revisions: the reader keeps the higher one either way', async () => {
     const r = await up()
     onTestFinished(() => r.close())
@@ -585,7 +602,9 @@ it('an export served over a torn store is still parseable by the CLI', async () 
 })
 
 it('concurrent appends: 200 simultaneous POSTs, every line intact', async () => {
-    const r = await up()
+    // One address sending 200 rows is what the limiter exists to refuse; this
+    // test is about the store, so it runs without one.
+    const r = await up({limits: false})
     onTestFinished(() => r.close())
     const N = 200
     // macOS caps the listen backlog at kern.ipc.somaxconn (128 by default), so
@@ -656,6 +675,100 @@ it('concurrent appends from SEPARATE PROCESSES (O_APPEND, not the event loop)', 
     // each stored line is bounded by the body cap, which is what makes the
     // single O_APPEND write atomic in the first place
     assert.ok(Math.max(...raw.map((l) => Buffer.byteLength(l))) < BODY_LIMIT + 256)
+})
+
+/* ═══════════════════════════════ who may write ═════════════════════════════ */
+
+it('the panel posts application/json with fetch, which is what lets the receiver require it', async () => {
+    const r = await up()
+    onTestFinished(() => r.close())
+    const sent = []
+    const mem = new Map()
+    pkgFeedback.record(ROW({messageId: 'm-panel'}), {
+        feedbackEndpoint: `${r.base}/ai/feedback`,
+        send: 'both',
+        storage: {getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v)},
+        fetchImpl: (u, i) => {
+            const res = fetch(u, i)
+            sent.push({init: i, res})
+            return res
+        },
+    })
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].init.headers['content-type'], 'application/json')
+    assert.equal((await sent[0].res).status, 204)
+})
+
+/**
+ * `text/plain`, a form and multipart are CORS-safelisted: another site's page
+ * sends them with no preflight, and the row would be written before the browser
+ * refused to read the reply. `application/json` is not, so the same page must
+ * preflight — and nothing here answers one.
+ */
+it('a cross-site simple POST is a 415 before it is read, and writes nothing', async () => {
+    const r = await up()
+    onTestFinished(() => r.close())
+    for (const type of ['text/plain;charset=UTF-8', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', 'application/json-seq']) {
+        const res = await r.post(ROW(), {headers: {'content-type': type, origin: 'https://evil.example'}})
+        assert.equal(res.status, 415, type)
+    }
+    assert.equal(lines(r.dir).length, 0)
+    assert.equal((await r.post(ROW(), {headers: {'content-type': 'application/json; charset=utf-8'}})).status, 204)
+})
+
+it(`${ORIGINS_ENV}: unset, any origin writes; set, only a listed one does`, async () => {
+    const open = await up()
+    onTestFinished(() => open.close())
+    assert.equal((await open.post(ROW(), {headers: {origin: 'https://evil.example'}})).status, 204)
+
+    const r = await up({env: {[TOKEN_ENV]: TOKEN, [ORIGINS_ENV]: 'https://docs.example.com/, https://preview.example.com'}})
+    onTestFinished(() => r.close())
+    const cases = [
+        ['https://docs.example.com', 204],
+        ['https://preview.example.com', 204],
+        ['https://evil.example', 403],
+        ['https://docs.example.com.evil.example', 403],
+        [null, 403],
+    ]
+    for (const [origin, want] of cases) {
+        const res = await r.post(ROW({messageId: `m-${origin}`}), {headers: origin ? {origin} : {}})
+        assert.equal(res.status, want, String(origin))
+        await res.arrayBuffer()
+    }
+    assert.equal(lines(r.dir).length, 2)
+})
+
+it('a client past its burst is a 429 before its body is read; another client, and the next minute, are not', async () => {
+    let t = 1_000_000
+    const r = await up({now: () => t, env: {[TOKEN_ENV]: TOKEN, [TRUST_PROXY_ENV]: '1'}})
+    onTestFinished(() => r.close())
+    const as = (xff, body = ROW()) => r.post(body, {headers: {'x-forwarded-for': xff}})
+    for (let i = 0; i < BURST.limit; i++) {
+        // the left-most entry is the client's to forge, and changes nothing
+        assert.equal((await as(`forged-${i}, 2001:db8:1:2::${i.toString(16)}`, ROW({messageId: `m-${i}`}))).status, 204)
+    }
+    const over = await as('2001:db8:1:2:ffff::1')
+    assert.equal(over.status, 429, 'the same /64')
+    assert.ok(Number(over.headers.get('retry-after')) > 0)
+    assert.equal((await as('2001:db8:1:2::9', 'x'.repeat(BODY_LIMIT + 1))).status, 429, 'refused before the 413 read')
+    assert.equal((await as('203.0.113.5')).status, 204, 'another client')
+    t += BURST.windowMs
+    assert.equal((await as('2001:db8:1:2::1')).status, 204, 'the window reopened')
+    assert.equal(lines(r.dir).length, BURST.limit + 2)
+})
+
+it('the store grows by at most dayBytes a UTC day across every client, and the count restarts at midnight', async () => {
+    let t = Date.UTC(2026, 9, 27, 23, 58)
+    const one = Buffer.byteLength(JSON.stringify(stored(ROW(), t))) + 1
+    const r = await up({now: () => t, dayBytes: 3 * one + 10, limits: false})
+    onTestFinished(() => r.close())
+    for (let i = 0; i < 3; i++) assert.equal((await r.post(ROW())).status, 204)
+    const full = await r.post(ROW())
+    assert.equal(full.status, 507)
+    assert.match((await full.json()).error.message, /today/)
+    t += 5 * 60_000
+    assert.equal((await r.post(ROW())).status, 204)
+    assert.equal(lines(r.dir).length, 4)
 })
 
 /* ═════════════════════════════════ the export ═════════════════════════════ */
