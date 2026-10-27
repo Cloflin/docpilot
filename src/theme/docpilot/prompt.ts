@@ -361,7 +361,9 @@ const parameterLine = (t, key) => {
   const f = t.parameters.properties[key]
   const optional = !t.parameters.required.includes(key)
   const kind = Array.isArray(f.enum) ? f.enum.map((v) => JSON.stringify(v)).join(' | ') : f.type
-  return `    ${key}: ${kind}${optional ? ', optional' : ''}${f.description ? `, ${f.description}` : ''}`
+  // The value an empty field sends — `checkArgs` fills it, as `providerParameters` says.
+  const fallback = f.default == null || f.default === '' ? '' : `, default ${JSON.stringify(f.default)}`
+  return `    ${key}: ${kind}${optional ? ', optional' : ''}${fallback}${f.description ? `, ${f.description}` : ''}`
 }
 
 /**

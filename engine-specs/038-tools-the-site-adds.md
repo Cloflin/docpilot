@@ -214,7 +214,8 @@ cache and costs nothing, like a repeated search.
 - the name is invalid or is a built-in name, or there are more than 12 tools;
 - `description` is missing;
 - `parameters` is not a flat object schema of the supported types, or a
-  `required` key is not a property;
+  `required` key is not a property, or a `default` is not a value of the
+  parameter's own type that its `enum`, `format` and bounds accept;
 - `confirm` is not `false`, `true` or `'form'`;
 - `run` has more than one executor, or an unknown method;
 - a function tool has a `POST` `fetch`, a `href` or an `event`;
@@ -228,6 +229,8 @@ cache and costs nothing, like a repeated search.
 **At run time** — every argument is checked before any runner sees it:
 
 - unknown keys are dropped and `null` means absent;
+- an absent value takes the parameter's `default`, which the model is told in
+  the parameter's description, and a form starts from;
 - a type is coerced only where the conversion is lossless (`"3"` → `3`,
   `"true"` → `true`);
 - `enum`, `format`, `maxLength`, `minimum` and `maximum` are enforced;

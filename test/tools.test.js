@@ -70,6 +70,14 @@ const PRICING = {
   },
 }
 
+/** A parameter with a `default` — engine-spec 038 §6. */
+const DEFAULTED = {
+  plan_limits: {
+    description: 'Live limits of one plan.',
+    parameters: { type: 'object', properties: { plan: { type: 'string', enum: ['free', 'pro'], default: 'free', description: 'The plan' } } },
+  },
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
   unregisterTools()
@@ -98,6 +106,16 @@ describe('a site tool the build refuses — engine-spec 038 §6', () => {
     ['a write without the reader', { a: { description: 'x', run: { fetch: '/a', method: 'POST' } } }, /without the reader/],
     ['a navigation as a function tool', { a: { description: 'x', run: { href: '/a' } } }, /cannot answer the model/],
     ['a placeholder that is no parameter', { a: { description: 'x', run: { fetch: '/a/{plan}' } } }, /\{plan\}, which is not a parameter/],
+    [
+      'a default the parameter refuses',
+      { a: { description: 'x', parameters: { type: 'object', properties: { p: { type: 'string', enum: ['free', 'pro'], default: 'gold' } } } } },
+      /p\.default is not one of free, pro/,
+    ],
+    [
+      'a default of another type',
+      { a: { description: 'x', parameters: { type: 'object', properties: { k: { type: 'integer', default: '3' } } } } },
+      /k\.default is not of type integer/,
+    ],
   ])('refuses %s', (_, tools, why) => {
     expect(refused(tools).join('\n')).toMatch(why)
   })
@@ -217,6 +235,44 @@ describe('the check every argument passes', () => {
     expect(checkArgs(support, { message: 'help' }, { partial: true })).toEqual({ ok: true, value: { message: 'help' }, errors: {} })
   })
 
+  /**
+   * `default` was kept, allowed by the build and listed in the spec, and read by
+   * nothing: a call that left the field empty reached the runner without it.
+   */
+  it('fills an absent value with the parameter’s default, through the same check', () => {
+    const [d] = normaliseTools(DEFAULTED)
+    expect(toolProblems(DEFAULTED)).toEqual([])
+    for (const args of [{}, { plan: null }, { plan: '' }, null]) {
+      expect(checkArgs(d, args), JSON.stringify(args)).toEqual({ ok: true, value: { plan: 'free' }, errors: {} })
+    }
+    // A given value wins, and is checked rather than replaced.
+    expect(checkArgs(d, { plan: 'pro' }).value).toEqual({ plan: 'pro' })
+    expect(checkArgs(d, { plan: 'gold' }).errors).toEqual({ plan: 'not one of free, pro' })
+    // A required value the default supplies is not missing.
+    const [k] = normaliseTools({ k: { description: 'x', parameters: { type: 'object', properties: { n: { type: 'integer', default: 3 } }, required: ['n'] } } })
+    expect(checkArgs(k, {})).toEqual({ ok: true, value: { n: 3 }, errors: {} })
+  })
+
+  /**
+   * The two string checks the provider schema only describes, at their edges.
+   * Neither had a test: `format: 'uri'` accepting `javascript:`, or a value one
+   * over `maxLength`, kept the suite green.
+   */
+  it('takes only a web address for format uri', () => {
+    const [u] = normaliseTools({ u: { description: 'x', parameters: { type: 'object', properties: { url: { type: 'string', format: 'uri' } } } } })
+    expect(checkArgs(u, { url: 'https://example.com/a?b=1' }).value).toEqual({ url: 'https://example.com/a?b=1' })
+    expect(checkArgs(u, { url: 'http://example.com' }).ok).toBe(true)
+    for (const url of ['javascript:alert(1)', 'data:text/html,<b>x</b>', 'ftp://example.com/f', 'not a url']) {
+      expect(checkArgs(u, { url }).errors, url).toEqual({ url: 'not a web address' })
+    }
+  })
+
+  it('refuses a string over maxLength, and keeps one at it', () => {
+    const [m] = normaliseTools({ m: { description: 'x', parameters: { type: 'object', properties: { s: { type: 'string', maxLength: 5 } } } } })
+    expect(checkArgs(m, { s: 'abcde' })).toEqual({ ok: true, value: { s: 'abcde' }, errors: {} })
+    expect(checkArgs(m, { s: 'abcdef' }).errors).toEqual({ s: 'longer than 5 characters' })
+  })
+
   it('URL-encodes every argument into a template', () => {
     expect(expandTemplate('/api/{q}?x={q}', { q: 'a b/c' })).toBe('/api/a%20b%2Fc?x=a%20b%2Fc')
   })
@@ -271,6 +327,16 @@ describe('what the model is sent', () => {
       required: ['a', 'b'],
       additionalProperties: false,
     })
+  })
+
+  it('tells the model a default, as words, on both transports', () => {
+    const [d] = normaliseTools(DEFAULTED)
+    expect(providerParameters(d).properties.plan).toEqual({
+      type: ['string', 'null'],
+      enum: ['free', 'pro', null],
+      description: 'The plan; default: "free"; null when not known',
+    })
+    expect(toolsDocFor({ tools: [d], actions: [] })).toContain('\n    plan: "free" | "pro", optional, default "free", The plan')
   })
 
   it('lists the function tools before answer, and gives answer its actions', () => {
@@ -631,6 +697,29 @@ describe('the panel — ui-specs/018', () => {
     ])
     expect(a.state).toBe('done')
     expect(a.message).toBe('Ticket 42 opened.')
+  })
+
+  /**
+   * The form starts from what `validActions` kept, and that is `checkArgs`'
+   * value — so a default the model left empty is already in the field, and in
+   * what the reader sends.
+   */
+  it('starts a form from a default the model left empty, and sends it', async () => {
+    const support = SUPPORT.contact_support
+    const topic = { type: 'string', enum: ['billing', 'other'], default: 'billing' }
+    const s = await start({
+      tools: { contact_support: { ...support, parameters: { ...support.parameters, properties: { ...support.parameters.properties, topic } } } },
+    })
+    transport(() => answering(['a#one'], { actions: [{ tool: 'contact_support', args: { message: 'Pro limits', topic: null } }] }))
+    await s.submit('How many requests does Pro allow?')
+    const a = s.state.turns.at(-1).actions[0]
+    expect(a.values).toEqual({ message: 'Pro limits', topic: 'billing' })
+
+    const posts = []
+    vi.stubGlobal('fetch', async (url, init) => (posts.push(JSON.parse(init.body).args), { ok: true, status: 200, text: async () => '{}' }))
+    a.values = { ...a.values, email: 'reader@example.com' }
+    await s.runAction(s.state.turns.at(-1), a)
+    expect(posts).toEqual([{ email: 'reader@example.com', message: 'Pro limits', topic: 'billing' }])
   })
 
   it('does not offer an action nothing on the page can run', async () => {

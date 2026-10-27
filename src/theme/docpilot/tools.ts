@@ -18,8 +18,8 @@
 export const BUILTIN_TOOLS = new Set(['search_docs', 'fetch_section', 'expand_section', 'list_pages', 'answer'])
 
 /**
- * TWELVE, because the built-ins are four and OpenAI's own guidance puts the
- * ceiling for choosing well at twenty tools at the start of a turn. Sixteen
+ * TWELVE, because the built-ins are five and OpenAI's own guidance puts the
+ * ceiling for choosing well at twenty tools at the start of a turn. Seventeen
  * leaves room under it rather than sitting on it.
  */
 export const MAX_TOOLS = 12
@@ -50,6 +50,9 @@ const PLACEHOLDER = /\{([A-Za-z0-9_-]+)\}/g
  */
 const URL_PARTS = /^(?:([^:/\\?#]+):)?(?:[/\\]{2}([^/\\?#]*))?([^?#]*)/
 const DOT_SEGMENT = /^(?:\.|%2e){1,2}$/i
+
+/** No value, as `checkArgs` reads one: the strict schema's `null`, or an empty field. */
+const absent = (v) => v === null || v === undefined || v === ''
 
 // ── the registry ─────────────────────────────────────────────────────────────
 
@@ -178,6 +181,15 @@ function fieldProblems(at, key, f) {
       out.push(`${here}.${k} must be a number, on a number or an integer`)
     }
   }
+  // A DEFAULT IS A VALUE THE PARAMETER ITSELF ACCEPTS, of its own type and not
+  // one `coerce` would convert. `checkArgs` fills it into every call that left
+  // the field empty, so a default the check refuses would fail each such call
+  // with an error the model is told to fix and cannot.
+  if (!absent(f.default)) {
+    const own = f.type === 'integer' ? 'number' : f.type
+    const c = typeof f.default === own ? coerce(f, f.default) : { error: `not of type ${f.type}` }
+    if (c.error) out.push(`${here}.default is ${c.error}`)
+  }
   return out
 }
 
@@ -260,7 +272,7 @@ export function toolProblems(raw, { runtime = 'browser' } = {}) {
   const out = []
   const names = Object.keys(raw)
   if (names.length > MAX_TOOLS) {
-    out.push(`tools has ${names.length} tools; at most ${MAX_TOOLS} — with the four built-in ones, that is as many as a model chooses between well`)
+    out.push(`tools has ${names.length} tools; at most ${MAX_TOOLS} — with the five built-in ones, that is as many as a model chooses between well`)
   }
   for (const name of names) {
     const t = raw[name]
@@ -303,7 +315,9 @@ export function toolProblems(raw, { runtime = 'browser' } = {}) {
  * `format` and the bounds become WORDS in the description rather than keywords:
  * which of them a strict schema may carry differs by provider and has moved
  * more than once, and a keyword one provider rejects is a 400 on every turn.
- * The code enforces them instead — `checkArgs`.
+ * The code enforces them instead — `checkArgs`. A `default` is a word for the
+ * same reason, and because it is the code that applies it: told the value, the
+ * model can leave a field null knowing what that sends.
  */
 export function providerParameters(def) {
   const props = def.parameters?.properties || {}
@@ -316,6 +330,7 @@ export function providerParameters(def) {
     if (f.maxLength) notes.push(`at most ${f.maxLength} characters`)
     if (f.minimum != null) notes.push(`at least ${f.minimum}`)
     if (f.maximum != null) notes.push(`at most ${f.maximum}`)
+    if (!absent(f.default)) notes.push(`default: ${JSON.stringify(f.default)}`)
     if (optional) notes.push('null when not known')
     const p: any = { type: optional ? [f.type, 'null'] : f.type }
     if (Array.isArray(f.enum)) p.enum = optional ? [...f.enum, null] : [...f.enum]
@@ -391,6 +406,11 @@ function coerce(f, v) {
  * `partial` keeps a call whose REQUIRED values are missing: a form is where the
  * reader supplies them, so a form action with an empty email is still an action
  * worth offering, and its check runs again on what the reader sends.
+ *
+ * AN ABSENT VALUE TAKES THE PARAMETER'S `default`, and passes the same check a
+ * given one does. Filled here, in the one check every argument passes, so the
+ * runner, a button and a form all read one value: `validActions` hands the
+ * panel this `value`, and a form's fields start from it.
  */
 export function checkArgs(def, args, { partial = false } = {}) {
   const props = def.parameters?.properties || {}
@@ -398,9 +418,9 @@ export function checkArgs(def, args, { partial = false } = {}) {
   const given = args && typeof args === 'object' && !Array.isArray(args) ? args : {}
   const value = {}
   const errors = {}
-  for (const [key, f] of Object.entries(props)) {
-    const v = given[key]
-    if (v === null || v === undefined || v === '') {
+  for (const [key, f] of Object.entries(props) as Array<[string, any]>) {
+    const v = absent(given[key]) ? f.default : given[key]
+    if (absent(v)) {
       if (required.has(key) && !partial) errors[key] = 'required'
       continue
     }
