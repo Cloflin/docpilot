@@ -39,7 +39,7 @@
  * ```
  */
 
-import { getCurrentInstance, inject, ref, shallowRef, type InjectionKey } from 'vue'
+import { computed, getCurrentInstance, inject, ref, shallowRef, type InjectionKey } from 'vue'
 import type {
   HostBinding,
   HostEnvironment,
@@ -145,8 +145,22 @@ export function createStandaloneHost(
   } = {},
 ): StandaloneHost {
   const theme = shallowRef(init.theme ?? {})
-  const route = ref(init.route ?? '/')
+  const at = ref(init.route ?? '/')
   const lang = ref(init.lang ?? 'en')
+
+  /**
+   * THE ROUTE IS BASE-LESS, whatever the caller handed in.
+   *
+   * Every imperative host has `location.pathname` to hand — the Docusaurus
+   * client passes it on every navigation, and so does `mountDocPilot` when told
+   * no route — and on a site served at `/docs/` that carries the base. The
+   * manifest does not, so `/docs/guide/x` matched no page: *this page* and
+   * *section* left the picker. The base is the one the index fetch resolves —
+   * author, then binding — and is read when the route is, because `mountDocPilot`
+   * installs the environment AFTER it builds this host.
+   */
+  const base = () => hostConfig(theme.value?.docPilot).base
+  const route = computed(() => stripBase(at.value, base()))
 
   /**
    * The last-resort navigation: a full page load.
@@ -154,10 +168,15 @@ export function createStandaloneHost(
    * Correct rather than merely adequate — a host with no router IS a site where
    * following a link means loading a page. A host that has one passes it in and
    * the panel keeps its thread.
+   *
+   * The base goes back on HERE, and only here: an href the panel navigates comes
+   * off the manifest and is base-less, so without it a citation on a based site
+   * loaded `/guide/x`, one directory above the site. A router the host passes in
+   * is handed the base-less href it is documented to take.
    */
   const router = init.router ?? {
     go(href) {
-      if (typeof location !== 'undefined') location.href = href
+      if (typeof location !== 'undefined') location.href = withBase(href, base())
     },
   }
 
@@ -173,10 +192,30 @@ export function createStandaloneHost(
      */
     update(next = {}) {
       if ('theme' in next) theme.value = next.theme
-      if ('route' in next) route.value = next.route
+      if ('route' in next) at.value = next.route
       if ('lang' in next) lang.value = next.lang
     },
   }
+}
+
+/**
+ * The two halves of the base rule for a standalone host, kept apart from
+ * `joinBase` because a route is not a fetch URL: the site root under `/docs/` is
+ * `/docs/`, not `/docs`, and VitePress's `withBase` keeps the slash the same way.
+ * Only a base that ends at a segment boundary is stripped — `/docsify` is not
+ * under `/docs/`.
+ */
+function stripBase(path, base) {
+  const b = String(base || '/').replace(/\/+$/, '')
+  const p = String(path || '/')
+  if (!b) return p
+  if (p === b) return '/'
+  return p.startsWith(`${b}/`) ? p.slice(b.length) : p
+}
+
+function withBase(href, base) {
+  const b = String(base || '/').replace(/\/+$/, '')
+  return b && String(href).startsWith('/') ? `${b}${href}` : href
 }
 
 /**

@@ -48,8 +48,9 @@ function ensure() {
     selectors: settings.selectors,
     // `false` removes the Shiki the bundle installs; anything else leaves it,
     // and a site that wants another one installs it from a client module of its
-    // own — see the note above.
-    highlighter: settings.highlighter === 'none' ? false : undefined,
+    // own — see the note above. The key is ABSENT on the default rather than
+    // `undefined`, which the bundle used to read as "none".
+    ...(settings.highlighter === 'none' ? { highlighter: false } : {}),
     // Docusaurus sets both of these on `<html>` itself, and for an imperative
     // host they are the right sources rather than a workaround: a client module
     // cannot call `useDocusaurusContext()`, and these are what that context

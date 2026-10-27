@@ -14,6 +14,7 @@
  * `history.js`, `feedback.js` and `scope.js` were all written for.
  */
 import vue from '@vitejs/plugin-vue'
+import { fileURLToPath } from 'node:url'
 
 // Node 22+ ships a global `localStorage` that shadows happy-dom's in the mount
 // suite. The flag that turns it off does not exist on Node 20, where putting it
@@ -30,6 +31,12 @@ export default {
     // ran its test suite too: every file twice, and a half-finished branch's
     // failures reported as this one's.
     exclude: ['**/node_modules/**', '**/.claude/**', '**/dist/**'],
+    // The React adapter and the Docusaurus client import the prebuilt bundle,
+    // whose `exports` entry is in `dist/`. `verify` rebuilds `build:js` only, so
+    // that file is absent until `npm run build` and STALE after any source edit:
+    // a test of either adapter would run last build's code. The bundle is
+    // `src/web.ts` compiled, so a test gets that file instead.
+    alias: [{ find: /^@cloflin\/docpilot\/web$/, replacement: fileURLToPath(new URL('./src/web.ts', import.meta.url)) }],
     execArgv: process.allowedNodeEnvironmentFlags.has(WEBSTORAGE_OFF) ? [WEBSTORAGE_OFF] : [],
   },
 }

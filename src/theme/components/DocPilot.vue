@@ -1820,6 +1820,18 @@ watch(
 // none of that runs inside a component where `useHost()` is reachable.
 watch(lang, (l) => session.setLang(l))
 
+// A config pushed in after mount — `mountDocPilot().setConfig()`, the React
+// adapter's `config` prop — lands on the host's `theme`, and `configure` above
+// ran once. The trigger reads `theme` itself, so it followed while the panel
+// kept the first config. A second `configure` replaces the config and touches
+// no turn, index or scope: the reader's thread survives the push. It watches
+// the `docPilot` block, not `theme`: a VitePress 2 locale hands a new `theme`
+// object on every navigation, and that is not a new config.
+watch(
+  () => theme.value?.docPilot,
+  () => session.configure(theme.value, route.value, lang.value),
+)
+
 onBeforeUnmount(() => {
   mql?.removeEventListener('change', sync)
   coarseMql?.removeEventListener('change', syncPointer)

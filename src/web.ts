@@ -21,13 +21,17 @@
 import './theme/styles/core.scss'
 import { createShikiHighlighter } from './theme/docpilot/highlighters/shiki.js'
 import { mountDocPilot as mount } from './mount.js'
+import type { MountOptions } from '../types/mount.js'
 
-export function mountDocPilot(options = {}) {
+export function mountDocPilot(options: MountOptions = {}) {
   return mount({
-    // Spread AFTER the default, so `highlighter: false` and any adapter of the
-    // caller's own both win. `false` is falsy and `mount` installs nothing.
-    highlighter: createShikiHighlighter(),
     ...options,
+    // `??`, not a spread over the default: a spread copies an explicit
+    // `highlighter: undefined` — which the Docusaurus client passed on every
+    // page — and that switched Shiki off as surely as `false`. Only `false` and
+    // an adapter of the caller's own replace it; `false` is falsy and `mount`
+    // installs nothing.
+    highlighter: options.highlighter ?? createShikiHighlighter(),
   })
 }
 

@@ -159,6 +159,63 @@ describe('the standalone host', () => {
   })
 })
 
+/**
+ * The standalone host under a base path — t4 R-2.
+ *
+ * The route goes in base-less and a full page load comes out based, because the
+ * manifest between them is base-less. VitePress's binding already did both; an
+ * imperative host handed `location.pathname` and the default `router.go` did
+ * neither, so on a site at `/docs/` *this page* matched no page and a citation
+ * loaded `/guide/x`, outside the site.
+ */
+describe('the standalone host under a base path', () => {
+  beforeEach(() => __resetHostForTests())
+
+  it.each([
+    ['/docs/guide/install', '/guide/install'],
+    ['/docs/', '/'],
+    ['/docs', '/'],
+    // A segment boundary, not a string prefix.
+    ['/docsify/guide', '/docsify/guide'],
+    // Already base-less: left as it is.
+    ['/guide/install', '/guide/install'],
+  ])('reads %s under /docs/ as %s', (raw, out) => {
+    const host = createStandaloneHost({ route: raw })
+    setHost(host.factory, { base: '/docs/' })
+    expect(host.binding.route.value).toBe(out)
+  })
+
+  it('takes the base off a route pushed in later', () => {
+    const host = createStandaloneHost()
+    setHost(host.factory, { base: '/docs/' })
+    host.update({ route: '/docs/reference/config' })
+    expect(host.binding.route.value).toBe('/reference/config')
+  })
+
+  it('puts the base back on a full page load', () => {
+    vi.stubGlobal('location', { href: '' })
+    try {
+      const host = createStandaloneHost()
+      setHost(host.factory, { base: '/docs/' })
+      host.binding.router.go('/guide/install#keys')
+      expect(location.href).toBe('/docs/guide/install#keys')
+      // The site root keeps its slash, as VitePress's `withBase` keeps it.
+      host.binding.router.go('/')
+      expect(location.href).toBe('/docs/')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('hands a router of the host’s own the base-less href it is documented to take', () => {
+    const go = vi.fn()
+    const host = createStandaloneHost({ router: { go } })
+    setHost(host.factory, { base: '/docs/' })
+    host.binding.router.go('/guide')
+    expect(go).toHaveBeenCalledWith('/guide')
+  })
+})
+
 describe('joinBase', () => {
   it.each([
     ['/', 'rag', '/rag'],

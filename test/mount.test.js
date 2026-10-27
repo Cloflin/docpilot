@@ -2,9 +2,29 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { mountDocPilot } from '../src/mount.js'
+import { mountDocPilot as mountWeb } from '../src/web.js'
 import { hostConfig, hostEnv, __resetHostForTests } from '../src/theme/docpilot/host.js'
 import { getHighlighter, setHighlighter } from '../src/theme/docpilot/highlight.js'
 import * as session from '../src/theme/docpilot/session.js'
+
+/**
+ * The Docusaurus client imports `@cloflin/docpilot/web`, which `vitest.config.js`
+ * points at `src/web.ts` — the file the bundle is built from. Each call is
+ * recorded: the options the client handed over, and the handle, so a test can
+ * take that panel down again.
+ */
+const webMounts = vi.hoisted(() => [])
+vi.mock('@cloflin/docpilot/web', async (importOriginal) => {
+  const web = await importOriginal()
+  return {
+    ...web,
+    mountDocPilot(options) {
+      const handle = web.mountDocPilot(options)
+      webMounts.push({ options, handle })
+      return handle
+    },
+  }
+})
 
 /**
  * `mountDocPilot` — the panel on a site that is not VitePress.
@@ -250,6 +270,93 @@ describe('the handle it returns', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(session.state.lang).toBe('fr')
   })
+
+  /**
+   * t4 R-1. `setConfig` wrote the host's `theme` and nothing read it again after
+   * mount, so the store kept the first config — while the trigger, which reads
+   * `theme` itself, followed the second. The thread is the half that must NOT
+   * follow: a host that pushes a new config has not asked for a new conversation.
+   */
+  it('pushes a config change through to the store, and keeps the thread', async () => {
+    panel = mountDocPilot({ config: CONFIG })
+    session.state.turns.push({
+      id: 'config-1',
+      question: 'how do I authenticate?',
+      answerText: 'with a key',
+      state: 'complete',
+      startedAt: 0,
+      sources: [],
+    })
+    panel.setConfig({ ...CONFIG, product: 'Other Editor' })
+    await nextTick()
+    expect(session.state.config.product).toBe('Other Editor')
+    expect(session.state.turns.map((t) => t.id)).toEqual(['config-1'])
+    session.state.turns.length = 0
+  })
+})
+
+/**
+ * A site under a base path — t4 R-2.
+ *
+ * The manifest is base-less, and an imperative host hands in
+ * `location.pathname`, which is not. On a site at `/docs/` the panel's *this
+ * page* was a path no page had, so the page and section scopes left the picker.
+ */
+describe('a site under a base path', () => {
+  afterEach(() => history.replaceState(null, '', '/'))
+
+  it('takes the base off the route it is handed', async () => {
+    panel = mountDocPilot({ config: CONFIG, base: '/docs/', route: '/docs/guide/install' })
+    expect(session.state.currentPath).toBe('/guide/install')
+    panel.setRoute('/docs/')
+    await nextTick()
+    expect(session.state.currentPath).toBe('/')
+  })
+
+  it('takes it off `location.pathname` when told no route', () => {
+    history.replaceState(null, '', '/docs/guide/install')
+    panel = mountDocPilot({ config: CONFIG, base: '/docs/' })
+    expect(session.state.currentPath).toBe('/guide/install')
+  })
+
+  // The base the index fetch reads, read the same way: author before binding.
+  it('takes off the base the author wrote in the config', () => {
+    panel = mountDocPilot({ config: { ...CONFIG, host: { base: '/docs/' } }, route: '/docs/guide' })
+    expect(session.state.currentPath).toBe('/guide')
+  })
+})
+
+/**
+ * The Docusaurus client, run — t4 R-2 and R-3. Both defects were invisible to a
+ * check over its source: the route it passes is `location.pathname`, and the
+ * `highlighter: undefined` it passed on every page switched the bundle's Shiki
+ * off.
+ */
+describe('the Docusaurus client module', () => {
+  // `mountWeb` above goes through the same record, and its panels are taken
+  // down by the file's own `afterEach`.
+  beforeEach(() => (webMounts.length = 0))
+
+  afterEach(() => {
+    webMounts.splice(0).forEach(({ handle }) => handle.destroy())
+    delete globalThis.__DOCPILOT__
+    history.replaceState(null, '', '/')
+  })
+
+  it('keeps Shiki and a base-less route on a site under /docs/', async () => {
+    history.replaceState(null, '', '/docs/guide/install')
+    globalThis.__DOCPILOT__ = { config: CONFIG, base: '/docs/', highlighter: 'shiki' }
+    const client = await import('../src/adapters/docusaurus/client.js')
+
+    expect(webMounts).toHaveLength(1)
+    expect('highlighter' in webMounts[0].options).toBe(false)
+    expect(getHighlighter()?.id).toBe('shiki')
+    expect(session.state.currentPath).toBe('/guide/install')
+
+    client.onRouteDidUpdate({ location: { pathname: '/docs/reference/config' } })
+    await nextTick()
+    expect(session.state.currentPath).toBe('/reference/config')
+  })
 })
 
 /**
@@ -342,12 +449,16 @@ describe('ui.motion', () => {
     expect(still()).toEqual([cls])
   })
 
-  // REMOVED, not skipped — `setConfig` runs on a live page.
-  it('takes the class off again when the config goes back to full motion', () => {
+  // REMOVED, not skipped — `setConfig` runs on a live page. Through the handle,
+  // not `session.configure`: calling the store directly is what hid that the
+  // handle never reached it (t4 R-1).
+  it('takes the class off again when the config goes back to full motion', async () => {
     panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, motion: 'reduce' } } })
-    session.configure({ docPilot: { ...CONFIG, ui: { ...CONFIG.ui, motion: 'auto' } } })
+    panel.setConfig({ ...CONFIG, ui: { ...CONFIG.ui, motion: 'auto' } })
+    await nextTick()
     expect(still()).toEqual(['docpilot-motion-auto'])
-    session.configure({ docPilot: CONFIG })
+    panel.setConfig(CONFIG)
+    await nextTick()
     expect(still()).toEqual([])
   })
 })
@@ -392,10 +503,11 @@ describe('ui.theme', () => {
    * runs on a live page, so a pin taken out of the settings has to leave the
    * document with it or the panel keeps a scheme nothing can now explain.
    */
-  it('takes the pin off again when the config stops naming one', () => {
+  it('takes the pin off again when the config stops naming one', async () => {
     panel = mountDocPilot({ config: { ...CONFIG, ui: { ...CONFIG.ui, theme: 'dark' } } })
     expect(pinned()).toEqual(['docpilot-dark'])
-    session.configure({ docPilot: CONFIG })
+    panel.setConfig(CONFIG)
+    await nextTick()
     expect(pinned()).toEqual([])
   })
 
@@ -418,6 +530,21 @@ describe('the highlighter option', () => {
     const adapter = { id: 'stub', load: async () => {}, loaded: () => [], render: () => null }
     panel = mountDocPilot({ config: CONFIG, highlighter: adapter })
     expect(getHighlighter()).toBe(adapter)
+  })
+
+  /**
+   * The bundle installs Shiki of its own — t4 R-3. Only `false` or an adapter
+   * replaces it: a spread over the default copied an explicit `undefined`, and
+   * code blocks in every answer came back grey.
+   */
+  it.each([
+    ['nothing', {}, 'shiki'],
+    ['`highlighter: undefined`', { highlighter: undefined }, 'shiki'],
+    ['`highlighter: null`', { highlighter: null }, 'shiki'],
+    ['`highlighter: false`', { highlighter: false }, null],
+  ])('/web handed %s: Shiki stays unless the value is `false`', (_, options, id) => {
+    panel = mountWeb({ config: CONFIG, ...options })
+    expect(getHighlighter()?.id ?? null).toBe(id)
   })
 })
 
