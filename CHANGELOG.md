@@ -124,6 +124,57 @@ API for reasoning with tools on GPT-6, and tool calls in `docpilot eval`. See
 - **`docpilot model compare` credits a refusal for any cause**, as `eval` does.
 - **`eval` no longer compares a run with another model's report.** `gpt` paired
   with `gpt-5` by filename prefix.
+- **A failed index load is tried again the next time the panel opens.** One
+  dropped connection left the panel off until a reload. A stored conversation
+  the panel cannot draw is removed instead of turning the panel off.
+- **A damaged history entry no longer turns a finished answer into an error.**
+  A `null` or malformed row in `docpilot:history` made every save throw; such
+  rows are dropped when the archive is read.
+- **Changing a thumbs-down to a thumbs-up takes the down-vote back at the
+  endpoint** under `feedback.send: 'down'` (and the other way under `'up'`).
+- **Search-only sites keep their history.** A turn answered with search results
+  was never saved, so a `chat: false` site lost the thread on reload.
+- **On a server install, a reopened conversation's answers stay trusted.** The
+  archive keeps the citation list the server signed; a restored turn rebuilt it
+  without repeats, and the answer was read as a quote on every follow-up.
+- **A changed `budget.dailyLimit` takes effect without a reload**, and what was
+  spent today still counts.
+- **A screen reader hears the same announcement twice when it happens twice** —
+  two answers with the same number of sources, or a second Copy.
+- **On a narrow screen, Tab stays inside the panel.** Below 960px the panel is
+  modal to screen readers, but Tab reached the page behind it, and then Esc
+  stopped working.
+- **Editing a past question no longer re-asks it in the middle of a word.** The
+  Enter that commits an input-method candidate saved the edit; the editor now
+  has the composer's guard.
+- **Ctrl/Cmd-click and Shift-click on a source open a new tab or window again**
+  instead of navigating the current tab.
+- **The question field has an accessible name**, the words it shows.
+- **A tool parameter's `default` is applied.** An empty value takes it, the
+  model is told it, and the build refuses a default the parameter would refuse.
+- **A refusal's closest pages stay the closest after an embed-model change, and
+  a query vector with a NaN no longer breaks a turn.** `closest()` had no width
+  check, and a NaN lane got past the embedder's zero-norm check; both fall back
+  to the lexical match and report `dim-mismatch` or `vector-not-finite`.
+- **A server turn's stream survives a proxy that mixes line ends.** A `\r\n\n`
+  separator took the first letter of the next event with it.
+- **Claude ids in Vertex and gateway spellings get the thinking shape they
+  take** — `claude-sonnet-4@20250514`, `claude-3.5-sonnet`.
+- **Two pages with the same title no longer stop `docpilot index`.** The build
+  warns, names the pages and keeps both.
+- **Ctrl-C during `docpilot index` leaves nothing beside the index.** On SIGINT
+  and SIGTERM the build removes `.<dir>.staging` and exits 130 or 143.
+- **A misspelled setting is reported.** `docPilot` keys that nothing reads, such
+  as `chatt`, `topk` or `chat.modle`, print one warning each, with the nearest
+  known key when exactly one is close.
+- **`calibrate --limit` and `--transfer` keep the rest of the raw cache**
+  instead of replacing it with the subset.
+- **`docpilot bench runs` gives no verdict on a single run**; with fewer than
+  two runs per side it prints "noise unknown".
+- **`eval --resume` re-runs a model whose saved report used other knobs** —
+  levers, seed, temperature, `num_ctx`, `maxIterations`, the A/B arm. A previous
+  report under another seed or temperature is no longer the baseline; a lever
+  change still pairs and is marked, as engine-spec 011 has it.
 
 ## 2.0.1 — 2026-10-27
 
