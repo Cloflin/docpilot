@@ -8367,6 +8367,50 @@ describe('createRetrieval', () => {
     expect(hits[0].id).toBe('c#one')
   })
 
+  /**
+   * `closest` is the one entry point whose vector never passes through `rank`,
+   * and it had no width guard of its own. Every row scored NaN, the sort kept
+   * the corpus order, and a refusal offered `/a` as the closest page to a
+   * question about refunds.
+   */
+  it('closest() drops a vector of the wrong width too, rather than offering corpus order', () => {
+    const seen = []
+    const r = createRetrieval({
+      index: makeIndex(CORPUS()),
+      scope: ALL,
+      guard: GUARD,
+      onDebug: (kind, data) => seen.push([kind, data]),
+    })
+    expect(r.closest({ query: 'invoices refunds', queryVec: axis(2) })[0].path).toBe('/c')
+    expect(seen).toEqual([])
+    expect(r.closest({ query: 'invoices refunds', queryVec: [1, 2] })[0].path).toBe('/c')
+    expect(seen).toEqual([['dim-mismatch', { got: 2, want: DIMS }]])
+  })
+
+  /**
+   * A NaN lane — a provider that answered NaN or Infinity, which embed.ts's
+   * zero-norm guard keeps — made every score NaN: `mmr` picked null ids and
+   * `search` threw from `rowOf`. It is a missing embedder, like a wrong width.
+   */
+  it('a vector with a non-finite lane degrades to lexical in search, the gate and closest()', () => {
+    const seen = []
+    const r = createRetrieval({
+      index: makeIndex(CORPUS()),
+      scope: ALL,
+      guard: GUARD,
+      onDebug: (kind, data) => seen.push([kind, data]),
+    })
+    const bad = [NaN, 0, 127, 0]
+    expect(r.search({ query: 'invoices refunds', queryVec: bad })[0].id).toBe('c#one')
+    expect(r.evaluate({ question: 'how are invoices and refunds handled?', queryVec: bad }).mode).toBe('lexical-only')
+    expect(r.closest({ query: 'beta gizmo registry', queryVec: [0, Infinity, 0, 0] })[0].path).toBe('/b')
+    expect(seen).toEqual([
+      ['vector-not-finite', { lane: 0 }],
+      ['vector-not-finite', { lane: 0 }],
+      ['vector-not-finite', { lane: 1 }],
+    ])
+  })
+
   it('the gate passes on evidence and refuses without it, before any model call', () => {
     const r = createRetrieval({ index: makeIndex(CORPUS()), scope: ALL, guard: GUARD })
     const hit = r.evaluate({ question: 'how is the alpha widget configured?', queryVec: axis(0) })
@@ -9913,6 +9957,13 @@ describe('mmr — what the two ends of lambda mean', () => {
 
   it('defaults to the module lambda when none is passed', () => {
     expect(mmr(['a', 'b', 'c'], simTo, 2)).toEqual(mmr(['a', 'b', 'c'], simTo, 2, 1.0))
+  })
+
+  // A NaN score beats nothing. It used to leave the pick null: a null id, and a
+  // splice of the pool's last id instead.
+  it('picks real ids, in pool order, when every score is NaN', () => {
+    expect(mmr(['a', 'b', 'c'], { query: () => NaN, pair: () => 0 }, 3, 1.0)).toEqual(['a', 'b', 'c'])
+    expect(mmr(['a', 'b', 'c'], { query: (id) => (id === 'c' ? 0.5 : NaN), pair: () => 0 }, 2, 1.0)).toEqual(['c', 'a'])
   })
 })
 

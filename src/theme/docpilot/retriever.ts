@@ -469,6 +469,27 @@ function dot(index, row, query) {
 }
 
 /**
+ * Why `dot` cannot score this query vector here, as a debug event and its data,
+ * or null when it can. ONE TEST for the three entry points that take a vector —
+ * `rank`, `evaluate`, `closest` — and each drops a vector that fails it to the
+ * lexical-only mode RAG-SPEC 3.2 defines. A guard on two of the three is how
+ * `closest` returned corpus order as the closest pages.
+ *
+ * A wrong width is an embed model that changed under a cached index. A
+ * NON-FINITE LANE is a provider that answered with a NaN or an Infinity, which
+ * embed.ts's zero-norm guard keeps: a NaN norm is falsy too. Every score such a
+ * vector touches is NaN, and every comparison with NaN is false, so a sort keeps
+ * the corpus order and `mmr` used to pick nothing at all.
+ */
+function unscorable(index, queryVec): [string, object] | null {
+  if (queryVec.length !== index.dims) return ['dim-mismatch', { got: queryVec.length, want: index.dims }]
+  for (let i = 0; i < queryVec.length; i++) {
+    if (!Number.isFinite(queryVec[i])) return ['vector-not-finite', { lane: i }]
+  }
+  return null
+}
+
+/**
  * Chunk-to-chunk cosine, for MMR's redundancy term.
  *
  * Two SIGN rows have no float side to fit a scale against, so a 1-bit index
@@ -513,7 +534,9 @@ export function mmr(ids, simTo, k, lambda = MMR_LAMBDA) {
   const picked = []
   const pool = [...ids]
   while (picked.length < k && pool.length) {
-    let best = null
+    // The pool's head, not null, until a score beats it: a NaN score beats
+    // nothing, and a null pick was a null id and a splice of the pool's last id.
+    let best = pool[0]
     let bestScore = -Infinity
     for (const id of pool) {
       const rel = simTo.query(id)
@@ -763,10 +786,12 @@ export function createRetrieval({
     // between two vector spaces; here there is only one.
     if (vectorless) queryVec = null
     // A vector of the wrong width means the embed model changed under a cached
-    // index. Degrade to lexical-only — the mode the spec already defines for a
-    // missing embedder — rather than scoring garbage or throwing mid-turn.
-    if (queryVec && queryVec.length !== index.dims) {
-      onDebug?.('dim-mismatch', { got: queryVec.length, want: index.dims })
+    // index; one with a NaN lane means a provider answered garbage. Degrade to
+    // lexical-only — the mode the spec already defines for a missing embedder —
+    // rather than scoring garbage or throwing mid-turn. `unscorable` says which.
+    const why = queryVec ? unscorable(index, queryVec) : null
+    if (why) {
+      onDebug?.(...why)
       queryVec = null
     }
     const fuse = (l, d) =>
@@ -927,10 +952,12 @@ export function createRetrieval({
        * the refusal legible and the fallback the one RAG-SPEC 3.2 defines.
        *
        * Reachable whenever an index outlives the model that built it, which a
-       * free embedding pool makes ordinary rather than exotic.
+       * free embedding pool makes ordinary rather than exotic. A vector with a
+       * non-finite lane is the same missing embedder, and takes the same mode.
        */
-      if (queryVec && queryVec.length !== index.dims) {
-        onDebug?.('dim-mismatch', { got: queryVec.length, want: index.dims })
+      const why = queryVec ? unscorable(index, queryVec) : null
+      if (why) {
+        onDebug?.(...why)
         queryVec = null
         composedVec = composedVec === undefined ? undefined : null
         mode = 'lexical-only'
@@ -1078,7 +1105,17 @@ export function createRetrieval({
        * without one — the disagreement `readiness()` reports rather than
        * prevents — embeds the question perfectly well and arrives holding a
        * vector with nothing to score it against.
+       *
+       * So does a vector this index cannot score — the test `rank` and
+       * `evaluate` run, run here because nothing else does. Unchecked, every
+       * row scored NaN, the sort kept corpus order, and a refusal offered the
+       * corpus's first pages as the closest ones.
        */
+      const why = queryVec && !vectorless ? unscorable(index, queryVec) : null
+      if (why) {
+        onDebug?.(...why)
+        queryVec = null
+      }
       const scored =
         queryVec && !vectorless
           ? pool
