@@ -1614,15 +1614,33 @@ async function main() {
 
   const pageList = [...pages.values()].map((p) => ({ ...p, tail: tailFor(p.path, sections) }))
 
-  // A duplicate (title, tail) pair renders two identical picker rows and two
-  // identical source rows with nothing to tell them apart.
-  const seenTitles = new Map()
+  /**
+   * A duplicate (title, tail) pair renders two identical picker rows and two
+   * identical source rows with nothing to tell them apart — a WARNING, not a
+   * failed build (t6 R8).
+   *
+   * The pair is a display label and nothing else: every row is keyed, linked
+   * and scoped by `path`, so two pages that read alike still open, cite and
+   * filter correctly. And the pair is normal where there is no sidebar: under
+   * `--html-dir` of a built site, or a project with no `themeConfig.sidebar`,
+   * every `tail` is '', and two pages titled "Overview" used to abort the whole
+   * build. Neither field is rewritten to tell them apart: `tail` is the group
+   * llms.txt files a page under and `title` is what the model reads, so a
+   * suffix on either would move a page the author never touched.
+   */
+  const sameLabel = new Map()
   for (const p of pageList) {
     const key = `${p.title}\x00${p.tail}`
-    if (seenTitles.has(key)) {
-      die(`two pages share (title, tail) = ("${p.title}", "${p.tail}"): ${seenTitles.get(key)} and ${p.path}`)
-    }
-    seenTitles.set(key, p.path)
+    sameLabel.set(key, [...(sameLabel.get(key) ?? []), p.path])
+  }
+  for (const [key, paths] of sameLabel) {
+    if (paths.length < 2) continue
+    const [title, tail] = key.split('\x00')
+    warn(
+      `${paths.length} pages share the title "${title}"${tail ? ` under "${tail}"` : ''}: ` +
+        `${paths.slice(0, 8).join(', ')}${paths.length > 8 ? `, +${paths.length - 8} more` : ''} — ` +
+        'the picker and the source list show them as identical rows. Give each a distinct `title:` in its frontmatter.',
+    )
   }
 
   const idx = new Map(pageList.map((p, i) => [p.path, i]))
@@ -1821,6 +1839,19 @@ async function main() {
   fs.rmSync(STAGE, { recursive: true, force: true })
   fs.mkdirSync(STAGE, { recursive: true })
   process.once('exit', () => fs.rmSync(STAGE, { recursive: true, force: true }))
+  /**
+   * AND ON CTRL-C. A signal fires no `exit` event: Node's default for SIGINT and
+   * SIGTERM ends the process without running the hook above, so an interrupted
+   * build — the openers pass alone can wait minutes on a model — left
+   * `docs/public/.rag.staging` beside a committed index for `git add -A` to pick
+   * up. A listener replaces that default, so it exits itself, with the shell's
+   * `128 + n`, and `exit` runs the hook on the way out. Handlers run between
+   * ticks, never inside the synchronous swap at the end of this function, so a
+   * signal cannot land between its two renames.
+   */
+  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
+    process.once(signal, () => process.exit(code))
+  }
 
   /**
    * EVERY FILE BELOW IS NAMED BY ITS OWN BYTES — engine-spec 034.

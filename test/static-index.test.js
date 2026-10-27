@@ -7,9 +7,10 @@
  * network and no model, and the build is the one a reader's site would run.
  */
 import { describe, it, expect, beforeAll, vi, afterEach } from 'vitest'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -101,6 +102,67 @@ describe('a failed build leaves the last index as it was', () => {
     expect(output(r)).toMatch(/manifest is \d+ bytes, over the 65536 ceiling/)
     expect(snapshot(rag)).toEqual(before)
     expect(fs.readdirSync(pub)).toEqual(['rag'])
+  })
+
+  /**
+   * fix-D1 R4 residue — a signal fires no `exit` event, so Ctrl-C during the
+   * build left `docs/public/.rag.staging` beside a committed index. The build
+   * is held in the openers pass by a model that never answers, which is the
+   * long wait a reader actually interrupts.
+   */
+  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+    it(`removes the stage on ${signal}, and exits ${code}`, async () => {
+      const server = http.createServer(() => {}) // accepts, never answers
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+      const base = `http://127.0.0.1:${server.address().port}`
+      const root = project(
+        `, chat: { provider: 'ollama', baseURL: '${base}', model: 'hang' }, suggestions: ['How does backoff work?']`,
+      )
+      const stage = path.join(root, 'docs', 'public', '.rag.staging')
+      const asked = new Promise((resolve) => server.once('request', resolve))
+      const child = spawn(process.execPath, [BIN, 'index', '--no-embed', '--yes'], {
+        cwd: root,
+        stdio: 'ignore',
+        env: { ...process.env, OLLAMA_BASE_URL: base },
+      })
+      try {
+        await asked
+        // The precondition that makes the assertion below mean something.
+        expect(fs.existsSync(stage)).toBe(true)
+        const exited = new Promise((resolve) => child.once('exit', (c, s) => resolve({ c, s })))
+        child.kill(signal)
+        expect(await exited).toEqual({ c: code, s: null })
+        expect(fs.existsSync(stage)).toBe(false)
+      } finally {
+        child.kill('SIGKILL')
+        server.closeAllConnections()
+        server.close()
+      }
+    }, 20000)
+  }
+})
+
+/**
+ * t6 R8 — two pages with the same (title, tail) died the build. Without a
+ * sidebar every tail is '', so two pages called "Overview" were enough.
+ */
+describe('two pages, one label', () => {
+  it('warns, keeps both pages, and leaves their titles as written', () => {
+    const root = project()
+    for (const dir of ['a', 'b']) {
+      fs.mkdirSync(path.join(root, 'docs', dir), { recursive: true })
+      fs.writeFileSync(path.join(root, 'docs', dir, 'overview.md'), `---\ntitle: Overview\n---\n\n# Overview\n\n${dir} body text\n`)
+    }
+    const r = build(root)
+    expect(r.status, output(r)).toBe(0)
+    // Either order: `walkMarkdown` lists in readdir order, which ext4 does not sort.
+    expect(output(r)).toMatch(/2 pages share the title "Overview": \/(a|b)\/overview, \/(a|b)\/overview — /)
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'docs', 'public', 'rag', 'manifest.json'), 'utf8'))
+    const both = manifest.pages.filter((p) => p.title === 'Overview')
+    expect(both.map((p) => [p.path, p.tail]).sort()).toEqual([
+      ['/a/overview', ''],
+      ['/b/overview', ''],
+    ])
   })
 })
 

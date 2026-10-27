@@ -33,6 +33,15 @@ docs/.vitepress/cache/
 # turns it into a red build. Serving this index needs an embedder that serves
 # bge-m3; nothing else will get past that gate.
 
+# The index build's scratch siblings, never part of the committed index.
+# `docpilot index` writes the new index to `.<dir>.staging` beside `indexDir`
+# (here `docs/public/.rag.staging`) and swaps it in last, parking the old one
+# at `.<dir>.retired` for the length of two renames. Both are removed on exit,
+# Ctrl-C and SIGTERM; only a SIGKILL or a crash mid-build leaves one behind —
+# exactly where `git add -A` would commit it — and the next build removes it.
+.*.staging/
+.*.retired/
+
 .env
 .env.local
 *.log
