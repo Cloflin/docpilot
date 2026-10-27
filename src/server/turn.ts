@@ -355,13 +355,16 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
   const openerArgs = { index, config, scope, quote, turns: history, locale, uiLocale: input.lang || locale }
   const opener = matchOpener(clean, openerArgs)
   const fromIds = (ids) => (ids || []).map((id) => index.byId.get(id)).filter(Boolean)
+  // Which openers a person wrote: the eval scores them, and its link gate
+  // (engine-spec 039) leaves them to `index`'s own warning.
+  const authoredOf = (o) => (o.answer?.model === 'authored' ? { authored: true } : {})
 
   if (opener?.answer) {
     record.citations = opener.answer.citations
     record.answer = opener.answer.text
     return settle({
       outcome: 'opener',
-      opener: { matched: opener.matched, score: opener.score, baked: true },
+      opener: { matched: opener.matched, score: opener.score, baked: true, ...authoredOf(opener) },
       text: opener.answer.text,
       citations: opener.answer.citations,
       sources: fromIds(opener.answer.citations).map(sourceChunk),
@@ -484,7 +487,7 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
         record.answer = dense.answer.text
         return settle({
           outcome: 'opener',
-          opener: { matched: dense.matched, score: dense.score, baked: true },
+          opener: { matched: dense.matched, score: dense.score, baked: true, ...authoredOf(dense) },
           text: dense.answer.text,
           citations: dense.answer.citations,
           sources: fromIds(dense.answer.citations).map(sourceChunk),

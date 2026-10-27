@@ -41,6 +41,7 @@ import { createRetrieval, resolveLevers } from '../theme/docpilot/retriever.js'
 import { excerptWindow, TRUNCATED_NOTE } from '../theme/docpilot/excerpt.js'
 import { buildMessages, finalNote, OBS_NOTE, promptHash } from '../theme/docpilot/prompt.js'
 import { computeSupport } from '../theme/docpilot/support.js'
+import { idMarkers } from '../theme/docpilot/markers.js'
 import { evalEmbedKey, nodeEmbedTarget } from '../config.js'
 import {
   tokenF1,
@@ -49,6 +50,7 @@ import {
   citationPrecision,
   hallucinatedCitationRate,
   underPath,
+  unlinkedAnswer,
   mean,
 } from './metrics.js'
 
@@ -691,9 +693,10 @@ function cell(tasksFile, answersFile) {
     // they ask is what the filter had to remove.
     const raw = Array.isArray(a.citations) ? a.citations.map(String) : []
     const citable = new Set(t.citable)
-    const citations = raw.filter((id) => citable.has(id))
-    const phantom = raw.length - citations.length
-    const text = String(a.text || '')
+    const phantom = raw.filter((id) => !citable.has(id)).length
+    // What `finish()` does in production — engine-spec 039 — so the bench scores
+    // the text and the list a reader would have been shown.
+    const { text, citations } = idMarkers(String(a.text || ''), raw, (id) => citable.has(id))
     const support = computeSupport(text, t.sources, t.question)
     rows.push({
       id: a.id,
@@ -722,6 +725,7 @@ function cell(tasksFile, answersFile) {
       // outside the primed set", was therefore unreachable code reporting a
       // clean bill of health it had not checked.
       hallucinated: hallucinatedCitationRate(raw, t.citable),
+      unlinked: unlinkedAnswer(text, citations, t.citable),
       support: typeof support === 'number' ? support : (support as any)?.score,
       chars: text.length,
     })
@@ -739,6 +743,7 @@ const agg = (rows) => ({
   cites: mean(rows.map((r) => r.cites)),
   phantom: rows.reduce((a, r) => a + r.phantom, 0),
   hallucinated: mean(rows.map((r) => r.hallucinated)),
+  unlinked: rows.filter((r) => r.unlinked).length,
   language: mean(rows.map((r) => r.language)),
   support: mean(rows.map((r) => r.support)),
   chars: mean(rows.map((r) => r.chars)),
@@ -786,6 +791,7 @@ function runs() {
     ['language match', 'language'],
     ['support (advisory)', 'support'],
     ['HALLUCINATED', 'hallucinated'],
+    ['UNLINKED', 'unlinked'],
   ]
   console.log(
     `  ${'metric'.padEnd(20)} ${labelA.padStart(8)} ${'spread'.padStart(8)}   ` +
@@ -856,12 +862,16 @@ function score() {
   line('citations / answer', (s) => num(s.cites))
   line('phantom (dropped)', (s) => s.phantom)
   line('HALLUCINATED', (s) => num(s.hallucinated))
+  line('UNLINKED', (s) => s.unlinked)
   line('language match', (s) => num(s.language))
   line('support (advisory)', (s) => num(s.support))
   line('answer chars', (s) => Math.round(s.chars || 0))
 
   if (stats.some((s) => s.hallucinated > 0)) {
     console.log('\n  HARD GATE FAILED: a citation outside the primed set')
+  }
+  if (stats.some((s) => s.unlinked > 0)) {
+    console.log('\n  HARD GATE FAILED: an answer with sources and no working [n] in its text')
   }
 
   if (cells.length === 2) {

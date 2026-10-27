@@ -1753,7 +1753,16 @@ describe('prompt', () => {
   // sentence or invents an id for it, and §4.3 strips invented ids.
   it('exempts the credential sentence from the citation marker, and only it', () => {
     expect(CORE).toContain('the one sentence in the answer that carries no citation marker')
-    expect(CORE).toContain('Mark every claim with a citation marker')
+    expect(CORE).toContain('mark every claim with a citation marker')
+  })
+
+  // engine-spec 039: as one sentence, "…never marker numbers" read as a rule
+  // about the marker and the model wrote the id in brackets — 13 of 16 replays.
+  // Two bullets, numbers in text and ids only in the array: 0 of 24.
+  it('asks for numbers in the text and keeps section ids in the array', () => {
+    expect(CORE).toContain('In text, mark every claim with a citation marker that is a number in brackets: [1], [2].')
+    expect(CORE).toContain('Section ids go only in citations, never in text.')
+    expect(CORE).not.toContain('never marker numbers')
   })
 
   it('sends the configured instruction, overridden or extended', () => {
@@ -3873,6 +3882,10 @@ describe('metrics', () => {
     expect(hardGatesFailed({ hallucinated: 0, scopeContainment: 1 })).toBe(false)
     expect(hardGatesFailed({ hallucinated: 0.02, scopeContainment: 1 })).toBe(true)
     expect(hardGatesFailed({ hallucinated: 0, scopeContainment: 0.99 })).toBe(true)
+    // engine-spec 039 — an answer shown with sources and no link in its text.
+    expect(hardGatesFailed({ hallucinated: 0, scopeContainment: 1, unlinked: 0.05 })).toBe(true)
+    expect(hardGatesFailed({ hallucinated: 0, scopeContainment: 1, unlinked: 0 })).toBe(false)
+    expect(hardGatesFailed({ hallucinated: 0, scopeContainment: 1, unlinked: null })).toBe(false)
     // --gate-only: no model ran, so there is no citation to have hallucinated.
     expect(hardGatesFailed({ hallucinated: null, scopeContainment: 1 })).toBe(false)
     expect(hardGatesFailed({ hallucinated: null, scopeContainment: null })).toBe(false)

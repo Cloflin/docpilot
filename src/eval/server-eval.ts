@@ -47,6 +47,7 @@ import {
   scopeContainment,
   tokenF1,
   underPath,
+  unlinkedAnswer,
 } from './metrics.js'
 import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 
@@ -304,6 +305,12 @@ export async function serverRows(o: ServerEvalOptions) {
       row.hallucinated = hallucinatedCitationRate(row.citations, [...(record.emitted || []), ...(record.toolIds || [])])
       row.emittedContainment = scopeContainment(record.emitted || [], scope)
     }
+    // engine-spec 039 — the same gate as the browser half, on the text the
+    // server settled. An author's opener is counted and gates nothing.
+    row.unlinked = row.text.trim() && row.citations.length
+      ? unlinkedAnswer(row.text, row.citations, [...row.citations, ...(record?.emitted || []), ...(record?.toolIds || [])])
+      : null
+    row.authored = s?.opener?.authored === true
     const wantRefusal = rec.expect.startsWith('refuse') || scoredAsNegative
     if (row.observed === 'answer' && !wantRefusal && rec.gold_answer) {
       row.answerF1 = tokenF1(row.text, rec.gold_answer)

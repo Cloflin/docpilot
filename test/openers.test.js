@@ -995,6 +995,18 @@ describe('openers — an answer the author wrote', () => {
     expect(out.report.answered).toBe(0)
   })
 
+  // engine-spec 039 — `[1]` is the first id in `cite`, as in a model's answer.
+  it('warns on a written answer that links none of its citations, and still bakes it', async () => {
+    const quiet = vi.fn()
+    await bakeOpeners({ ...base, warn: quiet, questions: [QUESTIONS[0]], authored: [{ ...WRITTEN, answer: `${WRITTEN.answer} [1]` }], chat: { searchOnly: true } })
+    expect(quiet.mock.calls.flat().join('\n')).not.toMatch(/links none/)
+
+    const warn = vi.fn()
+    const out = await bakeOpeners({ ...base, warn, questions: [QUESTIONS[0]], authored: [WRITTEN], chat: { searchOnly: true } })
+    expect(warn.mock.calls.flat().join('\n')).toMatch(/links none of its 1 citation\(s\) in its text — add \[1\]…\[1\]/)
+    expect(out.entries[0].answer.text).toBe(WRITTEN.answer)
+  })
+
   it('needs no model at all — a searchOnly site still gets its written answers', async () => {
     const out = await bakeOpeners({
       ...base, questions: [QUESTIONS[0]], authored: [WRITTEN], chat: { searchOnly: true },

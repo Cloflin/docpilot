@@ -7,6 +7,68 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## Unreleased
+
+A claim links to its source again. With `gpt-6-luna` at `reasoning: 'low'`,
+most answers printed a section id in brackets —
+`[editor-configuration/image-storage#connecting-your-own-server]` — where the
+link marker goes. The Sources list under the answer was right, and the claim had
+no link. This release fixes the instruction, settles the markers in code for any
+model, and makes `eval` fail on an answer without a link. Engine-spec 039.
+
+### Fixed
+
+**The citation rule is two sentences.** The system prompt said: "Mark every
+claim with a citation marker [1], [2] in the order of the citations array. It
+holds section ids copied exactly from tool results, never marker numbers."
+`gpt-6-luna` read the second sentence as a rule about the marker. It wrote the
+id in brackets in 13 of 16 replays of one production turn, and in 5 of 6 live
+turns. The rule now says: in the text, write numbers, and `[1]` is
+`citations[0]`; section ids go only in `citations`. On the same replays: 0 of
+24. On five questions of that site, 10 of 10 live turns linked every claim. The
+prompt hash changes, so eval reports start a new history, and the next
+`docpilot index` bakes the opener answers again.
+
+**The markers are settled with the citations.** Before anything reads the
+answer — the panel, the server's signed history, the turn log, the eval — the
+turn checks every bracket in the text against the list it validated:
+
+- `[section-id]` becomes its `[n]`. A known id that only the text cites is
+  added to the end of `citations`; an earlier position never moves.
+- Several ids in one bracket, `[a#x, b#y]`, become `[1][2]`, and so does
+  `[1, 2]`, which the panel never linked. A continuation part, `#anchor~2`,
+  maps to its cited `#anchor`.
+- A number is a position in the list the model sent. When an invented id is
+  dropped from that list, the numbers after it are renumbered; before, each of
+  them linked the source one row down. A number that pointed at an invented id,
+  or past the end of the list, is deleted.
+- A bracket with an id that nobody handed out — a path, a `#`, no spaces — is
+  deleted, as an invented citation's marker always was.
+- Code spans, fenced blocks, link text and image alt text are left alone.
+
+A reply in prose, without the `answer` tool, that names known ids in brackets
+now keeps them as citations and shows as a tentative answer. Before, it was
+withdrawn as "I couldn't find this in the docs".
+
+### Added
+
+**A third hard gate: answers without a link.** `eval` renders every answer to a
+question the docs cover with the panel's own renderer. If one is shown with
+sources and none of its `[n]` links, or it prints a section id in brackets, the
+run fails with exit code 1, as on a hallucinated citation, and the report names
+the records. Answers to negative records and an author's own openers are counted
+on a separate line and fail nothing. The scorecard, `docpilot status`, the
+server eval and the answer bench show the same gate.
+
+**A small model can fail it on the first run.** In earlier reports,
+`gpt-4o-mini` wrote no marker at all in about 30 % of its answers and `qwen3:8b`
+in 35–55 %. Those answers showed the reader Sources and no link; the gate makes
+that visible. Re-run with the new prompt before you read it as a regression.
+
+**`index` warns on a written answer with no marker.** An opener you answered
+in `suggestions` links its claims the same way: `[1]` is the first id in its
+`cite`. One that links none still ships, with a warning.
+
 ## 2.1.0 — 2026-10-27
 
 A site's own tools in the chat: functions the model calls for live data, and

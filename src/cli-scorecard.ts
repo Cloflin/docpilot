@@ -97,8 +97,9 @@ export function scorecardRows(
 }
 
 /**
- * The two gates a run may not breach, as `run.ts`'s `hardGatesFailed` reads
- * them: any hallucinated citation, and any scope containment under 1.
+ * The gates a run may not breach, as `run.ts`'s `hardGatesFailed` reads them:
+ * any hallucinated citation, any scope containment under 1, and any shown
+ * answer without a link in its text (engine-spec 039).
  */
 export function hardGates(summary, view: Ui): string {
   const { c, sym } = view
@@ -115,6 +116,13 @@ export function hardGates(summary, view: Ui): string {
       summary.scopeContainment < 1
         ? c.fail(`${sym.fail} scope containment ${summary.scopeContainment.toFixed(3)}`)
         : c.ok(`${sym.ok} scope containment ${summary.scopeContainment.toFixed(3)}`),
+    )
+  }
+  if (isNum(summary?.unlinked)) {
+    parts.push(
+      summary.unlinked > 0
+        ? c.fail(`${sym.fail} answers without a link ${pct(summary.unlinked)}`)
+        : c.ok(`${sym.ok} answers without a link 0`),
     )
   }
   return parts.join(c.muted(' · '))

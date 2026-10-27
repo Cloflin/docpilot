@@ -58,6 +58,7 @@ import {
   normaliseAnswer,
   pageOf,
   hallucinatedCitationRate,
+  unlinkedAnswer,
   classifyRow,
   langOf,
   underPath,
@@ -1066,6 +1067,12 @@ async function runRecords({ model, probes, guard, fallback, thinkSupported, rows
     row.reSearch = searched.filter((q) => !ownQuery.has(normaliseAnswer(q)))
     row.reSearchLang = [...new Set(row.reSearch.map((q) => langOf({ question: q })))]
     row.hallucinated = hallucinatedCitationRate(res.citations, [...res.emitted, ...(res.toolIds || [])])
+    // engine-spec 039: every answer the panel would SHOW with sources — a
+    // tentative one too — and whether its text links to one. Null when nothing
+    // is shown, so a refusal neither passes nor fails the gate.
+    row.unlinked = res.text.trim() && res.citations.length
+      ? unlinkedAnswer(res.text, res.citations, [...res.emitted, ...(res.toolIds || [])])
+      : null
     row.emittedContainment = scopeContainment(res.emitted, probe.scope)
 
     const answered = res.text.trim() && res.citations.length && res.confidence >= 0.4
@@ -1307,6 +1314,9 @@ function printScorecard(meta, s, prev) {
   console.log('')
 }
 
+/** A row the link gate reads: shown with sources, and written by the model. */
+const gatedLink = (r) => typeof r.unlinked === 'boolean' && !r.authored
+
 /** Every aggregate the summary and the markdown report share. */
 export function summarise(rows) {
   const positives = rows.filter((r) => r.expect === 'answer' && !r.scoredAsNegative)
@@ -1366,6 +1376,15 @@ export function summarise(rows) {
     noAnswerPrecision: negatives.length && rows.some((r) => r.gateEnforced !== false) ? causeExact / negatives.length : null,
     hallucinated: mean(rows.map((r) => r.hallucinated)),
     scopeContainment: containment.length ? Math.min(...containment) : null,
+    // engine-spec 039, the third hard gate: the share of POSITIVES shown with
+    // sources whose text links to none of them. A negative answered with "the
+    // docs do not cover this" and the nearest sections, and an author's own
+    // opener, are counted beside it and gate nothing. Null when no positive
+    // was shown with sources.
+    unlinked: mean(positives.filter(gatedLink).map((r) => (r.unlinked ? 1 : 0))),
+    unlinkedIds: positives.filter(gatedLink).filter((r) => r.unlinked).map((r) => r.id),
+    unlinkedShown: positives.filter(gatedLink).length,
+    unlinkedOther: rows.filter((r) => r.unlinked === true && !(positives.includes(r) && gatedLink(r))).map((r) => r.id),
     rejectedFetches: rows.reduce((a, r) => a + (r.rejectedFetches || 0), 0),
     iterationsPerAnswer: mean(answered.map((r) => r.iterations)),
     requestsPerTurn: mean(rows.map((r) => r.requests)),
@@ -1617,6 +1636,8 @@ function printSummary(s) {
   line('no-answer precision', pct(s.noAnswerPrecision))
   line('hallucinated citations', pct(s.hallucinated))
   line('SCOPE CONTAINMENT', num(s.scopeContainment))
+  if (s.unlinkedShown) line('answers without a link', `${s.unlinkedIds.length}/${s.unlinkedShown}`)
+  if (s.unlinkedOther?.length) line('  not gated (negatives, authored)', `${s.unlinkedOther.length}  ${s.unlinkedOther.slice(0, 8).join(' ')}`)
   line('rejected fetches', s.rejectedFetches)
   console.log('  ── cost ──')
   line('PROMPT TOKENS / turn', kchars(s.promptTokens))
@@ -1683,6 +1704,11 @@ function printSummary(s) {
   }
   if (s.scopeContainment != null && s.scopeContainment < 1) {
     console.log(`  HARD GATE FAILED: scope containment ${num(s.scopeContainment)} < 1.0 — a chunk outside the record's scope was used`)
+  }
+  if (s.unlinked) {
+    console.log(
+      `  HARD GATE FAILED: answers without a link ${s.unlinkedIds.length}/${s.unlinkedShown} — an answer had sources and no working [n] in its text: ${s.unlinkedIds.join(', ')}`,
+    )
   }
   if (s.languageFailures.length) console.log(`  LANGUAGE FAILURES: ${s.languageFailures.join(', ')}`)
   if (s.misses.length) console.log(`  misses: ${s.misses.join(', ')}`)

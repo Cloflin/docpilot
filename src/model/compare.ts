@@ -55,7 +55,7 @@ export function isOk(r) {
   if (String(expect).startsWith('refuse')) return String(r.observed).startsWith('refuse')
   if (r.observed !== expect) return false
   if (expect !== 'answer') return true
-  return (r.citationPrecision ?? 0) >= 0.5 && !(r.hallucinated > 0)
+  return (r.citationPrecision ?? 0) >= 0.5 && !(r.hallucinated > 0) && r.unlinked !== true
 }
 
 /** The pinned and noted fields that differ between two report metas. */

@@ -12,6 +12,7 @@ import { budgetPlan } from './budget.js'
 import { excerptWindow, TRUNCATED_NOTE } from './excerpt.js'
 import { chat, streamingAnswerText } from './llm.js'
 import { buildMessages, finalNote, OBS_NOTE, answerSummary } from './prompt.js'
+import { idMarkers } from './markers.js'
 import { computeSupport } from './support.js'
 import { normalise } from './text.js'
 import { actionsSchema, checkArgs, describeErrors, pageOf, resultText, runTool, siteFor, validActions } from './tools.js'
@@ -1102,9 +1103,11 @@ export async function runTurn(options: RunTurnOptions) {
     )
     if (final.toolCall?.name === 'answer') return finish(final.toolCall.args, final.think)
     // A model that writes prose instead of calling the tool has still answered;
-    // it simply has no citations, so validation lands it on `not-answerable`.
+    // it simply has no citations, so validation lands it on `not-answerable` —
+    // unless its text names known ids in brackets, which `finish()` turns into
+    // markers and citations (engine-spec 039), and it settles as tentative.
     if (final.text.trim()) {
-      return finish({ text: final.text, citations: [], confidence: 0.3 }, final.think)
+      return finish({ text: final.text, citations: [], confidence: 0.3, prose: true }, final.think)
     }
   } catch (e) {
     /**
@@ -1167,7 +1170,6 @@ export async function runTurn(options: RunTurnOptions) {
     let citations = Array.isArray(args.citations) ? args.citations.map(String) : []
     let confidence = Number(args.confidence)
     if (!Number.isFinite(confidence)) confidence = 0.5
-    const text = String(args.text || '')
 
     // Membership, never substring: searching serialised observation text would
     // let a chunk that documents this very format launder its own example id.
@@ -1175,11 +1177,22 @@ export async function runTurn(options: RunTurnOptions) {
     // this turn, by this module — engine-spec 038.
     const known = (id) => emittedIds.has(id) || toolSources.has(id)
     const phantom = citations.filter((id) => !known(id))
-    citations = citations.filter(known)
+
+    // engine-spec 039: the filter and the markers settle together. A number is
+    // renumbered into the filtered list or deleted, an id written where `[n]`
+    // goes becomes its marker, and a known id only the text cited joins the
+    // list. Before `sources` and `support`, which read both; `phantom` stays
+    // what the model sent.
+    const marked = idMarkers(String(args.text || ''), citations, known)
+    const text = marked.text
+    citations = marked.citations
 
     // With a reader instruction active, model-reported confidence is discarded:
     // it is the one enforcement input living inside the model's output.
     if (addendum) confidence = Math.min(gateResult.G, gateResult.GUnscoped ?? gateResult.G)
+    // A prose reply never stated a confidence, and the ids its text named are
+    // all it cites — tentative, whatever the gate scored (engine-spec 039).
+    if (args.prose) confidence = Math.min(confidence, 0.3)
 
     if (citations.length === 0 && confidence >= 0.4) confidence = 0.3
 

@@ -32,6 +32,7 @@ import { normalise } from '../../theme/docpilot/text.js'
 import { detectLanguage, localeOf, promptHash } from '../../theme/docpilot/prompt.js'
 import { openerFingerprint, similarity } from '../../theme/docpilot/openers.js'
 import { l2normalise, toInt8, quantisationError } from './quantize.js'
+import { unlinkedAnswer } from '../../eval/metrics.js'
 
 const ALL_SCOPE = { kind: 'all', paths: [], label: 'All docs' }
 
@@ -265,6 +266,16 @@ export async function bakeOpeners({
         )
         report.uncitable.push({ q: e.q, ids: unknown })
         continue
+      }
+      // engine-spec 039: `[1]` is the first id in `cite`, as in a model's
+      // answer. One that links none of them still ships — the author wrote it —
+      // and says so, because the reader gets Sources under prose that points at
+      // nothing.
+      if (unlinkedAnswer(a.answer, a.cite)) {
+        warn(
+          `[docpilot] the written answer to "${e.q}" links none of its ${a.cite.length} citation(s) in its text — ` +
+            `add [1]…[${a.cite.length}] after the claims they back`,
+        )
       }
       e.answer = {
         lang: localeOf(detectLanguage(e.q)),

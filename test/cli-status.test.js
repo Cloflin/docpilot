@@ -247,7 +247,7 @@ describe('the last eval block', () => {
     expect(mrr.delta).toBeCloseTo(-0.05)
     // A gate-only run scores no answer, so an answer-side zero is not a metric.
     expect(l.metrics.find((m) => m.key === 'latencyP50')).toBeUndefined()
-    expect(l.hardGates).toEqual({ hallucinated: 0, scopeContainment: 1, passed: true })
+    expect(l.hardGates).toEqual({ hallucinated: 0, scopeContainment: 1, unlinked: null, passed: true })
     expect(l.forIndex).toEqual({ gateOnly: true, full: true, partial: false })
   })
 

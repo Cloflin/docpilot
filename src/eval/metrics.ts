@@ -6,6 +6,7 @@
  */
 
 import { detectLanguage } from '../theme/docpilot/prompt.js'
+import { renderAnswer } from '../theme/docpilot/markdown.js'
 
 // ── 5.1 retrieval ────────────────────────────────────────────────────────────
 
@@ -297,6 +298,49 @@ export function hallucinatedCitationRate(cited, observed) {
   return cited.filter((id) => !seen.has(id)).length / cited.length
 }
 
+// A bracket that names a section id by its shape: a path, a `#`, no spaces.
+const ID_SHAPED = /^\/?[^\s#[\]]*\/[^\s#[\]]*#\S*$/
+
+/**
+ * Whether the answer's claims link to its sources — engine-spec 039.
+ *
+ * The citations array decides what the Sources list shows; the TEXT decides
+ * whether a claim links to one. Every citation metric above reads the array,
+ * so an answer whose text wrote `[page#anchor]` instead of `[1]` scored full
+ * citation recall while the reader got the id as plain text and no link.
+ *
+ * COUNTED BY THE PANEL'S OWN RENDERER, with one row per citation, so a marker
+ * counts exactly when the reader could press it: escapes, code spans, fences,
+ * link text and a number past the end all resolve the way they do on screen.
+ * A second parser here disagreed with markdown-it on six shapes in review.
+ * `rawIds` is a bracket left in the rendered prose that names an id — one the
+ * turn handed out (`ids`), or one shaped like a section id.
+ */
+export function inlineCitations(text, citations, ids = citations) {
+  const rows = citations.map((id, i) => ({ n: i + 1, href: `/__cite/${i + 1}`, title: String(id) }))
+  const { html } = renderAnswer(String(text || ''), new Set(), rows)
+  const cites = [...html.matchAll(/data-cite="(\d+)"/g)].map((m) => Number(m[1]))
+  const prose = html.replace(/<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>/g, ' ')
+  const named = new Set(ids)
+  let rawIds = 0
+  for (const m of prose.matchAll(/\[([^[\]<>\n]+)\]/g)) {
+    const parts = m[1].trim().split(/\s*[,;]\s*|\s+/).filter(Boolean)
+    if (parts.some((p) => named.has(p.replace(/^\//, '')) || ID_SHAPED.test(p))) rawIds++
+  }
+  return { markers: cites.length, rawIds, unreferenced: citations.length - new Set(cites).size }
+}
+
+/**
+ * An answer the reader sees with sources and no working link in its text: no
+ * marker resolves, or a section id is printed where one should be. The third
+ * hard gate below.
+ */
+export function unlinkedAnswer(text, citations, ids = citations) {
+  if (!String(text || '').trim() || !citations?.length) return false
+  const { markers, rawIds } = inlineCitations(text, citations, ids)
+  return markers === 0 || rawIds > 0
+}
+
 // ── failure taxonomy ─────────────────────────────────────────────────────────
 
 /**
@@ -435,7 +479,7 @@ export function percentile(values, q) {
 }
 
 /**
- * The two hard gates, as a VERDICT rather than as two printed lines.
+ * The hard gates, as a VERDICT rather than as printed lines.
  *
  * RAG-SPEC 5.5 says a hallucinated citation "fails the whole run regardless of
  * every other metric", and 5.4 says the same of scope containment below 1.0.
@@ -452,10 +496,15 @@ export function percentile(values, q) {
  * `--gate-only` pass runs no model, so no citation exists to be checked and
  * `hallucinated` is null; a run with nothing retrieved leaves `scopeContainment`
  * null the same way. Only a measured breach fails.
+ *
+ * The third gate, engine-spec 039: an answer shown with sources and no working
+ * link in its text. `unlinked` is null on a run that answered nothing, and on a
+ * report written before the gate existed.
  */
 export function hardGatesFailed(summary) {
   const s = summary || {}
   const hallucinated = typeof s.hallucinated === 'number' && s.hallucinated > 0
   const escaped = typeof s.scopeContainment === 'number' && s.scopeContainment < 1
-  return hallucinated || escaped
+  const unlinked = typeof s.unlinked === 'number' && s.unlinked > 0
+  return hallucinated || escaped || unlinked
 }

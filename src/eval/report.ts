@@ -69,6 +69,7 @@ export const HIGHER_IS_BETTER = new Set([
 export const LOWER_IS_BETTER = new Set([
   'unsupportedAnswerRate',
   'hallucinated',
+  'unlinked',
   'gateOverRefusal',
   'answerOverRefusal',
   'rejectedFetches',
@@ -357,6 +358,12 @@ function markdown({ meta, summary, diff, incomparable, rows }) {
   L.push(
     `| scope containment | ${fmt(sc)} | ${sc != null && sc < 1 ? '**FAIL**' : 'pass'} |`,
   )
+  // engine-spec 039. Absent on a report written before the gate existed.
+  if (summary.unlinked != null) {
+    L.push(
+      `| answers without a link | ${fmt(summary.unlinked)} | ${summary.unlinked ? `**FAIL** ${(summary.unlinkedIds || []).join(', ')}` : 'pass'} |`,
+    )
+  }
   L.push('')
 
   L.push('## Metrics')

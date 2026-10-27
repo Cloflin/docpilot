@@ -512,7 +512,8 @@ function readLastEval(docPilot, root, manifest, now) {
     hardGates: {
       hallucinated: isNum(s.hallucinated) ? s.hallucinated : null,
       scopeContainment: isNum(s.scopeContainment) ? s.scopeContainment : null,
-      passed: !(s.hallucinated > 0) && !(isNum(s.scopeContainment) && s.scopeContainment < 1),
+      unlinked: isNum(s.unlinked) ? s.unlinked : null,
+      passed: !(s.hallucinated > 0) && !(isNum(s.scopeContainment) && s.scopeContainment < 1) && !(s.unlinked > 0),
     },
     previous: prev ? { file: rel(prev.file), ranAt: new Date(prev.ranAt).toISOString() } : null,
     runs: history.length,
@@ -849,7 +850,7 @@ export function renderStatus(s, view: Ui): string[] {
             ? `Δ against the comparable run of ${l.previous.ranAt.slice(0, 16).replace('T', ' ')} UTC`
             : 'Δ — no earlier comparable run on this index',
         ),
-        ...renderScorecard(rows, { ui: view, trend: true, summary: { hallucinated: l.hardGates.hallucinated, scopeContainment: l.hardGates.scopeContainment }, indent: 0 }),
+        ...renderScorecard(rows, { ui: view, trend: true, summary: { hallucinated: l.hardGates.hallucinated, scopeContainment: l.hardGates.scopeContainment, unlinked: l.hardGates.unlinked }, indent: 0 }),
       ].join('\n'),
     ])
   }

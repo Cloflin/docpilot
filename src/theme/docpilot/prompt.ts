@@ -114,6 +114,18 @@ export const TOOLS = [
  * anything else. This rule is what stands in until there is one.
  */
 /**
+ * THE MARKER RULE IS TWO BULLETS, and the split is measured — engine-spec 039.
+ *
+ * As one sentence ("…in the order of the citations array. It holds section ids
+ * copied exactly from tool results, never marker numbers") gpt-6-luna at
+ * reasoning 'low' read the second half as a rule about the MARKER and wrote the
+ * id itself in brackets: 13 of 16 replays of one production turn, 5 of 6 live
+ * turns. `linkMarkers` links `[n]` and nothing else, so the reader got forty
+ * characters of section id as plain text and no link. Split into "numbers in
+ * text" and "ids only in citations", the same replays wrote 0 of 24. markers.ts
+ * still rewrites the id a model writes anyway: a rule is a request.
+ */
+/**
  * `docPilot.product` is the ONE brand-shaped string in the instruction.
  *
  * The default is deliberately generic. This package ships to any VitePress site,
@@ -133,7 +145,8 @@ export const shippedCore = (product = null) =>
 - The excerpts may describe a neighbouring feature, integration or API rather than the one asked about. That is not the answer: say the documentation does not cover it and call answer with confidence 0.
 - If the message is not a question about the documentation — a poem, a joke, a task of its own — call answer with confidence 0.
 - No headings. Paragraphs, lists, and fenced code blocks with a language.
-- Mark every claim with a citation marker [1], [2] in the order of the citations array. It holds section ids copied exactly from tool results ("getting-started/creating-an-application#2"), never marker numbers.
+- In text, mark every claim with a citation marker that is a number in brackets: [1], [2]. [1] points to citations[0], [2] to citations[1], and so on.
+- The citations array holds section ids copied exactly from tool results ("getting-started/creating-an-application#2"). Section ids go only in citations, never in text.
 - Answer in the question's language, whatever language the docs use.
 - Use search_docs to find, fetch_section when an excerpt is cut off, expand_section when the answer runs past the end of a section, list_pages only to orient.
 - Never ask for credentials and never repeat one back. Samples use placeholders PLUGIN_ID and SECRET_KEY. Read the draft once before you call answer; remove any real key, id or token.

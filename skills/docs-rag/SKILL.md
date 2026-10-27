@@ -213,8 +213,11 @@ Three things to check before believing a delta:
 
 - **`incomparable`** in the report. A prompt, lever, golden-set or `num_ctx`
   change makes the comparison meaningless, and the report says which.
-- **the hard gates**: `hallucinated == 0` and `scopeContainment == 1.0`. Either
-  one failing fails the whole run regardless of every other number.
+- **the hard gates**: `hallucinated == 0`, `scopeContainment == 1.0` and
+  `unlinked == 0` — no answer to a positive record shown with sources whose
+  text links none of them (engine-spec 039; negatives and authored openers are
+  counted, not gated). Any one failing fails the whole run regardless of every
+  other number.
 - **a delta exists only WITHIN one level.** A level-filtered run scores a
   different population, not a smaller sample of the same one — `--level=low` is
   ten smoke lookups and its answerF1 is not commensurable with the full set's.
