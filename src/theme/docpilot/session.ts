@@ -402,20 +402,23 @@ function newId(prefix) {
  */
 function ensureBudget() {
   if (budget) return budget
-  budget = createBudget({
-    // A ceiling the project wrote down wins. Failing that, a deployment on the
-    // provider's own FREE POOL gets the published free-tier number, so the
-    // requests spent before any response carries a header are still counted
-    // against something. Every other deployment counts against nothing and stays
-    // unknown — including a funded key on the same metered provider, which was
-    // the reading that dropped a paying site to one request per turn after 35
-    // questions. `freePool`, never `rateLimited`: the second says the service
-    // publishes limits, which is a different sentence.
-    dailyLimit:
-      state.config.budget.dailyLimit ?? (state.config.llm.freePool ? FREE_TIER_DAILY : null),
-  })
+  budget = createBudget({ dailyLimit: dailyCeiling() })
   refreshBudget()
   return budget
+}
+
+/**
+ * A ceiling the project wrote down wins. Failing that, a deployment on the
+ * provider's own FREE POOL gets the published free-tier number, so the requests
+ * spent before any response carries a header are still counted against
+ * something. Every other deployment counts against nothing and stays unknown —
+ * including a funded key on the same metered provider, which was the reading
+ * that dropped a paying site to one request per turn after 35 questions.
+ * `freePool`, never `rateLimited`: the second says the service publishes limits,
+ * which is a different sentence.
+ */
+function dailyCeiling() {
+  return state.config.budget.dailyLimit ?? (state.config.llm.freePool ? FREE_TIER_DAILY : null)
 }
 
 /**
@@ -609,7 +612,14 @@ export function configure(themeConfig, path, lang) {
   // After the config is settled, because both the ceiling and the plan come out
   // of it — and before the first question, because a budget carried over from
   // this morning is a line the panel can show while the composer is still empty.
-  ensureBudget()
+  //
+  // The ceiling is re-read on EVERY configure, not only the first. The ledger is
+  // created once per page and used to keep the ceiling it was created with, so a
+  // `setConfig` that raised `budget.dailyLimit` or left the free pool changed
+  // the settings and not the count the panel showed and planned against. What
+  // was already spent today stays: only the ceiling moves.
+  ensureBudget().setDailyLimit(dailyCeiling())
+  refreshBudget()
   if (typeof window !== 'undefined') {
     // After the config is settled, and every time it is: the panel's face is a
     // property of the document, not of a component, so it is applied here
@@ -866,17 +876,50 @@ export function prefetchIndex() {
 /** engine-spec 028: the turn runs on the owner's server, not here. */
 const serverRuntime = () => state.config?.runtime === 'server'
 
+/**
+ * NOT A LATCH. `degraded` used to be checked in the guard below, so the first
+ * failed load was the last load: a manifest fetch that dropped once on a flaky
+ * connection left the panel "off" until the tab was reloaded, although
+ * `loadIndex` releases its memo on failure precisely so that the next call can
+ * try again. Now every `open()` that finds no index asks once more — and so
+ * does a `submit()`, which awaits this before it reads `degraded` — and the
+ * panel keeps saying it is off until one of them succeeds. A failure is retried
+ * by something the reader did, never by a timer or a loop.
+ */
 export async function ensureIndex() {
-  if (state.index || state.degraded) return
+  if (state.index) return
+  let index
   try {
-    const index = serverRuntime()
+    index = serverRuntime()
       ? await loadShell(state.config.server.endpoint)
       : await loadIndex(hostConfig(state.config).ragBase)
-    // Two calls can both pass the guard above before either resolves — an open
-    // racing a prefetch, now that there are two callers. The restore below is
-    // not idempotent (it announces), so the loser stops here.
-    if (state.index) return
-    state.index = index
+  } catch {
+    // The reason is deliberately NOT kept. It was, and nothing ever read it —
+    // ui-specs/012 deletes it on the reasoning 009 used for `llm.think`: state
+    // with no reader is indistinguishable from state somebody forgot to wire,
+    // and an upstream message held in the store is a message one careless
+    // template binding away from the reader. `degraded` is the whole fact the
+    // panel acts on.
+    state.degraded = true
+    return
+  }
+  // Two calls can both pass the guard above before either resolves — an open
+  // racing a prefetch, now that there are two callers. The restore below is
+  // not idempotent (it announces), so the loser stops here.
+  if (state.index) return
+  state.index = index
+  state.degraded = false
+  /**
+   * EVERYTHING BELOW IS THE READER'S OWN STATE, and none of it is the index.
+   *
+   * It sat inside the same `try` as the fetch, so a scope or a conversation in
+   * storage that this bundle could not read put the panel into `degraded` with
+   * a perfectly good index in hand — for every open of every tab, until the
+   * reader cleared site data. A restore that fails now costs what it was
+   * restoring and nothing else: the scope falls back to all docs, and
+   * `restoreConversation` drops the thread it could not read.
+   */
+  try {
     const restored = scopeApi.restore(state.index.manifest)
     state.scope = restored.scope
     if (restored.reset) say(T('announce.scopeReset'))
@@ -887,19 +930,13 @@ export async function ensureIndex() {
     if (state.pendingScope === 'page' && knownPaths.value.has(state.currentPath)) {
       setScope([state.currentPath])
     }
-    state.pendingScope = null
-    state.instruction = state.config.prompt.show ? instruction.get() : ''
-    restoreConversation()
-    state.ready = true
   } catch {
-    // The reason is deliberately NOT kept. It was, and nothing ever read it —
-    // ui-specs/012 deletes it on the reasoning 009 used for `llm.think`: state
-    // with no reader is indistinguishable from state somebody forgot to wire,
-    // and an upstream message held in the store is a message one careless
-    // template binding away from the reader. `degraded` is the whole fact the
-    // panel acts on.
-    state.degraded = true
+    state.scope = { ...scopeApi.ALL }
   }
+  state.pendingScope = null
+  state.instruction = state.config.prompt.show ? instruction.get() : ''
+  restoreConversation()
+  state.ready = true
 }
 
 /** The query parameters, namespaced — a docs site may well own `ask` already. */
@@ -1178,13 +1215,13 @@ function rehydrate(row) {
      * ids where it had three, and the follow-up is seeded one section of that
      * page rather than two.
      *
-     * The archive still holds ONE copy. A second stored list would buy the live
-     * ids back exactly and is not worth the bytes: the seed is a head start on
-     * the next turn rather than that turn's evidence, and both directions stay
-     * inside the same bound — SEED_FROM_HISTORY caps what reaches the model at
-     * three sections whichever way the count went, and the resolution below
-     * drops anything that no longer exists. Over or under, this beats the
-     * `undefined` it replaces, which seeded nothing at all.
+     * For an unsigned turn the archive holds ONE copy. A second stored list
+     * would buy the live ids back exactly and is not worth the bytes: the seed
+     * is a head start on the next turn rather than that turn's evidence, and
+     * both directions stay inside the same bound — SEED_FROM_HISTORY caps what
+     * reaches the model at three sections whichever way the count went, and the
+     * resolution below drops anything that no longer exists. Over or under,
+     * this beats the `undefined` it replaces, which seeded nothing at all.
      *
      * A rebuilt index needs no check here. `seedFromHistory` resolves every id
      * through `retrieval.fetch`, and an id that has left the corpus is dropped
@@ -1193,8 +1230,18 @@ function rehydrate(row) {
      *
      * A restored refusal has no sources and so inherits nothing, which is
      * correct: a refused turn was never a source.
+     *
+     * THE ONE EXCEPTION is a SIGNED turn — engine-spec 033. The server's MAC
+     * covers `citations` exactly as it sent them, so for that turn the derived
+     * list is not "a head start, over or under" but a signature that fails, and
+     * the answer reaches the model as a quote for the rest of the conversation.
+     * `slimTurn` keeps the signed list beside `answerSig`, and it is the one
+     * stored list read back here.
      */
-    citationIds: sources.map((s) => s.id).filter(Boolean),
+    citationIds:
+      rest.answerSig && Array.isArray(rest.sigCitations)
+        ? rest.sigCitations.map(String)
+        : sources.map((s) => s.id).filter(Boolean),
     reasons: rest.reasons || [],
     verdict: rest.verdict || null,
     // v-model wants a string, never undefined.
@@ -1230,16 +1277,36 @@ function adopt(found) {
   state.turns = found.turns.map(rehydrate)
 }
 
+/**
+ * NEVER THROWS — `ensureIndex` calls it after the index is in hand, and a thread
+ * the panel cannot draw is not a reason for the panel to be off.
+ *
+ * A row that fails to rehydrate — a `null` turn, a `sources` that is not a list —
+ * is DROPPED, not skipped. Left in the archive with this tab's pointer on it,
+ * every reload would trip on it again; dropped, the reader gets an empty thread
+ * now and the switcher stops offering a conversation that cannot be opened.
+ */
 function restoreConversation() {
   if (!state.config.history.enabled) return
-  // The pre-history per-tab thread, imported once and then removed. Runs before
-  // the pointer is read, because it is what sets the pointer on the first load.
-  store.migrate()
-  refreshHistory()
-  const id = store.current()
-  if (!id) return
-  const found = store.open(id)
-  if (found) adopt(found)
+  let id = null
+  try {
+    // The pre-history per-tab thread, imported once and then removed. Runs before
+    // the pointer is read, because it is what sets the pointer on the first load.
+    store.migrate()
+    refreshHistory()
+    id = store.current()
+    if (!id) return
+    const found = store.open(id)
+    if (found) adopt(found)
+  } catch {
+    // `adopt` names the conversation before it maps the turns, so a throw there
+    // leaves the id of a thread that is not on screen.
+    state.turns = []
+    state.conversationId = null
+    state.conversationStale = false
+    if (id) store.remove(id)
+    refreshHistory()
+  }
 }
 
 /**
@@ -3393,7 +3460,8 @@ export function vote(turn, verdict) {
   // reader has since retracted is the one outcome a thumb the reader can press
   // twice must not produce, and once that thumb can carry a sentence, what is
   // being retracted is the reader's own words. `retracted` tells the send filter
-  // which verdict this record is about; the receiver upserts on messageId.
+  // which verdict this record withdraws — on a switch as well as on a second
+  // press of the same thumb; the receiver upserts on messageId.
   writeFeedback(turn, {retracted: was})
   // The stored turn also has to stop showing a thumb the reader has taken back.
   saveCurrent()

@@ -188,7 +188,14 @@ export function record(
   // something it cannot deliver. `retracted` names what was withdrawn so the
   // send filter can answer "would this vote have been sent?" for a vote that is
   // no longer there; it is a routing hint, not part of the record.
-  const about = row.verdict ?? row.retracted ?? null
+  //
+  // A SWITCHED vote withdraws one too. It used to be consulted only when the
+  // verdict was null, so a thumb flipped down → up under `send: 'down'` was a
+  // record "about" up, which is not sent — and the endpoint kept the down-vote
+  // and the sentence under it, while the reader's panel said up. Both verdicts
+  // are asked now: the new one decides what the record SAYS, the withdrawn one
+  // whether there is something at the endpoint to take back.
+  const retracted = row.retracted ?? null
   delete row.retracted
 
   // The LOCAL copy only: the request below is governed by `feedback.send`,
@@ -197,13 +204,20 @@ export function record(
   write(list, storage)
 
   const allowed = SENDS[send] || SENDS[FEEDBACK_DEFAULTS.send]
-  if (feedbackEndpoint && about && allowed.includes(about)) {
+  const sendsVerdict = row.verdict != null && allowed.includes(row.verdict)
+  const sendsRetraction = retracted != null && allowed.includes(retracted)
+  // A new verdict this site does not collect leaves as a plain WITHDRAWAL —
+  // `verdict: null` at the raised revision, which the receiver already stores as
+  // a retraction — and without the reader's words: an up-vote under `send:
+  // 'down'` is still not the site's to see, and a form belongs to a down-vote.
+  const body = sendsVerdict ? row : {...row, verdict: null, reasons: [], comment: null}
+  if (feedbackEndpoint && (sendsVerdict || sendsRetraction)) {
     try {
       const post = fetchImpl || globalThis.fetch
       post(feedbackEndpoint, {
         method: 'POST',
         headers: {'content-type': 'application/json'},
-        body: JSON.stringify(row),
+        body: JSON.stringify(body),
         keepalive: true,
       }).catch((e) => {
         // Silent by default — a failed vote is not the reader's problem and they

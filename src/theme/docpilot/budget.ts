@@ -343,7 +343,10 @@ export function createBudget({
   now?: () => number
   dailyLimit?: number | null
 } = {}) {
-  const ceiling = Number.isFinite(dailyLimit) && dailyLimit > 0 ? dailyLimit : null
+  const ceilingOf = (n) => (Number.isFinite(n) && n > 0 ? n : null)
+  // `let`, for `setDailyLimit` below — the one value here a later `configure()`
+  // may change. Everything else in the ledger is a fact about the day.
+  let ceiling = ceilingOf(dailyLimit)
 
   // Resolved per call rather than captured at module load: this file is imported
   // during the docs build, where `localStorage` does not exist and asking for it
@@ -826,6 +829,22 @@ export function createBudget({
       // spent day, and this answers only the second question.
       const s = snapshot()
       return s.defensibleRemaining !== undefined && s.defensibleRemaining <= 0
+    },
+
+    /**
+     * A new ceiling for the local count, with the day's count kept.
+     *
+     * The ceiling is a SETTING and `spentLocal` is a FACT. A second `configure()`
+     * — `panel.setConfig`, HMR — that names a different `budget.dailyLimit`, or
+     * moves the deployment on or off the free pool, has changed the first and
+     * not the second. Rebuilding the ledger would lose the second wherever there
+     * is no storage to read it back from, and would bind one more `storage`
+     * listener per call. Nothing is written: the ceiling is not part of the
+     * stored state, because every tab takes it from its own config.
+     */
+    setDailyLimit(n: number | null) {
+      ceiling = ceilingOf(n)
+      return snapshot()
     },
 
     /**

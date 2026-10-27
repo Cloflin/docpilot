@@ -1406,6 +1406,36 @@ describe('a turn on a metered service', () => {
   })
 
   /**
+   * A LATER `configure()` — `panel.setConfig` — moves the ceiling, and only the
+   * ceiling. The ledger is made once per page, and it kept the ceiling it was
+   * made with: a pushed `budget.dailyLimit` changed the settings and not the
+   * count the panel showed or planned against. What the day already spent is a
+   * fact, not a setting, and survives the change — here with no storage at all
+   * to read it back from.
+   */
+  it('takes a new ceiling from a later configure, and keeps what the day spent', async () => {
+    const s = await start()
+    transport(() => reply(PROSE))
+    await s.submit('how is the alpha widget configured?')
+    const spent = 50 - s.state.budget.remaining
+    expect(spent).toBeGreaterThan(0)
+
+    const again = (settings) =>
+      s.configure({
+        docPilot: themeDocPilot(
+          resolveDocPilot({ chat: { provider: 'openrouter' }, guard: { mode: 'off' }, ...settings }),
+          ENV,
+        ),
+      })
+    again({ budget: { dailyLimit: 80 } })
+    expect(s.state.budget).toMatchObject({ limit: 80, remaining: 80 - spent, source: 'local' })
+
+    // Off the free pool with no ceiling of its own: nothing left to count against.
+    again({ chat: { provider: 'openrouter', model: 'anthropic/claude-sonnet-4' } })
+    expect(s.state.budget).toBe(null)
+  })
+
+  /**
    * THE ALLOWANCE BELONGS TO THE TURN, not to each call the turn makes.
    *
    * `budget: {mode: 'agentic'}` pins the loop on, so a rationed turn here still

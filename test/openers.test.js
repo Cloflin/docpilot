@@ -1288,12 +1288,15 @@ describe('openers — a baked answer is revealed, not placed', () => {
     })
   }
 
-  const setup = async (over = {}) => {
+  // `ui` is the second argument the motion cases pass. It used to be ignored —
+  // the helper took one — so both of them ran under the default `motion` and
+  // passed only because `submit` waits for a real-timer reveal to finish.
+  const setup = async (over = {}, ui = null) => {
     const { resolveDocPilot, themeDocPilot } = await import('../src/config.js')
     session.configure(
       {
         docPilot: themeDocPilot(
-          resolveDocPilot({ suggestions: { questions: [OPENER], ...over } }, ENV),
+          resolveDocPilot({ suggestions: { questions: [OPENER], ...over }, ...(ui ? { ui } : {}) }, ENV),
           ENV,
         ),
       },
@@ -1370,21 +1373,35 @@ describe('openers — a baked answer is revealed, not placed', () => {
     expect(turn.answerText).toBe(TEXT)
   })
 
+  // The frame the default case above reads a partial answer in. Here the whole
+  // answer is already on screen in it, which is what "skips" means.
   it('`motion: auto` skips it while the OS asks for reduced motion', async () => {
+    vi.useFakeTimers()
     reducedOs()
     await setup({}, { motion: 'auto' })
-    await session.submit(OPENER)
+    expect(session.state.config.ui.motion).toBe('auto')
+    const done = session.submit(OPENER)
+    await vi.advanceTimersByTimeAsync(100)
     const turn = session.state.turns.at(-1)
+    expect(turn.streaming).toBe(false)
     expect(turn.state).toBe('complete')
     expect(turn.answerText).toBe(TEXT)
+    await vi.runAllTimersAsync()
+    await done
   })
 
   it('`motion: reduce` skips it with no OS signal at all', async () => {
+    vi.useFakeTimers()
     await setup({}, { motion: 'reduce' })
-    await session.submit(OPENER)
+    expect(session.state.config.ui.motion).toBe('reduce')
+    const done = session.submit(OPENER)
+    await vi.advanceTimersByTimeAsync(100)
     const turn = session.state.turns.at(-1)
+    expect(turn.streaming).toBe(false)
     expect(turn.state).toBe('complete')
     expect(turn.answerText).toBe(TEXT)
+    await vi.runAllTimersAsync()
+    await done
   })
 })
 

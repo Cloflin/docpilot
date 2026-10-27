@@ -153,7 +153,7 @@ import { detectSocial, socialCopy, SOCIAL_LANGUAGES } from '../src/theme/docpilo
 import { createRetrieval, ScopeEscape } from '../src/theme/docpilot/retriever.js'
 import { excerptWindow } from '../src/theme/docpilot/excerpt.js'
 import { runTurn } from '../src/theme/docpilot/harness.js'
-import { assembleIndex } from '../src/theme/docpilot/store.js'
+import { assembleIndex, __setIndex } from '../src/theme/docpilot/store.js'
 import {
   KEY_PATHS,
   resolveI18n,
@@ -2932,6 +2932,118 @@ describe('009 — the prefetch split', () => {
     expect(trigger).toContain('@focus="warm"')
     expect(trigger).toContain("ui.value.prefetch === 'hover'")
     expect(trigger).toContain('requestIdleCallback')
+  })
+})
+
+/**
+ * `ensureIndex`, driven rather than read: the load, and the reader's own state
+ * restored on top of it.
+ *
+ * Two different failures used to share one `catch` and one flag. A fetch that
+ * dropped once latched `degraded` for the life of the tab, and a stored thread
+ * this bundle could not draw put a panel holding a good index into the same
+ * state. And the deep link's `dp-scope=page` is consumed here, in a branch only
+ * the half that arms it was ever tested for.
+ */
+describe('ensureIndex — the load, and what is restored on it', () => {
+  const fake = () => {
+    const m = new Map()
+    return {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      setItem: (k, v) => m.set(k, String(v)),
+      removeItem: (k) => m.delete(k),
+    }
+  }
+  const INDEX = {
+    manifest: {
+      hash: 'h1',
+      pages: [{ path: '/guide/auth', title: 'Authentication', tail: 'Guide' }],
+      sections: [],
+    },
+  }
+  const RESET = { index: null, degraded: false, ready: false, turns: [], conversationId: null, pendingScope: null }
+  const settle = () => new Promise((r) => setTimeout(r, 0))
+
+  beforeEach(async () => {
+    // A macrotask first: an `open()` from an earlier describe may still have a
+    // real `loadIndex` in flight, and its failure releases the memo — which
+    // would release the fixture installed below.
+    await settle()
+    __setHistoryForTests(createHistory({ local: fake(), session: fake(), now: () => 1 }))
+    configure({ docPilot: themeDocPilot(resolveDocPilot({})) }, '/guide/auth')
+    Object.assign(sessionState, RESET, { scope: { kind: 'all', paths: [], label: 'All docs' } })
+  })
+
+  afterEach(() => {
+    __setIndex(null)
+    __setHistoryForTests(null)
+    Object.assign(sessionState, RESET, { open: false })
+  })
+
+  it('tries the load again on the next open, rather than staying off for the tab', async () => {
+    __setIndex(Promise.reject(new Error('offline')))
+    await session.ensureIndex()
+    expect(sessionState.degraded).toBe(true)
+    expect(sessionState.index).toBe(null)
+
+    // The connection came back a second later.
+    __setIndex(Promise.resolve(INDEX))
+    session.open()
+    await settle()
+    expect(sessionState.index?.manifest.hash).toBe('h1')
+    expect(sessionState.degraded).toBe(false)
+    expect(sessionState.ready).toBe(true)
+  })
+
+  it('keeps a working panel when the stored thread cannot be drawn, and drops that thread', async () => {
+    const local = fake()
+    const tab = fake()
+    const good = { id: 'c_ok', title: 'Fine', createdAt: 1, updatedAt: 1, hash: 'h1', turns: [] }
+    local.setItem(
+      'docpilot:history',
+      JSON.stringify({ v: 1, conversations: [{ ...good, id: 'c_bad', turns: [null] }, good] }),
+    )
+    tab.setItem('docpilot:conversation', 'c_bad')
+    const store = createHistory({ local, session: tab, now: () => 1 })
+    __setHistoryForTests(store)
+    __setIndex(Promise.resolve(INDEX))
+
+    await session.ensureIndex()
+
+    expect(sessionState.degraded).toBe(false)
+    expect(sessionState.ready).toBe(true)
+    expect(sessionState.index?.manifest.hash).toBe('h1')
+    expect(sessionState.turns).toEqual([])
+    expect(sessionState.conversationId).toBe(null)
+    // Gone from the archive and from this tab's pointer, so the next load does
+    // not trip on it again — and the switcher no longer offers it.
+    expect(store.current()).toBe(null)
+    expect(store.list().map((c) => c.id)).toEqual(['c_ok'])
+    expect(sessionState.history.map((c) => c.id)).toEqual(['c_ok'])
+  })
+
+  it('narrows to this page when a deep link asked for it and the index has the page', async () => {
+    sessionState.pendingScope = 'page'
+    __setIndex(Promise.resolve(INDEX))
+    await session.ensureIndex()
+    expect(sessionState.scope).toMatchObject({ kind: 'page', paths: ['/guide/auth'] })
+    expect(sessionState.pendingScope).toBe(null)
+  })
+
+  it('keeps all docs when the page is not in the index, and forgets the request', async () => {
+    sessionState.currentPath = '/not/indexed'
+    sessionState.pendingScope = 'page'
+    __setIndex(Promise.resolve(INDEX))
+    await session.ensureIndex()
+    expect(sessionState.scope.kind).toBe('all')
+    expect(sessionState.pendingScope).toBe(null)
+  })
+
+  it('does not narrow a page the index has when no deep link asked', async () => {
+    __setIndex(Promise.resolve(INDEX))
+    await session.ensureIndex()
+    expect(sessionState.currentPath).toBe('/guide/auth')
+    expect(sessionState.scope.kind).toBe('all')
   })
 })
 
@@ -6331,6 +6443,81 @@ describe('history — a durable, tab-safe archive', () => {
     expect(slimTurn(turn({ state: 'rate-limited', answerText: '', refusal: null }))).toBe(null)
   })
 
+  /**
+   * A `results` turn IS an answer — the only kind a search-only site has. It
+   * carries neither `answerText` nor `refusal`, so the guard dropped it, and a
+   * `chat: false` deployment never wrote a row: no switcher, no thread after a
+   * reload. A hybrid settle in the middle of an answering thread vanished from
+   * it the same way, with the turns after it still there.
+   */
+  it('keeps a results turn with what its template draws, and nothing it does not', () => {
+    const row = {
+      id: 'auth#t',
+      path: '/guide/auth',
+      anchor: 't',
+      href: '/guide/auth#t',
+      title: 'Tokens',
+      breadcrumb: 'Guide · Auth',
+      origin: null,
+      snippet: 'Pass the key as a bearer token.',
+      truncated: false,
+    }
+    const closest = [{ path: '/guide/limits', title: 'Rate limits', tail: 'Guide', origin: null }]
+    const base = { answerText: '', refusal: null, sources: [], cited: null, state: 'results' }
+
+    const found = slimTurn(turn({ ...base, results: [row], noStrongMatches: true, wouldWiden: true }))
+    expect(found.state).toBe('results')
+    expect(found.results).toEqual([
+      { id: 'auth#t', href: '/guide/auth#t', origin: null, title: 'Tokens', breadcrumb: 'Guide · Auth', snippet: row.snippet },
+    ])
+    expect(found.noStrongMatches).toBe(true)
+    expect(found.wouldWiden).toBe(true)
+    expect(found).not.toHaveProperty('hybrid')
+
+    // The hybrid settle with no rows at all: the outage lead and the pages floor.
+    const empty = slimTurn(
+      turn({ ...base, results: [], hybrid: true, error: 'boom', closest, closestAreOutside: true }),
+    )
+    expect(empty.results).toEqual([])
+    expect(empty.hybrid).toBe(true)
+    expect(empty.closest).toEqual(closest)
+    expect(empty.closestAreOutside).toBe(true)
+    expect(empty).not.toHaveProperty('error')
+
+    // A spent limit carries rows too, and is still not kept without text.
+    expect(slimTurn(turn({ ...base, state: 'rate-limited', results: [row] }))).toBe(null)
+
+    // And it reaches the archive and comes back.
+    const h = tab(fakeStore())
+    const id = h.save({ id: null, hash: 'h', turns: [turn({ ...base, results: [row] })] })
+    expect(id).toBeTruthy()
+    expect(h.open(id).turns[0].results[0].href).toBe('/guide/auth#t')
+  })
+
+  /**
+   * A row the panel cannot read must not be able to fail a turn. `save` runs in
+   * the settle of every turn and `list` right after it, and both dereferenced
+   * `c.id` on whatever the array held — a `null` in the list rewrote a finished
+   * answer as a failed one.
+   */
+  it('drops an archive row it cannot read, and still lists and saves', () => {
+    const local = fakeStore()
+    const good = { id: 'c_ok', title: 'Old', createdAt: T0, updatedAt: T0, hash: 'h', turns: [slimTurn(turn())] }
+    local.setItem(
+      'docpilot:history',
+      JSON.stringify({ v: 1, conversations: [null, 7, 'x', { id: 3, turns: [] }, { id: 'c_noturns' }, good] }),
+    )
+    const h = tab(local, 1000)
+
+    expect(h.list().map((c) => c.id)).toEqual(['c_ok'])
+    const id = h.save({ id: null, hash: 'h', turns: [turn({ id: 'm_2' })] })
+    expect(id).toMatch(/^c_/)
+    expect(h.open('c_ok').turns).toHaveLength(1)
+    // The write that followed left the unreadable rows out of storage too.
+    const stored = JSON.parse(local.getItem('docpilot:history')).conversations
+    expect(stored.map((c) => c.id)).toEqual([id, 'c_ok'])
+  })
+
   it('caps scope.paths at the same 20 the feedback record already caps at', () => {
     const wide = turn({
       scope: { kind: 'pages', label: '60 pages', paths: Array.from({ length: 60 }, (_, i) => `/p${i}`) },
@@ -7266,6 +7453,79 @@ describe('feedback — what leaves the device', () => {
       fetchImpl,
     })
     expect(calls).toHaveLength(0)
+  })
+
+  /**
+   * A SWITCHED thumb withdraws the verdict it replaces. The hint was read only
+   * when the new verdict was null, so a flip down → up under `send: 'down'` was a
+   * record about `up`, which that site does not collect: nothing was sent, and
+   * the endpoint kept the down-vote and the sentence under it while the reader's
+   * panel said up. What goes instead is a withdrawal — not the up-vote, which is
+   * still not that site's to see.
+   */
+  it('withdraws a switched vote at the endpoint, without sending the verdict it switched to', () => {
+    for (const [send, was, now] of [
+      ['down', 'down', 'up'],
+      ['up', 'up', 'down'],
+    ]) {
+      const storage = fakeStorage()
+      const { calls, fetchImpl } = capture()
+      recordFeedback(
+        entry({ verdict: now, retracted: was, revision: 1, reasons: ['wrong'], comment: 'this leaked my email' }),
+        { feedbackEndpoint: '/f', send, storage, fetchImpl },
+      )
+      expect(calls, send).toHaveLength(1)
+      expect(calls[0].body, send).toMatchObject({ messageId: 'm_1', revision: 1, verdict: null, reasons: [], comment: null })
+      expect(calls[0].body, send).not.toHaveProperty('retracted')
+      // The reader's own copy says what they chose.
+      expect(stored(storage)[0].verdict, send).toBe(now)
+    }
+
+    // Under `both` the switch is the new verdict itself, exactly as before.
+    const { calls, fetchImpl } = capture()
+    recordFeedback(entry({ verdict: 'up', retracted: 'down', revision: 1 }), {
+      feedbackEndpoint: '/f',
+      send: 'both',
+      storage: fakeStorage(),
+      fetchImpl,
+    })
+    expect(calls.map((c) => c.body.verdict)).toEqual(['up'])
+  })
+
+  /** The same switch through the panel, under the mode the finding names. */
+  it('leaves no down-vote at the endpoint after the reader changes it to up', () => {
+    const calls = []
+    vi.stubGlobal('localStorage', fakeStorage())
+    vi.stubGlobal('fetch', (url, init) => {
+      calls.push(JSON.parse(init.body))
+      return Promise.resolve({ ok: true })
+    })
+    try {
+      configure({
+        docPilot: themeDocPilot(resolveDocPilot({ feedbackEndpoint: '/f', feedback: { send: 'down' }, history: { enabled: false } })),
+      })
+      const turn = {
+        id: 'm_9',
+        question: 'q',
+        answerText: 'a',
+        sources: [],
+        verdict: null,
+        reasons: [],
+        comment: '',
+        feedbackRevision: 0,
+        scope: { kind: 'all', label: 'All docs', paths: [] },
+      }
+      session.vote(turn, 'down')
+      turn.comment = 'this leaked my email'
+      session.vote(turn, 'up')
+      expect(turn.verdict).toBe('up')
+      expect(calls.map((c) => c.verdict)).toEqual(['down', null])
+      expect(calls.at(-1).comment).toBe(null)
+      expect(calls.at(-1).revision).toBeGreaterThan(calls[0].revision)
+    } finally {
+      vi.unstubAllGlobals()
+      configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
+    }
   })
 
   it('masks a pasted key in the stored row AND in the request body', () => {

@@ -11,6 +11,7 @@ import {
 } from '../src/config.js'
 import { assembleIndex, __setIndex } from '../src/theme/docpilot/store.js'
 import { resultRows } from '../src/theme/docpilot/results.js'
+import { createHistory } from '../src/theme/docpilot/history.js'
 import * as session from '../src/theme/docpilot/session.js'
 
 /**
@@ -489,5 +490,68 @@ describe('a search-only turn, end to end', () => {
     expect(turn.state).toBe('no-answer')
     expect(turn.refusal.cause).toBe('credential')
     expect(turn.results).toEqual([])
+  })
+
+  // ── the archive ────────────────────────────────────────────────────────────
+
+  const fake = () => {
+    const m = new Map()
+    return {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      setItem: (k, v) => m.set(k, String(v)),
+      removeItem: (k) => m.delete(k),
+    }
+  }
+
+  /** A history store for one test, with the thread it starts from cleared. */
+  const archive = (local = fake()) => {
+    const store = createHistory({ local, session: fake(), now: () => 1 })
+    session.__setHistoryForTests(store)
+    session.state.conversationId = null
+    return store
+  }
+
+  afterEach(() => session.__setHistoryForTests(null))
+
+  /**
+   * THE ROWS ARE THE ANSWER, so they are what the archive keeps. A `results`
+   * turn has neither an answer nor a refusal, and the archive dropped every
+   * turn that had neither: on a `chat: false` site no row was ever written, so
+   * the switcher stayed empty and a reload lost the thread.
+   */
+  it('writes the thread down, and draws the same rows after a reload', async () => {
+    const store = archive()
+    await session.submit('alpha widget token')
+    await session.submit('quarterly hiring headcount forecast')
+    const id = session.state.conversationId
+    expect(store.list().map((c) => c.turnCount)).toEqual([2])
+    const drawn = (turns) => turns.map((t) => ({ rows: t.results.map((r) => r.href), weak: t.noStrongMatches }))
+    const live = drawn(session.state.turns)
+
+    session.state.turns = []
+    session.openConversation(id)
+    expect(session.state.turns.map((t) => t.state)).toEqual(['results', 'results'])
+    expect(drawn(session.state.turns)).toEqual(live)
+    expect(live[1].weak).toBe(true)
+    expect(session.state.turns[0].results[0].snippet).toContain('alpha widget')
+  })
+
+  /**
+   * A row the panel cannot read must not reach the turn it is writing down.
+   * `null` in the archive made the settle's save throw, and the turn that had
+   * just answered was re-settled as a hybrid failure with a TypeError for its
+   * reason.
+   */
+  it('settles its turn even when the archive holds a row it cannot read', async () => {
+    const local = fake()
+    local.setItem('docpilot:history', JSON.stringify({ v: 1, conversations: [null] }))
+    const store = archive(local)
+    await session.submit('alpha widget token')
+    const turn = lastTurn()
+    expect(turn.state).toBe('results')
+    expect(turn.hybrid).toBe(false)
+    expect(turn.error).toBeUndefined()
+    expect(session.state.busy).toBe(false)
+    expect(store.list()).toHaveLength(1)
   })
 })

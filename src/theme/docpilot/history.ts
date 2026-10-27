@@ -58,6 +58,8 @@ export interface StoredTurn {
   answerSummary?: string
   /** engine-spec 033 — the server's signature, so a reopened thread is still trusted. */
   answerSig?: string
+  /** engine-spec 033 — the citation list `answerSig` covers, in the order it was signed. */
+  sigCitations?: string[]
   citedIdx?: number[]
   answerHtml?: string
   scope?: { kind?: string; paths?: string[]; label?: string }
@@ -79,6 +81,13 @@ export interface StoredTurn {
   gate?: unknown
   opener?: unknown
   notAnswerable?: unknown
+  /** A `results` turn — search-only, or the hybrid settle. Its rows are its answer. */
+  results?: Array<Record<string, unknown>>
+  noStrongMatches?: boolean
+  wouldWiden?: boolean
+  hybrid?: boolean
+  closest?: Array<Record<string, unknown>>
+  closestAreOutside?: boolean
 }
 
 export const HISTORY_KEY = 'docpilot:history'
@@ -115,8 +124,13 @@ const GATE_KEYS = ['G', 'threshold', 'mode', 'n', 'channel', 'antecedent', 'woul
  * the coercion below stored it as 'aborted' and it came back under
  * `T('turn.stopped')` — "Stopped." — telling the reader they pressed a button
  * they never pressed. The service refused; the reader did nothing.
+ *
+ * `'results'` is on it for the reason `'rate-limited'` is. A search-only site
+ * settles EVERY turn there, and the hybrid settle lands there too; leaving it
+ * off — together with the guard in `slimTurn`, which wanted an answer or a
+ * refusal — meant a search-only site never wrote a single row.
  */
-const TERMINAL = new Set(['complete', 'no-answer', 'aborted', 'error', 'rate-limited'])
+const TERMINAL = new Set(['complete', 'no-answer', 'aborted', 'error', 'rate-limited', 'results'])
 
 const MINUTE = 60_000
 const HOUR = 3_600_000
@@ -135,12 +149,19 @@ function newId() {
  * one fixed sentence that would restore as a mystery. Being able to return null
  * is what makes an out-of-band save — one taken while a turn is in flight, which
  * switching conversations does — safe rather than lossy.
+ *
+ * A settled `results` turn is the third thing a reader can read back: its rows
+ * ARE the answer on a search-only site. Keyed on the STATE, not on `results`
+ * being non-empty — an empty one still says "nothing in this scope" and still
+ * offers its closest pages — and not on the rows alone, because a rate-limited
+ * turn carries rows too and is dropped below for its own reason.
  */
 export function slimTurn(turn, limits = LIMITS) {
   if (!turn) return null
   const answerText = turn.answerText || ''
   const refusal = turn.refusal || null
-  if (!answerText && !refusal) return null
+  const results = turn.state === 'results'
+  if (!answerText && !refusal && !results) return null
 
   // A turn caught mid-flight settled the moment it was written down. It kept
   // what it had already streamed, which is exactly what `stop()` produces.
@@ -178,7 +199,17 @@ export function slimTurn(turn, limits = LIMITS) {
 
   const out: StoredTurn = { id: turn.id, question: turn.question, state, answerText, sources }
   if (turn.answerSummary) out.answerSummary = String(turn.answerSummary)
-  if (turn.answerSig) out.answerSig = String(turn.answerSig)
+  if (turn.answerSig) {
+    out.answerSig = String(turn.answerSig)
+    // WHAT THE SIGNATURE COVERS, kept beside it. The server's MAC is over the
+    // citation list as the server sent it — repeats and all — and a restore
+    // derives `citationIds` from the deduplicated `sources`, so a turn that cited
+    // one section twice, or two sections of one imported page, came back with a
+    // list the MAC no longer matched and was demoted to a quote on every
+    // follow-up. Only a signed turn pays for the second list, and only the
+    // restore in session.ts reads it.
+    if (Array.isArray(turn.citationIds)) out.sigCitations = turn.citationIds.map(String)
+  }
 
   // POSITION IS THE MEANING. `cited[i]` is the row citation i+1 resolved to, and
   // two citations into one section share one row — so this is an index per
@@ -215,6 +246,34 @@ export function slimTurn(turn, limits = LIMITS) {
   }
 
   if (refusal) out.refusal = refusal
+  /**
+   * The rows of a `results` turn, and the four facts its template reads beside
+   * them — the lead sentence (`noStrongMatches`, `hybrid`), the widen button and
+   * the closest-pages floor. Projected to the fields a row DRAWS: `path`,
+   * `anchor` and `truncated` are inputs to building a row and nothing reads
+   * them after. A row is a heading, a breadcrumb and a 220-character snippet,
+   * at most `RESULTS_K` of them, so a turn costs about what an answer does and
+   * the byte cap below needs no new rule.
+   */
+  if (results) {
+    out.results = (turn.results || []).map((r) => ({
+      id: r.id,
+      href: r.href,
+      origin: r.origin || null,
+      title: r.title,
+      breadcrumb: r.breadcrumb || '',
+      snippet: r.snippet || '',
+    }))
+    if (turn.noStrongMatches) out.noStrongMatches = true
+    if (turn.wouldWiden) out.wouldWiden = true
+    // The Retry button and the lead that names the outage hang on this, and
+    // nothing else tells a hybrid settle from a search-only one.
+    if (turn.hybrid) out.hybrid = true
+    if (turn.closest?.length) {
+      out.closest = turn.closest.map((c) => ({ path: c.path, title: c.title, tail: c.tail || '', origin: c.origin || null }))
+      if (turn.closestAreOutside) out.closestAreOutside = true
+    }
+  }
   // The passage this question was about. Without it a restored thread renders
   // "what does this mean?" above an answer with no `this` anywhere on screen.
   // Bounded at 500 characters by clampQuote before it ever reaches a turn, so it
@@ -341,7 +400,15 @@ export function createHistory({
       if (!raw) return []
       const payload = JSON.parse(raw)
       if (payload?.v !== SCHEMA || !Array.isArray(payload.conversations)) return []
-      return payload.conversations
+      // EACH ROW, not only the envelope. A `null` in the list — a hand edit, a
+      // bundle with a bug, another script on the origin — made `list()` and
+      // `save()` throw on `c.id`, and `save` runs inside the settle of every
+      // turn: a finished answer was rewritten as a failed one by a storage row
+      // the reader cannot see. A row this cannot read is dropped here, and the
+      // next write leaves it out of storage too.
+      return payload.conversations.filter(
+        (c) => c && typeof c === 'object' && typeof c.id === 'string' && Array.isArray(c.turns),
+      )
     } catch {
       /* private mode, disabled storage, a payload from another version */
       return []

@@ -355,8 +355,12 @@ describe('createDocPilotServer — node() never throws', () => {
  * every turn in either runtime.
  */
 describe('local models — what Ollama refuses, and the concession that answers it', () => {
+  // After EACH test, not once after the describe: every case here assigns its
+  // own `fetch`, and until the describe ended the global stayed whatever the
+  // last assignment was — a case that reads `fetch` before it assigns one would
+  // have run against another case's stub.
   const realFetch = globalThis.fetch
-  afterAll(() => (globalThis.fetch = realFetch))
+  afterEach(() => (globalThis.fetch = realFetch))
 
   it('detectTools reads "does not support tools" as a model without tools, not as no answer', async () => {
     const { detectTools } = await import('../src/theme/docpilot/llm.js')
@@ -492,6 +496,43 @@ describe('the panel’s half — a turn the server runs', () => {
     expect(two.trusted).toEqual([true])
     // The archive keeps the id it was handed, so a reload sends it too.
     expect(session.state.conversationId).toBe(one.body.conversationId)
+  })
+
+  /**
+   * engine-spec 033, after the thread is reopened. The MAC covers `citations` as
+   * the server sent them; a restore derived them from the deduplicated source
+   * rows instead, so an answer that cited one section twice came back with one
+   * id and failed its MAC on every follow-up.
+   */
+  it('sends the citations it was signed with after the thread is reopened', async () => {
+    const TWICE = 'Pass the token [1], in a header [2].'
+    const cited = [CHUNK.id, CHUNK.id]
+    reply = (body, init) =>
+      stream(init, [
+        [
+          'settle',
+          {
+            ...answered(body),
+            text: TWICE,
+            citations: cited,
+            sig: signAnswer(SECRET, { conversationId: body.conversationId, question: body.question, answer: TWICE, citations: cited }),
+          },
+        ],
+      ])
+    await session.submit('how do I pass the token')
+    const id = session.state.conversationId
+    // One row for the two citations — the dedupe that loses the second id.
+    expect(session.state.turns[0].sources).toHaveLength(1)
+
+    // A reload: an empty panel, and the thread back from the archive.
+    session.state.turns = []
+    session.openConversation(id)
+    expect(session.state.turns[0].restored).toBe(true)
+
+    reply = (body, init) => stream(init, [['settle', answered(body)]])
+    await session.submit('and where does it go')
+    expect(sent.at(-1).body.history[0].citations).toEqual(cited)
+    expect(sent.at(-1).trusted).toEqual([true])
   })
 
   it('ends the turn on a settle it cannot read, rather than staying busy', async () => {
