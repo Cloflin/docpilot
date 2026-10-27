@@ -155,8 +155,15 @@ const answerSchema = (citableIds, actions = []) => ({
   additionalProperties: false,
 })
 
-function observation(tool, scopeLabel, results) {
-  return { tool, note: OBS_NOTE, scope: scopeLabel, results }
+/**
+ * `query` is the text a search ran on, and it is part of the evidence —
+ * engine-spec 040. Without it the priming result read as a search nobody had
+ * made, and the model made it: in every live turn measured on the 2.1.0 prompt,
+ * one of the two steps re-searched and got back exactly the six excerpts it
+ * already had, every one marked repeated.
+ */
+function observation(tool, scopeLabel, results, query = null) {
+  return { tool, ...(query ? { query } : {}), note: OBS_NOTE, scope: scopeLabel, results }
 }
 
 /**
@@ -170,6 +177,18 @@ function observation(tool, scopeLabel, results) {
  */
 const REPEAT_NOTE = 'The same call as an earlier step; its result is above. Use it, or make a different call.'
 const repeated = (tool) => ({ tool, note: REPEAT_NOTE })
+
+/**
+ * What a search that found nothing new is answered with — engine-spec 040.
+ *
+ * Every result already spelled out above used to come back as a row each — id,
+ * title, breadcrumb, path and "shown in an earlier result" — and that list was
+ * re-sent on every remaining step. Measured on the 2.1.1 prompt it was two of
+ * ten live turns, five and nine rows. The ids keep the ranking; the sentence
+ * says what to do instead. Still charged: it was a real search, and a refund
+ * would buy the model one more request rather than save one.
+ */
+const NOTHING_NEW_NOTE = 'Every result for this query is already above. Use them, fetch one in full, or search for something different.'
 
 /**
  * The built-ins' arguments, in the shape `checkArgs` reads — a model writes
@@ -576,15 +595,24 @@ export async function runTurn(options: RunTurnOptions) {
     primed.push(c)
   }
   for (const c of primed) emittedIds.add(c.id)
+  // The text the gate scored: the composed query where that channel won, the
+  // reader's question otherwise — and exactly what a `search_docs` with no query
+  // of its own falls back to below.
+  const primedQuery = composedQuery || question
   observations.push(
     observation(
       'search_docs',
       scopeLabel,
       primed.map((c) => excerpt(c, SEARCH_CHARS)),
+      primedQuery,
     ),
   )
 
-  const searchCache = new Set()
+  const searchKey = (query, kind = '') => `${String(query || '').trim().toLowerCase()}|${kind || ''}`
+  // The host already ran this search, so the model asking for it — by name or
+  // by leaving `query` out — is a repeated call, answered and refunded the way
+  // a repeat of its own search is.
+  const searchCache = new Set([searchKey(primedQuery), searchKey('')])
 
   /**
    * Expansions taken this turn. Never refunded — see the cap below.
@@ -600,7 +628,7 @@ export async function runTurn(options: RunTurnOptions) {
     }
 
     if (name === 'search_docs') {
-      const key = `${String(args.query || '').trim().toLowerCase()}|${args.kind || ''}`
+      const key = searchKey(args.query, args.kind)
       if (searchCache.has(key)) {
         // A cache hit cost no iteration and, as far as the reader is concerned,
         // did not happen: it is not reflected in the UI at all.
@@ -646,12 +674,16 @@ export async function runTurn(options: RunTurnOptions) {
       }
       const chunks = retrieval.search({ query: searchQuery, queryVec: searchVec, k: args.k, kind: args.kind })
       for (const c of chunks) emittedIds.add(c.id)
+      searchCache.add(key)
+      if (chunks.length && chunks.every((c) => spelled.has(c.id))) {
+        return { observation: { tool: 'search_docs', query: searchQuery, note: NOTHING_NEW_NOTE, scope: scopeLabel, ids: chunks.map((c) => c.id) } }
+      }
       const obs = observation(
         'search_docs',
         scopeLabel,
         chunks.map((c) => excerpt(c, SEARCH_CHARS)),
+        searchQuery,
       )
-      searchCache.add(key)
       if (!chunks.length) obs.note = 'No results in the selected pages.'
       return { observation: obs }
     }

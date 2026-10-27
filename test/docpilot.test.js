@@ -9562,7 +9562,7 @@ describe('runTurn — a re-search can buy its own vector', () => {
    * model called with no query of its own, which is the branch the default
    * exists for.
    */
-  const runWithSearch = async ({ query, embedQuery, composedQuery = null }) => {
+  const runWithSearch = async ({ query, kind, embedQuery, composedQuery = null }) => {
     let step = 0
     vi.stubGlobal('fetch', async () => {
       step++
@@ -9571,7 +9571,7 @@ describe('runTurn — a re-search can buy its own vector', () => {
           ok: true,
           json: async () => ({
             message: {
-              tool_calls: [{ function: { name: 'search_docs', arguments: JSON.stringify({ query }) } }],
+              tool_calls: [{ function: { name: 'search_docs', arguments: JSON.stringify({ query, kind }) } }],
             },
           }),
         }
@@ -9611,12 +9611,20 @@ describe('runTurn — a re-search can buy its own vector', () => {
     expect(Array.from(rewritten.searched[0].queryVec)).toEqual([0, 127, 0, 0])
     expect(rewritten.res.cost.embedRequests).toBe(1)
 
-    // The same question back is the vector the turn already holds.
+    // The same question back is the search the host already ran to prime the
+    // turn: answered from the turn, so nothing is searched and nothing bought
+    // (engine-spec 040).
     asked.length = 0
     const echoed = await runWithSearch({ query: 'How is the alpha widget configured?', embedQuery })
     expect(asked).toEqual([])
-    expect(Array.from(echoed.searched[0].queryVec)).toEqual([127, 0, 0, 0])
+    expect(echoed.searched).toHaveLength(0)
     expect(echoed.res.cost.embedRequests).toBe(0)
+
+    // Narrowed by `kind`, it is a different search, and it runs on the vector
+    // the turn already holds.
+    const narrowed = await runWithSearch({ query: 'How is the alpha widget configured?', kind: 'guide', embedQuery })
+    expect(asked).toEqual([])
+    expect(Array.from(narrowed.searched[0].queryVec)).toEqual([127, 0, 0, 0])
   })
 
   it('falls back to the turn vector when the embedder refuses', async () => {
@@ -9656,7 +9664,8 @@ describe('runTurn — a re-search can buy its own vector', () => {
     const asked = []
     const embedQuery = async (t) => (asked.push(t), Float64Array.from([0, 127, 0, 0]))
 
-    const { searched, res } = await runWithSearch({ composedQuery: COMPOSED, embedQuery })
+    // Narrowed by `kind`, so it is not the priming search again — see below.
+    const { searched, res } = await runWithSearch({ composedQuery: COMPOSED, kind: 'guide', embedQuery })
     expect(searched[0].query).toBe(COMPOSED)
     // The pair moves together — the composed text is what `queryVec` was
     // embedded from, so the turn's own vector is already the right one and
@@ -9668,8 +9677,13 @@ describe('runTurn — a re-search can buy its own vector', () => {
     // Absent composes nothing, and then the default is the reader's question to
     // the byte — every first turn, and every follow-up whose composed channel
     // lost.
-    const bare = await runWithSearch({ embedQuery })
+    const bare = await runWithSearch({ kind: 'guide', embedQuery })
     expect(bare.searched[0].query).toBe('how is the alpha widget configured?')
+
+    // With no `kind` either, it IS the search that primed the turn, and it is
+    // answered from the turn (engine-spec 040).
+    const again = await runWithSearch({ composedQuery: COMPOSED, embedQuery })
+    expect(again.searched).toHaveLength(0)
   })
 
   it('buys nothing for a model that echoes the composed text back verbatim', async () => {
@@ -9677,15 +9691,27 @@ describe('runTurn — a re-search can buy its own vector', () => {
     const embedQuery = async (t) => (asked.push(t), Float64Array.from([0, 127, 0, 0]))
 
     const { searched, res } = await runWithSearch({
-      // Case and punctuation are what `normalise` is for, and it is the same
-      // comparison `searchCache` keys on.
+      // Case is what the cache key folds. Verbatim, it is the priming search,
+      // answered from the turn (engine-spec 040)…
       query: `What is the alpha widget?\nHow is the alpha widget configured?`,
       composedQuery: COMPOSED,
       embedQuery,
     })
     expect(asked).toEqual([])
-    expect(Array.from(searched[0].queryVec)).toEqual([127, 0, 0, 0])
+    expect(searched).toHaveLength(0)
     expect(res.cost.embedRequests).toBe(0)
+
+    // …and spaced differently, without its closing mark, it is a search of its
+    // own that still buys nothing: `normalise` folds whitespace and trailing
+    // punctuation, and says it is the text `queryVec` holds.
+    const unpunctuated = await runWithSearch({
+      query: `What is the alpha widget?  How is the alpha widget configured`,
+      composedQuery: COMPOSED,
+      embedQuery,
+    })
+    expect(asked).toEqual([])
+    expect(Array.from(unpunctuated.searched[0].queryVec)).toEqual([127, 0, 0, 0])
+    expect(unpunctuated.res.cost.embedRequests).toBe(0)
   })
 
   /**
@@ -9888,8 +9914,12 @@ describe('runTurn — the free-step ceiling', () => {
   it('answers a cached search with a note, not a second copy of its results', async () => {
     const r = await run({ function: { name: 'search_docs', arguments: '{"query":"alpha"}' } })
     const last = r.bodies.at(-1).messages.map((m) => String(m.content)).join('\n')
-    // Once for the priming retrieval, once for the first search — and no more.
-    expect(last.match(/"id":"a#one"/g)).toHaveLength(2)
+    // Spelled out once, by the priming retrieval. The first search found only
+    // that chunk again, so it names the id and says so (engine-spec 040); every
+    // repeat after it points back.
+    expect(last.match(/"id":"a#one"/g)).toHaveLength(1)
+    expect(last).toMatch(/"ids":\["a#one"\]/)
+    expect(last).toMatch(/already above/)
     expect(last).toMatch(/same call as an earlier step/)
   })
 

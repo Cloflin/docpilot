@@ -578,8 +578,11 @@ async function emit() {
       return { ...head, text: w.text, ...(w.truncated ? { truncated: TRUNCATED_NOTE } : {}) }
     })
 
+    // The query the gate scored rides with its results, as in the harness —
+    // engine-spec 040 — and it is the composed text only where that channel won,
+    // which is also the only time session.js hands the harness one.
     const observations = [
-      { tool: 'search_docs', note: OBS_NOTE, scope: scope.label, results },
+      { tool: 'search_docs', query: (g.channel === 'composed' && composedQuery) || question, note: OBS_NOTE, scope: scope.label, results },
       { tool: 'system', note: finalNote(question) },
     ]
     // The same flag the harness reads off the same field, so the bench's

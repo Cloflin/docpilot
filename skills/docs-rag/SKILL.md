@@ -1098,6 +1098,12 @@ agents, and fix a vocabulary gap in the section that answers.
   text, one RRF merging two different queries, on exactly the follow-up the
   composed channel exists to rescue. A change that moves one half without the
   other reopens it.
+- **The priming search is a search the turn has already made** (engine-spec
+  040). Its observation names its `query` — that same `composedQuery || question`
+  — and so does every search after it. Asked for again, by that text or with no
+  `query` and no `kind`, it is answered from the turn's cache as a repeated call
+  and refunded. A search whose every result is already spelled out comes back as
+  one line — query, note, ids — and is charged.
 - **The composed antecedent has one spelling and at most two hops.**
   `chainAntecedent` (gate.js) decides how far back — the previous answered
   question, and the one before it only where that turn ITSELF won on `channel:
