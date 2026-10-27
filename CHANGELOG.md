@@ -7,6 +7,64 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 2.0.1 — 2026-10-27
+
+`gpt-6-luna` is the model OpenAI names as the replacement for `gpt-4o-mini`.
+On 2.0.0 it could not answer one question. `chat: {provider: 'openai', model:
+'gpt-6-luna'}` failed in three ways at once, and the panel said the AI models
+were not reachable. This release makes it the default `openai` model. It also
+lets you configure a model that this package has not heard of.
+
+### Fixed
+
+**A refusal that names its cause gets that one change, not a failed turn.**
+OpenAI's reasoning models refuse fields that other models take, and the 400
+names the field. They refuse `max_tokens` ("use `max_completion_tokens`
+instead"). They refuse `temperature` and `top_p` unless reasoning is off. And
+`gpt-6-luna` refuses function tools on Chat Completions unless
+`reasoning_effort` is `'none'`. The transport now reads the field that the 400
+names. It then asks the same model again with the one change that the refusal
+asks for:
+
+- a refused ceiling field is spelled the other way;
+- a refused `temperature` or `top_p` is not sent, and neither is the other one;
+- a refusal that asks for `'none'` gets `reasoning_effort: 'none'` on each
+  search step, and the answer keeps `chat.reasoning`.
+
+Each change costs one extra request, once. The model keeps the change until the
+page reloads; on a server install, until the server restarts. `gpt-6-luna` costs
+two extra requests on a reader's first question and none after that. A refusal
+that names nothing, such as OpenRouter's `Filter by Parameters`, walks the same
+two rungs in the same order as before.
+
+**`provider: 'openai'` sends `max_completion_tokens` to every model.** OpenAI's
+endpoint takes that field from every model it serves, and its reasoning models
+take no other field. So the model-name pattern is not used for OpenAI. Every
+other service keeps the pattern, which now matches `gpt-5` to `gpt-9`. Before
+this release it stopped at `gpt-5`, so `gpt-6-luna` got `max_tokens`.
+
+**The capability probe uses the same changes.** The probe sent tools and
+`temperature: 0`, and no reasoning field, so `gpt-6-luna` refused it. The probe
+read that refusal as "the model did not answer", so it asked again on every
+turn. Now it makes the change that the refusal names and asks again. The turn
+after the probe starts with that change.
+
+**`doctor` prints the ceiling field that the request will carry**, from the
+adapter's own rule. Before, `doctor` used a copy of the pattern, and the copy
+also stopped at `gpt-5`.
+
+### Changed
+
+**`gpt-6-luna` is the default `openai` model**, in place of `gpt-4o-mini`.
+OpenAI removes `gpt-4o-mini` from its API on 2027-01-14 and recommends
+`gpt-6-luna` as the replacement. `gpt-6-luna` costs less per token: $0.10 /
+$0.50 per million input / output tokens, against $0.15 / $0.60. A config that
+names its model does not change. `chat: {provider: 'openai'}` with no model, and
+`provider: 'auto'` with an `OPENAI_API_KEY`, now give `gpt-6-luna`. The examples
+in the documentation use it too. `gpt-6-luna` is a reasoning model, and it
+reasons at `medium` unless the request sets a level. So an answer takes longer
+than on `gpt-4o-mini`. `chat.reasoning: 'low'` makes it faster.
+
 ## 2.0.0 — 2026-10-26
 
 Two installs, measured, and a panel that opens three ways — from a bar at the
