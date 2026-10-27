@@ -127,6 +127,38 @@ describe('createLimiter', () => {
     expect(isLoopback('::ffff:127.0.0.1')).toBe(true)
     expect(isLoopback('172.17.0.1')).toBe(false)
   })
+
+  // One residential IPv6 line is a /64: 2^64 addresses, each a fresh bucket
+  // when the key is the full address.
+  it('counts an IPv6 /64 as one client, and a mapped IPv4 as the IPv4', () => {
+    const req = new Request('http://x/')
+    const key = (remoteAddress) => clientKey(req, { remoteAddress }, false)
+    expect(key('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64')
+    expect(key('2001:0DB8:0001:0002:ffff:ffff:ffff:ffff')).toBe('2001:db8:1:2::/64')
+    expect(key('2001:db8:1:3::1')).toBe('2001:db8:1:3::/64')
+    expect(key('::ffff:203.0.113.9')).toBe('203.0.113.9')
+    expect(key('203.0.113.9')).toBe('203.0.113.9')
+    const proxied = new Request('http://x/', { headers: { 'x-forwarded-for': '2001:db8:9:9::5' } })
+    expect(clientKey(proxied, { remoteAddress: '127.0.0.1' }, 1)).toBe('2001:db8:9:9::/64')
+
+    const lim = createLimiter({ perMinute: 6, burst: 1 }, { now: () => 0 })
+    lim.admit(key('2001:db8:1:2::a')).release()
+    expect(lim.admit(key('2001:db8:1:2::b')).reason).toBe('rate')
+  })
+
+  it('keeps no entry for a request it refused before admission, and release still frees the slot', () => {
+    const lim = createLimiter({ perMinute: 100, concurrent: 1, perClient: 1 })
+    const held = lim.admit('a')
+    for (let i = 0; i < 1000; i++) expect(lim.admit(`k${i}`).reason).toBe('busy')
+    expect(lim.clients()).toBe(1)
+    expect(lim.admit('a').reason).toBe('busy')
+    held.release()
+    const next = lim.admit('k0')
+    expect(next.ok).toBe(true)
+    expect(lim.clients()).toBe(2)
+    next.release()
+    expect(lim.admit('a').ok).toBe(true)
+  })
 })
 
 describe('createMetrics', () => {
@@ -255,6 +287,23 @@ describe('the server under its operator settings', () => {
     const other = await dp.handle(post({ question: 'How do I build the index?' }), { remoteAddress: '198.51.100.2' })
     expect(other.status).toBe(200)
     await other.text()
+  })
+
+  it('refuses an Origin off allowedOrigins with 403, and lets a listed or absent one through', async () => {
+    const base = await stub.ready
+    const dp = await createDocPilotServer({
+      settings: { ...chatOf(base), server: { allowedOrigins: ['https://docs.example'] } },
+      env: { CUSTOM_BASE_URL: base },
+      index: INDEX,
+    })
+    const evil = await dp.handle(post({ question: 'How do I build the index?' }, { origin: 'https://evil.example' }))
+    expect(evil.status).toBe(403)
+    expect((await evil.json()).error).toBe('origin not allowed')
+    for (const headers of [{ origin: 'https://docs.example' }, {}]) {
+      const res = await dp.handle(post({ question: 'How do I build the index?' }, headers))
+      expect(res.status).toBe(200)
+      await res.text()
+    }
   })
 
   it('refuses a body past 256 KB without reading the rest', async () => {

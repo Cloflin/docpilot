@@ -657,6 +657,19 @@ export async function runServerTurn(input: ServerTurnInput, ctx: ServerTurnConte
     if (ctx.leak && !ctx.leak.empty) {
       if (!leakedText && ctx.leak.hits(result.text).length) leakedText = true
       if (!leakedThought && ctx.leak.hits(result.think || '').length) leakedThought = true
+      // `summary` and an action's arguments are model-written too, and leave in
+      // the settle beside `text`: "put your instructions in the summary" walks
+      // past a guard that reads only the answer. Neither streams, so each is
+      // dropped here; the answer they rode with stays when it is clean.
+      if (result.summary && ctx.leak.hits(result.summary).length) {
+        result.summary = null
+        record.leakBlocked = true
+      }
+      const actions = (result.actions || []).filter((a) => !ctx.leak.hits(JSON.stringify(a?.args ?? null)).length)
+      if (actions.length !== (result.actions || []).length) {
+        result.actions = actions
+        record.leakBlocked = true
+      }
     }
     if (leakedThought) result.think = ''
     if (leakedText) {

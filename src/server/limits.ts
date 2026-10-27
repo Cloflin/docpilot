@@ -21,10 +21,11 @@
  *
  * THE CLIENT IS THE SOCKET'S ADDRESS, never a header, unless `trustProxy` says a
  * proxy in front rewrites `X-Forwarded-For` — a header the client writes is a
- * limit the client chooses. On a runtime that gives no address (an edge
- * `handle(Request)` with no `info`), every request shares one bucket: the limit
- * still holds the endpoint, it just cannot tell readers apart, and the docs say
- * to put the edge's own limiter in front.
+ * limit the client chooses. An IPv6 address counts as its /64 (`addressKey`).
+ * On a runtime that gives no address (an edge `handle(Request)` with no
+ * `info`), every request shares one bucket: the limit still holds the
+ * endpoint, it just cannot tell readers apart, and the docs say to put the
+ * edge's own limiter in front.
  *
  * In memory, per process: a restart forgets, and N replicas allow N times the
  * rate. Both are stated in the guide; a shared store is the proxy's job.
@@ -75,11 +76,13 @@ export function createLimiter(settings: LimitSettings | false, { now = Date.now 
   function admit(key: string): Admission {
     const t = now()
     if (++admitted % 256 === 0) prune(t)
+    // A client is REMEMBERED ONLY ONCE ADMITTED. A newcomer is judged on a fresh
+    // record that is stored on the way out, so a flood of refused requests from
+    // new addresses — every one `busy` while the server is full — costs no
+    // memory: the map holds the clients that ran a turn, not every one that asked.
     let c = clients.get(key)
-    if (!c) {
-      c = { tokens: burst, at: t, day: dayOf(t), dayCount: 0, running: 0 }
-      clients.set(key, c)
-    }
+    const fresh = !c
+    if (fresh) c = { tokens: burst, at: t, day: dayOf(t), dayCount: 0, running: 0 }
     c.tokens = Math.min(burst, c.tokens + (t - c.at) * refillPerMs)
     c.at = t
     if (c.day !== dayOf(t)) {
@@ -97,6 +100,7 @@ export function createLimiter(settings: LimitSettings | false, { now = Date.now 
     if (running >= concurrent || c.running >= perClient) {
       return { ok: false, release: NOOP, status: 503, reason: 'busy', retryAfterS: 2 }
     }
+    if (fresh) clients.set(key, c)
     c.tokens -= 1
     c.dayCount++
     c.running++
@@ -133,9 +137,52 @@ export function clientKey(request: Request, info: { remoteAddress?: string | nul
       .map((s) => s.trim())
       .filter(Boolean)
     const fromProxy = chain[chain.length - hops]
-    if (fromProxy) return fromProxy
+    if (fromProxy) return addressKey(fromProxy)
   }
-  return info?.remoteAddress || 'anonymous'
+  return addressKey(info?.remoteAddress) || 'anonymous'
+}
+
+/**
+ * One client per IPv6 /64, and an IPv4-mapped address as its IPv4.
+ *
+ * A /64 is what one residential line or one cloud VM is handed, so keyed on the
+ * full address one client holds 2^64 keys, each with a fresh burst, day and
+ * `perClient` slot — every ceiling above, bypassed by rotating the low bits.
+ * `::ffff:a.b.c.d` is how a dual-stack socket reports an IPv4 peer, and the same
+ * reader must not count once per spelling. A string that is not an address (an
+ * edge's own id) is kept as given.
+ */
+export function addressKey(addr: string | null | undefined): string {
+  const a = String(addr ?? '')
+    .trim()
+    .replace(/^\[|\]$/g, '')
+    .replace(/%.*$/, '')
+  if (!a.includes(':')) return a
+  const halves = a.split('::')
+  if (halves.length > 2) return a
+  const groups = (part: string) => {
+    const out = part ? part.split(':') : []
+    const last = out[out.length - 1]
+    // An embedded IPv4 tail (`::ffff:1.2.3.4`, `64:ff9b::1.2.3.4`) is two groups.
+    if (last && last.includes('.')) {
+      const o = last.split('.').map(Number)
+      if (o.length !== 4 || o.some((n) => !(n >= 0 && n <= 255))) return null
+      out.splice(-1, 1, ((o[0] << 8) | o[1]).toString(16), ((o[2] << 8) | o[3]).toString(16))
+    }
+    return out
+  }
+  const head = groups(halves[0])
+  const tail = halves.length === 2 ? groups(halves[1]) : []
+  if (!head || !tail) return a
+  const fill = 8 - head.length - tail.length
+  if (halves.length === 2 ? fill < 1 : fill !== 0) return a
+  const all = [...head, ...Array(Math.max(fill, 0)).fill('0'), ...tail]
+  if (!all.every((g) => /^[0-9a-f]{1,4}$/i.test(g))) return a
+  const n = all.map((g) => parseInt(g, 16))
+  if (n.slice(0, 5).every((x) => x === 0) && n[5] === 0xffff) {
+    return [n[6] >> 8, n[6] & 255, n[7] >> 8, n[7] & 255].join('.')
+  }
+  return `${n.slice(0, 4).map((x) => x.toString(16)).join(':')}::/64`
 }
 
 /** Loopback, in the spellings `node:net` reports it — IPv4, IPv6, mapped IPv4. */
