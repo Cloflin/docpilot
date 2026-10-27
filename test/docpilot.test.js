@@ -13490,7 +13490,14 @@ describe('the environment, and who wins', () => {
       DUP: 'second',
     }
     expect(parseDotenv(text)).toEqual(want)
-    if (typeof util.parseEnv === 'function') expect(util.parseEnv(text)).toEqual(want)
+    if (typeof util.parseEnv !== 'function') return
+    // Node 20's own parser joins a line with no `=` to the key on the next
+    // line — `NOEQUALS\nWINDOWS` — where 22 and later skip it, as the fallback
+    // does. The CLI reads what Vite reads on each version, so the difference is
+    // pinned here rather than hidden: those two shapes pass, and any third fails.
+    const native = util.parseEnv(text)
+    const { WINDOWS, ...rest } = want
+    expect(native).toEqual('NOEQUALS\nWINDOWS' in native ? { ...rest, 'NOEQUALS\nWINDOWS': WINDOWS } : want)
   })
 
   it('is applied by the launcher, so the two commands that never read it see it', async () => {
