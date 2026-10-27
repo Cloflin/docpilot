@@ -2245,6 +2245,38 @@ describe('citation markers', () => {
     expect(renderAnswer('mid-stream [1]', known).html).toContain('[1]')
   })
 
+  /**
+   * A LINK THAT LOOKS LIKE A CITATION IS ONE. `[1](/pricing)` and a reference
+   * definition `[1]: /pricing` both reach a known page, so the link filter kept
+   * them — and rendered a `1` the reader takes for source 1, pointing at a page
+   * no citation named. Both now go through the marker path, which can only
+   * point at the row the number belongs to.
+   */
+  it('reads a link whose text is a citation number as that citation, wherever the model pointed it', () => {
+    const pages = new Set([...known, '/pricing'])
+    const spoofs = ['claim [1](/pricing)', 'claim [[1]](/pricing)', 'claim [1]\n\n[1]: /pricing', 'claim [ 1 ](/pricing "Source 1")']
+    for (const text of spoofs) {
+      const html = renderAnswer(text, pages, sources).html
+      expect(html, text).not.toContain('/pricing')
+      expect(html, text).toContain('href="/editor-configuration/image-storage#aws-s3-bucket"')
+      expect(html, text).toContain('data-cite="1"')
+    }
+    // The number decides the row, and a number with no row is deleted.
+    expect(renderAnswer('x [2](/pricing)', pages, sources).html).toContain('data-cite="2"')
+    expect(renderAnswer('x [4](/pricing)', pages, sources).html).not.toMatch(/pricing|data-cite|\[4\]/)
+    // Mid-stream, before any citation is validated, it is the text it says.
+    const streaming = renderAnswer('claim [1](/pricing)', pages).html
+    expect(streaming).not.toContain('/pricing')
+    expect(streaming).toContain('[1]')
+  })
+
+  it('keeps a link to a known page that is not a number, inline or by reference', () => {
+    const pages = new Set([...known, '/pricing'])
+    expect(renderAnswer('see [the pricing page](/pricing)', pages, sources).html).toContain('<a href="/pricing">the pricing page</a>')
+    expect(renderAnswer('see [pricing][1]\n\n[1]: /pricing', pages, sources).html).toContain('<a href="/pricing">pricing</a>')
+    expect(renderAnswer('see [plan 2 limits](/pricing)', pages, sources).html).toContain('<a href="/pricing">plan 2 limits</a>')
+  })
+
   it('points two citations at one row when they resolve to the same section', () => {
     // What the retriever hands back when a long section was split in two.
     const shared = [sources[0], { ...sources[0] }]

@@ -232,6 +232,49 @@ function linkMarkers(tokens, sources) {
 }
 
 /**
+ * A link whose text is a citation number IS a citation, wherever it points.
+ *
+ * `[1](/pricing)`, and `[1]` beside a definition `[1]: /pricing`, both reach a
+ * known page, so the filter below keeps them — and the reader sees a `1` that
+ * reads as source 1 and opens a page no citation named. Turned back into the
+ * `[n]` it shows, it goes through `linkMarkers`, the one path that may point a
+ * number anywhere: at its own row, or nowhere. Answer-only; a passage has no
+ * citations, and a corpus `[1](…)` is its author's footnote.
+ */
+const CITATION_TEXT = /^\[?\s*(\d+)\s*\]?$/
+
+function markerLinks(tokens) {
+  for (const token of tokens) {
+    if (!token.children) continue
+    const kids = token.children
+    const out = []
+    for (let i = 0; i < kids.length; i++) {
+      let close = -1
+      let text = ''
+      if (kids[i].type === 'link_open') {
+        for (let j = i + 1; j < kids.length; j++) {
+          if (kids[j].type === 'link_close') {
+            close = j
+            break
+          }
+          if (kids[j].type === 'text' || kids[j].type === 'code_inline') text += kids[j].content
+        }
+      }
+      const m = close > 0 && CITATION_TEXT.exec(text.trim())
+      if (!m) {
+        out.push(kids[i])
+        continue
+      }
+      const t = new Token('text', '', 0)
+      t.content = `[${m[1]}]`
+      out.push(t)
+      i = close
+    }
+    token.children = out
+  }
+}
+
+/**
  * Every link in the stream, tested against the manifest — UI-SPEC 11.
  *
  * Shared by both renderers below, and shared rather than copied on purpose:
@@ -288,6 +331,7 @@ function filterLinks(tokens, known) {
  */
 export function renderAnswer(text, known, sources = []) {
   const tokens = md.parse(String(text || ''), {})
+  markerLinks(tokens)
   const delinked = filterLinks(tokens, known)
 
   if (sources.length) linkMarkers(tokens, sources)
