@@ -94,11 +94,32 @@ function write(list, storage) {
 }
 
 /**
+ * The reader's own words on a row, and what the local copy drops when the site
+ * keeps no history.
+ *
+ * `history.enabled: false` promises that the reader's questions do not stay on
+ * their machine, and this log is a second copy of exactly those. Nothing here
+ * reads them back: the revision counter lives on the turn, and the list is read
+ * only to replace a message's earlier row. What a text-free row keeps — the
+ * ids, the verdict, the citations — is what the console export still needs.
+ */
+const TEXT_FIELDS = ['question', 'quote', 'answer', 'comment']
+
+const hasText = (row) => TEXT_FIELDS.some((k) => row?.[k] != null)
+
+function withoutText(row) {
+  const out = {...row}
+  for (const k of TEXT_FIELDS) delete out[k]
+  return out
+}
+
+/**
  * @param {Record<string, any>} entry
  * @param {object} [o]
  * @param {string|null} [o.feedbackEndpoint]
  * @param {string} [o.send]
  * @param {boolean} [o.debug]
+ * @param {boolean} [o.keepText] false: the local copy drops the reader's words — see `TEXT_FIELDS`
  * @param {Storage} [o.storage] injected in tests; resolved per call otherwise
  * @param {typeof fetch} [o.fetchImpl] ditto
  */
@@ -108,12 +129,14 @@ export function record(
     feedbackEndpoint,
     send = FEEDBACK_DEFAULTS.send,
     debug = false,
+    keepText = true,
     storage,
     fetchImpl,
   }: {
     feedbackEndpoint?: string | null
     send?: string
     debug?: boolean
+    keepText?: boolean
     storage?: Storage | null
     fetchImpl?: typeof fetch
   } = {},
@@ -168,7 +191,9 @@ export function record(
   const about = row.verdict ?? row.retracted ?? null
   delete row.retracted
 
-  list.push(row)
+  // The LOCAL copy only: the request below is governed by `feedback.send`,
+  // which the reader is told about in the panel's own disclaimer.
+  list.push(keepText ? row : withoutText(row))
   write(list, storage)
 
   const allowed = SENDS[send] || SENDS[FEEDBACK_DEFAULTS.send]
@@ -198,6 +223,25 @@ export function record(
 
 export function all(storage?: Storage | null) {
   return read(storage)
+}
+
+/** "Delete all" — the history's own erasure reaches this copy of it too. */
+export function clear(storage?: Storage | null) {
+  try {
+    storageOf(storage)?.removeItem(KEY)
+  } catch {
+    /* private mode — there was nothing stored to erase */
+  }
+}
+
+/**
+ * The rows already stored, without the reader's words — for a site that has
+ * switched history off. Writes only when a row still carries text, because it
+ * runs on every `configure()`.
+ */
+export function forgetText(storage?: Storage | null) {
+  const list = read(storage)
+  if (Array.isArray(list) && list.some(hasText)) write(list.map(withoutText), storage)
 }
 
 export function exportJsonl(storage?: Storage | null) {

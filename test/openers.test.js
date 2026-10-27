@@ -1387,3 +1387,103 @@ describe('openers — a baked answer is revealed, not placed', () => {
     expect(turn.answerText).toBe(TEXT)
   })
 })
+
+/**
+ * A TURN OWNS WHAT IT STARTED — the controller, `busy` and `status`.
+ *
+ * `finishTurn` released all three for whichever turn called it. A reveal is not
+ * busy, so a question asked during one is accepted and takes the controller —
+ * and the reveal's own settle, a microtask later, took it away again: the new
+ * turn ran with `busy` false, the composer enabled, and a Stop that aborted
+ * nothing. Two submits in one tick were the same hole from the other side.
+ *
+ * The transport hangs until it is aborted, so the only way either turn below
+ * settles is through the Stop the reader pressed.
+ */
+describe('openers — a question asked during the reveal owns its turn', () => {
+  const ENV = { OPENROUTER_API_KEY: 'k' }
+  const OPENER = 'How do I configure the refusal gate?'
+  const TEXT = 'The gate refuses below tau. [1]'
+
+  const setup = async () => {
+    const { resolveDocPilot, themeDocPilot } = await import('../src/config.js')
+    session.configure(
+      {
+        docPilot: themeDocPilot(
+          // `embed: false`, so the live turn's first request is the model call.
+          resolveDocPilot({ suggestions: { questions: [OPENER] }, embed: false }, ENV),
+          ENV,
+        ),
+      },
+      '/gate',
+      'en',
+    )
+    session.state.turns = []
+    session.state.busy = false
+    session.state.degraded = false
+    session.state.index = indexWith({
+      configHash: questionsHash([OPENER]),
+      embedModel: null,
+      dims: 0,
+      matchTau: 0.75,
+      entries: [entry(OPENER, { answer: { lang: 'en', text: TEXT, citations: ['gate#one'] } })],
+    })
+    __setIndex(Promise.resolve(session.state.index))
+    vi.stubGlobal(
+      'fetch',
+      (url, init) =>
+        new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+          )
+        }),
+    )
+  }
+
+  afterEach(() => {
+    __setIndex(null)
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps busy, status and Stop for the question that interrupted a reveal', async () => {
+    vi.useFakeTimers()
+    await setup()
+    const chip = session.submit(OPENER)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(session.state.turns.at(-1).streaming).toBe(true)
+
+    const asked = session.submit('the sidebar is generated from what')
+    await vi.advanceTimersByTimeAsync(10)
+    await chip
+    const [revealed, live] = session.state.turns
+    // The reveal completed — Stop's meaning for a reveal — and let go.
+    expect(revealed.state).toBe('complete')
+    // The question after it still holds the panel.
+    expect(['retrieving', 'thinking']).toContain(live.state)
+    expect(session.state.busy).toBe(true)
+    expect(session.state.status).not.toBe(null)
+
+    // And Stop reaches it.
+    session.stop()
+    await vi.runAllTimersAsync()
+    await asked
+    expect(['aborted', 'no-answer']).toContain(live.state)
+    expect(session.state.busy).toBe(false)
+  })
+
+  it('takes one turn from two submits in one tick, not a refusal and a turn', async () => {
+    await setup()
+    const first = session.submit('the refusal gate scores which channels')
+    const second = session.submit('the sidebar is generated from what')
+    // A macrotask: both have resumed from `ensureIndex` by now, whatever they did.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(session.state.turns.map((t) => t.question)).toEqual(['the refusal gate scores which channels'])
+    expect(['retrieving', 'thinking']).toContain(session.state.turns[0].state)
+    expect(session.state.busy).toBe(true)
+
+    session.stop()
+    await Promise.all([first, second])
+    expect(session.state.busy).toBe(false)
+  })
+})

@@ -6596,6 +6596,76 @@ describe('history — the off switch clears', () => {
     __setHistoryForTests(null)
     configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
   })
+
+  /**
+   * THE FEEDBACK LOG IS A SECOND COPY OF THE SAME QUESTIONS.
+   *
+   * Every vote writes the question, the answer, the quote and the comment to
+   * `docpilot:feedback`, endpoint or none. "Delete all" and the off switch both
+   * erased `docpilot:history` and left that key standing — readable by any
+   * script on the origin through `window.__docPilot.feedback()`.
+   */
+  const votedTurn = () => ({
+    id: 'm_1',
+    question: 'How do I authenticate?',
+    answerText: 'Use a bearer token.',
+    quote: 'a passage',
+    sources: [],
+    reasons: [],
+    comment: '',
+    scope: { kind: 'all', label: 'All docs', paths: [] },
+  })
+
+  it('"Delete all" erases the feedback log along with the archive', () => {
+    const local = fake()
+    vi.stubGlobal('localStorage', local)
+    __setHistoryForTests(createHistory({ local: fake(), session: fake(), now: () => 1 }))
+    configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
+    const turn = votedTurn()
+    sessionState.turns = [turn]
+    session.vote(turn, 'down')
+    expect(local.getItem('docpilot:feedback')).toContain('How do I authenticate?')
+
+    session.clearHistory()
+    expect(local._map.has('docpilot:feedback')).toBe(false)
+
+    vi.unstubAllGlobals()
+    __setHistoryForTests(null)
+  })
+
+  it('keeps the vote and none of the reader’s words while history is off', () => {
+    const local = fake()
+    // A row from before the switch, when the site still kept history.
+    local.setItem(
+      'docpilot:feedback',
+      JSON.stringify([{ messageId: 'm_0', revision: 0, verdict: 'up', question: 'q0', answer: 'a0', quote: 'p0', comment: 'c0' }]),
+    )
+    const posts = []
+    vi.stubGlobal('localStorage', local)
+    vi.stubGlobal('fetch', async (url, init) => {
+      posts.push(JSON.parse(init.body))
+      return { ok: true }
+    })
+    configure({
+      docPilot: themeDocPilot(resolveDocPilot({ history: { enabled: false }, feedbackEndpoint: '/feedback' })),
+    })
+    expect(JSON.parse(local.getItem('docpilot:feedback'))).toEqual([{ messageId: 'm_0', revision: 0, verdict: 'up' }])
+
+    const turn = votedTurn()
+    sessionState.turns = [turn]
+    session.vote(turn, 'down')
+    turn.comment = 'the token is in the wrong header'
+    session.submitFeedback(turn)
+
+    const row = JSON.parse(local.getItem('docpilot:feedback')).find((r) => r.messageId === 'm_1')
+    expect(row).toMatchObject({ verdict: 'down', revision: 1 })
+    for (const k of ['question', 'answer', 'quote', 'comment']) expect(row, k).not.toHaveProperty(k)
+    // The local copy only: what leaves is still `feedback.send`'s decision.
+    expect(posts.at(-1)).toMatchObject({ question: 'How do I authenticate?', comment: 'the token is in the wrong header' })
+
+    vi.unstubAllGlobals()
+    configure({ docPilot: themeDocPilot(resolveDocPilot({})) })
+  })
 })
 
 /**

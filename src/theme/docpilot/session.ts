@@ -363,6 +363,17 @@ export const state: SessionState = reactive({
 })
 
 let controller = null
+/**
+ * The turn that holds `controller`, `busy` and `status` — the one turn whose
+ * `finishTurn` may release them.
+ *
+ * A reveal is not busy, so a question asked during one is accepted: its
+ * `stop()` completes the reveal, and the reveal's settle lands a microtask
+ * AFTER the new turn has taken the controller. Released unconditionally, that
+ * settle cleared the new turn's `busy`, `status` and controller — a turn
+ * running with the composer enabled and a Stop that aborted nothing.
+ */
+let activeTurn = null
 let sessionId = null
 let budget = null
 
@@ -583,9 +594,12 @@ export function configure(themeConfig, path, lang) {
   if (!state.config.prompt.appendMaxChars) state.config.prompt.allowAppend = false
   // The same rule as prompt.show directly above, applied to a store that
   // OUTLIVES the tab: a feature the reader can no longer see must not keep their
-  // questions on their machine, so switching it off is also an erasure.
-  if (!state.config.history.enabled) store.clear()
-  else store.setLimits({ conversations: state.config.history.maxConversations })
+  // questions on their machine, so switching it off is also an erasure — of the
+  // feedback log's copy of those questions as well.
+  if (!state.config.history.enabled) {
+    store.clear()
+    feedback.forgetText()
+  } else store.setLimits({ conversations: state.config.history.maxConversations })
   if (path) state.currentPath = path
   if (lang) state.lang = lang
   sessionId = sessionId || newId('s')
@@ -1005,6 +1019,9 @@ export function removeConversation(id) {
 export function clearHistory() {
   stop()
   store.clear()
+  // Every vote wrote the question, the answer and the comment under its own
+  // key. An erasure that left that copy behind would be a button that lies.
+  feedback.clear()
   state.turns = []
   state.conversationId = null
   state.conversationStale = false
@@ -1872,7 +1889,9 @@ export async function submit(question, { quote = '' } = {}) {
   const q = String(question || '').trim()
   if (!q || state.busy) return
   await ensureIndex()
-  if (state.degraded) return
+  // `busy` again, after the await: two submits in one tick both passed the line
+  // above, and the second aborted the first into a false "couldn't find this".
+  if (state.degraded || state.busy) return
 
   const frozen = scopeApi.freeze(state.scope)
 
@@ -2025,6 +2044,7 @@ export async function submit(question, { quote = '' } = {}) {
     stop()
     controller = new AbortController()
     const turn = makeTurn(clean, frozen, selected)
+    activeTurn = turn
     turn.opener = { matched: opener.matched, score: opener.score, baked: true }
     turn.gate = opener.entry.gate
     const started = performance.now()
@@ -2060,6 +2080,7 @@ export async function submit(question, { quote = '' } = {}) {
   const signal = controller.signal
 
   const turn = makeTurn(q, frozen, selected)
+  activeTurn = turn
   // Provenance for a turn that skipped the embedder — the evidence half of
   // the bake fired even though the answer half did not (wrong language, a quote
   // attached, a scope narrowed, or no answer was baked at all).
@@ -3033,12 +3054,25 @@ async function submitRemote(q, frozen, selected) {
   controller = new AbortController()
   const signal = controller.signal
   const turn = makeTurn(q, frozen, selected)
+  activeTurn = turn
   state.turns.push(turn)
   state.busy = true
   state.status = { phase: 'searching' }
   const started = performance.now()
   let settled = null
   let failure = null
+  /**
+   * The thread's id, minted BEFORE its first turn leaves — engine-spec 033.
+   *
+   * The server signs every answer under the conversation id it was sent, and
+   * checks each returned turn against the id of the request carrying it. Turn 1
+   * used to go out under its own message id, because the archive only names a
+   * thread once something in it settles; `saveCurrent` then named it, turn 2
+   * went out under that name, and turn 1's answer failed its MAC on every
+   * follow-up — demoted to a quote for the rest of the conversation. The
+   * archive keeps an id it is handed, so the name chosen here is the row's too.
+   */
+  if (!state.conversationId) state.conversationId = newId('c')
 
   const adopt = (chunks) => {
     for (const c of chunks || []) if (c?.id) state.index.byId.set(c.id, c)
@@ -3050,7 +3084,7 @@ async function submitRemote(q, frozen, selected) {
       state.config.server.endpoint,
       {
         messageId: turn.id,
-        conversationId: state.conversationId || state.turns[0]?.id || turn.id,
+        conversationId: state.conversationId,
         question: q,
         quote: selected,
         scope: { paths: frozen.kind === 'all' ? [] : frozen.paths || [] },
@@ -3081,6 +3115,75 @@ async function submitRemote(q, frozen, selected) {
       },
     )
     if (!settled) throw Object.assign(new Error(failure?.message || 'the server ended the turn without an answer'), failure || {})
+
+    // ── the settle, INSIDE the try ─────────────────────────────────────────
+    //
+    // It sat below the catch, and a settle event the panel could not read —
+    // `sources: [null]`, a chunk missing its fields — threw with nothing left to
+    // call `finishTurn`: `busy` stayed true, every later submit returned on it,
+    // and Stop had no controller to reach. The reader had to reload. Here it
+    // lands on the catch below, as the error its local twin in `submit` is.
+    const p = settled
+    turn.gate = p.gate || null
+    if (p.outcome === 'answer' || p.outcome === 'opener') {
+      if (p.opener) turn.opener = p.opener
+      turn.answerSig = typeof p.sig === 'string' ? p.sig : null
+      turn.iterations = p.iterations
+      turn.rejectedFetches = p.rejectedFetches
+      turn.support = p.support
+      turn.thought = p.think || ''
+      turn.thoughtSeconds = turn.thought ? Math.max(1, Math.round((performance.now() - started) / 1000)) : 0
+      if (!turn.thought) autoThought(turn, false)
+      if (p.notAnswerable) turn.notAnswerable = p.notAnswerable
+      if (p.tentative) turn.tentative = true
+      const sources = adopt(p.sources)
+      const baked = p.outcome === 'opener'
+      if (baked) {
+        state.busy = false
+        state.status = null
+      }
+      await settleAnswer(
+        turn,
+        { text: p.text, summary: p.summary, citations: p.citations || [], sources, actions: p.actions || [] },
+        started,
+        baked ? signal : null,
+      )
+      return
+    }
+    if (p.outcome === 'results') {
+      turn.results = p.results || []
+      turn.noStrongMatches = Boolean(p.noStrongMatches)
+      turn.state = 'results'
+      finishTurn(turn, started)
+      return
+    }
+    turn.state = 'no-answer'
+    if (p.outcome === 'social' || p.outcome === 'credential') {
+      // The panel caught both before sending; a server that catches one anyway
+      // answers with the same template the local branch uses.
+      const locale = localeOf(detectLanguage(q))
+      if (p.outcome === 'social') {
+        turn.social = {
+          kind: p.social?.kind,
+          copy: replyT(locale, `reply.social.${p.social?.kind}`, { product: state.config.product || 'this documentation' }),
+        }
+      } else {
+        turn.credential = { kinds: [], count: 1, copy: replyT(locale, 'reply.credential') }
+      }
+    }
+    if (p.notAnswerable) turn.notAnswerable = p.notAnswerable
+    const r = p.refusal || {}
+    turn.refusal = {
+      cause: r.cause || 'not-answerable',
+      scopeLabel: frozen.label,
+      scopeKind: frozen.kind,
+      pagesRead: r.pagesRead || 0,
+      pages: state.config.citations.pagesRead ? pagesReadFrom(r.emittedPaths || []) : undefined,
+      degraded: Boolean(r.degraded),
+      closest: r.closest || [],
+      closestAreOutside: Boolean(r.closestAreOutside),
+    }
+    finishTurn(turn, started)
   } catch (e) {
     if (signal.aborted) {
       if (turn.answerText) turn.answerHtml = renderAnswer(turn.answerText, knownPaths.value).html
@@ -3103,70 +3206,7 @@ async function submitRemote(q, frozen, selected) {
       if (state.debug) console.error('[docpilot] server turn failed', e)
     }
     finishTurn(turn, started)
-    return
   }
-
-  const p = settled
-  turn.gate = p.gate || null
-  if (p.outcome === 'answer' || p.outcome === 'opener') {
-    if (p.opener) turn.opener = p.opener
-    turn.answerSig = typeof p.sig === 'string' ? p.sig : null
-    turn.iterations = p.iterations
-    turn.rejectedFetches = p.rejectedFetches
-    turn.support = p.support
-    turn.thought = p.think || ''
-    turn.thoughtSeconds = turn.thought ? Math.max(1, Math.round((performance.now() - started) / 1000)) : 0
-    if (!turn.thought) autoThought(turn, false)
-    if (p.notAnswerable) turn.notAnswerable = p.notAnswerable
-    if (p.tentative) turn.tentative = true
-    const sources = adopt(p.sources)
-    const baked = p.outcome === 'opener'
-    if (baked) {
-      state.busy = false
-      state.status = null
-    }
-    await settleAnswer(
-      turn,
-      { text: p.text, summary: p.summary, citations: p.citations || [], sources, actions: p.actions || [] },
-      started,
-      baked ? signal : null,
-    )
-    return
-  }
-  if (p.outcome === 'results') {
-    turn.results = p.results || []
-    turn.noStrongMatches = Boolean(p.noStrongMatches)
-    turn.state = 'results'
-    finishTurn(turn, started)
-    return
-  }
-  turn.state = 'no-answer'
-  if (p.outcome === 'social' || p.outcome === 'credential') {
-    // The panel caught both before sending; a server that catches one anyway
-    // answers with the same template the local branch uses.
-    const locale = localeOf(detectLanguage(q))
-    if (p.outcome === 'social') {
-      turn.social = {
-        kind: p.social?.kind,
-        copy: replyT(locale, `reply.social.${p.social?.kind}`, { product: state.config.product || 'this documentation' }),
-      }
-    } else {
-      turn.credential = { kinds: [], count: 1, copy: replyT(locale, 'reply.credential') }
-    }
-  }
-  if (p.notAnswerable) turn.notAnswerable = p.notAnswerable
-  const r = p.refusal || {}
-  turn.refusal = {
-    cause: r.cause || 'not-answerable',
-    scopeLabel: frozen.label,
-    scopeKind: frozen.kind,
-    pagesRead: r.pagesRead || 0,
-    pages: state.config.citations.pagesRead ? pagesReadFrom(r.emittedPaths || []) : undefined,
-    degraded: Boolean(r.degraded),
-    closest: r.closest || [],
-    closestAreOutside: Boolean(r.closestAreOutside),
-  }
-  finishTurn(turn, started)
 }
 
 /**
@@ -3234,9 +3274,14 @@ function finishTurn(turn, started) {
   turn.promptStock = !state.instruction
   turn.addendumHash = instruction.hash(state.instruction)
   turn.addendumChars = state.instruction.length
-  state.busy = false
-  state.status = null
-  controller = null
+  // Only the owner releases — see `activeTurn`. A superseded reveal still
+  // settles below; it just no longer speaks for the turn that replaced it.
+  if (activeTurn === turn) {
+    state.busy = false
+    state.status = null
+    controller = null
+    activeTurn = null
+  }
   // What the turn just spent, and what that leaves the next one. Read once here
   // rather than watched: the count only ever moves during a turn, and a line
   // that changes under the reader's eye mid-answer is a distraction from the
@@ -3512,6 +3557,7 @@ function writeFeedback(turn, {retracted = null} = {}) {
       feedbackEndpoint: state.config.feedbackEndpoint,
       send: state.config.feedback.send,
       debug: state.debug,
+      keepText: state.config.history.enabled,
     },
   )
   turn.feedbackRevision = revision + 1

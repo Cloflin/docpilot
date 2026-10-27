@@ -6,7 +6,7 @@
  * reads. The model is a local OpenAI-shaped stub that cites the first chunk id
  * it was shown — enough to walk `runTurn` end to end without a network.
  */
-import { describe, it, expect, afterAll } from 'vitest'
+import { describe, it, expect, afterAll, afterEach, beforeEach, vi } from 'vitest'
 import { createServer } from 'node:http'
 import net from 'node:net'
 import fs from 'node:fs'
@@ -16,7 +16,10 @@ import path from 'node:path'
 import { createDocPilotServer, shellManifest } from '../src/server/index.js'
 import { parseTurnInput } from '../src/server/input.js'
 import { prune } from '../src/server/log.js'
+import { signAnswer, verifyAnswer } from '../src/server/sign.js'
 import { sseParser } from '../src/theme/docpilot/remote.js'
+import { createHistory } from '../src/theme/docpilot/history.js'
+import * as session from '../src/theme/docpilot/session.js'
 import { resolveDocPilot, themeDocPilot } from '../src/config.js'
 
 const INDEX = path.resolve('docs/public/rag')
@@ -347,5 +350,150 @@ describe('local models — what Ollama refuses, and the concession that answers 
     })
     expect(sent).toEqual([true, false])
     expect(JSON.stringify(reply)).toContain('hi')
+  })
+})
+
+/**
+ * THE PANEL'S HALF — `submitRemote`, driven through `session.submit`.
+ *
+ * Everything above is the server; this is what the panel makes of the stream it
+ * writes. `fetch` answers the way `createDocPilotServer` does: a `: ping`
+ * comment, one `event:`/`data:` frame per enqueue, the settle last — or the
+ * limiter's 429, whose body is the panel's own rate-limited shape. Every case
+ * ends on `busy`, because a turn that never lets go of it is a panel that takes
+ * no further question until the tab is reloaded.
+ */
+describe('the panel’s half — a turn the server runs', () => {
+  const SECRET = 'test-secret'
+  const encoder = new TextEncoder()
+  const frame = (event, data) => encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  const fake = () => {
+    const m = new Map()
+    return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }
+  }
+  const CHUNK = { id: 'a#x', path: '/a', anchor: 'x', title: 'Tokens', breadcrumb: 'Docs', text: 'The alpha widget takes a token.' }
+  const TEXT = 'Pass the token in a header [1].'
+
+  // Each request as the server received it, and the server's verdict on every
+  // prior answer it carried — `runServerTurn`'s own `trusted` line.
+  let sent
+  let reply
+
+  /** A stream as the server writes it; `hold` keeps it open until the turn is aborted. */
+  const stream = (init, events, { hold = false } = {}) =>
+    new Response(
+      new ReadableStream({
+        start(c) {
+          c.enqueue(encoder.encode(': ping\n\n'))
+          for (const [event, data] of events) c.enqueue(frame(event, data))
+          if (!hold) return c.close()
+          init.signal.addEventListener('abort', () => c.error(new DOMException('The operation was aborted.', 'AbortError')), {
+            once: true,
+          })
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    )
+
+  /** The answer `runServerTurn` settles with, signed the way it signs one. */
+  const answered = (body) => ({
+    outcome: 'answer',
+    text: TEXT,
+    summary: null,
+    citations: [CHUNK.id],
+    sources: [CHUNK],
+    actions: [],
+    gate: { pass: true, mode: 'lexical-only', channel: 'raw' },
+    think: '',
+    sig: signAnswer(SECRET, { conversationId: body.conversationId, question: body.question, answer: TEXT, citations: [CHUNK.id] }),
+  })
+
+  beforeEach(() => {
+    sent = []
+    reply = (body, init) => stream(init, [['phase', { phase: 'searching' }], ['settle', answered(body)]])
+    vi.stubGlobal('fetch', async (url, init) => {
+      if (String(url).endsWith('/manifest')) {
+        return new Response(JSON.stringify({ hash: 'h', pages: [{ path: '/a', title: 'Alpha' }], sections: [] }), { status: 200 })
+      }
+      const body = JSON.parse(init.body)
+      sent.push({ body, trusted: body.history.map((t) => verifyAnswer(SECRET, body.conversationId, t)) })
+      return reply(body, init)
+    })
+    session.__setHistoryForTests(createHistory({ local: fake(), session: fake() }))
+    session.configure({ docPilot: themeDocPilot(resolveDocPilot({ runtime: 'server' })) }, '/a', 'en')
+    Object.assign(session.state, { index: null, degraded: false, busy: false, turns: [], conversationId: null })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    session.__setHistoryForTests(null)
+    session.state.index = null
+  })
+
+  it('settles an answer with its sources, and lets go of the panel', async () => {
+    await session.submit('how do I pass the token')
+    const turn = session.state.turns.at(-1)
+    expect(turn.state).toBe('complete')
+    expect(turn.answerText).toBe(TEXT)
+    expect(turn.sources.map((s) => s.href)).toEqual(['/a#x'])
+    expect(turn.answerHtml).toContain('href="/a#x"')
+    expect(turn.answerSig).toBe(answered(sent[0].body).sig)
+    expect(session.state.busy).toBe(false)
+  })
+
+  /**
+   * engine-spec 033: the MAC covers the conversation id. Turn 1 used to go out
+   * under its own message id and turn 2 under the archive's, so the server
+   * demoted the first answer of every conversation to a quote.
+   */
+  it('sends one conversation id from the first turn, so turn 1’s answer still verifies on turn 2', async () => {
+    await session.submit('how do I pass the token')
+    await session.submit('and where does it go')
+    const [one, two] = sent
+    expect(one.body.conversationId).toMatch(/^c_/)
+    expect(two.body.conversationId).toBe(one.body.conversationId)
+    expect(two.trusted).toEqual([true])
+    // The archive keeps the id it was handed, so a reload sends it too.
+    expect(session.state.conversationId).toBe(one.body.conversationId)
+  })
+
+  it('ends the turn on a settle it cannot read, rather than staying busy', async () => {
+    reply = (body, init) => stream(init, [['settle', { ...answered(body), sources: [null] }]])
+    await expect(session.submit('how do I pass the token')).resolves.toBeUndefined()
+    expect(session.state.turns.at(-1).state).toBe('error')
+    expect(session.state.busy).toBe(false)
+
+    // And the panel takes the next question.
+    reply = (body, init) => stream(init, [['settle', answered(body)]])
+    await session.submit('and where does it go')
+    expect(sent).toHaveLength(2)
+    expect(session.state.turns.at(-1).state).toBe('complete')
+  })
+
+  it('keeps what was painted when the reader stops the stream', async () => {
+    reply = (body, init) => stream(init, [['stream', { start: true }], ['stream', { text: 'Pass the token' }]], { hold: true })
+    const done = session.submit('how do I pass the token')
+    await vi.waitFor(() => expect(session.state.turns.at(-1)?.answerText).toBe('Pass the token'))
+    session.stop()
+    await done
+    const turn = session.state.turns.at(-1)
+    expect(turn.state).toBe('aborted')
+    expect(turn.answerHtml).toContain('Pass the token')
+    expect(session.state.busy).toBe(false)
+  })
+
+  it('lands the limiter’s 429 on the rate-limited state, with the time answers resume', async () => {
+    const resetAt = Date.now() + 60_000
+    reply = () =>
+      new Response(JSON.stringify({ error: 'rate limited', rateLimit: { resetAt, limit: null } }), {
+        status: 429,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+      })
+    await session.submit('how do I pass the token')
+    const turn = session.state.turns.at(-1)
+    expect(turn.state).toBe('rate-limited')
+    expect(turn.rateLimit.resetAt).toBe(resetAt)
+    expect(session.resetLine(turn)).not.toBe('')
+    expect(session.state.busy).toBe(false)
   })
 })
