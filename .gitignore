@@ -3,73 +3,18 @@ dist/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 
-# The retrieval index is COMMITTED, deliberately, and this is the note that
-# stops someone re-adding it here.
-#
-# It is a build artifact everywhere else, and this repository is the exception
-# because it is also the deployed site. Building it during the deploy would spend
-# an embedding request per 32 chunks on every push — against a daily ceiling the
-# readers of this site share — so it is built locally and committed instead.
-# `test/docs-links.test.js` re-derives the index hash from the docs offline and
-# fails when the two disagree, which is what keeps a committed index honest.
-#
-# A CONSUMER's project should still ignore theirs: `docs/public/rag/` there is a
-# pure build artifact with no such tradeoff. `docpilot init` writes that entry.
-#
-# `rag-local/` is the SAME corpus embedded by a local bge-m3 at 1024 dimensions,
-# and it is committed too. It exists to be measured against: an eval run on the
-# weaker embedder is a floor, and a configuration that answers well there answers
-# at least as well on the stronger one. That comparison is only worth anything if
-# both indexes are the same corpus and both are reproducible, which is what
-# committing them buys — `test/docs-links.test.js` holds every manifest under
-# `docs/public/` to the corpus hash, so neither can drift.
-#
-# It was ignored because committing it looked like a way to ship keyword-only
-# retrieval by accident: the browser asks for the model the manifest names, and
-# OpenRouter does not serve `bge-m3`. That is a real failure and it is NOT
-# prevented by hiding the file — it is prevented by `readiness()`, which raises
-# "the index was built with X, which is not in <provider>'s free embedding pool"
-# as a hard `missing`, and by `scripts/vercel-build.sh`, which runs `doctor` and
-# turns it into a red build. Serving this index needs an embedder that serves
-# bge-m3; nothing else will get past that gate.
-
-# The index build's scratch siblings, never part of the committed index.
-# `docpilot index` writes the new index to `.<dir>.staging` beside `indexDir`
-# (here `docs/public/.rag.staging`) and swaps it in last, parking the old one
-# at `.<dir>.retired` for the length of two renames. Both are removed on exit,
-# Ctrl-C and SIGTERM; only a SIGKILL or a crash mid-build leaves one behind —
-# exactly where `git add -A` would commit it — and the next build removes it.
 .*.staging/
 .*.retired/
 
 .env
 .env.local
 *.log
-
-# Repo-internal scan output, and one design note kept in Russian for its author.
 CLAUDE-SECURITY-RESULTS.md
 ui-specs/IDEAS.ru.md
 
-# The Vercel CLI's local link state.
-.vercel/
-
-# Both of these are currently excluded only by the author's ~/.gitignore_global,
-# so the second person to clone this repository would commit them.
 .DS_Store
 .claude/settings.local.json
 
-# The embedding cache: float32 vectors `npx docpilot index` has already bought,
-# keyed by model and chunk text. Re-derivable at one embedding request per 32
-# changed chunks, and larger than the index it saves rebuilding — 1.9 MB per
-# embedder here against a 952 KB int8 blob. `docpilot init` writes this line
-# into docpilot/.gitignore for a consuming project; this repository has none,
-# because it deliberately commits calibration.raw.jsonl.
 docpilot/embed-cache/
-
-# The previous eval report, kept aside so a rerun does not erase it. `reportName`
-# is a pure function of the inputs, so a rerun with nothing changed writes over
-# the very file `previousReport` diffs against. Long-term history is git; this
-# directory protects the last run inside ONE working cycle, between the run and
-# the decision about what to commit. Same reason as the line above: re-derivable
-# by rerunning, and it grows by a report per run.
 docpilot/reports/history/
+.planning
