@@ -747,6 +747,41 @@ describe('import — a published .md beats converting the HTML', () => {
     expect(degraded).toEqual(['img/b.png'])
   })
 
+  it('leaves a fenced block and an inline code span exactly as the author wrote them (CR-03)', () => {
+    const base = 'https://acme.test/docs/page'
+    const degraded = []
+    const raw = [
+      'Call it: [the guide](/guide) and `list[0](err)` inline.',
+      '',
+      '```js',
+      'const h = handlers[type](event)',
+      'const x = a[i](x)',
+      '```',
+      '',
+      '~~~',
+      'list[0](err)',
+      '~~~',
+      '',
+      'A [`code` label](/ref) stays a link, and so does [mail](mailto:a@b.test).',
+    ].join('\n')
+    const out = absolutiseLinks(raw, base, (h) => degraded.push(h))
+    // The fenced bodies and the span are byte-identical to the input.
+    expect(out).toContain('```js\nconst h = handlers[type](event)\nconst x = a[i](x)\n```')
+    expect(out).toContain('~~~\nlist[0](err)\n~~~')
+    expect(out).toContain('`list[0](err)` inline')
+    // Prose is still resolved, including a link whose label is code.
+    expect(out).toContain('[the guide](https://acme.test/guide)')
+    expect(out).toContain('[`code` label](https://acme.test/ref)')
+    expect(out).toContain('and so does mail.')
+    expect(degraded).toEqual([])
+    // Without a base the prose degrades and the fence still does not.
+    const bare = []
+    const noBase = absolutiseLinks(raw, null, (h) => bare.push(h))
+    expect(noBase).toContain('const h = handlers[type](event)')
+    expect(noBase).toContain('Call it: the guide and `list[0](err)` inline.')
+    expect(bare).toEqual(['/guide', '/ref'])
+  })
+
   it('builds the page from the markdown, converting nothing', async () => {
     const built = await buildPage({
       html: head('<link rel="alternate" type="text/markdown" href="/x.md">'),

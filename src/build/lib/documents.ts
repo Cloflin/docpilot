@@ -22,6 +22,7 @@ import path from 'node:path'
 
 import { chunkMarkdown } from './chunker.js'
 import { closesFence, openFence } from './normalise.js'
+import { mapProse } from './markdown-code.js'
 import { EXTRACTOR_VERSION } from './extract-html.js'
 import { chunkOpenapi } from './openapi-chunker.js'
 import { frontmatterValue, kindFor } from './readers.js'
@@ -98,47 +99,6 @@ const ASSET_PATH = /\.\w+$/
  * nested brackets is left as written rather than half-rewritten.
  */
 const ROOT_LINK = /(?<!!)\[([^\]]*)\]\((\/[^)\s#]*)(#[^)\s]*)?(\s+(?:"[^"]*"|'[^']*'))?\)/g
-
-/**
- * One line of prose with its inline code spans copied unchanged. A span opens at
- * a backtick run and closes at the next run of the same length (CommonMark); a
- * run that never closes on the line is literal text.
- */
-function mapProse(line: string, fn: (prose: string) => string): string {
-  let out = ''
-  let from = 0
-  let i = 0
-  while (i < line.length) {
-    if (line[i] !== '`') {
-      i++
-      continue
-    }
-    let n = 0
-    while (line[i + n] === '`') n++
-    let j = i + n
-    let close = -1
-    while (j < line.length) {
-      if (line[j] !== '`') {
-        j++
-        continue
-      }
-      let m = 0
-      while (line[j + m] === '`') m++
-      if (m === n) {
-        close = j
-        break
-      }
-      j += m
-    }
-    if (close < 0) {
-      i += n
-      continue
-    }
-    out += fn(line.slice(from, i)) + line.slice(i, close + n)
-    from = i = close + n
-  }
-  return out + fn(line.slice(from))
-}
 
 /**
  * An imported page's links, held to this site's routes (D-10, F-08).

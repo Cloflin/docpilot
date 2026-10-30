@@ -29,6 +29,7 @@
  * `looksLikeMarkdown` is what decides, and it defaults to no.
  */
 
+import { replaceInProse } from './markdown-code.js'
 import { fetchWithin } from './redirects.js'
 
 /** `<link rel="alternate">` types that mean markdown. */
@@ -176,19 +177,23 @@ export function splitFrontmatter(md) {
  * (engine-spec 043, D-10). `onDegrade(href)` is called for the first two, which
  * are failures the extraction report counts; another scheme is a choice, not a
  * failure, and a fragment-only href is kept as written.
+ *
+ * Prose only: a fenced block and an inline code span are copied as written, so a
+ * sample such as `handlers[type](event)` is never read as a link. A link whose
+ * LABEL is code is still a link.
  */
 export function absolutiseLinks(md, base, onDegrade = null) {
-  return String(md || '').replace(
-    /(!?\[[^\]]*\]\()([^)\s]+)(\s+"[^"]*")?(\))/g,
-    (whole, open, href, title, close) => {
-      const abs = malformed(href) ? null : absolute(href, base)
-      if (abs) return `${open}${abs}${title || ''}${close}`
-      if (href.startsWith('#')) return whole
-      if (!otherScheme(href)) onDegrade?.(href)
-      return open.replace(/^!?\[/, '').replace(/\]\($/, '')
-    },
-  )
+  return replaceInProse(String(md || ''), LINK, (whole, open, href, title, close) => {
+    const abs = malformed(href) ? null : absolute(href, base)
+    if (abs) return `${open}${abs}${title || ''}${close}`
+    if (href.startsWith('#')) return whole
+    if (!otherScheme(href)) onDegrade?.(href)
+    return open.replace(/^!?\[/, '').replace(/\]\($/, '')
+  })
 }
+
+/** `[text](href "title")` and `![alt](href)`; the href holds no space or `)`. */
+const LINK = /(!?\[[^\]]*\]\()([^)\s]+)(\s+"[^"]*")?(\))/g
 
 /**
  * A `%` that does not start a two-digit escape. The URL parser accepts it and
