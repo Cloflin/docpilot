@@ -181,6 +181,20 @@ describe('html structure — headings, details, lists, text', () => {
     expect(md('<blockquote><p>One.</p><p>Two.</p></blockquote>')).toBe('> One.\n>\n> Two.')
   })
 
+  it('reads the dt and dd pairs of a dl whose pairs are wrapped in div', () => {
+    const out = md(
+      '<p>long text</p><dl><div><dt>Term</dt><dd>Definition here</dd></div>' +
+        '<div><dt>T2</dt><dd>Def two</dd></div></dl>',
+    )
+    expect(out).toBe('long text\n\n- **Term** — Definition here\n- **T2** — Def two')
+  })
+
+  it('keeps the text of a dl that holds no dt/dd pair', () => {
+    expect(md('<dl><dt>Only a term</dt></dl>')).toBe('Only a term')
+    expect(md('<dl><div>Words in a wrapper</div></dl>')).toBe('Words in a wrapper')
+    expect(md('<p>x</p><dl></dl>')).toBe('x')
+  })
+
   it('keeps two adjacent lists as two blocks with one blank line between', () => {
     expect(md('<ul><li>a</li></ul><ul><li>b</li></ul>')).toBe('- a\n\n- b')
   })

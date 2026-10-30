@@ -178,15 +178,31 @@ function list(el, ctx, depth = 0) {
 function definitions(el, ctx) {
   const out = []
   let term = ''
-  for (const child of [...(el.children || [])]) {
+  for (const child of termsAndDefinitions(el)) {
     const tag = String(child.tagName || '').toLowerCase()
     if (tag === 'dt') term = inline(child, ctx).replace(/\s+/g, ' ').trim()
-    else if (tag === 'dd') {
+    else {
       const def = inline(child, ctx).replace(/\s+/g, ' ').trim()
       if (def) out.push(term ? `- **${term}** — ${def}` : `- ${def}`)
     }
   }
   return out.join('\n')
+}
+
+/**
+ * The `dt` and `dd` children of a `dl`, in order, looking through `div`
+ * wrappers: HTML5 allows `<dl><div><dt/><dd/></div></dl>` and generators use it
+ * for parameter lists. A `dl` read by its direct children alone came out empty
+ * and the list vanished (CR-02, engine-spec 043).
+ */
+function termsAndDefinitions(el): any[] {
+  const out = []
+  for (const child of [...(el.children || [])]) {
+    const tag = String(child.tagName || '').toLowerCase()
+    if (tag === 'div') out.push(...termsAndDefinitions(child))
+    else if (tag === 'dt' || tag === 'dd') out.push(child)
+  }
+  return out
 }
 
 /**
@@ -289,8 +305,13 @@ function* blocks(el, ctx) {
 
     if (tag === 'dl') {
       const text = definitions(node, ctx)
-      if (text.trim()) yield { kind: 'list', text }
-      continue
+      if (text.trim()) {
+        yield { kind: 'list', text }
+        continue
+      }
+      // No pair, but text: a `dl` of another shape is a container, and the
+      // walk below keeps its words instead of dropping them (CR-02).
+      if (!String(node.textContent || '').trim()) continue
     }
 
     if (tag === 'table') {
