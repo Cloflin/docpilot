@@ -108,6 +108,13 @@ const argValue = (name) => flagValue('index', process.argv.slice(2), name, '')
  */
 const HTML_DIR = argValue('html-dir')
 const HTML_SELECT = argValue('html-select')
+/**
+ * `--html-exclude`: selectors removed from inside the content root for this run
+ * (engine-spec 043, D-22). The flag is registered with its docs row by plan
+ * 02-12, so `argValue` reads '' for it until then; the config key
+ * `docPilot.html.exclude` works now.
+ */
+const HTML_EXCLUDE = argValue('html-exclude')
 const HTML_BASE = argValue('html-base')
 const SITEMAP = argValue('sitemap')
 /**
@@ -1296,6 +1303,11 @@ async function main() {
         ...(await readHtmlDocs({
           dir: path.resolve(ROOT, HTML_DIR),
           select: HTML_SELECT,
+          exclude: HTML_EXCLUDE,
+          // `html` joins the resolved settings with plan 02-12 (D-18); the author's
+          // object is spread into them already, so it is read through a cast until then.
+          html: (docPilot as any).html ?? null,
+          root: ROOT,
           base: HTML_BASE,
           sitemap: SITEMAP ? path.resolve(ROOT, SITEMAP) : '',
           warn,

@@ -104,8 +104,11 @@ export function sitemapRoutes(xml) {
  * quietly indexing whatever the scorer picked instead would answer a different
  * question than the one they asked. It warns, and skips the page.
  */
-export async function pageFromHtml(html, { select = '', base = '', warn = NO_WARN, id = '' } = {}) {
-  const result = await extractHtml(html, { content: select, base, id, warn })
+export async function pageFromHtml(
+  html,
+  { select = '', exclude = '' as string | string[], base = '', warn = NO_WARN, id = '' } = {},
+) {
+  const result = await extractHtml(html, { content: select, exclude, base, id, warn })
   if (!result.ok) {
     warn(`skipped ${id}: ${result.reason}`)
     return null
@@ -136,7 +139,15 @@ export async function pageFromHtml(html, { select = '', base = '', warn = NO_WAR
  *
  * @returns {Promise<Array<{ route: string, file: string, src: string, title: string }>>}
  */
-export async function readHtmlDir({ dir, select = '', base = '', sitemap = '', warn = NO_WARN }) {
+export async function readHtmlDir({
+  dir,
+  select = '',
+  exclude = '' as string | string[],
+  base = '',
+  sitemap = '',
+  warn = NO_WARN,
+  optionsFor = null as null | ((file: string) => { content: string; exclude: string | string[] }),
+}) {
   if (!fs.existsSync(dir)) {
     throw new Error(`--html-dir "${dir}" does not exist`)
   }
@@ -169,7 +180,16 @@ export async function readHtmlDir({ dir, select = '', base = '', sitemap = '', w
     // the directory (engine-spec 043, D-11): it is named in a warning and skipped.
     let page = null
     try {
-      page = await pageFromHtml(fs.readFileSync(file, 'utf8'), { select, base, warn, id: rel })
+      // The options are per page: `optionsFor` is how a per-source override
+      // (D-21) reaches a file, and the default is the one pair for the run.
+      const opts = optionsFor ? optionsFor(file) : { content: select, exclude }
+      page = await pageFromHtml(fs.readFileSync(file, 'utf8'), {
+        select: opts.content,
+        exclude: opts.exclude,
+        base,
+        warn,
+        id: rel,
+      })
     } catch (e) {
       warn(`skipped ${rel}: ${(e as Error)?.message || e}`)
     }

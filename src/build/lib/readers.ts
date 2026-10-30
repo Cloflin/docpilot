@@ -17,6 +17,7 @@ import path from 'node:path'
 
 import { splitFrontmatter } from './normalise.js'
 import { readHtmlDir } from './html-dir.js'
+import { htmlOptionsFor } from './html-options.js'
 import { specFiles } from './openapi-chunker.js'
 import { routeOf } from '../../theme/docpilot/route.js'
 import type { ReadDoc } from './source-doc.js'
@@ -172,17 +173,25 @@ export function readMarkdownDocs({
 export async function readHtmlDocs({
   dir,
   select,
+  exclude = '',
   base,
   sitemap,
   warn,
+  html = null,
+  root = '',
 }: {
   dir: string
   select: string
+  exclude?: string
   base: string
   sitemap: string
   warn: (message: string) => void
+  /** `docPilot.html`; flags above it, per-source overrides inside it (D-21). */
+  html?: any
+  root?: string
 }): Promise<ReadDoc[]> {
-  const found = await readHtmlDir({ dir, select, base, sitemap, warn })
+  const optionsFor = (file: string) => htmlOptionsFor(html, file, { root, flags: { content: select, exclude } })
+  const found = await readHtmlDir({ dir, select, exclude, base, sitemap, warn, optionsFor })
   return found.map(({ route, file, src, title }) => ({
     id: route,
     source: 'html-dir',
