@@ -513,16 +513,22 @@ export function parseImportFlags(argv) {
  * The slug is typed by a person or passed by an agent, and the re-import
  * commands that `index` and `doctor` print feed it too. A nested slug such as
  * `guides/x` is the documented way to refresh a nested page (WR-05), so a
- * separator is fine; an absolute path, a `..` segment, an empty name or a path
- * that resolves outside the directory is not, because the page text of a remote
- * site would then be written anywhere the user can write (WR-14, engine-spec
- * 043). The `.md` suffix is read in either case, as `importSlug` reads it.
+ * separator is fine; an absolute path, a `..` segment, an empty name, a name of
+ * only dots or a path that resolves outside the directory is not, because the
+ * page text of a remote site would then be written anywhere the user can write
+ * (WR-14, IN-16, engine-spec 043). The `.md` suffix is read in either case,
+ * as `importSlug` reads it.
  */
 export function outFileFor(importDir: string, out: string): string | null {
   const slug = out.replace(/\.md$/i, '')
   if (!slug || slug.includes('\0')) return null
   if (path.isAbsolute(slug) || /^[\\/]|^[A-Za-z]:/.test(slug)) return null
-  if (slug.split(/[\\/]/).includes('..')) return null
+  const segments = slug.split(/[\\/]/)
+  if (segments.includes('..')) return null
+  // The last segment names the file. `guides/` and `x/.` would write `.md` or
+  // `..md`, a hidden file that `readKbDocs` reads back as a page with no slug (IN-16).
+  const last = segments[segments.length - 1]
+  if (!last || /^\.+$/.test(last)) return null
   const root = path.resolve(importDir)
   const file = path.join(importDir, `${slug}.md`)
   const rel = path.relative(root, path.resolve(file))

@@ -347,7 +347,7 @@ describe('import — --out is confined to importDir', () => {
     return found.sort()
   }
 
-  it.each(['../x', '../../x', 'guides/../../x', 'a/../b', '/tmp/docpilot-escape', '..\\x', '.md', '..', 'C:\\x'])(
+  it.each(['../x', '../../x', 'guides/../../x', 'a/../b', '/tmp/docpilot-escape', '..\\x', '.md', '..', 'C:\\x', 'guides/', 'a/.', '.', 'guides\\', 'x/...'])(
     'refuses %j with exit 2, before any fetch, directory or file',
     async (slug) => {
       const { code, out, fetched } = await runOut(slug)
@@ -367,6 +367,18 @@ describe('import — --out is confined to importDir', () => {
     const { code } = await runOut('guides/deep/x')
     expect(code).toBe(0)
     expect(files()).toEqual([path.join('site', 'kb', 'guides', 'deep', 'x.md')])
+  })
+
+  it('still accepts ./x, a dotted name and the slug of a nested page (IN-16)', async () => {
+    for (const slug of ['./x', 'v1.2', 'guides/x']) {
+      const { code } = await runOut(slug)
+      expect(code).toBe(0)
+    }
+    expect(files()).toEqual([
+      path.join('site', 'kb', 'guides', 'x.md'),
+      path.join('site', 'kb', 'v1.2.md'),
+      path.join('site', 'kb', 'x.md'),
+    ])
   })
 
   it('reads a .MD suffix as it reads .md, and does not write X.MD.md', async () => {
