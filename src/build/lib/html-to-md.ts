@@ -20,6 +20,7 @@
  */
 
 import { textOf, tooltips } from './html-extract.js'
+import { codeBlock, isCodeBlock } from './html-code.js'
 import { createLinkResolver } from './html-links.js'
 import { renderBlocks } from './ir.js'
 
@@ -49,14 +50,6 @@ function escapeLeader(line) {
   return line.replace(/^(\s*)([-+*>#]|\d+[.)])(\s)/, '$1\\$2$3')
 }
 
-/** The language of a `<pre><code class="language-js">` fence, if it names one. */
-function fenceLanguage(el) {
-  const code = el.querySelector?.('code') || el
-  const cls = code.getAttribute?.('class') || ''
-  const m = /(?:language|lang|highlight)[-_]([a-z0-9+#]+)/i.exec(cls)
-  return m ? m[1].toLowerCase() : ''
-}
-
 /**
  * Inline serialisation: the text of a node with its emphasis kept.
  *
@@ -74,6 +67,9 @@ function inline(node, ctx) {
 
   switch (tag) {
     case 'br':
+      // A code span cannot hold a newline in Markdown, so inside prose a `br`
+      // is a space. A block of code built from `br` lines is read before this
+      // function is reached, by `html-code.ts`.
       return ' '
     case 'strong':
     case 'b': {
@@ -222,6 +218,15 @@ function* blocks(el, ctx) {
 
     const tag = String(node.tagName || '').toLowerCase()
 
+    // Code is asked before any other branch: a `pre`, a highlighter's wrapper
+    // and a `br`-built sample all have to be recognised before a generic
+    // container branch walks into them and splits the lines (engine-spec 043).
+    if (isCodeBlock(node)) {
+      const b = codeBlock(node)
+      if (b) yield b
+      continue
+    }
+
     if (/^h[1-6]$/.test(tag)) {
       const text = inline(node, ctx).replace(/\s+/g, ' ').trim()
       if (text) yield { kind: 'h', level: Number(tag[1]), text }
@@ -231,12 +236,6 @@ function* blocks(el, ctx) {
     if (tag === 'p') {
       const text = inline(node, ctx).replace(/[ \t]+/g, ' ').trim()
       if (text) yield { kind: 'p', text: escapeLeader(text) }
-      continue
-    }
-
-    if (tag === 'pre') {
-      const code = String(node.textContent || '').replace(/\n+$/, '')
-      if (code.trim()) yield { kind: 'code', lang: fenceLanguage(node), text: code }
       continue
     }
 
