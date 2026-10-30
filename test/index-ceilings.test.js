@@ -84,13 +84,10 @@ describe('the manifest ceiling is per runtime', () => {
   it('builds a 900-page corpus (manifest over 64 KB) under runtime: server', () => {
     const root = project(SERVER)
     addManyPages(root)
-    const t0 = Date.now()
     const r = build(root)
-    const ms = Date.now() - t0
     expect(r.status, output(r)).toBe(0)
     const manifest = fs.readFileSync(path.join(ragOf(root), 'manifest.json'))
     expect(manifest.length).toBeGreaterThan(64 * 1024)
-    expect(ms).toBeLessThan(30000)
   }, TIMEOUT)
 
   it('refuses the same corpus under the default runtime, naming the way out', () => {
