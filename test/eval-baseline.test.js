@@ -548,3 +548,10 @@ frozenBaselineSuite({
   baselineFile: '2.1.1.rag-local.json',
   kind: 'ollama',
 })
+
+frozenBaselineSuite({
+  label: 'rag',
+  indexDir: 'docs/public/rag',
+  baselineFile: '2.1.1.rag.json',
+  kind: 'openrouter',
+})
