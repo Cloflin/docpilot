@@ -2071,7 +2071,9 @@ async function settleBaseline(runs) {
       o !== null &&
       (['127.0.0.1', 'localhost', '[::1]'].includes(new URL(o).hostname) ||
         /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(new URL(o).hostname))
-    const localBase = [originOnly(EMBED_BASE), originOnly(BASE)].find(isLocal) ?? null
+    // A gate-only run never calls the chat host (`host.chat` is null above), so a local
+    // chat base the environment happens to name is not part of the measurement.
+    const localBase = [originOnly(EMBED_BASE), ...(GATE_ONLY ? [] : [originOnly(BASE)])].find(isLocal) ?? null
     const model = GATE_ONLY ? null : (runs[0]?.meta?.model ?? MODELS[0])
     const failed = runs.filter((r) => hardGatesFailed(r.summary)).map((r) => r.meta.model)
     const meta = {
