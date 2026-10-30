@@ -4,13 +4,16 @@
 
 DocPilot 3.0 widens where grounded answers come from and how fresh they stay, and shrinks what a site ships. The roadmap starts by freezing the 2.1.1 baselines and moving the existing sources onto one shared document pipeline with unchanged output bytes. Then it improves HTML extraction, builds the connectors (Intercom, Zendesk, Freshdesk, Generic REST, own-origin pages), puts the server index behind a storage adapter with an atomic hot swap, and adds the sync engine that makes an edit at the source reach answers without a restart (Core Value). Confluence and Notion follow once sync and reconcile exist. Next, one turn pipeline serves browser, server and eval, and server retrieval gains filters, a candidate pool, a reranker and contextual chunks, each backed by eval evidence. The client track then moves chat state onto a Vue-free core, splits the bundle into registered features with a custom-bundle CLI, and decides through a go/no-go whether the whole UI moves to Web Components. The last phase ships the migration path and proves the motivating case on stock DocPilot: a production site that today needs a patched DocPilot and hand-written import scripts.
 
+Two phases were added after the roadmap was created. Phase 10 puts MCP on both ends of the server runtime — an endpoint through which coding agents search the docs, and a client through which the assistant calls other services' tools — under one permission policy that only the server owner writes. Phase 11 renames the package to `@cloflin/ai` and splits it into one subpath per layer, before the release phase (Phase 12).
+
 ## Structure Notes
 
 - **Ten phases, above the standard 5-8.** 106 requirements in 11 categories split into two tracks (server: Phases 2-6, client: Phases 7-9). Research suggested 12 phases. Two merges were made where dependencies stay honest: wiki connectors joined the sync phase (they are the first schedule-first consumers of reconcile), and the turn-driver unification joined server retrieval (the driver is that phase's first deliverable and must be green before any retrieval stage lands). Further merges would cross real boundaries: Phase 1 keeps output byte-identical while Phase 2 deliberately shifts corpus hashes; Phases 4 and 5 would hold 25 requirements; Phases 7 and 8 differ in risk and research needs; Phase 9 is conditional.
 - **Requirements placed ahead of their category.** REL-01 (Node >= 22.13, CI on 22 and 24) is in Phase 4 because the `node:sqlite` adapter cannot run in CI before it. SYNC-08 (atomic hot swap) is in Phase 4 because the index holder is built with the store. STORE-08 (ceilings per runtime) is in Phase 1 because the shared pipeline owns the ceilings. SEC-01 to SEC-03 start in Phase 3 because credentials first exist there; later phases keep the secret scan green and extend the visibility fixtures to the wiki connectors.
 - **Embedding-moving changes are batched.** All extractor changes land as one extractor-version bump in Phase 2. Eval evidence for that bump, the breadcrumb prefix, the contextual prefix and the reranker is collected together in Phase 6 (EVAL-04), once the Intercom golden set exists, and always before 3.0 ships.
-- **The 2.x deprecation release (REL-02) is cut before 3.0 final.** The list of removed exports and options is final only after Phase 9, so Phase 10 owns it.
-- **Research flags.** Phases 3, 4, 5, 6, 8 and 9 need `/gsd-plan-phase --research-phase <N>` before planning.
+- **The 2.x deprecation release (REL-02) is cut before 3.0 final.** The list of removed exports and options is final only after Phase 9, so Phase 12 owns it.
+- **Research flags.** Phases 3, 4, 5, 6, 8, 9, 10 and 11 need `/gsd-plan-phase --research-phase <N>` before planning.
+- **Two phases were added on 2026-10-30, after the roadmap was created, and the last three were renumbered the same day.** 27 requirements in 4 new categories (MCPS, MCPC, PERM, PKG) bring the total to 133 in 15; MCPS-07 and MCPS-08 (the local and the Vercel deploy of `/mcp`) were added the same day. Phase 10 (MCP, engine-spec 042) needs the Phase 6 turn driver, where the reader's approval pause is built once for all three drivers. Phase 11 (the package split) needs the final UI (Phase 9) and the `mcp` layer (Phase 10). The release moved from Phase 10 to Phase 12. Before the renumbering, MCP was Phase 11, the package split Phase 12 and the release Phase 10; `/gsd-autonomous` and the auto-advance chain go to phase N+1, so the number order must be the dependency order.
 
 ## Phases
 
@@ -20,7 +23,7 @@ DocPilot 3.0 widens where grounded answers come from and how fresh they stay, an
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Baselines and shared document pipeline** - Freeze 2.1.1 baselines and run existing sources through one `SourceDoc` pipeline, byte-identical
+- [x] **Phase 1: Baselines and shared document pipeline** - Freeze 2.1.1 baselines and run existing sources through one `SourceDoc` pipeline, byte-identical (completed 2026-10-30)
 - [ ] **Phase 2: HTML extraction** - Deterministic, structure-preserving HTML to Markdown that never fails the index on one bad page
 - [ ] **Phase 3: Source connectors and snapshot pull** - Intercom, Zendesk, Freshdesk, Generic REST and sitemap sources pulled into a snapshot that `index` reads offline
 - [ ] **Phase 4: Server storage and hot swap** - Server index behind a `StorageAdapter` (files, memory, SQLite, Postgres) with an atomic swap in the running server
@@ -29,7 +32,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 7: Vue-free chat core** - Per-instance chat state on a framework-agnostic core; the Vue panel runs on it unchanged to the reader
 - [ ] **Phase 8: Feature registry and modular bundle** - Per-feature exports, lazy chunks, launcher, custom-bundle CLI and a published size table
 - [ ] **Phase 9: Web Component UI (conditional go/no-go)** - Evidence-based decision on a Lit `<docpilot-panel>` replacing the Vue UI
-- [ ] **Phase 10: Release and acceptance** - Deprecation release, migration tooling, rc on `next`, the reference site on stock 3.0, eval no worse than 2.1.1
+- [ ] **Phase 10: MCP server, MCP client and permissions** - A `/mcp` endpoint for coding agents, external MCP tools for the assistant, one owner policy that tokens and readers can only narrow
+- [ ] **Phase 11: Package split and rename to @cloflin/ai** - One package `@cloflin/ai` with `core`, `server`, `mcp`, `chat-ui` and `cli` subpaths, shipped before the release phase
+- [ ] **Phase 12: Release and acceptance** - Deprecation release, migration tooling, rc on `next`, the reference site on stock 3.0, eval no worse than 2.1.1
 
 ## Phase Details
 
@@ -43,7 +48,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Characterisation tests of the 2.1.1 session (submit sequence, state writes, citations, openers, history, quote, budget) pass on today's code and stay as the safety net for Phases 6 and 7.
   4. Markdown, HTML-directory and OpenAPI sources emit documents in the one `SourceDoc` shape (id, canonical URL, title, body, `updatedAt`, locale, visibility, breadcrumb, tags, content hash), and `docs/public/rag/` and `docs/public/rag-local/` rebuild byte-identical.
   5. A server-runtime corpus above the 64 KB manifest and 5 MB file ceilings builds without patching, while the browser build still refuses it.
-**Plans:** 9/12 plans executed in 6 waves
+**Plans:** 12/12 plans complete in 6 waves
 
 Plans:
 **Wave 1**
@@ -62,13 +67,13 @@ Plans:
 - [x] 01-08-PLAN.md — Recalibrate rag-local (full) and rag (transfer), freeze both rankings, offline gate in verify (EVAL-02, EVAL-01)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 01-09-PLAN.md — Answer-quality and server-runtime baselines on local Ollama (EVAL-01)
+- [x] 01-09-PLAN.md — Answer-quality and server-runtime baselines on local Ollama (EVAL-01)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 01-10-PLAN.md — All four sources through SourceDoc and `documentsToChunks`, real-corpus oracle (SRC-01, SRC-02)
+- [x] 01-10-PLAN.md — All four sources through SourceDoc and `documentsToChunks`, real-corpus oracle (SRC-01, SRC-02)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 01-11-PLAN.md — Per-runtime ceilings, shell-size line, byte-identical rebuild of both indexes, phase gate (STORE-08, SRC-02)
+- [x] 01-11-PLAN.md — Per-runtime ceilings, shell-size line, byte-identical rebuild of both indexes, phase gate (STORE-08, SRC-02)
 
 **Cross-cutting constraints:**
 - Every scenario goes through createHarness; this file never imports session.js (D-14)
@@ -77,6 +82,7 @@ Plans:
 **Goal**: HTML pages become clean, deterministic Markdown that keeps code, links, tables and structure, and one bad page never fails `docpilot index`.
 **Depends on**: Phase 1
 **Requirements**: HTML-01, HTML-02, HTML-03, HTML-04, HTML-05, HTML-06, HTML-07, HTML-08, HTML-09, HTML-10, HTML-11, HTML-12, HTML-13
+**UI hint**: no
 **Success Criteria** (what must be TRUE):
   1. Site owner can set `content` and `exclude` selectors per source and get only the article body. Without selectors, the rule list removes navigation, footers, cookie banners, breadcrumbs, feedback widgets, share bars and TOC sidebars, and keeps tab panels and accordions with their labels.
   2. A page with `<br>` inside a code block produces a multi-line fenced block with the language as fence info, with highlighter spans, line-number tables and copy buttons gone. A page with an OpenAPI description embedded in an article indexes, and its relative link resolves against the canonical URL or degrades to text with a warning.
@@ -96,7 +102,7 @@ Plans:
   4. Site owner can point a sitemap / URL source at their own origin and get its pages with no import script: sitemap discovery, robots, 1 request/s by default, a cookie jar for geo-redirects, a configurable user agent. A WAF soft-block or stub page is reported and not indexed.
   5. Draft, internal and restricted documents never reach an index (per-connector fixtures prove it), and the static build refuses any non-public document. Connector, store and sync config and credentials never appear in the client config, built bundle, manifest or logs; credentials come only from environment-variable references; `npm run verify` scans the built output for them; `docpilot doctor` checks connector auth and scopes.
 **Plans**: TBD
-**Research**: run `/gsd-plan-phase --research-phase 3` first. Per-connector spikes on live trial accounts: Zendesk deletions in the incremental export, Freshdesk article `updated_at`, Intercom webhook topics for the account's API version, signature details.
+**Research**: run `/gsd-plan-phase --research-phase 3` first. Per-connector spikes on live trial accounts: Zendesk deletions in the incremental export, Freshdesk article `updated_at`, Intercom webhook topics for the account's API version, signature details. Zendesk auth is OAuth client credentials with `hc:read`, not an API token (https://developer.zendesk.com/documentation/authentication/oauth-migration/); confirm which Help Center endpoints, the incremental export included, accept that scope.
 
 ### Phase 4: Server storage and hot swap
 **Goal**: The server index lives behind a `StorageAdapter` that works on files, memory, SQLite and Postgres, and a running server swaps to updated content atomically without a restart.
@@ -174,9 +180,37 @@ Plans:
 **UI hint**: yes
 **Research**: run `/gsd-plan-phase --research-phase 9` first. Lit and Shadow DOM accessibility spike (focus trap, aria references, selection / quote, host themes).
 
-### Phase 10: Release and acceptance
+### Phase 10: MCP server, MCP client and permissions
+**Goal**: Coding agents reach the docs through an MCP endpoint on the server runtime, the assistant calls the tools of external MCP servers, and one policy that only the server owner writes decides which tool runs for whom; token scopes, tool annotations and reader choices can only narrow it. Design: engine-spec 042.
+**Depends on**: Phase 6 (the unified turn driver for the approval pause; through it, the Phase 4 index holder and `StorageAdapter`). The panel approval card of PERM-04 lands on the Phase 7 chat core.
+**Requirements**: MCPS-01, MCPS-02, MCPS-03, MCPS-04, MCPS-05, MCPS-06, MCPS-07, MCPS-08, MCPC-01, MCPC-02, MCPC-03, MCPC-04, MCPC-05, PERM-01, PERM-02, PERM-03, PERM-04, PERM-05, PERM-06, PERM-07
+**Success Criteria** (what must be TRUE):
+  1. Site owner turns on `/mcp`, and `claude mcp add --transport http docs https://<host>/mcp --header "Authorization: Bearer <token>"` connects. Claude Code, Cursor and VS Code list `search_docs`, `fetch_section`, `expand_section` and `list_pages`; `search_docs` returns at most 8 ranked sections with the ids the panel cites, and no read calls a chat model. Clients on protocol versions 2025-06-18, 2025-11-25 and 2026-07-28 all connect.
+  2. A call with no token off loopback is 401, a foreign `Origin` is 403, and no response carries a CORS header. A token scoped to one path prefix and two tools can neither read outside the prefix nor call another tool, a revoked token fails its next call, and a swapped index reaches an agent without a restart.
+  3. Site owner lists an external MCP server with credentials from the environment, and in a server-runtime turn the assistant calls an allowed tool and cites its result. A tool the policy does not name is never offered, a new upstream tool waits for the policy, a down server leaves the turn answered, and the build scan finds no MCP URL or credential in the bundle, the manifest or the logs.
+  4. A tool in `ask` mode pauses the turn, and the panel shows the tool, its server and the exact arguments with allow once, allow for this conversation and deny. Nothing runs before the choice, and no reader choice, token scope or annotation makes an `off` tool callable (one test per widening attempt).
+  5. `docpilot permissions list|explain|set` and `docpilot mcp token create|list|revoke` work, and a change applies on the next call without a restart. `docpilot doctor` warns on a risky setup, and every call is logged with the caller, the tool, the decision and the deciding layer.
+  6. The maintainer runs `/mcp` locally first: `docpilot serve` and `docker compose -f docker/compose.yaml up` both serve it, and Claude Code on the same machine connects with no token over loopback. Then the same handler runs as a Vercel function on a preview deployment of the docs site: Claude Code connects with a Bearer token that lives only in the Vercel environment, a call without it is 401, and the built-output scan finds no token.
+**Plans**: TBD
+**UI hint**: yes
+**Research**: run `/gsd-plan-phase --research-phase 10` first. The protocol versions Claude Code, Cursor and VS Code send at that time; the official MCP SDK versus a hand-written client for the client half; the signed pause and resume across the browser, server and eval drivers; whether any target client needs OAuth 2.1 rather than a static Bearer token. For the Vercel deploy (MCPS-08): how a Vercel function serves stateless Streamable HTTP within `maxDuration`, how it loads the static index on a cold start, and where tokens live and how a revoke takes effect on a host with no writable disk.
+
+### Phase 11: Package split and rename to @cloflin/ai
+**Goal**: 3.0 ships as one package, `@cloflin/ai`, whose subpaths `core`, `server`, `mcp`, `chat-ui` and `cli` each import alone and carry only their own layer, and every `@cloflin/docpilot` user has a mapped way across.
+**Depends on**: Phase 8 (per-feature exports), Phase 9 (the UI that `chat-ui` ships), Phase 10 (the `mcp` layer)
+**Requirements**: PKG-01, PKG-02, PKG-03, PKG-04, PKG-05, PKG-06, PKG-07
+**Success Criteria** (what must be TRUE):
+  1. In a clean project, the packed `@cloflin/ai` tarball installs and each of `@cloflin/ai/core`, `/server`, `/mcp`, `/chat-ui` and `/cli` imports alone. A server-only or MCP-only install needs no Vue, and `chat-ui` pulls in no Node built-in.
+  2. `npm run check` fails on an import that breaks the layer graph, and `src/config.ts` is split into a browser-safe part and a Node part, with resolution still offline.
+  3. `npx @cloflin/ai index` and `docpilot index` run the same command.
+  4. `@cloflin/docpilot` carries a final 2.x release and an `npm deprecate` message that names `@cloflin/ai`, and `docpilot doctor --migrate` and the migration guide map every old import to its new subpath.
+  5. `@cloflin/ai` publishes through trusted publishing on a `v*` tag, with the first publish and the trusted-publisher setup documented as a manual step.
+**Plans**: TBD
+**Research**: run `/gsd-plan-phase --research-phase 11` first. npm trusted publishing for a new package name; how `npx @cloflin/ai` resolves its bin; `exports` and types per subpath under `publint` and `@arethetypeswrong/cli`.
+
+### Phase 12: Release and acceptance
 **Goal**: 3.0 ships with a safe upgrade path, and the motivating reference site runs on stock DocPilot with an edit visible in an answer and no eval regression.
-**Depends on**: Phase 9 (and all earlier phases)
+**Depends on**: Phase 11 (and all earlier phases, including Phase 10)
 **Requirements**: REL-02, REL-03, REL-04, REL-05, REL-06, REL-07, REL-08, REL-09, REL-10
 **Success Criteria** (what must be TRUE):
   1. A 2.x release warns on every export and option that 3.0 removes, and `docpilot doctor --migrate` finds old options and imports in a project and shows the replacement for each.
@@ -189,11 +223,11 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10. Phase 4 depends only on Phase 1 and may overlap Phases 2 and 3. Phase 5 needs both Phase 3 and Phase 4. The client track (Phases 7-9) starts after Phase 6 delivers the unified turn driver.
+Phases execute in number order, which is the dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. Phase 4 depends only on Phase 1 and may overlap Phases 2 and 3. Phase 5 needs both Phase 3 and Phase 4. The client track (Phases 7-9) starts after Phase 6 delivers the unified turn driver. Phase 10 needs Phase 6 and may overlap Phases 7-9; its panel approval plan (PERM-04) waits for Phase 7. Phase 11 needs Phases 8, 9 and 10, and Phase 12 ships after Phase 11.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Baselines and shared document pipeline | 9/12 | In Progress | - |
+| 1. Baselines and shared document pipeline | 12/12 | Complete    | 2026-10-30 |
 | 2. HTML extraction | 0/TBD | Not started | - |
 | 3. Source connectors and snapshot pull | 0/TBD | Not started | - |
 | 4. Server storage and hot swap | 0/TBD | Not started | - |
@@ -202,24 +236,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Vue-free chat core | 0/TBD | Not started | - |
 | 8. Feature registry and modular bundle | 0/TBD | Not started | - |
 | 9. Web Component UI (conditional go/no-go) | 0/TBD | Not started | - |
-| 10. Release and acceptance | 0/TBD | Not started | - |
-
-### Phase 11: MCP server, MCP client and permissions
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 10
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 11 to break down)
-
-### Phase 12: Package split and rename to @cloflin/ai
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 11
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 12 to break down)
+| 10. MCP server, MCP client and permissions | 0/TBD | Not started | - |
+| 11. Package split and rename to @cloflin/ai | 0/TBD | Not started | - |
+| 12. Release and acceptance | 0/TBD | Not started | - |
