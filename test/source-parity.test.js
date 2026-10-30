@@ -15,7 +15,7 @@
  * `--no-embed` and no calibration file: no network, no model, and no threshold
  * a recalibration could move.
  */
-import { describe, it, expect } from 'vitest'
+import { afterAll, describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -30,9 +30,18 @@ import { NonPublicDocument } from '../src/build/lib/source-doc.js'
 const BIN = path.resolve('bin/docpilot.js')
 const FIXTURE = path.resolve('test/fixtures/source-parity')
 
+/** Every temp directory a test made, removed once the file is done. */
+const made = []
+afterAll(() => made.forEach((d) => fs.rmSync(d, { recursive: true, force: true })))
+const tmp = (prefix) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix))
+  made.push(dir)
+  return dir
+}
+
 /** The fixture, copied: a build deletes and rewrites its index directory. */
 function copyFixture() {
-  const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dp-parity-')), 'site')
+  const root = path.join(tmp('dp-parity-'), 'site')
   fs.cpSync(FIXTURE, root, {
     recursive: true,
     // The snapshots are the test's expectations, not the project's input.
@@ -311,7 +320,7 @@ describe('source parity — documentsToChunks, in process', () => {
 
   it('reads an OpenAPI file as a document and hands it to the OpenAPI chunker', async () => {
     // A spec is a YAML file; the fixture's JSON is valid YAML, copied under that name.
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dp-spec-')), 'mini.yaml')
+    const file = path.join(tmp('dp-spec-'), 'mini.yaml')
     fs.copyFileSync(path.join(FIXTURE, 'openapi', 'mini.json'), file)
     const [d] = readOpenapiDocs([file])
     expect(d.id).toBe('/reference/mini')
@@ -323,7 +332,7 @@ describe('source parity — documentsToChunks, in process', () => {
   })
 
   it('stops when two spec files claim one /reference/ route', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-specs-'))
+    const root = tmp('dp-specs-')
     for (const v of ['v1', 'v2']) {
       fs.mkdirSync(path.join(root, v))
       fs.writeFileSync(path.join(root, v, 'api.yaml'), 'openapi: 3.0.0\n')

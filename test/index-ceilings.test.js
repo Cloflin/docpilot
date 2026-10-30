@@ -10,7 +10,7 @@
  * Every project lives under `fs.mkdtempSync`, built for real by the CLI with
  * `--no-embed` (no network, no model).
  */
-import { describe, it, expect } from 'vitest'
+import { afterAll, describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -21,9 +21,15 @@ const BIN = path.resolve('bin/docpilot.js')
 const SERVER = ", runtime: 'server', server: { endpoint: '/ai/turn' }"
 const TIMEOUT = 120000
 
+/** Every temp directory a test made: a server build here writes more than 5 MB, so none may stay. */
+const made = []
+afterAll(() => made.forEach((d) => fs.rmSync(d, { recursive: true, force: true })))
+
 /** A throwaway site with two small pages; `extra` is spliced into the config. */
 function project(extra = '') {
-  const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dp-ceil-')), 'site')
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-ceil-'))
+  made.push(base)
+  const root = path.join(base, 'site')
   fs.mkdirSync(path.join(root, 'docs', 'guide'), { recursive: true })
   fs.writeFileSync(
     path.join(root, 'docpilot.config.mjs'),
