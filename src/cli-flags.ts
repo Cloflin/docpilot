@@ -177,6 +177,8 @@ export const COMMANDS = {
       { name: 'endpoint', kind: 'value', example: 'http://localhost:8787/ai/turn', help: 'measure a running server over HTTP; implies --runtime=server' },
       { name: 'set', kind: 'enum', values: ['golden', 'adversarial'], example: 'adversarial', help: 'the golden questions, or the security probes in adversarial.jsonl' },
       { name: 'quiet', kind: 'bool', help: 'no line per record — the summary and the report path only' },
+      { name: 'baseline', kind: 'value', example: 'docpilot/baselines/2.1.1.rag-local.json', help: 'compare the run with a frozen baseline; exit 1 when a record moved' },
+      { name: 'update-baseline', kind: 'bool', help: 'with --baseline=, rewrite that file from this run — the whole set only' },
     ],
   },
 

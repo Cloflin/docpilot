@@ -208,7 +208,7 @@ The two halves answer silence differently, and the difference is worth a minute 
 
   The same two words also name a configuration — [`embed: false`](#no-embedder-at-all) — and a site that declared it looks nothing like a site that lost its embedder: it logs nothing and calls no refusal degraded, because nothing failed. If you are reading this while debugging, the config file settles which one you have.
 
-Both free embedders are 2048-dimensional, so the vector blob alone is **2 KB per chunk** — and the builder's ceiling is on the whole directory, chunk text and document frequencies included, which on a typical corpus is another kilobyte or so per chunk. Past roughly 900 chunks the size warning fires at 3 MB; past roughly 1500 the build refuses at 5 MB. `npx docpilot index` prints the running total either way, so measure rather than estimate.
+Both free embedders are 2048-dimensional, so the vector blob alone is **2 KB per chunk** — and the builder's ceiling is on the whole directory, chunk text and document frequencies included, which on a typical corpus is another kilobyte or so per chunk. On the browser runtime, past roughly 900 chunks the size warning fires at 3 MB; past roughly 1500 the build refuses at 5 MB. Those are the browser runtime's ceilings — `docPilot.runtime: 'server'` lifts them, because the browser then downloads only the shell and `docpilot serve` reads the index. `npx docpilot index` prints the running total either way, so measure rather than estimate.
 
 ### Asking for the pool
 

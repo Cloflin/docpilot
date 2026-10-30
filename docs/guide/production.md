@@ -167,7 +167,7 @@ The upstream host needs a `resolver` only if it is resolved at runtime — that 
 
 | file | cache | notes |
 |---|---|---|
-| `manifest.json` | `no-cache` | unhashed, names every other file, 64 KB at most — the indexer refuses to write a larger one |
+| `manifest.json` | `no-cache` | unhashed, names every other file. 64 KB at most on the browser runtime, where the indexer refuses to write a larger one; with `docPilot.runtime: 'server'` only `docpilot serve` reads the index and the browser downloads its shell, so the limit does not apply |
 | `chunks-NN.<hash>.json` | `immutable` | the text, 250 chunks per shard; compresses well with gzip |
 | `df.<hash>.json` | `immutable` | document frequencies for the lexical half |
 | `vectors.<hash>.bin` | `immutable` | `chunkCount × dims / 8` bytes of sign bits (`chunkCount × dims` with `--quantize=int8`) — absent on an index built `--no-embed` |
