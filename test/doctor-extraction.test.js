@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { runDoctor } from '../src/cli-doctor.js'
+import { EXTRACTOR_VERSION } from '../src/build/lib/extract-html.js'
 
 /**
  * `docpilot doctor` reports what the HTML extractor does on this site —
@@ -61,6 +62,10 @@ const page = (title, body, head = '') =>
   `<body><nav><a href="/x">nav</a></nav><main>${body}</main><footer>footer text</footer></body></html>`
 
 const BODY = '<p>Refunds are issued to the original payment method within five business days.</p>'
+
+/** A markdown page as `docpilot import` writes it, with the stamps under test. */
+const imported = (source, stamps) =>
+  `---\ntitle: "Page"\nsource: "${source}"\n${stamps}---\n\n# Page\n\nBody text of the imported page.\n`
 
 let realFetch
 const fetchSpy = vi.fn(() => {
@@ -143,8 +148,78 @@ describe('doctor — the html row', () => {
 
   it('makes no network call', async () => {
     const dir = tmp({ 'refunds.html': page('Refunds', BODY) })
-    const r = await capture(await base({ html: { sources: { [dir]: { content: 'main' } } } }))
+    const importDir = tmp({ 'old.md': imported('https://acme.test/old', 'importedAt: 2026-01-01\n') })
+    const r = await capture(await base({ html: { sources: { [dir]: { content: 'main' } } }, importDir }))
     expect(r.out).toContain('[docpilot] html')
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('doctor — the imports row', () => {
+  it('lists every imported page an older extractor wrote, each with its re-import command', async () => {
+    const importDir = tmp({
+      'refunds.md': imported('https://acme.test/help/refunds', 'importedAt: 2026-01-01\n'),
+      'shipping.md': imported('https://acme.test/help/shipping', 'importedAt: 2026-01-02\n'),
+      'current.md': imported('https://acme.test/help/current', `importedAt: 2026-01-03\nextractor: ${EXTRACTOR_VERSION}\n`),
+    })
+    const r = await capture(await base({ importDir }))
+
+    expect(r.out).toContain(
+      `[docpilot] imports   2 written by an older extractor (this build's is ${EXTRACTOR_VERSION})`,
+    )
+    expect(r.out).toContain('npx docpilot import https://acme.test/help/refunds --out refunds --force')
+    expect(r.out).toContain('npx docpilot import https://acme.test/help/shipping --out shipping --force')
+    expect(r.out).not.toContain('--out current')
+  })
+
+  it('lists them all, past the five that index prints', async () => {
+    const files = {}
+    for (let i = 0; i < 7; i++) files[`p${i}.md`] = imported(`https://acme.test/p${i}`, 'importedAt: 2026-01-01\n')
+    const r = await capture(await base({ importDir: tmp(files) }))
+    expect(r.out).toContain('7 written by an older extractor')
+    for (let i = 0; i < 7; i++) expect(r.out).toContain(`--out p${i} --force`)
+    expect(r.out).not.toContain('…and')
+  })
+
+  it('does not list a hand-written page that has no importedAt', async () => {
+    const importDir = tmp({
+      'notes.md': '---\ntitle: "Notes"\nsource: "https://acme.test/notes"\n---\n\n# Notes\n\nWritten by hand.\n',
+      'old.md': imported('https://acme.test/old', 'importedAt: 2026-01-01\n'),
+    })
+    const r = await capture(await base({ importDir }))
+    expect(r.out).toContain('1 written by an older extractor')
+    expect(r.out).not.toContain('--out notes')
+  })
+
+  it('prints no imports row without an importDir, or when nothing is stale', async () => {
+    const none = await capture(await base())
+    expect(none.out).not.toContain('[docpilot] imports')
+
+    const importDir = tmp({
+      'current.md': imported('https://acme.test/c', `importedAt: 2026-01-03\nextractor: ${EXTRACTOR_VERSION}\n`),
+    })
+    const fresh = await capture(await base({ importDir }))
+    expect(fresh.out).not.toContain('[docpilot] imports')
+
+    const missing = await capture(await base({ importDir: path.join(os.tmpdir(), 'docpilot-doctor-no-imports') }))
+    expect(missing.out).not.toContain('[docpilot] imports')
+  })
+
+  it('keeps the exit code and the --json object, and escapes a hostile source', async () => {
+    const importDir = tmp({
+      'old.md': imported('https://acme.test/a\\u001b[2Jb', 'importedAt: 2026-01-01\n'),
+    })
+    const withImports = await base({ importDir })
+    const without = await base()
+
+    const a = await capture(withImports)
+    expect(a.code).toBe((await capture(without)).code)
+    // eslint-disable-next-line no-control-regex
+    expect(a.out).not.toMatch(/\u001b/)
+    expect(a.out).toContain('1 written by an older extractor')
+
+    const j = await capture({ ...withImports, argv: ['--json'] })
+    expect(Object.keys(JSON.parse(j.out)).sort()).toEqual(Object.keys(JSON.parse((await capture({ ...without, argv: ['--json'] })).out)).sort())
+    expect(j.out).not.toContain('older extractor')
   })
 })

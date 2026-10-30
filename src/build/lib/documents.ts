@@ -75,14 +75,14 @@ export const MAX_STALE_LISTED = 5
  * from extractor 2; the 2.x extractor wrote none, so a page with `importedAt:`
  * and no usable stamp reads as 1 (engine-spec 043, D-05).
  */
-function extractorOf(src: string): number {
+export function extractorOf(src: string): number {
   const n = Number(frontmatterValue(src, 'extractor'))
   return Number.isInteger(n) && n > 0 ? n : 1
 }
 
 /** A word safe in a shell command as it stands; anything else is single-quoted. */
 const SHELL_SAFE = /^[A-Za-z0-9_\-./:@%+=,~]+$/
-const shellWord = (w: string) => (SHELL_SAFE.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`)
+export const shellWord = (w: string) => (SHELL_SAFE.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`)
 
 /**
  * A link target an imported page may keep: `/`, an asset (a path ending in an

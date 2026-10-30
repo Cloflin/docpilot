@@ -49,7 +49,9 @@ import { inspectChatTarget } from './build/lib/chat-preflight.js'
 import { maxTokensFieldFor, providerFor } from './theme/docpilot/providers.js'
 import { toolSchemas } from './theme/docpilot/llm.js'
 import { flagErrors, flagGiven } from './cli-flags.js'
-import { extractHtml } from './build/lib/extract-html.js'
+import { EXTRACTOR_VERSION, extractHtml } from './build/lib/extract-html.js'
+import { extractorOf, shellWord } from './build/lib/documents.js'
+import { frontmatterValue, walkMarkdown } from './build/lib/readers.js'
 import { walkHtml } from './build/lib/html-dir.js'
 import { htmlOptionsFor } from './build/lib/html-options.js'
 import { formatExtractionReport, rowFromResults } from './build/lib/extraction-report.js'
@@ -184,6 +186,41 @@ async function extractionReport(
     rows.push(rowFromResults(key, items))
   }
   return { rows, missing }
+}
+
+/**
+ * The imported pages an older extractor wrote, each with the command that
+ * re-imports it (engine-spec 043, D-05, D-13).
+ *
+ * The rule is the one `index` applies, read through the same two functions: a
+ * page `docpilot import` wrote has `importedAt:`, its extractor is the positive
+ * integer in `extractor:` or 1 when there is none. A hand-written page has no
+ * `importedAt:` and is never listed. The list is complete here; `index` prints
+ * at most `MAX_STALE_LISTED` and points to this command.
+ */
+function staleImports(importDir: string): { source: string; slug: string }[] {
+  const dir = path.resolve(importDir)
+  let files: string[] = []
+  try {
+    if (statSync(dir).isDirectory()) files = walkMarkdown(dir).sort()
+  } catch {
+    // No directory is no imports; `readiness` already names a missing importDir.
+  }
+  const stale: { source: string; slug: string }[] = []
+  for (const file of files) {
+    let src = ''
+    try {
+      src = readFileSync(file, 'utf8')
+    } catch {
+      continue
+    }
+    if (!frontmatterValue(src, 'importedAt') || extractorOf(src) >= EXTRACTOR_VERSION) continue
+    stale.push({
+      source: frontmatterValue(src, 'source'),
+      slug: path.basename(file).replace(/\.md$/i, ''),
+    })
+  }
+  return stale
 }
 
 export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} as Record<string, string | undefined>, configPath = null }) {
@@ -792,6 +829,23 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
       for (const l of formatExtractionReport(rows)) line(`${PAD}${l}`)
     }
     for (const key of missing) say('html', `${printable(key)} does not exist — nothing to re-extract`)
+  }
+
+  /**
+   * THE IMPORTED PAGES AN OLDER EXTRACTOR WROTE, with the command that refreshes
+   * each (engine-spec 043, D-05, D-13). Information, like the row above: it never
+   * reaches the exit code or the `--json` object. The `source:` value is remote
+   * text, so it is escaped before it is printed (T-02-22).
+   */
+  if (!json && docPilot.importDir) {
+    const stale = staleImports(docPilot.importDir)
+    if (stale.length) {
+      say('imports', `${stale.length} written by an older extractor (this build's is ${EXTRACTOR_VERSION})`)
+      for (const p of stale) {
+        const source = p.source ? shellWord(printable(p.source)) : '<source>'
+        line(`${PAD}npx docpilot import ${source} --out ${shellWord(printable(p.slug))} --force`)
+      }
+    }
   }
 
   /**
