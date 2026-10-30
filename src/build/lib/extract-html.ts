@@ -155,6 +155,18 @@ function webUrl(value: string, base = ''): string {
   }
 }
 
+/**
+ * The base a relative link resolves against (engine-spec 043, D-10, research
+ * Pattern 4): the page's own `<base href>` first, because that is what a
+ * browser uses; then its canonical URL, the best address a built page has of
+ * itself; then the `base` option (the --html-base value or the import source
+ * URL). Only an http(s) result counts, and '' means no base is known
+ * (T-02-07: a `javascript:` base or canonical is ignored).
+ */
+export function linkBaseFor(meta: { baseHref?: string; canonical?: string }, base = ''): string {
+  return webUrl(meta.baseHref || '', base) || webUrl(meta.canonical || '', base) || webUrl(base)
+}
+
 /** Extract an already parsed document. Synchronous. */
 export function extractDocument(document, options: ExtractOptions = {}): ExtractResult {
   const { content = '', exclude = [], base = '', id = '' } = options
@@ -208,8 +220,8 @@ export function extractDocument(document, options: ExtractOptions = {}): Extract
     dropped.push(...prune(root))
     dropped.sort((a, b) => b.text.length - a.text.length)
 
-    const links = createLinkResolver({ base, id })
-    const rendered = toMarkdown(root, { origin: base, links })
+    const links = createLinkResolver({ base: linkBaseFor(meta, base), id })
+    const rendered = toMarkdown(root, { origin: linkBaseFor(meta, base), links })
     const markdown = rendered.markdown.normalize('NFC')
 
     report.dropped = dropped
@@ -218,9 +230,10 @@ export function extractDocument(document, options: ExtractOptions = {}): Extract
     report.linksResolved = links.stats.resolved
     report.linksDegraded = links.stats.degraded
     if (links.stats.degraded > 0) {
+      const named = links.stats.samples.map((s) => `"${s}"`).join(', ')
       const line =
         `${id}: ${links.stats.degraded} link(s) had no usable base URL and became text ` +
-        `(first: "${links.stats.firstDegraded}") — set --html-base, or give the page a rel=canonical`
+        `(e.g. ${named}) — set --html-base, or give the page a rel=canonical`
       report.warnings.push(line)
       options.warn?.(line)
     }
