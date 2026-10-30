@@ -475,6 +475,26 @@ describe('import — the command', () => {
     expect(dates(Date.UTC(2026, 7, 15)).iso).toBe('2026-08-15')
   })
 
+  it('the human date comes from a month table, not ICU: day unpadded, every month named (IN-10)', () => {
+    const humans = Array.from({ length: 12 }, (_, m) => dates(Date.UTC(2026, m, 1)).human)
+    expect(humans).toEqual([
+      '1 January 2026',
+      '1 February 2026',
+      '1 March 2026',
+      '1 April 2026',
+      '1 May 2026',
+      '1 June 2026',
+      '1 July 2026',
+      '1 August 2026',
+      '1 September 2026',
+      '1 October 2026',
+      '1 November 2026',
+      '1 December 2026',
+    ])
+    // The last second of the year is still the 31st in UTC, whatever the local zone says.
+    expect(dates(Date.UTC(2026, 11, 31, 23, 59, 59)).human).toBe('31 December 2026')
+  })
+
   it('a redirect out of the allowlist is refused after the fetch', async () => {
     const fetchImpl = async () => ({
       ok: true,

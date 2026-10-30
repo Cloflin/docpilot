@@ -61,19 +61,35 @@ export function slugFor(url) {
   )
 }
 
+/**
+ * English month names, spelled out here. `toLocaleDateString` formats through
+ * the runtime's ICU data, which differs between Node builds, so the attribution
+ * text could differ with the machine that ran the import (engine-spec 043, F-14).
+ */
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
 /** `2026-08-15` and `15 August 2026` from one clock reading. */
 export function dates(now) {
-  const iso = new Date(now).toISOString().slice(0, 10)
-  // Both readings are UTC. `toISOString` always is; without `timeZone` the
-  // second one formats in the machine's local zone, so the same instant printed
-  // two different days depending on who ran the import — and the attribution
-  // line could disagree with the `importedAt` key three lines above it.
-  const human = new Date(now).toLocaleDateString('en-GB', {
-    timeZone: 'UTC',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+  const when = new Date(now)
+  const iso = when.toISOString().slice(0, 10)
+  // Both readings are UTC. `toISOString` always is, and so are the `getUTC*`
+  // reads below; a local-zone read would print the same instant as two
+  // different days depending on who ran the import — and the attribution line
+  // could disagree with the `importedAt` key three lines above it.
+  const human = `${when.getUTCDate()} ${MONTH_NAMES[when.getUTCMonth()]} ${when.getUTCFullYear()}`
   return { iso, human }
 }
 
