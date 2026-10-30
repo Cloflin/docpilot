@@ -285,6 +285,14 @@ describe('imported pages — an older extractor is named with the command that r
     expect(c.said.die).toEqual([])
   })
 
+  it('names a page nested under importDir by its path, so the re-import writes the same file (WR-05)', async () => {
+    const c = ctx()
+    const page = imported('/kb/guides/deep/x', 'https://example.com/x')
+    page.file = '/proj/kb/guides/deep/x.md'
+    await documentsToChunks([page], c)
+    expect(stale(c)[0]).toContain('npx docpilot import https://example.com/x --out guides/deep/x --force')
+  })
+
   it('lists five commands and counts the rest', async () => {
     const c = ctx()
     const docs = Array.from({ length: 7 }, (_, i) => imported(`/kb/p${i}`, `https://example.com/p${i}`))

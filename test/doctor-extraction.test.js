@@ -172,6 +172,14 @@ describe('doctor — the imports row', () => {
     expect(r.out).not.toContain('--out current')
   })
 
+  it('names a page nested under importDir by its path, so the re-import writes the same file (WR-05)', async () => {
+    const importDir = tmp({
+      'guides/deep/x.md': imported('https://acme.test/help/x', 'importedAt: 2026-01-01\n'),
+    })
+    const r = await capture(await base({ importDir }))
+    expect(r.out).toContain('npx docpilot import https://acme.test/help/x --out guides/deep/x --force')
+  })
+
   it('lists them all, past the five that index prints', async () => {
     const files = {}
     for (let i = 0; i < 7; i++) files[`p${i}.md`] = imported(`https://acme.test/p${i}`, 'importedAt: 2026-01-01\n')

@@ -50,7 +50,7 @@ import { maxTokensFieldFor, providerFor } from './theme/docpilot/providers.js'
 import { toolSchemas } from './theme/docpilot/llm.js'
 import { flagErrors, flagGiven } from './cli-flags.js'
 import { EXTRACTOR_VERSION, extractHtml } from './build/lib/extract-html.js'
-import { extractorOf, shellWord } from './build/lib/documents.js'
+import { extractorOf, importSlug, shellWord } from './build/lib/documents.js'
 import { frontmatterValue, walkMarkdown } from './build/lib/readers.js'
 import { walkHtml } from './build/lib/html-dir.js'
 import { htmlOptionsFor } from './build/lib/html-options.js'
@@ -217,7 +217,7 @@ function staleImports(importDir: string): { source: string; slug: string }[] {
     if (!frontmatterValue(src, 'importedAt') || extractorOf(src) >= EXTRACTOR_VERSION) continue
     stale.push({
       source: frontmatterValue(src, 'source'),
-      slug: path.basename(file).replace(/\.md$/i, ''),
+      slug: importSlug(dir, file),
     })
   }
   return stale

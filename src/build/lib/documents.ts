@@ -81,6 +81,18 @@ export function extractorOf(src: string): number {
   return Number.isInteger(n) && n > 0 ? n : 1
 }
 
+/**
+ * The `--out` value that makes `docpilot import` write `file` again: its path
+ * under `importDir`, in forward slashes, with no `.md`. `readKbDocs` reads nested
+ * files and `runImport` joins the slug under `importDir` and creates the
+ * directories, so a page at `guides/x.md` is refreshed by `--out guides/x`; the
+ * bare file name wrote a second page beside the stale one and the warning never
+ * cleared (WR-05).
+ */
+export function importSlug(importDir: string, file: string): string {
+  return path.relative(importDir, file).split(path.sep).join('/').replace(/\.md$/i, '')
+}
+
 /** A word safe in a shell command as it stands; anything else is single-quoted. */
 const SHELL_SAFE = /^[A-Za-z0-9_\-./:@%+=,~]+$/
 export const shellWord = (w: string) => (SHELL_SAFE.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`)
@@ -284,7 +296,10 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
         const extractor = extractorOf(original)
         const file = rel(doc)
         if (extractor < EXTRACTOR_VERSION) {
-          stale.push({ file, source: doc.url ?? '', slug: path.basename(file).replace(/\.md$/i, ''), extractor })
+          const slug = ctx.importDir
+            ? importSlug(path.resolve(root, ctx.importDir), path.resolve(root, doc.file ?? doc.id))
+            : path.basename(file).replace(/\.md$/i, '')
+          stale.push({ file, source: doc.url ?? '', slug, extractor })
         } else if (extractor > EXTRACTOR_VERSION) {
           newer.push({ file, extractor })
         }
