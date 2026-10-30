@@ -293,7 +293,21 @@ describe('html furniture — noise', () => {
       expect(reasonOf('<div id="x">Updated over a week ago</div>')).toBeTruthy()
       expect(reasonOf('<div id="x">Last updated 12/03/2026</div>')).toBeTruthy()
       expect(reasonOf('<p id="x">Updated pricing applies from May.</p>')).toBe(null)
-      expect(reasonOf('<p id="x">Written by hand, the file is short.</p>')).toBeTruthy()
+      // A sentence is not a byline (WR-07): its tail is neither a name nor a date.
+      expect(reasonOf('<p id="x">Written by hand, the file is short.</p>')).toBe(null)
+    })
+
+    it('keeps a sentence that starts like a byline and drops a byline in its usual shapes (WR-07)', () => {
+      expect(reasonOf('<p id="x">Created by default when the webhook handler runs.</p>')).toBe(null)
+      expect(reasonOf('<p id="x">Posted by the worker once the job ends.</p>')).toBe(null)
+      expect(reasonOf('<p id="x">Created by Docker Compose when the service starts.</p>')).toBe(null)
+      expect(reasonOf('<p id="x">Published by the build, not by hand.</p>')).toBe(null)
+      expect(reasonOf('<p id="x">Written by Dana Reyes</p>')).toBeTruthy()
+      expect(reasonOf('<p id="x">Authored by J. R. R. Tolkien</p>')).toBeTruthy()
+      expect(reasonOf('<p id="x">Posted by Dana Reyes on May 3, 2026</p>')).toBeTruthy()
+      expect(reasonOf('<p id="x">Published by Dana Reyes, 3 May 2026</p>')).toBeTruthy()
+      expect(reasonOf('<p id="x">Posted by the support team on 2026-05-03</p>')).toBeTruthy()
+      expect(reasonOf('<p id="x">WRITTEN BY DANA REYES</p>')).toBeTruthy()
     })
 
     it('drops a table-of-contents title and a feedback question by text', () => {

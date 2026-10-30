@@ -193,9 +193,33 @@ export const UPDATED_TEXT =
 export const TOC_TITLE_TEXT = /^(?:table of contents|contents|on this page|in this article)$/i
 export const FEEDBACK_TEXT = /^was this (?:article|page|answer|section) (?:helpful|useful)\b.{0,60}$/i
 
-/** Each text rule with the reason that reaches the report. */
-const TEXT_RULES = [
-  { rule: BYLINE_TEXT, reason: 'help-centre byline ("written by …")' },
+/**
+ * What a byline's tail looks like (WR-07). `BYLINE_TEXT` alone matched every
+ * short sentence that opens with "Created by" or "Posted by": "Created by
+ * default when the webhook handler runs." is documentation, and a drop removes
+ * it from the corpus. A byline names a person, or dates the post. The tail
+ * therefore has to be a run of one to four capitalised words (a name), a name
+ * and a date, or a short phrase that ends in "on <date>". Every quantifier is
+ * bounded, as in the other rules, and the pattern is case-sensitive on purpose:
+ * `BYLINE_TEXT` carries the `i` flag, which would let "default" pass as a name.
+ */
+const NAME_WORD = "\\p{Lu}[\\p{L}\\p{M}'’.-]{0,30}"
+const NAME_RUN = `${NAME_WORD}(?: ${NAME_WORD}){0,3}`
+const MONTH = '\\p{Lu}\\p{L}{2,8}\\.?'
+const BYLINE_DATE =
+  `(?:\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}|${MONTH} \\d{1,2},? \\d{4}|\\d{1,2} ${MONTH},? \\d{4})`
+export const BYLINE_SHAPE = new RegExp(
+  `^\\S{1,12} [Bb][Yy] (?:${NAME_RUN}(?:,| on| ·| [-–|]) ${BYLINE_DATE}|${NAME_RUN}|.{1,40} on ${BYLINE_DATE})$`,
+  'u',
+)
+
+/**
+ * Each text rule with the reason that reaches the report. `shape`, when there is
+ * one, must also accept the text: the rule says what the line starts with, the
+ * shape says what the rest has to look like.
+ */
+const TEXT_RULES: { rule: RegExp; reason: string; shape?: RegExp }[] = [
+  { rule: BYLINE_TEXT, reason: 'help-centre byline ("written by …")', shape: BYLINE_SHAPE },
   { rule: UPDATED_TEXT, reason: 'help-centre date line ("updated …")' },
   { rule: TOC_TITLE_TEXT, reason: 'table-of-contents title' },
   { rule: FEEDBACK_TEXT, reason: 'feedback question ("was this helpful?")' },
@@ -341,6 +365,7 @@ function textRuleReason(el, tag: string): string | null {
   if (el.querySelector?.('p, ul, ol, dl, table, pre')) return null
   const found = TEXT_RULES.find(({ rule }) => rule.test(text))
   if (!found) return null
+  if (found.shape && !found.shape.test(text)) return null
   if (el.closest?.('pre, code')) return null
   return found.reason
 }
