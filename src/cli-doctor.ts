@@ -26,7 +26,7 @@
  * `--json` shape and three network-touching flags worth testing.
  */
 import path from 'node:path'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 
 import {
   readiness,
@@ -49,6 +49,13 @@ import { inspectChatTarget } from './build/lib/chat-preflight.js'
 import { maxTokensFieldFor, providerFor } from './theme/docpilot/providers.js'
 import { toolSchemas } from './theme/docpilot/llm.js'
 import { flagErrors, flagGiven } from './cli-flags.js'
+import { extractHtml } from './build/lib/extract-html.js'
+import { walkHtml } from './build/lib/html-dir.js'
+import { htmlOptionsFor } from './build/lib/html-options.js'
+import { formatExtractionReport, rowFromResults } from './build/lib/extraction-report.js'
+import type { ExtractionRow } from './build/lib/extraction-report.js'
+import { parseAllowlist } from './build/lib/sources.js'
+import { printable } from './build/lib/terminal.js'
 
 /**
  * @param {{docPilot: any, settings: any, argv: string[], env: Record<string,string|undefined>, configPath: string|null}} opts
@@ -113,6 +120,70 @@ async function probeBody(adapter, target, model, extra) {
   } catch (e) {
     return { ok: false, status: 0, kind: null, reason: String(e?.message || e) }
   }
+}
+
+/** A `docPilot.html.sources` key written as a URL, whether or not the allowlist accepts it. */
+const URL_KEY = /^[a-z][a-z0-9+.-]*:\/\//i
+
+/**
+ * The built-site directories `docPilot.html.sources` names, in key order.
+ *
+ * A key the allowlist parser accepts is an https URL prefix (a connector or
+ * `import` source) and is never walked; every other key is a directory relative
+ * to the project root, the same split `htmlOptionsFor` makes when it picks the
+ * level for a file (engine-spec 043, D-21). A URL-shaped key the allowlist
+ * refuses (http, a query) is not a directory either: `htmlConfigProblems` names
+ * it, and walking `http:/…` as a path would only print a second, wrong complaint.
+ */
+function htmlDirectoryKeys(html: any): string[] {
+  const sources = html && typeof html === 'object' ? html.sources : null
+  if (!sources || typeof sources !== 'object') return []
+  return Object.keys(sources).filter(
+    (key) => !URL_KEY.test(key) && parseAllowlist({ allow: [key] }).entries.length === 0,
+  )
+}
+
+/**
+ * Re-run the extraction over every configured built-site directory — offline.
+ *
+ * This is a RE-RUN, not a cache read: the same pipeline `index --html-dir`
+ * runs (engine-spec 043, D-06), with the options a page would get there, so an
+ * owner sees the table before a build changes the corpus. It makes no network
+ * call (nothing here fetches) and a finding is information: the caller never
+ * lets it move the exit code. A page that cannot be read is a skipped page, not
+ * a stop, for the reason the builder gives (D-11).
+ */
+async function extractionReport(
+  html: any,
+  root: string,
+): Promise<{ rows: ExtractionRow[]; missing: string[] }> {
+  const rows: ExtractionRow[] = []
+  const missing: string[] = []
+  for (const key of htmlDirectoryKeys(html)) {
+    const dir = path.resolve(root, key)
+    let isDir = false
+    try {
+      isDir = statSync(dir).isDirectory()
+    } catch {
+      // Absent or unreadable: reported below as "does not exist".
+    }
+    if (!isDir) {
+      missing.push(key)
+      continue
+    }
+    const items: { id: string; result: { ok: boolean; reason?: string; report?: any } }[] = []
+    for (const file of walkHtml(dir)) {
+      const id = path.relative(dir, file).split(path.sep).join('/')
+      try {
+        const options = htmlOptionsFor(html, file, { root })
+        items.push({ id, result: await extractHtml(readFileSync(file, 'utf8'), { ...options, id }) })
+      } catch (e) {
+        items.push({ id, result: { ok: false, reason: String((e as Error)?.message || e) } })
+      }
+    }
+    rows.push(rowFromResults(key, items))
+  }
+  return { rows, missing }
 }
 
 export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} as Record<string, string | undefined>, configPath = null }) {
@@ -705,6 +776,22 @@ export async function runDoctor({ docPilot, settings = {}, argv = [], env = {} a
       }
     }
     line('')
+  }
+
+  /**
+   * WHAT THE HTML EXTRACTOR KEEPS AND DROPS ON THIS SITE (engine-spec 043, D-13).
+   *
+   * Human-readable only in this phase: under `--json` the rows are not printed
+   * and the work is not done, and the object below gains no key. The findings
+   * never reach the exit code, which stays the readiness verdict.
+   */
+  if (!json) {
+    const { rows, missing } = await extractionReport(docPilot.html, process.cwd())
+    if (rows.length) {
+      say('html', 'extraction, re-run offline over docPilot.html.sources')
+      for (const l of formatExtractionReport(rows)) line(`${PAD}${l}`)
+    }
+    for (const key of missing) say('html', `${printable(key)} does not exist — nothing to re-extract`)
   }
 
   /**
