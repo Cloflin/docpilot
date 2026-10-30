@@ -152,6 +152,17 @@ and again</code></pre></div>`
     expect(markdown).toBe('**Can I export my data?**\n\nYes, from the Settings page.')
   })
 
+  it('writes the label of a non-button accordion trigger once (IN-07)', async () => {
+    for (const trigger of [
+      '<div role="button" id="q" aria-expanded="false" aria-controls="a">Question one</div>',
+      '<h3 id="q" aria-expanded="false" aria-controls="a">Question one</h3>',
+      '<a href="#a" id="q" aria-expanded="false" aria-controls="a">Question one</a>',
+    ]) {
+      const { markdown } = await extract(`${trigger}<div id="a" hidden><p>The answer is here.</p></div>`)
+      expect(markdown, trigger).toBe('**Question one**\n\nThe answer is here.')
+    }
+  })
+
   it('keeps a details accordion with its summary and its answer', async () => {
     const { markdown } = await extract(`<details><summary>Do you offer refunds?</summary><p>Within 14 days of the first payment.</p></details>`)
     expect(plain(markdown)).toContain('Do you offer refunds?')

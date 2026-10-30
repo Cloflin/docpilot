@@ -24,7 +24,7 @@
  */
 
 import { isCodeBlock } from './html-code.js'
-import { textOf } from './html-extract.js'
+import { DROP_TAGS, textOf } from './html-extract.js'
 
 /**
  * A tab group written without ARIA, recognised by the generator's own classes.
@@ -213,9 +213,13 @@ function ariaAccordions(root, ids: Map<string, any>): number {
     if (!region || done.has(region) || !root.contains(region)) continue
     if (region === trigger || region.contains(trigger) || trigger.contains(region)) continue
     done.add(region)
-    // The trigger stays: a `button` is the prune's, and the label is already
-    // written into the region.
-    if (keep(region, clean(textOf(trigger)))) regions++
+    const label = clean(textOf(trigger))
+    if (!keep(region, label)) continue
+    regions++
+    // The label is written into the region now. A `button` goes with the prune,
+    // which reports it; any other trigger (`div role="button"`, a heading, a link)
+    // would stay and print the label a second time (IN-07).
+    if (label && !DROP_TAGS.includes(String(trigger.tagName || '').toLowerCase())) trigger.remove()
   }
   return regions
 }
