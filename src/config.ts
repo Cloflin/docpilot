@@ -3318,6 +3318,23 @@ export const DEFAULTS = {
      */
     sources: null,
     /**
+     * How a page of HTML becomes Markdown — engine-spec 043.
+     *
+     * `{ content?, exclude?, sources?: { [key]: { content?, exclude? } }, fetcher? }`.
+     * `content` is one CSS selector for the body of a page and `exclude` a
+     * selector or a list removed from inside it. A `sources` key is a URL prefix
+     * (what `sources.allow` takes) for `docpilot import`, or a directory for
+     * `index --html-dir`, and only the longest matching key applies. Precedence
+     * is the flags, then that key, then this default; each of the two is taken
+     * from the most specific level that sets it.
+     *
+     * Null — off — because the shipped rule list needs no word from the owner.
+     * Server-only: it steers the build and the CLI, and `fetcher` is a FUNCTION
+     * that is carried and never called at resolve time, so resolving a config
+     * stays free of the network. It never reaches the browser.
+     */
+    html: null,
+    /**
      * Where the OpenAPI specs are — paths relative to the project root.
      *
      * Null keeps the behaviour that predates the setting: `${docsDir}/public/openapi`,
@@ -3918,6 +3935,7 @@ export const SERVER_ONLY = [
     'evalDir',
     'importDir',
     'sources',
+    'html',
     'openapi',
     'vocabulary',
     'chat.preferLocal',
@@ -4126,6 +4144,7 @@ function resolveChat(chat = {}, env = {}) {
  *   embed    the object form, and what `resolveEmbed` adds, for the same reason.
  *   server   `resolveServerOptions`'s keys; `DEFAULTS.server` holds one of them.
  *   sources  `{allow}`; the default is `null`.
+ *   html     `content`, `exclude`, `sources` and `fetcher`; the default is `null`.
  */
 const SETTING_EXTRAS = {
     '': ['outDir', 'description'],
@@ -4133,6 +4152,7 @@ const SETTING_EXTRAS = {
     embed: ['provider', 'model', 'baseURL', 'fallback', 'models', 'modelAuto', 'lexicalOnly', 'auto', 'borrowed'],
     server: ['metrics', 'limits', 'trustProxy', 'turnTimeoutMs', 'embedTimeoutMs', 'cache', 'allowedOrigins', 'turn'],
     sources: ['allow'],
+    html: ['content', 'exclude', 'sources', 'fetcher'],
 }
 
 /** Groups whose keys are the AUTHOR's own names — a tool, a vocabulary term — or that hold a list. */

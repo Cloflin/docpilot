@@ -2,15 +2,15 @@
   "ok": true,
   "fails": [],
   "version": 1,
-  "ranAt": "2026-10-30T06:24:56.960Z",
+  "ranAt": "2026-10-30T17:34:53.224Z",
   "embedBase": "https://openrouter.ai",
   "probeSha": "8c28e1b30505a1c9",
   "embedRequests": 13,
-  "calibratedAt": "0182f850",
+  "calibratedAt": "37991d24",
   "embedModel": "qwen/qwen3-embedding-8b",
   "vocabHash": null,
   "lexicalOnly": false,
-  "chunkCount": 847,
+  "chunkCount": 856,
   "probeFile": "docpilot/calibration.jsonl",
   "probeCount": 271,
   "byStratum": {
@@ -45,42 +45,42 @@
     "wDense": 0.75,
     "wLexical": 0.25,
     "denseMode": "cosine",
-    "cosFloor": 0.24,
-    "cosCeil": 0.6,
+    "cosFloor": 0.22,
+    "cosCeil": 0.62,
     "source": "transferred-window",
-    "calibratedAt": "0182f850",
+    "calibratedAt": "37991d24",
     "zexp": [
       {
         "n": 7,
-        "z": 1.1661
+        "z": 1.1862
       },
       {
         "n": 9,
-        "z": 1.3916
+        "z": 1.4073
       },
       {
         "n": 24,
-        "z": 1.914
+        "z": 1.8778
       },
       {
         "n": 47,
-        "z": 2.2614
+        "z": 2.3056
       },
       {
         "n": 105,
-        "z": 3.0877
+        "z": 3.0769
       },
       {
-        "n": 306,
-        "z": 3.8373
+        "n": 307,
+        "z": 3.8656
       },
       {
-        "n": 711,
-        "z": 4.5412
+        "n": 712,
+        "z": 4.52
       },
       {
-        "n": 847,
-        "z": 4.8373
+        "n": 856,
+        "z": 4.8579
       }
     ],
     "zexpSource": "measured",
@@ -89,7 +89,7 @@
   },
   "transferredFrom": {
     "embedModel": "bge-m3",
-    "calibratedAt": "0182f850",
+    "calibratedAt": "37991d24",
     "source": "calibrated-reduced",
     "probeCount": 631,
     "tau": 0.68,
@@ -101,8 +101,8 @@
     "anchorCount": 271,
     "probeCount": 631,
     "window": {
-      "cosFloor": 0.24,
-      "cosCeil": 0.6
+      "cosFloor": 0.22,
+      "cosCeil": 0.62
     },
     "byStratum": {
       "U": {
@@ -137,8 +137,8 @@
       },
       "N3": {
         "n": 15,
-        "failures": 10,
-        "rate": 0.6666666666666666,
+        "failures": 9,
+        "rate": 0.6,
         "sourceRate": null
       },
       "N4": {
@@ -155,8 +155,8 @@
       },
       "N6": {
         "n": 15,
-        "failures": 10,
-        "rate": 0.6666666666666666,
+        "failures": 9,
+        "rate": 0.6,
         "sourceRate": null
       },
       "X": {
@@ -172,9 +172,9 @@
         "sourceRate": null
       }
     },
-    "gatePrecision": 0.45925925925925926,
+    "gatePrecision": 0.4740740740740741,
     "blatantRefusalRate": 1,
-    "rampShare": 0.375,
+    "rampShare": 0.40441176470588236,
     "drift": 0.04512275300267796
   },
   "bounds": {
@@ -221,22 +221,28 @@
   "tauWithoutBoundingProbes": null,
   "backlog": [
     {
-      "id": "s-18",
-      "stratum": "S",
-      "G": 0.6919,
-      "margin": 0.0119
-    },
-    {
       "id": "s-115",
       "stratum": "S",
-      "G": 0.6957,
-      "margin": 0.0157
+      "G": 0.6827,
+      "margin": 0.0027
+    },
+    {
+      "id": "s-18",
+      "stratum": "S",
+      "G": 0.7049,
+      "margin": 0.0249
     },
     {
       "id": "s-08",
       "stratum": "S",
-      "G": 0.7471,
-      "margin": 0.0671
+      "G": 0.736,
+      "margin": 0.056
+    },
+    {
+      "id": "s-66",
+      "stratum": "S",
+      "G": 0.7446,
+      "margin": 0.0646
     },
     {
       "id": "f-71",
@@ -247,38 +253,32 @@
     {
       "id": "f-80",
       "stratum": "F",
-      "G": 0.7642,
-      "margin": 0.0842
+      "G": 0.7522,
+      "margin": 0.0722
     },
     {
       "id": "s-43",
       "stratum": "S",
-      "G": 0.7643,
-      "margin": 0.0843
+      "G": 0.7612,
+      "margin": 0.0812
+    },
+    {
+      "id": "f-62",
+      "stratum": "F",
+      "G": 0.7644,
+      "margin": 0.0844
     },
     {
       "id": "s-103",
       "stratum": "S",
-      "G": 0.7661,
-      "margin": 0.0861
-    },
-    {
-      "id": "s-66",
-      "stratum": "S",
-      "G": 0.7702,
-      "margin": 0.0902
+      "G": 0.7653,
+      "margin": 0.0853
     },
     {
       "id": "f-85",
       "stratum": "F",
       "G": 0.775,
       "margin": 0.095
-    },
-    {
-      "id": "f-88",
-      "stratum": "F",
-      "G": 0.7778,
-      "margin": 0.0978
     }
   ],
   "sweep": [],

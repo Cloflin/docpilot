@@ -106,6 +106,7 @@ export const COMMANDS = {
       { name: 'quantize', kind: 'enum', values: ['auto', 'binary', 'int8'], example: 'int8', help: 'how chunk vectors are stored: one bit or one byte per dimension; auto measures and picks' },
       { name: 'html-dir', kind: 'value', example: 'dist', help: 'also index a site that is already built — any generator, no markdown needed' },
       { name: 'html-select', kind: 'value', example: 'main', help: 'the CSS selector naming the body of a built page' },
+      { name: 'html-exclude', kind: 'value', example: '.toc', help: 'CSS selectors removed from every built page' },
       { name: 'html-base', kind: 'value', example: 'https://example.com', help: 'the origin those built pages are served from' },
       { name: 'sitemap', kind: 'value', example: 'dist/sitemap.xml', help: 'limit --html-dir to the published routes' },
       { name: 'embed-provider', kind: 'enum', values: [...PROVIDER_IDS, 'none'], example: 'ollama', help: 'build with this embedder instead of the one your config names' },
@@ -127,6 +128,8 @@ export const COMMANDS = {
     flags: [
       { name: 'dry', kind: 'bool', alias: 'dry-run', help: 'print the report and write nothing' },
       { name: 'html', kind: 'value', example: './page.html', help: 'read HTML from a file or `-` for stdin instead of fetching' },
+      { name: 'html-select', kind: 'value', example: 'article', help: 'the CSS selector naming the body of the page' },
+      { name: 'html-exclude', kind: 'value', example: '.feedback', help: 'CSS selectors removed from the body' },
       { name: 'out', kind: 'value', example: 'their-guide', help: "the file name under `importDir`; defaults to the URL's last segment" },
       { name: 'lang', kind: 'value', example: 'en', help: 'the `accept-language` to ask for' },
       { name: 'no-alternate', kind: 'bool', help: 'do not look for a published `.md`; convert the HTML' },

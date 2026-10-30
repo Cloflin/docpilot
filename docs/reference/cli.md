@@ -29,6 +29,7 @@ npx docpilot index
 npx docpilot index --dry
 npx docpilot index --no-embed
 npx docpilot index --html-dir=dist
+npx docpilot index --html-dir=dist --html-exclude=".toc"
 npx docpilot index --refresh-embeddings
 npx docpilot index --quantize=binary
 ```
@@ -98,6 +99,7 @@ And it inlines the tuned retrieval levers, which is the half of [`tune`](#tune) 
 ```bash
 npx docpilot index --html-dir=dist
 npx docpilot index --html-dir=public --html-select="article.doc"
+npx docpilot index --html-dir=dist --html-select="article.doc" --html-exclude=".feedback"
 npx docpilot index --html-dir=dist --sitemap=dist/sitemap.xml
 ```
 
@@ -112,11 +114,17 @@ A built page is a page of **your** site. It is cited by its route, exactly like 
   built pages      0 (412 shadowed by markdown) from dist
 ```
 
-Which part of each page is the documentation is decided in code, by the same extractor [`import`](#import) uses: `<main>`, `[role=main]` or `<article>` when the page has one, otherwise the block holding the most prose. Navigation, footers, banners and share widgets are dropped. **`--html-select` overrides that** with a CSS selector of your own — and a selector that matches nothing warns and skips the page rather than quietly falling back, because a typo in a flag should not index a different subtree than the one you asked for.
+Which part of each page is the documentation is decided in code, by the same extractor [`import`](#import) uses: `<main>`, `[role=main]` or `<article>` when the page has one, otherwise the block holding the most prose. Navigation, footers, banners and share widgets are dropped; tab panels and accordions are kept, each panel under its label; code keeps its line breaks and its language; a table keeps its merged cells. **`--html-select` overrides the choice of body** with a CSS selector of your own — and a selector that matches nothing warns and skips the page rather than quietly falling back, because a typo in a flag should not index a different subtree than the one you asked for. **`--html-exclude` removes** one more selector from inside that body on every page: `--html-exclude=".toc"`, or a CSS selector list such as `".toc, .feedback"` when one rule is not enough.
+
+The same two settings can be written once in the config, as [`html`](/reference/config#html), and narrowed per directory there. The order is: the flags, then the longest matching `html.sources` key, then the project default, and `content` and `exclude` are each taken from the most specific level that sets them. A level that sets `exclude` replaces the lower list rather than adding to it.
+
+**One bad page does not stop the run.** A page that cannot be read is skipped, warned about by name and counted, and the build goes on with the rest: a `noindex` page, one with fewer than 24 characters left after extraction, one over 8 MiB, one that will not parse, or one the selector does not match. `index` stops only when it attempted at least one page and extracted none — then the warnings above the error say why. To see what the extractor keeps and drops over a directory without building, [`doctor`](#doctor) prints the same table `import` does.
+
+**The corpus hash carries the extractor.** A corpus that holds `--html-dir` pages hashes the extractor's version in with them, so a release that reads a page differently is a changed corpus and the calibration behind it reads as stale, instead of a different text under an unchanged hash. A corpus of markdown alone has no extractor in it, and its hash does not move.
 
 `--sitemap` reads a **local** `sitemap.xml` and indexes only the routes it declares. Nothing is fetched: the file is the list of pages your site publishes, which is exactly the filter that removes the 404 page, the draft a generator left behind, and the per-tag listing pages. `--html-base=https://example.com` only resolves relative links found inside the pages.
 
-Requires an HTML parser, which is an optional dependency — `npm i -D linkedom`. The command says so if it is missing.
+The HTML parser ships with the package, so there is nothing to install first, and it never reaches the browser bundle.
 
 ::: tip Rebuild after it
 `--html-dir` changes what is in the corpus, so the numbers behind the gate move with it. Run [`calibrate`](#calibrate) and [`eval`](#eval) after the first build that includes it.
@@ -157,10 +165,10 @@ Turns an allowlisted external page into a page of the corpus, written to `import
 Six steps, in this order:
 
 1. **The allowlist runs before the network.** A URL outside `sources.allow` is refused without being fetched, and the line that would widen the boundary is printed rather than applied.
-2. **Fetch**, identifying itself as `docpilot-import` and asking for `--lang` (default `en`). A page behind a bot wall or built by JavaScript will not fetch: open it in a browser, save the DOM, and pass `--html <file>` — or `--html -` to pipe it in.
+2. **Fetch**, identifying itself as `docpilot-import` and asking for `--lang` (default `en`), with a 30-second deadline. A page behind a bot wall or built by JavaScript will not fetch: render it yourself with [`html.fetcher`](/reference/config#html), which the command calls instead of its own request, or open it in a browser, save the DOM, and pass `--html <file>` — or `--html -` to pipe it in. `--html` wins over the fetcher. The fetcher is called with the URL and an `AbortSignal`, and returns the HTML or `{ html, url, headers }`; the URL you asked for and the `url` it returns both pass `sources.allow`, exactly as a redirect does, and `x-robots-tag` in `headers` is honoured.
 3. **Look for markdown the site already publishes**, and use it if there is any — see below. Steps 4 and 5 are what happens when there is none. `--no-alternate` skips the search.
-4. **Extract**, in code: headings, prose, lists, data tables, code samples and tooltips are kept; navigation, footers, cookie banners, share rails and anything whose meaning is a button are dropped. Every drop is named on stdout, and so is the subtree that was read.
-5. **Convert** to markdown, with `title`, `description`, `source` and `importedAt` frontmatter and the attribution block.
+4. **Extract**, in code: headings, prose, lists, data tables, code samples and tooltips are kept; navigation, footers, cookie banners, share rails and anything whose meaning is a button are dropped. Every drop is named on stdout, and so is the subtree that was read. `--html-select` names the body yourself and `--html-exclude` removes selectors from inside it; both override what `html` in the config says for the source (flags, then the longest `html.sources` key, then the project default). The command then prints [the extraction report](#import-report). A page that cannot be extracted is skipped for one of these reasons, and because `import` handles one page, a skipped page is a command that imported nothing: it prints `nothing to import: <reason>` and **exits 1**.
+5. **Convert** to markdown, with `title`, `description`, `source`, `importedAt` and `extractor` frontmatter — and `lang` and `dateModified` when the page declares them — and the attribution block. `extractor` is the version of the rules that wrote the page; `index` and [`doctor`](#doctor) name a page an older one wrote, with the command that refreshes it. Relative links are made absolute against the page's `<base href>`, then its canonical address, then the URL you gave; a link that cannot be resolved, or that names `javascript:` or `data:`, is written as its text, and images are never carried over.
 6. **Annotate**, with the model `chat` points at. This pass may add `<llm-only>` and `<llm-exclude>` and nothing else — the output is stripped of those tags and compared to the input character for character, and a model that reworded, reordered or dropped anything has its whole answer discarded. `--no-annotate` skips it.
 
 ### The page's own markdown wins
@@ -192,11 +200,32 @@ Whichever path ran, the report says so:
 |---|---|
 | `--dry-run` | print the report and write nothing |
 | `--html <file\|->` | read HTML from a file or stdin instead of fetching |
+| `--html-select <css>` | the CSS selector naming the body of the page; a selector that matches nothing skips the page |
+| `--html-exclude <css>` | CSS selectors removed from the body |
 | `--out <slug>` | the file name under `importDir`; defaults to the URL's last segment |
 | `--lang <tag>` | the `accept-language` to ask for; default `en` |
 | `--no-alternate` | do not look for a published `.md`; convert the HTML |
 | `--no-annotate` | skip the model pass |
 | `--force` | replace a file that already exists |
+
+### The extraction report {#import-report}
+
+Every run prints what the extractor kept and dropped, so the size of a loss is visible before the corpus changes. A silent extraction reads as "it took everything", and this table is how a selector that took too little or too much shows itself:
+
+```
+source                       pages  kept  dropped  empty  link failures
+https://example.com/product      1  4210      812      0              0
+```
+
+`pages` is the pages extracted, `kept` and `dropped` count characters of the text — Unicode code points, whitespace collapsed, plain digits with no locale grouping, so two machines print the same table — `empty` counts pages skipped for having almost nothing left, and `link failures` counts links that could not be resolved and were written as text. Skipped pages are named under the row, the first ten of them, then a count of the rest:
+
+```
+source  pages   kept  dropped  empty  link failures
+dist        2  14100     2760      1              2
+  skipped /404: near-empty (11 characters)
+```
+
+A skipped page carries one reason: `noindex` (a robots meta tag, or an `X-Robots-Tag` header), `near-empty (N characters)`, `too large (N bytes)`, `parse failed`, `invalid selector "…"`, `content selector "…" matched nothing`, or `extraction failed`. `import` exits 1 on any of them, because it had one page and imported none. The report is human-readable only; there is no JSON form.
 
 The command does not index. An import changes the corpus hash, so what follows it is `index --dry`, `index`, `lint`, `eval --gate-only` and `calibrate` — the command prints that list when it writes.
 
@@ -657,6 +686,20 @@ It runs without a config file at all, on the shipped defaults and your environme
   "notes": ["…"]
 }
 ```
+
+When `docPilot.html.sources` names a directory of built pages, `doctor` also **re-runs the HTML extraction over it, offline**, with the options that directory's key gives it, and prints the [extraction report](#import-report) — one row per directory, skipped pages named — under an `html` heading. A key written as a URL is never walked, and a directory that does not exist is named in one line. When `importDir` holds pages that an older extractor wrote, an `imports` row lists every one, each with the command that re-imports it (`index` names at most five; `doctor` names them all):
+
+```
+[docpilot] html      extraction, re-run offline over docPilot.html.sources
+                     source  pages  kept  dropped  empty  link failures
+                     dist        2  14100     2760      1              2
+                       skipped /404: near-empty (11 characters)
+[docpilot] imports   2 written by an older extractor (this build's is 2)
+                     npx docpilot import https://example.com/a --out a --force
+                     npx docpilot import https://example.com/b --out b --force
+```
+
+Both rows are information. They make no network call, they are left out of `--json`, and neither moves the exit code, which stays the readiness verdict.
 
 `--proxy` additionally prints the contract a production reverse proxy has to satisfy: the exact paths, the upstream for each, and the name of the header the key goes in. The key value is never printed. See [Production](/guide/production) for what to do with it.
 

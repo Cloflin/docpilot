@@ -718,6 +718,50 @@ export interface ServerSettings {
   turn?: { loop?: 'agentic' | 'one-shot' | 'adaptive'; adaptiveG?: number; finalThink?: boolean }
 }
 
+/**
+ * Which part of an HTML page is the documentation (engine-spec 043).
+ *
+ * Server-only: it steers `docpilot import` and `docpilot index --html-dir`, and
+ * never reaches the browser.
+ */
+export interface HtmlSourceOptions {
+  /** One CSS selector for the body of the page. A selector that matches nothing skips the page. */
+  content?: string
+  /** A selector, or a list of them, removed from inside the body. A level that sets it replaces the lower list. */
+  exclude?: string | string[]
+}
+
+/**
+ * What a `docPilot.html.fetcher` may return instead of a plain string: the page,
+ * the URL it was finally served from, and the response headers the extractor
+ * reads (`x-robots-tag`; keys in lower case).
+ */
+export interface HtmlFetchResult {
+  html: string
+  /** The address the page came from after redirects. It must pass `sources.allow`, like the one asked for. */
+  url?: string
+  headers?: Record<string, string>
+}
+
+/**
+ * `docPilot.html` — server-only, so the fetcher is never part of a client artifact.
+ *
+ * Precedence is the flags, then the longest matching `sources` key, then the
+ * `content` and `exclude` written here.
+ */
+export interface HtmlConfig extends HtmlSourceOptions {
+  /**
+   * Per-source overrides. A key is a URL prefix of `sources.allow` for `docpilot import`,
+   * or a directory for `index --html-dir`; only the longest matching key applies.
+   */
+  sources?: Record<string, HtmlSourceOptions>
+  /**
+   * The owner's renderer for `docpilot import`, for a page a plain request cannot read.
+   * Server-only. The requested URL and the returned `url` both pass `sources.allow`.
+   */
+  fetcher?: (url: string, init: { signal: AbortSignal }) => Promise<string | HtmlFetchResult>
+}
+
 /** What you pass to `defineDocPilot`, and export by name for the CLI to read. */
 export interface DocPilotSettings {
   enabled?: boolean
@@ -734,6 +778,11 @@ export interface DocPilotSettings {
   evalDir?: string
   importDir?: string | null
   sources?: { allow: string[] } | null
+  /**
+   * How a page of HTML becomes Markdown: the body selector, what to remove, and the
+   * fetcher `docpilot import` may use. `null` is the default. Server-only.
+   */
+  html?: HtmlConfig | null
   /**
    * Where the OpenAPI specs are, as paths from the project root: a directory, a
    * file, or a `*` in the FILE NAME. `null` is the default and means

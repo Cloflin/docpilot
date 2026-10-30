@@ -18,12 +18,12 @@ the panel fetches the index once and caches it:
 
 | | |
 | --- | --- |
-| the vectors | **424 KB for this site's 847 chunks at 4096 dimensions** |
+| the vectors | **428 KB for this site's 856 chunks at 4096 dimensions** |
 | the chunk text, titles and breadcrumbs | the rest of the same directory |
 | when | on the reader's **first open of the panel**, not on page load |
 
 The vectors are one sign bit per dimension, which is what keeps that number
-in kilobytes: at `float32` the same blob would be 13.2 MB. A reader who never
+in kilobytes: at `float32` the same blob would be 13.4 MB. A reader who never
 opens the panel downloads none of it at all.
 
 That is the cost nobody budgets for and the one that scales with your corpus

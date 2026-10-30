@@ -21,6 +21,7 @@ title: Product overview
 description: What the product does and which plan includes what.
 source: https://example.com/product
 importedAt: 2026-08-14
+extractor: 2
 ---
 
 # Product overview
@@ -56,7 +57,9 @@ A page inside `docsDir` may also carry `source:`. Then it keeps its route — th
 
 ## Links out of an imported page
 
-`vitepress build` checks dead links for every page it renders, and it never renders this one. `docpilot index` does it instead, and fails on a link to a path that is not a page of this site — after the generated routes are known, so a link into `/reference/…` resolves correctly.
+`vitepress build` checks dead links for every page it renders, and it never renders this one, and a dead link in somebody else's page is not a mistake in yours. So the two kinds of page are held to different rules. **A page you wrote** keeps the strict check: `docpilot index` fails on a link to a path that is not a page of this site, after the generated routes are known, so a link into `/reference/…` resolves correctly. **An imported page** does not fail the build. A root-relative link that points at no page of this site becomes its text, `index` warns with the file and the link, and the build exits 0. Links inside fenced code and inline code are never read, and an image is never rewritten.
+
+The links themselves are settled when the page is imported, not when it is indexed. A relative link is resolved against the page's own `<base href>`, then its canonical address, then the URL you passed, so a link that meant `/docs/next` on the source site does not point at `/docs/next` on yours. A link that cannot be resolved, or one that names `javascript:` or `data:`, is written as its text. Images are not carried over at all: an import is text, and an image would be a link into a host you do not control.
 
 ## It is still public
 
@@ -68,6 +71,15 @@ The index under `public/rag/` is served to every browser that opens the panel, a
   pages            214 (3 imported, 2 of them external)
 ```
 
+The extractor that wrote a page is stamped into it as `extractor:`, and the build compares the stamp with its own. A page written by an older extractor is named once, with the command that refreshes each, up to five of them:
+
+```
+  3 imported page(s) under knowledge-base/ were written by extractor 1 (this build's is 2); re-import to apply the current rules:
+        npx docpilot import https://example.com/product --out product --force
+```
+
+It is a warning and the build goes on. A page stamped by a newer extractor than the one installed gets its own line asking you to update docpilot, and a page you wrote by hand has no stamp and is never flagged. [`docpilot doctor`](/reference/cli#doctor) lists every stale page, not the first five.
+
 An imported page belongs to no sidebar section, so it is also reported as an orphan page. That is expected: it is retrievable under "All docs" — the default — and invisible to a reader who has narrowed the scope. Worth knowing if the import exists to answer a question a narrowed reader would ask.
 
 ## Importing one
@@ -78,6 +90,14 @@ npx docpilot import https://example.com/product
 ```
 
 The command does the whole page: it checks the allowlist **before** it fetches, extracts the documentation from the markup in code, writes the frontmatter and the attribution block, and then runs one model pass that may add `<llm-only>` and `<llm-exclude>` and nothing else. See [`import`](/reference/cli#import) for the flags.
+
+The frontmatter records where the page came from and which rules read it: `source`, `importedAt`, `extractor`, and the page's own `lang` and `dateModified` when it declares them. `dateModified` is kept as the page wrote it.
+
+**The extractor chooses the body of the page, and you can overrule it.** `--html-select` names the body with a CSS selector and `--html-exclude` removes selectors from inside it, for one run. To keep the choice for every run, write it once as [`html`](/reference/config#html) in the config, narrowed per source: the flags win, then the longest matching `html.sources` key, then the project default. A selector that matches nothing skips the page instead of quietly reading a different one.
+
+**After the extraction the command prints what it kept and dropped**, as a table of pages, characters kept and dropped, empty pages and links that could not be resolved. A page the extractor refuses — marked `noindex`, left with almost nothing, over 8 MiB, or not matched by your selector — is named with its reason, and the command exits 1 with nothing written, since a single page was the whole job. See [the extraction report](/reference/cli#import-report).
+
+**A page a plain request cannot read can be rendered by your own code.** Set [`html.fetcher`](/reference/config#html) and `import` calls it instead of its own request. What it returns still crosses the allowlist: the address it was asked for and the one it reports must both be on `sources.allow`.
 
 Two things are worth knowing before the first run.
 

@@ -50,6 +50,7 @@ export const docPilot = {
   evalDir: 'docpilot',
   importDir: null,
   sources: null,
+  html: null,
   openapi: null,
   chat: { provider: 'auto', chain: false, preferLocal: false, model: null, baseURL: null, models: null, temperature: 0.2, maxTokens: 2048, numCtx: 8192, reasoning: 'auto', verbosity: null, topP: null, seed: null },
   embed: 'auto',
@@ -99,8 +100,8 @@ Four things the block cannot say on its own:
   row in the table rather than in this block. Naming a provider with no model
   gets that provider's default; naming one that has neither a default nor a free
   pool — `custom` — is still a build-stopping error.
-- **Five keys never reach the browser** — `docsDir`, `indexDir`, `evalDir`,
-  `importDir` and `sources`. See [What reaches the browser](#what-reaches-the-browser).
+- **Six keys never reach the browser** — `docsDir`, `indexDir`, `evalDir`,
+  `importDir`, `sources` and `html`. See [What reaches the browser](#what-reaches-the-browser).
 
 ## Parameters
 
@@ -127,6 +128,7 @@ written by hand; only the values are mechanical.
 | [`evalDir`](#evaldir) | `string` | `'docpilot'` | Holds the golden set, the calibration set and the reports — a statement about your corpus, resolved from the project root — *server-only — the CLI reads it, the panel never sees it* |
 | [`importDir`](#importdir) | `string \| null` | `null` | A second corpus root that is indexed but never routed — its pages carry a mandatory frontmatter `source:` as their citation — *server-only, and it must sit outside `docsDir` or VitePress publishes the pages anyway* |
 | [`sources`](#sources) | `{ allow: string[] } \| null` | `null` | The https origins a page may name in `source:`, each optionally narrowed to a path prefix; `null` forbids `source:` outright — *server-only, and assigned whole rather than merged, so a partial object is the entire allowlist* |
+| [`html`](#html) | `HtmlConfig \| null` | `null` | Which part of a page of HTML is the documentation — a body selector, what to remove from it, per-source overrides and a fetcher for `docpilot import`; `null` uses the shipped rule list — *server-only, and `fetcher` is a function the build carries and never calls while the config resolves* |
 | [`openapi`](#openapi) | `string[] \| null` | `null` | Where the OpenAPI specs are, as paths from the project root — a directory, a file, or a `*` in the file name; `null` means `${docsDir}/public/openapi` — *server-only, and each spec claims `/reference/<basename>`, so two entries sharing a basename claim one route and the build says so* |
 | [`chat.provider`](#chat-provider) | `ProviderId \| 'auto'` | `'auto'` | Picks which service answers and where the request is sent; `'auto'` reads the environment and takes the first key it finds along [the chain](#the-provider-chain) — *fifteen ids, listed under [Choosing providers](/guide/providers); a misspelled one stops the build instead of quietly becoming a local Ollama* |
 | [`chat.chain`](#chat-chain) | `'auto' \| false \| Array<ProviderId \| ChainMember>` | `false` | Which SERVICES may answer, in order — the provider-level form of `chat.models`; `false`, the shipped value, is one provider chosen once, `'auto'` is every member of [the chain](#the-provider-chain) the environment selects, billed accounts before free tiers, an array is your own set — *fires only where `chat.provider` is also `'auto'`, so naming a provider is how rotation is declined; the embed half never rotates* |
@@ -217,7 +219,7 @@ written by hand; only the values are mechanical.
 
 <!-- /PARAMETERS TABLE -->
 
-Five settings are **server-only** and never reach the browser; three keys are
+Six settings are **server-only** and never reach the browser; three keys are
 **unions** whose off form is a single word rather than an object. Both are marked
 in the table and explained under [What reaches the browser](#what-reaches-the-browser)
 and in each key's own section.
@@ -342,6 +344,38 @@ trusted with a URL scheme. A path narrows the origin at a segment boundary.
 
 `sources` is assigned whole, never merged: a half-merged allowlist is one whose
 contents nobody wrote.
+
+## html
+
+- **Type:** `{ content?, exclude?, sources?, fetcher? } | null`
+- **Default:** `null`
+- **Related:** [`importDir`](#importdir), [`sources`](#sources), [`docpilot index --html-dir`](/reference/cli#html-dir), [`docpilot import`](/reference/cli#import)
+
+How a page of HTML becomes Markdown. The shipped extractor needs no word from you: it takes `<main>`, `[role=main]` or `<article>`, otherwise the block with the most prose, and drops the navigation, banners and share widgets. This setting is for the site where that is not enough.
+
+```js
+html: {
+  content: 'article.doc',                  // the body of every page
+  exclude: ['.toc', '.feedback'],          // removed from inside it
+  sources: {
+    'dist/blog': { exclude: '.byline' },   // a directory of built pages
+    'https://help.example.com': { content: '#article-body' },   // a page of `docpilot import`
+  },
+  fetcher: async (url, { signal }) => (await fetch(url, { signal })).text(),
+}
+```
+
+`content` is one CSS selector naming the body of the page. `exclude` is a selector or a list of them, removed from inside that body. Both are optional, and an empty string or an empty list counts as not set rather than as "select nothing".
+
+**A `sources` key is either a URL prefix or a directory.** A key that [`sources.allow`](#sources) would accept — an https origin, optionally narrowed to a path at a segment boundary — applies to `docpilot import`, so `https://help.example.com` never matches `https://help.example.com.evil.test` or `/helpdesk`. Any other key is a directory under the project root, and applies to the pages `index --html-dir` reads from it. Only the **longest** matching key applies, and a URL key never matches a directory or the other way round. An `http:` URL or one with a query is named as an error instead of being read as a directory that matches nothing.
+
+**Precedence is the flags, then the longest matching `sources` key, then the keys at the top.** `content` and `exclude` are each taken from the most specific level that sets them, and a level that sets `exclude` **replaces** the lower list: an author who narrows one source expects the list they wrote there, not that list plus one they forgot. The flags are `--html-select` and `--html-exclude` on both `index` and `import`.
+
+**`fetcher(url, { signal })` is your renderer for `docpilot import`.** Use it for a page a plain request cannot read — one a script builds, or one behind a login you hold. It returns the HTML as a string, or `{ html, url?, headers? }`: `url` is where the page finally came from, and `headers` may carry `x-robots-tag`, which is honoured. The `signal` aborts after 30 seconds, the deadline the built-in fetch has, so a renderer that hangs cannot hang the import. The allowlist is checked twice, before and after: the URL the command asks for and the `url` the fetcher returns must both pass `sources.allow`, the same check a redirect gets, so a fetcher cannot lead an import to an origin you did not list. `--html <file>` still wins over it, and the search for a published `.md` beside the page keeps the built-in fetch.
+
+A key this setting does not know, a `content` that is not a string, a `fetcher` that is not a function and a `sources` level that is not an object each stop the build with the dotted key named, before a page is read: a typo here must not quietly change what is indexed.
+
+**It is server-only, and the fetcher is the reason to be sure.** `html` is withheld from the browser like [`importDir`](#importdir) and [`sources`](#sources), so no selector and no function of yours is compiled into a page. Resolving the config only carries the function; nothing calls it until `docpilot import` runs.
 
 ## openapi
 
@@ -3030,8 +3064,8 @@ what once put a paying deployment on one request per turn. None of the three
 names who is answering, so the browser still knows adapters and transports rather
 than vendors.
 
-Six keys are deliberately withheld — `docsDir`, `indexDir`, `evalDir`,
-`importDir`, `sources` and `openapi`. They describe the build, not the panel, and
+Seven keys are deliberately withheld — `docsDir`, `indexDir`, `evalDir`,
+`importDir`, `sources`, `html` and `openapi`. They describe the build, not the panel, and
 the allowlist in particular has already done its work by then: the origin it
 approved is baked into `manifest.pages[].origin`.
 

@@ -111,9 +111,9 @@ const HTML_DIR = argValue('html-dir')
 const HTML_SELECT = argValue('html-select')
 /**
  * `--html-exclude`: selectors removed from inside the content root for this run
- * (engine-spec 043, D-22). The flag is registered with its docs row by plan
- * 02-12, so `argValue` reads '' for it until then; the config key
- * `docPilot.html.exclude` works now.
+ * (engine-spec 043, D-22). The flag is registered in `cli-flags.ts` and its row
+ * is in `docs/reference/cli.md`; the config key `docPilot.html.exclude` is the
+ * standing form of it.
  */
 const HTML_EXCLUDE = argValue('html-exclude')
 const HTML_BASE = argValue('html-base')
