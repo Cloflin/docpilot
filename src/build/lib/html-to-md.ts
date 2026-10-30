@@ -33,6 +33,19 @@ const BLOCK = new Set([
 ])
 
 /**
+ * The ids a heading may carry into `## Title {#id}`.
+ *
+ * The form the chunker's `{#…}` rule accepts, and the length a hand-written
+ * anchor has. Anything else — a space, a leading digit, a 300-character
+ * generated hash — would become an anchor nobody can link to (engine-spec 043,
+ * HTML-04).
+ */
+const HEADING_ID = /^[A-Za-z][\w-]{0,63}$/
+
+/** Elements whose text is never page text: code, styling, inert markup, graphics. */
+const INERT = new Set(['script', 'style', 'template', 'svg', 'noscript'])
+
+/**
  * Characters that would change the meaning of the line they land in.
  *
  * Deliberately not the full CommonMark set. Escaping every `*` and `_` inside
@@ -43,7 +56,16 @@ const BLOCK = new Set([
  * handled per line, at the only place it can be a marker.
  */
 function escapeInline(text) {
-  return text.replace(/([[\]`])/g, '\\$1')
+  return (
+    text
+      .replace(/([[\]`])/g, '\\$1')
+      // A decoded `&lt;llm-exclude&gt;` is the text `<llm-exclude>`, and left raw
+      // it is an annotation tag: `applyLlmTags` would drop the rest of the page
+      // (engine-spec 043, T-02-17). `&lt;` renders as `<` (markdown-it, html:
+      // false). Code spans and fences never pass through here and keep the raw
+      // character, which `applyLlmTags` masks.
+      .replace(/<(?=[A-Za-z/!?])/g, '&lt;')
+  )
 }
 
 /** A line that would be read as a block marker gets its leader escaped. */
@@ -72,6 +94,7 @@ function inline(node, ctx) {
   if (node.nodeType !== 1) return ''
 
   const tag = String(node.tagName || '').toLowerCase()
+  if (INERT.has(tag)) return ''
   const kids = () => [...(node.childNodes || [])].map((n) => inline(n, ctx)).join('')
 
   switch (tag) {
@@ -104,6 +127,7 @@ function inline(node, ctx) {
     case 's':
       return kids()
     case 'a': {
+      if (ctx.heading && isPermalink(node)) return ''
       const inner = kids().trim()
       if (!inner) return ''
       const href = ctx.links.resolve(node.getAttribute('href'))
@@ -180,6 +204,33 @@ function containsBlock(el) {
 }
 
 /**
+ * A permalink a site adds inside its own heading: a fragment-only link whose
+ * text has no letter or digit (`#`, `¶`, `§`, a zero-width space). It is
+ * furniture, and left in it puts a symbol into the title (engine-spec 043).
+ */
+function isPermalink(a) {
+  const href = String(a.getAttribute?.('href') || '').trim()
+  return href.startsWith('#') && !/[\p{L}\p{N}]/u.test(String(a.textContent || ''))
+}
+
+/**
+ * The id a heading carries, or null: its own `id`, else the `id` or `name` of a
+ * direct child anchor with no `href`, whichever is a usable id first.
+ */
+function headingId(el) {
+  const own = el.getAttribute?.('id')
+  if (own && HEADING_ID.test(own)) return own
+  for (const child of [...(el.children || [])]) {
+    if (String(child.tagName || '').toLowerCase() !== 'a' || child.hasAttribute?.('href')) continue
+    for (const name of ['id', 'name']) {
+      const value = child.getAttribute?.(name)
+      if (value && HEADING_ID.test(value)) return value
+    }
+  }
+  return null
+}
+
+/**
  * Blocks, in document order.
  *
  * A generator rather than a string builder so the caller can see the sequence:
@@ -207,8 +258,20 @@ function* blocks(el, ctx) {
     }
 
     if (/^h[1-6]$/.test(tag)) {
-      const text = inline(node, ctx).replace(/\s+/g, ' ').trim()
-      if (text) yield { kind: 'h', level: Number(tag[1]), text }
+      const text = inline(node, { ...ctx, heading: true }).replace(/\s+/g, ' ').trim()
+      const id = headingId(node)
+      // The custom-anchor form `chunker.ts` reads and strips (engine-spec 043).
+      if (text) yield { kind: 'h', level: Number(tag[1]), text: id ? `${text} {#${id}}` : text }
+      continue
+    }
+
+    // The label of a `details` is its lead line; the content that follows is
+    // walked as a container below, opened or not. Tab panels and ARIA
+    // accordions are `html-tabs.ts`'s, not this branch's.
+    if (tag === 'summary') {
+      // `**` inside the label would nest bold markers into `****x****`.
+      const label = inline(node, ctx).replace(/\*\*/g, '').replace(/\s+/g, ' ').trim()
+      if (label) yield { kind: 'p', text: `**${label}**` }
       continue
     }
 
@@ -277,6 +340,29 @@ function* blocks(el, ctx) {
 }
 
 /**
+ * Adjacent text nodes, merged into one, throughout the subtree.
+ *
+ * The parser splits a decoded entity off as a node of its own — `&lt;tag&gt;`
+ * arrives as `<`, `tag`, `>` — and `escapeInline` has to see the `<` and the
+ * letter after it together to know it starts a tag (engine-spec 043, T-02-17).
+ * The DOM is the same document afterwards.
+ */
+function mergeText(el) {
+  let prev = null
+  for (const node of [...(el.childNodes || [])]) {
+    if (node.nodeType === 3) {
+      if (prev) {
+        prev.data = String(prev.data || '') + String(node.data || '')
+        node.remove()
+      } else prev = node
+      continue
+    }
+    prev = null
+    if (node.nodeType === 1) mergeText(node)
+  }
+}
+
+/**
  * The page body, as markdown.
  *
  * Two halves, and only the first is about HTML. `blocks()` reads a DOM and
@@ -296,5 +382,6 @@ function* blocks(el, ctx) {
  */
 export function toMarkdown(root, { origin = '', minHeading = 2, links = null }: any = {}) {
   const resolver = links || createLinkResolver({ base: origin })
+  mergeText(root)
   return renderBlocks([...blocks(root, { origin, links: resolver })], { minHeading })
 }

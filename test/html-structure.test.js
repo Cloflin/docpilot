@@ -3,6 +3,7 @@ import { parseHTML } from 'linkedom'
 
 import { pickMain, prune } from '../src/build/lib/html-extract.js'
 import { toMarkdown } from '../src/build/lib/html-to-md.js'
+import { applyLlmTags } from '../src/build/lib/normalise.js'
 import { MAX_TABLE_SPAN } from '../src/build/lib/html-table.js'
 
 /**
@@ -127,5 +128,88 @@ describe('html structure — tables', () => {
     expect(out).toBe(
       '| A | B |\n| --- | --- |\n| 1 | 2 |\n\n| A | B |\n| --- | --- |\n| 3 | 4 |',
     )
+  })
+})
+
+describe('html structure — headings, details, lists, text', () => {
+  it('writes a heading id in the custom-anchor form the chunker reads', () => {
+    expect(md('<h2 id="rate-limits">Rate limits</h2>')).toBe('## Rate limits {#rate-limits}')
+  })
+
+  it('takes the id from a direct child anchor with no href', () => {
+    // An h2 first, because a lone h3 is normalised up to `##`.
+    expect(md('<h2>Top</h2><h3><a id="x"></a>Usage</h3>')).toBe('## Top\n\n### Usage {#x}')
+    expect(md('<h2>Top</h2><h3><a name="y"></a>Usage</h3>')).toBe('## Top\n\n### Usage {#y}')
+  })
+
+  it('writes no id that the chunker rule could not accept', () => {
+    expect(md('<h2 id="bad id">T</h2>')).toBe('## T')
+    expect(md('<h2 id="1st">T</h2>')).toBe('## T')
+    expect(md(`<h2 id="a${'b'.repeat(64)}">T</h2>`)).toBe('## T')
+  })
+
+  it('adds nothing for a permalink anchor inside a heading', () => {
+    const out = md('<h2 id="a">Intro<a class="header-anchor" href="#a">&ZeroWidthSpace;</a></h2>')
+    expect(out).toBe('## Intro {#a}')
+    expect(out).not.toContain('\u200b')
+    expect(md('<h2>Intro <a href="#intro">#</a></h2>')).toBe('## Intro')
+  })
+
+  it('keeps a link in a heading when its text has letters', () => {
+    expect(md('<h2><a href="#top">Back to top</a></h2>')).toContain('Back to top')
+  })
+
+  it('keeps the content of details and writes its summary as a bold lead line', () => {
+    const out = md('<details><summary>Can I export?</summary><p>Yes, as PDF.</p></details>')
+    expect(out).toBe('**Can I export?**\n\nYes, as PDF.')
+  })
+
+  it('does not double the bold of a summary that is already strong', () => {
+    expect(md('<details><summary><strong>Why?</strong></summary><p>Because.</p></details>')).toBe(
+      '**Why?**\n\nBecause.',
+    )
+  })
+
+  it('keeps three levels of nesting and the start of an ordered list', () => {
+    const out = md('<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>')
+    expect(out).toBe('- a\n  - b\n    - c')
+    expect(md('<ol start="3"><li>x</li><li>y</li></ol>')).toBe('3. x\n4. y')
+  })
+
+  it('keeps a definition list and the paragraphs of a blockquote', () => {
+    expect(md('<dl><dt>Seat</dt><dd>One user</dd></dl>')).toBe('- **Seat** — One user')
+    expect(md('<blockquote><p>One.</p><p>Two.</p></blockquote>')).toBe('> One.\n>\n> Two.')
+  })
+
+  it('keeps two adjacent lists as two blocks with one blank line between', () => {
+    expect(md('<ul><li>a</li></ul><ul><li>b</li></ul>')).toBe('- a\n\n- b')
+  })
+
+  it('decodes entities', () => {
+    expect(md('<p>caf&eacute; &#x1F600; &amp; more</p>')).toBe('café 😀 & more')
+  })
+
+  it('writes a decoded tag in prose as &lt;, so applyLlmTags drops nothing', () => {
+    const out = md('<p>Use &lt;llm-exclude&gt; with care &amp; café&eacute;</p><p>After.</p>')
+    expect(out).toContain('&lt;llm-exclude>')
+    expect(out).toContain('&')
+    expect(out).toContain('éé')
+    expect(applyLlmTags(out)).toBe(out)
+    expect(md('<p>a &lt;/b and &lt;!x and &lt;?y</p>')).toBe('a &lt;/b and &lt;!x and &lt;?y')
+  })
+
+  it('leaves a < that starts no tag, and the code inside a span, as written', () => {
+    expect(md('<p>1 &lt; 2 and a&lt;3</p>')).toBe('1 < 2 and a<3')
+    expect(md('<p>Use <code>&lt;llm-exclude&gt;</code> here</p>')).toBe('Use `<llm-exclude>` here')
+    expect(md('<pre><code>&lt;div&gt;</code></pre>')).toBe('```\n<div>\n```')
+  })
+
+  it('drops script, style, template, svg and noscript text', () => {
+    const html =
+      '<p>Hi<script>x()</script><style>p{}</style><template>t</template><svg><text>s</text></svg><noscript>n</noscript></p>'
+    expect(md(html)).toBe('Hi')
+    // Not pruned first: the serialiser holds the rule on its own.
+    const { document } = parseHTML(`<!doctype html><html><body><main>${html}</main></body></html>`)
+    expect(toMarkdown(pickMain(document)).markdown).toBe('Hi')
   })
 })
