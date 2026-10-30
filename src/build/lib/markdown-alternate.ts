@@ -166,15 +166,45 @@ export function splitFrontmatter(md) {
   return { data, body: text.slice(m[0].length).trim() }
 }
 
-/** `[text](/a/b)` → `[text](https://host/a/b)`, for links and images alike. */
-export function absolutiseLinks(md, base) {
+/**
+ * `[text](/a/b)` → `[text](https://host/a/b)`, for links and images alike.
+ *
+ * An href that cannot become an absolute http(s) URL is written as its text
+ * (`[text](x)` → `text`, `![alt](x)` → `alt`): a relative path with no base to
+ * resolve it, a malformed one, and a `mailto:`, `tel:` or `javascript:` link all
+ * leave the corpus as plain words, the rule the HTML converter applies
+ * (engine-spec 043, D-10). `onDegrade(href)` is called for the first two, which
+ * are failures the extraction report counts; another scheme is a choice, not a
+ * failure, and a fragment-only href is kept as written.
+ */
+export function absolutiseLinks(md, base, onDegrade = null) {
   return String(md || '').replace(
     /(!?\[[^\]]*\]\()([^)\s]+)(\s+"[^"]*")?(\))/g,
     (whole, open, href, title, close) => {
-      const abs = absolute(href, base)
-      return abs ? `${open}${abs}${title || ''}${close}` : whole
+      const abs = malformed(href) ? null : absolute(href, base)
+      if (abs) return `${open}${abs}${title || ''}${close}`
+      if (href.startsWith('#')) return whole
+      if (!otherScheme(href)) onDegrade?.(href)
+      return open.replace(/^!?\[/, '').replace(/\]\($/, '')
     },
   )
+}
+
+/**
+ * A `%` that does not start a two-digit escape. The URL parser accepts it and
+ * resolves `%zz` to a path no server holds, so it is refused here: such an href
+ * is a typo, and writing it as a link would put a dead URL in the corpus.
+ */
+const malformed = (href) => /%(?![0-9a-fA-F]{2})/.test(href)
+
+/** Does `href` carry its own non-web scheme (`mailto:`, `tel:`, `data:`)? */
+function otherScheme(href) {
+  try {
+    const { protocol } = new URL(String(href).trim())
+    return protocol !== 'http:' && protocol !== 'https:'
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -184,13 +214,13 @@ export function absolutiseLinks(md, base) {
  * frontmatter title, and two of them makes the chunker's first section a
  * duplicate of the page title.
  */
-export function prepareMarkdown(raw, { base }) {
+export function prepareMarkdown(raw, { base, onDegrade = null }) {
   const { data, body } = splitFrontmatter(raw)
   const withoutTitle = body.replace(/^#\s+.*(\r?\n)+/, '')
   return {
     title: data.title || '',
     description: data.description || '',
-    markdown: absolutiseLinks(withoutTitle, base).trim(),
+    markdown: absolutiseLinks(withoutTitle, base, onDegrade).trim(),
   }
 }
 

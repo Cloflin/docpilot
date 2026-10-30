@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { parseHTML } from 'linkedom'
 
@@ -430,6 +433,10 @@ describe('import — the command', () => {
     expect(built.file).toContain('description: "How many requests each plan allows."')
     expect(built.file).toContain('source: "https://acme.test/help/rate-limits"')
     expect(built.file).toContain('importedAt: 2026-08-15')
+    // The extractor stamp follows importedAt: `index` and `doctor` read it to
+    // name an import made by an older extractor (engine-spec 043, D-05).
+    expect(built.file).toContain('importedAt: 2026-08-15\nextractor: 2\n')
+    expect(built.file).not.toMatch(/^lang:/m)
     // The provenance travels with the evidence: it is inside the chunk text,
     // which is why the date is in it.
     expect(built.file).toContain('Imported from [acme.test](https://acme.test/help/rate-limits) on 15 August 2026.')
@@ -816,5 +823,127 @@ describe('import — frontmatter of a published .md', () => {
 
   it('strips the quotes a title is sometimes written with', () => {
     expect(splitFrontmatter('---\ntitle: "Rate limits"\n---\nx').data.title).toBe('Rate limits')
+  })
+})
+
+/**
+ * `docpilot import` on the shared extractor (engine-spec 043, D-05, D-06, D-11, D-13).
+ *
+ * Every case passes `--no-annotate --no-alternate` or injects the finder, so no
+ * model and no network is reached.
+ */
+describe('import — the shared extractor and its report', () => {
+  const page = (head, body) =>
+    `<!doctype html><html${head.lang ? ` lang="${head.lang}"` : ''}><head><title>Rate limits</title>${head.extra || ''}</head><body>${body}</body></html>`
+  const article =
+    '<main><h1>Rate limits</h1><p>Every plan is capped at sixty requests a minute, and the cap resets on the hour.</p></main>'
+
+  const run = async (html, extra = []) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-import-'))
+    const htmlFile = path.join(dir, 'page.html')
+    fs.writeFileSync(htmlFile, html)
+    const said = []
+    const log = { log: (m) => said.push(String(m)), error: (m) => said.push(String(m)) }
+    const code = await runImport({
+      docPilot: { importDir: path.join(dir, 'kb'), sources: { allow: ['https://acme.test'] } },
+      argv: ['https://acme.test/help/rate-limits', '--html', htmlFile, '--no-annotate', '--no-alternate', '--dry-run', ...extra],
+      log,
+    })
+    return { code, out: said.join('\n') }
+  }
+
+  it('writes the page language and its modification date, quoted', async () => {
+    const html = page(
+      { lang: 'uk', extra: '<script type="application/ld+json">{"@type":"Article","dateModified":"2026-03-04T10:00:00Z"}</script>' },
+      article,
+    )
+    const built = await buildPage({ html, source: 'https://acme.test/help/rate-limits', now: Date.UTC(2026, 7, 15) })
+    expect(built.file).toContain('extractor: 2\nlang: "uk"\ndateModified: "2026-03-04T10:00:00Z"\n---')
+  })
+
+  it('prints a table with one row for the source', async () => {
+    const { code, out } = await run(page({}, article))
+    expect(code).toBe(0)
+    expect(out).toMatch(/source\s+pages\s+kept\s+dropped\s+empty\s+link failures/)
+    expect(out).toMatch(/https:\/\/acme\.test\/help\/rate-limits\s+1\s+\d+\s+\d+\s+0\s+0/)
+  })
+
+  it('skips a noindex page, names the reason and exits 1', async () => {
+    const { code, out } = await run(page({ extra: '<meta name="robots" content="noindex">' }, article))
+    expect(code).toBe(1)
+    expect(out).toContain('noindex')
+    // HTML-10, empty edge: the table is still printed, with a row of 0 pages.
+    expect(out).toMatch(/https:\/\/acme\.test\/help\/rate-limits\s+0\s+0\s+0\s+0\s+0/)
+    expect(out).toContain('skipped https://acme.test/help/rate-limits: noindex')
+  })
+
+  it('skips a near-empty page and counts it as empty', async () => {
+    const { code, out } = await run(page({}, '<main><p>Loading</p></main>'))
+    expect(code).toBe(1)
+    expect(out).toContain('near-empty')
+    expect(out).toMatch(/\s+0\s+\d+\s+\d+\s+1\s+0/)
+  })
+
+  it('skips a page whose content selector matches nothing', async () => {
+    // The CLI takes --html-select once plan 02-12 registers it; buildPage is
+    // what this plan owns.
+    const built = await buildPage({ html: page({}, article), source: 'https://acme.test/x', content: '.nowhere' })
+    expect(built.skipped).toMatch(/matched nothing/)
+    expect(built.file).toBeUndefined()
+  })
+
+  it('an X-Robots-Tag value skips the page the same way', async () => {
+    const built = await buildPage({ html: page({}, article), source: 'https://acme.test/x', robots: 'noindex, nofollow' })
+    expect(built.skipped).toBe('noindex')
+  })
+
+  it('a noindex page is skipped before the published-markdown search runs', async () => {
+    let searched = false
+    const built = await buildPage({
+      html: page({ extra: '<meta name="robots" content="none">' }, article),
+      source: 'https://acme.test/x',
+      findMarkdownFn: async () => {
+        searched = true
+        return { url: 'https://acme.test/x.md', body: 'Body text that is long enough to count.', tried: [] }
+      },
+    })
+    expect(built.skipped).toBe('noindex')
+    expect(searched).toBe(false)
+  })
+
+  it('a link that cannot be made absolute becomes text in a published .md', async () => {
+    const built = await buildPage({
+      html: page({}, article),
+      source: 'https://acme.test/x',
+      findMarkdownFn: async () => ({
+        url: 'https://acme.test/x.md',
+        body: '---\ntitle: T\n---\nWrite to [x](mailto:a@acme.test) or see ![d](%zz) and [ok](/limits) for the details.',
+        tried: [],
+      }),
+    })
+    expect(built.file).toContain('Write to x or see d and [ok](https://acme.test/limits) for the details.')
+    // Only the malformed href is a failure; a mailto: is a choice.
+    expect(built.extraction.report.linksDegraded).toBe(1)
+  })
+
+  it('counts kept and dropped as code points, with no locale grouping', async () => {
+    const big = `<main><p>${'я'.repeat(1500)}</p></main>`
+    const { out } = await run(page({}, big))
+    expect(out).toMatch(/\s1500\s/)
+    expect(out).not.toMatch(/1[,.\u00a0\u202f]500/)
+  })
+
+  it('every HTML path goes through the one extractor', () => {
+    const code = (file) =>
+      fs
+        .readFileSync(new URL(`../src/build/${file}`, import.meta.url), 'utf8')
+        .split('\n')
+        .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+        .join('\n')
+    for (const file of ['lib/html-dir.ts', 'import.ts']) {
+      const text = code(file)
+      expect(text, file).not.toMatch(/\bprune\(|\btoMarkdown\(|\bpickMain\(/)
+      expect(text, file).toMatch(/\bextractHtml\(|\bextractDocument\(/)
+    }
   })
 })

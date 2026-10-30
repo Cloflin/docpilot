@@ -22,8 +22,9 @@ import path from 'node:path'
 import { parseAllowlist, checkSource } from './lib/sources.js'
 import { fetchWithin } from './lib/redirects.js'
 import { printable, printableLines } from './lib/terminal.js'
-import { pickMain, prune, metadata } from './lib/html-extract.js'
-import { toMarkdown } from './lib/html-to-md.js'
+import { metadata, robotsNoindex } from './lib/html-extract.js'
+import { extractDocument, EXTRACTOR_VERSION, MAX_HTML_BYTES } from './lib/extract-html.js'
+import { formatExtractionReport, rowFromResults } from './lib/extraction-report.js'
 import { parseDocument } from './lib/dom.js'
 import { annotate } from './lib/annotate.js'
 import type { Annotation } from './lib/annotate.js'
@@ -102,7 +103,15 @@ const yamlValue = (v) =>
  * so the provenance travels with the evidence the model reads — and the date is
  * what stops a price copied today from being cited as current in a year.
  */
-export function composePage({ title, description, source, markdown, now = Date.now() }) {
+export function composePage({
+  title,
+  description,
+  source,
+  markdown,
+  now = Date.now(),
+  lang = '',
+  dateModified = '',
+}) {
   const { iso, human } = dates(now)
   const host = new URL(source).hostname.replace(/^www\./, '')
   // The same collapsed title goes into the `#` heading below: a newline there
@@ -116,6 +125,14 @@ export function composePage({ title, description, source, markdown, now = Date.n
     `description: ${yamlValue(description)}`,
     `source: ${yamlValue(source)}`,
     `importedAt: ${iso}`,
+    // The stamp is what `index` and `doctor` read to name an import made by an
+    // older extractor (engine-spec 043, D-05). It is an integer constant, so it
+    // needs no quoting, and it is front matter, not body: the corpus hash of an
+    // import changes only when the Markdown does (D-26).
+    `extractor: ${EXTRACTOR_VERSION}`,
+    // The page's own words about itself, quoted like the title (T-02-15).
+    ...(lang ? [`lang: ${yamlValue(lang)}`] : []),
+    ...(dateModified ? [`dateModified: ${yamlValue(dateModified)}`] : []),
     '---',
   ].join('\n')
 
@@ -191,13 +208,16 @@ export async function readHtml({
  * Split out so the suite can drive it end to end: HTML in, the finished file and
  * a report of every decision out. `annotateFn` is injected for the same reason.
  *
+ * The HTML branch is `extractDocument`, the one extractor `index --html-dir`
+ * runs too (engine-spec 043, D-06): this file holds no rule list of its own. A
+ * page that gives nothing (noindex, near-empty, too large, a selector that
+ * matches nothing) comes back as `{ skipped, extraction }` with no `file`.
+ *
  * @param {{html: string, source: string, title?: string, now?: number,
  *   annotateFn?: ((o: {markdown: string, target: any}) => Promise<any>)|null,
  *   target?: any, expectLang?: string,
- *   findMarkdownFn?: ((o: {document: any, source: string}) => Promise<any>)|null}} o
- * @returns {Promise<{file: string, title: string, description: string, scope: string,
- *   pageLang: string, langMismatch: boolean, dropped: {reason: string, text: string}[],
- *   links: string[], annotation: any, from: {kind: string, url: string, tried?: any[]}}>}
+ *   findMarkdownFn?: ((o: {document: any, source: string}) => Promise<any>)|null,
+ *   content?: string, exclude?: string|string[], robots?: string}} o
  */
 export async function buildPage({
   html,
@@ -208,7 +228,23 @@ export async function buildPage({
   target = null,
   expectLang = 'en',
   findMarkdownFn = null,
-}) {
+  content = '',
+  exclude = [],
+  robots = '',
+}): Promise<any> {
+  const from = { kind: 'html', url: source, tried: [] as any[] }
+  const skip = (reason: string, extraction: any = null, meta: any = {}) => ({
+    skipped: reason,
+    extraction: extraction || { ok: false, reason, report: emptyReport() },
+    title: meta.title || '',
+    description: meta.description || '',
+    from,
+  })
+
+  // Counted before the parse, because the parse is what a huge page would cost.
+  const bytes = Buffer.byteLength(String(html), 'utf8')
+  if (bytes > MAX_HTML_BYTES) return skip(`too large (${bytes} bytes)`)
+
   const document = await parseDocument(html)
   const meta = metadata(document)
 
@@ -218,13 +254,21 @@ export async function buildPage({
    * It is not a better conversion of the page — it is the file the page was
    * built from, so there is nothing to reconstruct and nothing to lose to a
    * theme. Everything below this branch exists for the sites that publish none.
+   *
+   * A page that asked not to be indexed never gets this far: whatever else it
+   * publishes, it said no, and `extractDocument` below reports it (D-27).
    */
-  const published = findMarkdownFn ? await findMarkdownFn({ document, source }) : null
+  const noindex = meta.noindex || robotsNoindex(robots)
+  const published = findMarkdownFn && !noindex ? await findMarkdownFn({ document, source }) : null
   if (published?.url) {
-    const prepared = prepareMarkdown(published.body, { base: published.url })
+    let degraded = 0
+    const prepared = prepareMarkdown(published.body, {
+      base: published.url,
+      onDegrade: () => degraded++,
+    })
     const title = (titleOverride || prepared.title || meta.title || slugFor(source)).trim()
     const description = (prepared.description || meta.description).trim()
-    const pageLang = langOf(document)
+    const pageLang = meta.lang
 
     let body = prepared.markdown
     let annotation: Annotation = { only: 0, exclude: 0, added: [], rejected: 'not run' }
@@ -232,33 +276,44 @@ export async function buildPage({
       annotation = await annotateFn({ markdown: body, target })
       body = annotation.markdown
     }
+    const kept = [...String(body).replace(/\s+/g, ' ').trim()].length
+    const extraction = {
+      ok: true,
+      reason: '',
+      // Nothing was dropped because nothing was decided: this is the author's
+      // own file, not a subtree somebody chose out of a rendered document.
+      report: { ...emptyReport(), totalChars: kept, keptChars: kept, linksDegraded: degraded },
+    }
+    if (degraded) {
+      extraction.report.warnings.push(
+        `${degraded} link(s) in ${published.url} could not be made absolute and became text`,
+      )
+    }
     return {
-      file: composePage({ title, description, source, markdown: body, now }),
+      file: composePage({
+        title,
+        description,
+        source,
+        markdown: body,
+        now,
+        lang: pageLang,
+        dateModified: meta.dateModified || '',
+      }),
       title,
       description,
       scope: 'the page\'s own markdown',
       pageLang,
       langMismatch: mismatched(pageLang, expectLang),
-      // Nothing was dropped because nothing was decided: this is the author's
-      // own file, not a subtree somebody chose out of a rendered document.
       dropped: [],
       links: [...String(body).matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)].map((m) => m[1]),
       annotation,
+      extraction,
       from: { kind: 'markdown', url: published.url, tried: published.tried },
     }
   }
 
-  const root = pickMain(document)
-  const dropped = prune(root)
-  // Naming the subtree matters as much as naming the drops. Choosing `<main>`
-  // silently discards the entire rest of the document, and a report that lists
-  // three dropped blocks while a whole column went unread is a report that
-  // reads as "it took everything".
-  const scope = [
-    String(root.tagName || 'body').toLowerCase(),
-    root.getAttribute?.('id') ? `#${root.getAttribute('id')}` : '',
-  ].join('')
-  const { markdown, links } = toMarkdown(root, { origin: source })
+  const result = extractDocument(document, { content, exclude, base: source, id: source, robots })
+  if (!result.ok) return skip(result.reason, result, result)
 
   /**
    * The language the page came back in, which is not always the one asked for.
@@ -269,12 +324,12 @@ export async function buildPage({
    * every chunk of it retrieves for nothing and the page looks fine in the file
    * — so the mismatch is reported rather than assumed away.
    */
-  const pageLang = langOf(document)
+  const pageLang = result.lang
 
-  const title = (titleOverride || meta.title || slugFor(source)).trim()
-  const description = meta.description.trim()
+  const title = (titleOverride || result.title || slugFor(source)).trim()
+  const description = result.description.trim()
 
-  let body = markdown
+  let body = result.markdown
   let annotation: Annotation = { only: 0, exclude: 0, added: [], rejected: 'not run' }
   if (annotateFn) {
     annotation = await annotateFn({ markdown: body, target })
@@ -282,24 +337,38 @@ export async function buildPage({
   }
 
   return {
-    file: composePage({ title, description, source, markdown: body, now }),
+    file: composePage({
+      title,
+      description,
+      source,
+      markdown: body,
+      now,
+      lang: pageLang,
+      dateModified: result.dateModified || '',
+    }),
     title,
     description,
-    scope,
+    scope: result.scope,
     pageLang,
     langMismatch: mismatched(pageLang, expectLang),
-    dropped,
-    links,
+    dropped: result.report.dropped,
+    links: result.links,
     annotation,
+    extraction: result,
     from: { kind: 'html', url: source, tried: published?.tried || [] },
   }
 }
 
-/** `<html lang>`, as a bare subtag. */
-const langOf = (document) =>
-  String(document.documentElement?.getAttribute?.('lang') || '')
-    .toLowerCase()
-    .split('-')[0]
+/** A report with nothing in it, for a page skipped before it was read. */
+const emptyReport = () => ({
+  totalChars: 0,
+  keptChars: 0,
+  droppedChars: 0,
+  dropped: [],
+  linksResolved: 0,
+  linksDegraded: 0,
+  warnings: [] as string[],
+})
 
 const mismatched = (pageLang, expectLang) =>
   !!pageLang && !!expectLang && pageLang !== expectLang.toLowerCase().split('-')[0]
@@ -437,7 +506,15 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
   const slug = flags.out ? flags.out.replace(/\.md$/, '') : slugFor(verdict.href)
   const file = path.join(docPilot.importDir, `${slug}.md`)
 
-  report(log, { built, file, flags })
+  if (built.skipped) {
+    // D-11: no page was extracted, so there is nothing to write and the exit is
+    // non-zero. The table still prints, with its row of 0 pages and the reason.
+    printExtraction(log, verdict.href, built.extraction)
+    log.error(`[docpilot] nothing to import: ${printable(built.skipped)}`)
+    return 1
+  }
+
+  report(log, { built, file, flags, source: verdict.href })
 
   if (flags.dryRun) {
     log.log('\n  --dry-run: nothing was written.\n')
@@ -468,6 +545,14 @@ const originOf = (url) => {
   }
 }
 
+/** The extraction table, then the page's warnings (D-13). */
+function printExtraction(log, source, extraction) {
+  for (const line of formatExtractionReport([rowFromResults(source, [{ id: source, result: extraction }])])) {
+    log.log(`  ${line}`)
+  }
+  for (const w of extraction.report.warnings) log.error(`[docpilot] ${printableLines(w)}`)
+}
+
 /**
  * What the run decided, printed.
  *
@@ -477,7 +562,7 @@ const originOf = (url) => {
  * model added, because that text is going into the corpus as documentation and
  * a reader is meant to check it.
  */
-function report(log, { built, file, flags }) {
+function report(log, { built, file, flags, source }) {
   const { dropped, annotation } = built
   // Every field below except the counts came off the remote page or out of the
   // model, so each one goes through `printable` — see lib/terminal.ts.
@@ -511,6 +596,8 @@ function report(log, { built, file, flags }) {
     }
     if (dropped.length > 5) log.log(`               …and ${dropped.length - 5} more`)
   }
+
+  printExtraction(log, source, built.extraction)
 
   if (!flags.annotate) {
     log.log('  annotation   skipped (--no-annotate)')
