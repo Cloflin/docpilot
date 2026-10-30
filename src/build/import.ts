@@ -591,12 +591,15 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
 
   const annotateFn = flags.annotate ? ({ markdown, target }) => annotate({ markdown, target }) : null
   let built
+  // The selectors this run resolved (flags, then config), kept for the report.
+  let selectors: { content: string; exclude: string[] } = { content: '', exclude: [] }
   try {
     const { nodeChatTarget } = await import('../config.js')
     const { content, exclude } = htmlOptionsFor(docPilot.html, verdict.href, {
       root: process.cwd(),
       flags: { content: flags.htmlSelect, exclude: flags.htmlExclude },
     })
+    selectors = { content, exclude }
     built = await buildPage({
       html: fetched.html,
       source: verdict.href,
@@ -641,7 +644,7 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
     return 1
   }
 
-  report(log, { built, file, flags, source: verdict.href })
+  report(log, { built, file, flags, source: verdict.href, selectors })
 
   if (flags.dryRun) {
     log.log('\n  --dry-run: nothing was written.\n')
@@ -689,7 +692,7 @@ function printExtraction(log, source, extraction) {
  * model added, because that text is going into the corpus as documentation and
  * a reader is meant to check it.
  */
-function report(log, { built, file, flags, source }) {
+function report(log, { built, file, flags, source, selectors }) {
   const { dropped, annotation } = built
   // Every field below except the counts came off the remote page or out of the
   // model, so each one goes through `printable` — see lib/terminal.ts.
@@ -703,6 +706,19 @@ function report(log, { built, file, flags, source }) {
   if (built.from.kind === 'markdown') {
     log.log(`  read         ${p(built.from.url)}`)
     log.log('               the page\'s OWN markdown — nothing was converted or dropped')
+    // A selector picks a subtree of rendered HTML, and there is no HTML here. Said
+    // once, so an owner who passed one is not left reading "nothing dropped" as
+    // "the selector matched everything" (engine-spec 043, IN-01).
+    const set = [
+      selectors?.content ? `content selector "${p(selectors.content)}"` : '',
+      selectors?.exclude?.length ? `exclude selector "${p(selectors.exclude.join(', '))}"` : '',
+    ].filter(Boolean)
+    if (set.length) {
+      log.error(
+        `[docpilot] ${set.join(' and ')} not applied: the page's own markdown was used, and a selector reads HTML. ` +
+          'Pass --no-alternate to extract the HTML with it.',
+      )
+    }
   } else {
     log.log(`  read         <${built.scope}> — nothing outside it was read`)
     for (const t of built.from.tried || []) log.log(`               no .md at ${p(t.url)} (${p(t.why)})`)

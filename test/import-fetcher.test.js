@@ -224,6 +224,48 @@ describe('import — the fetcher hook', () => {
     })
   })
 
+  describe('a selector the published markdown cannot use (IN-01)', () => {
+    const WITH_ALTERNATE = PAGE.replace('</head>', '<link rel="alternate" type="text/markdown" href="/x.md"></head>')
+    const exitCode = async (argv, html) => {
+      vi.stubGlobal('fetch', async () =>
+        new Response('# Rate limits\n\nSixty requests a minute.', { status: 200, headers: { 'content-type': 'text/markdown' } }),
+      )
+      const said = []
+      const log = { log: (m) => said.push(String(m)), error: (m) => said.push(String(m)) }
+      const code = await runImport({
+        docPilot: {
+          importDir: path.join(dir, 'kb'),
+          sources: { allow: ['https://acme.test'] },
+          html: { fetcher: async () => WITH_ALTERNATE, ...html },
+        },
+        argv: [SOURCE, '--no-annotate', '--dry-run', ...argv],
+        log,
+      })
+      return { code, out: said.join('\n') }
+    }
+    const notices = (out) => out.split('\n').filter((l) => l.includes('not applied'))
+
+    it('says once that --html-select was not applied, and how to apply it', async () => {
+      const { code, out } = await exitCode(['--html-select=main'], {})
+      expect(code).toBe(0)
+      expect(out).toContain("the page's OWN markdown")
+      expect(notices(out)).toHaveLength(1)
+      expect(notices(out)[0]).toMatch(/^\[docpilot\] content selector "main" not applied/)
+      expect(notices(out)[0]).toContain('--no-alternate')
+    })
+
+    it('says so for an exclude selector set in docPilot.html, naming it', async () => {
+      const { out } = await exitCode([], { exclude: ['.promo', '#banner'] })
+      expect(notices(out)).toHaveLength(1)
+      expect(notices(out)[0]).toContain('exclude selector ".promo, #banner" not applied')
+    })
+
+    it('says nothing when no selector is set', async () => {
+      const { out } = await exitCode([], {})
+      expect(notices(out)).toEqual([])
+    })
+  })
+
   it('--html <file> wins over a configured fetcher', async () => {
     const file = path.join(dir, 'page.html')
     fs.writeFileSync(file, PAGE)
