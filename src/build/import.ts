@@ -508,6 +508,29 @@ export function parseImportFlags(argv) {
 }
 
 /**
+ * The file `--out <slug>` names, or null when the slug leaves `importDir`.
+ *
+ * The slug is typed by a person or passed by an agent, and the re-import
+ * commands that `index` and `doctor` print feed it too. A nested slug such as
+ * `guides/x` is the documented way to refresh a nested page (WR-05), so a
+ * separator is fine; an absolute path, a `..` segment, an empty name or a path
+ * that resolves outside the directory is not, because the page text of a remote
+ * site would then be written anywhere the user can write (WR-14, engine-spec
+ * 043). The `.md` suffix is read in either case, as `importSlug` reads it.
+ */
+export function outFileFor(importDir: string, out: string): string | null {
+  const slug = out.replace(/\.md$/i, '')
+  if (!slug || slug.includes('\0')) return null
+  if (path.isAbsolute(slug) || /^[\\/]|^[A-Za-z]:/.test(slug)) return null
+  if (slug.split(/[\\/]/).includes('..')) return null
+  const root = path.resolve(importDir)
+  const file = path.join(importDir, `${slug}.md`)
+  const rel = path.relative(root, path.resolve(file))
+  if (!rel || rel.split(path.sep)[0] === '..' || path.isAbsolute(rel)) return null
+  return file
+}
+
+/**
  * The command. Returns an exit code rather than calling `process.exit`, so the
  * suite can run it and the CLI stays the only place that decides to die.
  *
@@ -560,6 +583,16 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
         "    export const docPilot = { importDir: 'knowledge-base', sources: { allow: [...] } }\n",
     )
     return 1
+  }
+
+  // Before the network, and before any directory exists: an `--out` that leaves
+  // importDir is refused as a usage error (WR-14).
+  if (flags.out && !outFileFor(docPilot.importDir, flags.out)) {
+    log.error(
+      `[docpilot] --out "${printable(flags.out)}" is not a name under ${printable(docPilot.importDir)}.\n` +
+        '  Give a slug without "..", not an absolute path; a nested one such as guides/x is fine.',
+    )
+    return USAGE
   }
 
   // The allowlist runs BEFORE the network. Fetching a page and then refusing it
@@ -636,8 +669,9 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
     return 1
   }
 
-  const slug = flags.out ? flags.out.replace(/\.md$/, '') : slugFor(verdict.href)
-  const file = path.join(docPilot.importDir, `${slug}.md`)
+  const file = flags.out
+    ? (outFileFor(docPilot.importDir, flags.out) as string)
+    : path.join(docPilot.importDir, `${slugFor(verdict.href)}.md`)
 
   if (built.skipped) {
     // D-11: no page was extracted, so there is nothing to write and the exit is

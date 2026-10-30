@@ -306,3 +306,72 @@ describe('import — the fetcher hook', () => {
     expect(text).not.toContain('"html"')
   })
 })
+
+/**
+ * `--out` stays inside importDir (WR-14, engine-spec 043). The slug is typed by
+ * a person or passed by an agent, so a path that leaves the directory is a
+ * usage error, and it is refused before the page is fetched and before any
+ * directory exists.
+ */
+describe('import — --out is confined to importDir', () => {
+  const runOut = async (out, { dry = false } = {}) => {
+    const said = []
+    const log = { log: (m) => said.push(String(m)), error: (m) => said.push(String(m)) }
+    let fetched = 0
+    const code = await runImport({
+      docPilot: {
+        importDir: path.join(dir, 'site', 'kb'),
+        sources: { allow: ['https://acme.test'] },
+        html: {
+          fetcher: async () => {
+            fetched++
+            return PAGE
+          },
+        },
+      },
+      argv: [SOURCE, '--no-annotate', '--no-alternate', ...(dry ? ['--dry-run'] : []), '--out', out],
+      log,
+    })
+    return { code, out: said.join('\n'), fetched }
+  }
+  const files = () => {
+    const found = []
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = path.join(d, e.name)
+        if (e.isDirectory()) walk(p)
+        else found.push(path.relative(dir, p))
+      }
+    }
+    walk(dir)
+    return found.sort()
+  }
+
+  it.each(['../x', '../../x', 'guides/../../x', 'a/../b', '/tmp/docpilot-escape', '..\\x', '.md', '..', 'C:\\x'])(
+    'refuses %j with exit 2, before any fetch, directory or file',
+    async (slug) => {
+      const { code, out, fetched } = await runOut(slug)
+      expect(code).toBe(2)
+      expect(out).toContain('[docpilot] --out')
+      expect(fetched).toBe(0)
+      expect(fs.existsSync(path.join(dir, 'site'))).toBe(false)
+      expect(files()).toEqual([])
+    },
+  )
+
+  it('refuses it under --dry-run too', async () => {
+    expect((await runOut('../x', { dry: true })).code).toBe(2)
+  })
+
+  it('still writes a nested slug under importDir, the name the re-import command prints', async () => {
+    const { code } = await runOut('guides/deep/x')
+    expect(code).toBe(0)
+    expect(files()).toEqual([path.join('site', 'kb', 'guides', 'deep', 'x.md')])
+  })
+
+  it('reads a .MD suffix as it reads .md, and does not write X.MD.md', async () => {
+    const { code } = await runOut('Page.MD')
+    expect(code).toBe(0)
+    expect(files()).toEqual([path.join('site', 'kb', 'Page.md')])
+  })
+})
