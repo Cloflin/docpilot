@@ -121,6 +121,25 @@ describe('html code blocks — gutters and chrome', () => {
     expect(out).not.toContain('```')
   })
 
+  it('keeps every column of a data table whose cells hold a number and a pre', () => {
+    const out = md(
+      '<table><tr><th>Code</th><th>Name</th><th>Example</th></tr>' +
+        '<tr><td>404</td><td>Not found</td><td><pre>GET /x</pre></td></tr>' +
+        '<tr><td>500</td><td>Server error</td><td><pre>GET /y</pre></td></tr></table>',
+    )
+    for (const text of ['404', 'Not found', 'GET /x', '500', 'Server error', 'GET /y']) expect(out).toContain(text)
+  })
+
+  it('keeps every column of a headerless row of a digit, a name and a pre', () => {
+    const out = md('<table><tr><td>404</td><td>Not found</td><td><pre>GET /x</pre></td></tr></table>')
+    for (const text of ['404', 'Not found', 'GET /x']) expect(out).toContain(text)
+  })
+
+  it('still reads a two-cell digits-and-pre row as a gutter beside code', () => {
+    const out = md('<table><tr><td>1</td><td><pre>npm i</pre></td></tr><tr><td>2</td><td><pre>npm test</pre></td></tr></table>')
+    expect(out).toBe('```\nnpm i\nnpm test\n```')
+  })
+
   it('does not match a gutter hint inside a longer class token', () => {
     expect(md('<pre><code><span class="client">x</span></code></pre>')).toBe('```\nx\n```')
   })

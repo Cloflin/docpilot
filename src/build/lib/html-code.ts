@@ -169,21 +169,31 @@ const digitsOnly = (cell): boolean => /^\d[\d\s]*$/.test(String(cell.textContent
 const isGutterCell = (cell): boolean => hasHintBeneath(cell) || digitsOnly(cell)
 
 /**
- * A table that is a highlighter's layout (engine-spec 043): a gutter cell next
- * to a cell that holds the code.
+ * One row of a highlighter's layout: a gutter cell, then one cell that holds
+ * the code, and nothing else (engine-spec 043).
  *
- * The test is narrow on purpose. A data table with a numeric first column is
- * not code, so a digits-only cell counts as a gutter only when the cell beside
- * it holds a `pre`, and a hinted gutter needs a `pre` or a `code` beside it.
+ * The test is narrow on purpose and it is made row by row, from the cell beside
+ * the code. A digits-only cell counts as a gutter only when the cell beside it
+ * holds a `pre`, and a hinted gutter needs a `pre` or a `code` beside it. A
+ * third cell means the row is data (`404 | Not found | <pre>…</pre>`), and
+ * reading it as code would keep the `pre` and lose every other column (CR-01).
+ */
+function isCodeRow(cells): boolean {
+  if (cells.length !== 2) return false
+  const [gutter, code] = cells
+  if (!isGutterCell(gutter) || isGutterCell(code)) return false
+  if (code.querySelector('pre')) return true
+  return hasHintBeneath(gutter) && !!code.querySelector('code')
+}
+
+/**
+ * A table that is a highlighter's layout (engine-spec 043): every row is a
+ * gutter cell next to a cell that holds the code. One row that is not that is
+ * a data table, and `tableBlock` keeps all of its columns.
  */
 function isCodeTable(table): boolean {
-  const cells = [...table.querySelectorAll('tr')].flatMap(cellsOf)
-  const gutters = cells.filter(isGutterCell)
-  const others = cells.filter((c) => !isGutterCell(c))
-  if (!gutters.length || !others.length) return false
-
-  if (others.some((c) => c.querySelector('pre'))) return true
-  return gutters.some(hasHintBeneath) && others.some((c) => c.querySelector('code'))
+  const rows = [...table.querySelectorAll('tr')].map(cellsOf).filter((cells) => cells.length)
+  return rows.length > 0 && rows.every(isCodeRow)
 }
 
 /**
