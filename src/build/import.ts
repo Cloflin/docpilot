@@ -694,7 +694,7 @@ function report(log, { built, file, flags, source }) {
   if (dropped.length) {
     log.log(`  dropped      ${dropped.length} blocks:`)
     for (const d of dropped.slice(0, 5)) {
-      log.log(`               ${d.reason.padEnd(22)} "${p(d.text.slice(0, 60))}${d.text.length > 60 ? '…' : ''}"`)
+      log.log(`               ${p(d.reason).padEnd(22)} "${p(d.text.slice(0, 60))}${d.text.length > 60 ? '…' : ''}"`)
     }
     if (dropped.length > 5) log.log(`               …and ${dropped.length - 5} more`)
   }

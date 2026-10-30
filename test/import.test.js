@@ -13,7 +13,7 @@ import {
   proseLength,
 } from '../src/build/lib/html-extract.js'
 import { toMarkdown } from '../src/build/lib/html-to-md.js'
-import { MAX_HTML_BYTES } from '../src/build/lib/extract-html.js'
+import { extractHtml, MAX_HTML_BYTES } from '../src/build/lib/extract-html.js'
 import { fetchWithin, MAX_HOPS } from '../src/build/lib/redirects.js'
 import { printable } from '../src/build/lib/terminal.js'
 import { annotate, stripAnnotations, verifyAnnotation } from '../src/build/lib/annotate.js'
@@ -919,6 +919,30 @@ describe('import — the shared extractor and its report', () => {
     expect(code).toBe(0)
     expect(out).toMatch(/source\s+pages\s+kept\s+dropped\s+empty\s+link failures/)
     expect(out).toMatch(/https:\/\/acme\.test\/help\/rate-limits\s+1\s+\d+\s+\d+\s+0\s+0/)
+  })
+
+  it('escapes control bytes in a drop reason, in the report and on the terminal (CR-04)', async () => {
+    const hostile = page(
+      {},
+      '<main><h1>Rate limits</h1><p>Every plan is capped at sixty requests a minute, and the cap resets on the hour.</p>' +
+        '<div class="x-feedback-\u001b[31m">Was this page useful to you today?</div>' +
+        '<a href="/start">get started\u001b]0;pwn\u0007</a></main>',
+    )
+    // The reason strings themselves are clean, for every consumer of `report.dropped`.
+    const { report } = await extractHtml(hostile, { id: 'x' })
+    const reasons = report.dropped.map((d) => d.reason)
+    expect(reasons.some((r) => r.startsWith('class/id token'))).toBe(true)
+    expect(reasons.some((r) => r.startsWith('call to action'))).toBe(true)
+    // eslint-disable-next-line no-control-regex
+    for (const r of reasons) expect(r).not.toMatch(/[\u0000-\u0008\u000a-\u001f\u007f-\u009f]/)
+    expect(reasons.join('\n')).toContain('x-feedback-\\x1b[31m')
+    expect(reasons.join('\n')).toContain('get started\\x1b]0;pwn\\x07')
+
+    // And nothing reaches the terminal raw.
+    const { out } = await run(hostile)
+    expect(out).toContain('dropped')
+    expect(out).not.toContain('\u001b')
+    expect(out).not.toContain('\u0007')
   })
 
   it('skips a noindex page, names the reason and exits 1', async () => {

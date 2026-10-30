@@ -18,6 +18,8 @@
  * facts, so the suite drives it with whatever DOM the caller parsed.
  */
 
+import { printable } from './terminal.js'
+
 /**
  * Elements removed outright, by what they ARE rather than by what they say.
  *
@@ -311,7 +313,10 @@ function noiseListReason(el): string | null {
     for (const word of tokens) {
       const needle = `-${word}-`
       const hit = names.find((name) => name.includes(needle))
-      if (hit) return `class/id token "${hit.slice(1, -1)}" (${kind})`
+      // `reason` ends up on a terminal, in a report and in every later consumer
+      // of `report.dropped`, and the token came off the page: escaped HERE, so
+      // no consumer has to remember to (engine-spec 043).
+      if (hit) return `class/id token "${printable(hit.slice(1, -1))}" (${kind})`
     }
   }
   if (String(el.getAttribute?.('itemtype') || '').slice(0, SIGNATURE_MAX).toLowerCase().includes('breadcrumblist')) {
@@ -393,7 +398,7 @@ export function dropReason(el) {
     if (BUTTON_CLASS.test(sig)) return 'link styled as a button'
     if ((el.getAttribute?.('role') || '') === 'button') return 'role="button"'
     const text = textOf(el)
-    if (text && BUTTON_TEXT.test(text)) return `call to action ("${text.slice(0, 40)}")`
+    if (text && BUTTON_TEXT.test(text)) return `call to action ("${printable(text.slice(0, 40))}")`
   }
 
   return null
