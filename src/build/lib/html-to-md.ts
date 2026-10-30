@@ -20,6 +20,7 @@
  */
 
 import { textOf, tooltips } from './html-extract.js'
+import { createLinkResolver } from './html-links.js'
 import { renderBlocks } from './ir.js'
 
 /** Block elements that end a paragraph run. Everything else is inline. */
@@ -46,22 +47,6 @@ function escapeInline(text) {
 /** A line that would be read as a block marker gets its leader escaped. */
 function escapeLeader(line) {
   return line.replace(/^(\s*)([-+*>#]|\d+[.)])(\s)/, '$1\\$2$3')
-}
-
-/** `<a href>` → absolute, or null for a link that is not one. */
-function absolute(href, origin) {
-  if (!href) return null
-  const raw = href.trim()
-  if (!raw || raw.startsWith('#')) return null
-  // Only http(s) survives. `javascript:` and `data:` are the two with names and
-  // the allowlist already refuses them at build time; dropping them here means
-  // they never reach a file that somebody could then trust.
-  try {
-    const url = new URL(raw, origin || undefined)
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null
-  } catch {
-    return null
-  }
 }
 
 /** The language of a `<pre><code class="language-js">` fence, if it names one. */
@@ -116,7 +101,7 @@ function inline(node, ctx) {
     case 'a': {
       const inner = kids().trim()
       if (!inner) return ''
-      const href = absolute(node.getAttribute('href'), ctx.origin)
+      const href = ctx.links.resolve(node.getAttribute('href'))
       // A link the reader cannot follow is still a sentence they can read.
       return href ? `[${inner}](${href})` : inner
     }
@@ -324,12 +309,14 @@ function* blocks(el, ctx) {
  * former second half, verbatim.
  *
  * @param {any} root the pruned subtree from `pickMain` + `prune`
- * @param {{ origin?: string, minHeading?: number }} [options]
- *   `origin` resolves relative hrefs. `minHeading` is the level the shallowest
+ * @param {{ origin?: string, minHeading?: number, links?: any }} [options]
+ *   `origin` resolves relative hrefs; `links` is a resolver from `html-links.ts`
+ *   when the caller wants the counts (engine-spec 043). `minHeading` is the level the shallowest
  *   heading is normalised to — 2, so the file's single `#` stays the title the
  *   frontmatter names and the source page's own `<h1>` does not compete with it.
  * @returns {{ markdown: string, headings: string[], links: string[] }}
  */
-export function toMarkdown(root, { origin = '', minHeading = 2 } = {}) {
-  return renderBlocks([...blocks(root, { origin })], { minHeading })
+export function toMarkdown(root, { origin = '', minHeading = 2, links = null }: any = {}) {
+  const resolver = links || createLinkResolver({ base: origin })
+  return renderBlocks([...blocks(root, { origin, links: resolver })], { minHeading })
 }

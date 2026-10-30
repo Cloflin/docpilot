@@ -53,6 +53,7 @@ import { applyFileEnv } from '../cli-env.js'
 import { entryFlagError, flagValue } from '../cli-flags.js'
 import { printError, FAILED, USAGE } from '../cli-exit.js'
 import { meter } from '../cli-ui.js'
+import { EXTRACTOR_VERSION } from './lib/extract-html.js'
 import {
   terms,
   estTokens,
@@ -1545,9 +1546,16 @@ async function main() {
   }
 
   // ── write ──────────────────────────────────────────────────────────────────
+  // The extractor version is part of the corpus identity of a corpus that holds
+  // --html-dir pages: a parser or rule change moves their Markdown. A corpus
+  // with no such page adds no term, so the committed Markdown-only indexes stay
+  // byte-identical. Pages of `--kb` add none either: their bytes are on disk and
+  // already reflect the extractor that wrote them (engine-spec 043, D-05, D-26).
+  const hashInput = chunks.map((c) => c.id + c.text)
+  if (htmlPages > 0) hashInput.push(`extractor:${EXTRACTOR_VERSION}`)
   const hash = crypto
     .createHash('sha256')
-    .update(JSON.stringify(chunks.map((c) => c.id + c.text)))
+    .update(JSON.stringify(hashInput))
     .digest('hex')
     .slice(0, 8)
 

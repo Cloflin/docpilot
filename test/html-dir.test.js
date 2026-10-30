@@ -111,7 +111,7 @@ describe('pageFromHtml', () => {
       id: 'guide/rate-limits.html',
     })
     expect(out).toBeNull()
-    expect(warnings.join()).toContain('--html-select ".no-such-thing" matched nothing')
+    expect(warnings.join()).toContain('content selector ".no-such-thing" matched nothing')
   })
 
   it('honours a selector that does match', async () => {

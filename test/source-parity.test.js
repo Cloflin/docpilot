@@ -10,7 +10,9 @@
  * NEVER REGENERATE THE SNAPSHOTS TO MAKE A REFACTOR PASS. Every snapshot below
  * was generated from the UNCHANGED builder. A refactor that moves a byte has
  * changed what `docpilot index` writes for a reader's site, and the right
- * response is to find why, not to run `vitest -u`.
+ * response is to find why, not to run `vitest -u`. Phase 2 moved expected.json
+ * once, on purpose, because a built-site corpus hash carries the extractor
+ * version (engine-spec 043).
  *
  * `--no-embed` and no calibration file: no network, no model, and no threshold
  * a recalibration could move.

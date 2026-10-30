@@ -8,9 +8,9 @@
  * that reached the corpus was `docpilot import <url>`, one page at a time,
  * through the network, past an allowlist, with a model annotating the result.
  *
- * NOTHING HERE PARSES HTML. The extractor (`html-extract.js`), the serialiser
- * (`html-to-md.js`) and the parser loader (`dom.js`) were written for `import`
- * and are used verbatim. What is genuinely new is two things: walking a
+ * NOTHING HERE PARSES HTML. `extractHtml` (`extract-html.js`) is the one
+ * pipeline from HTML to Markdown, shared with `import` and the connectors
+ * (engine-spec 043). What is specific to this file is two things: walking a
  * directory, and turning a file path into the route the page is served at. Both
  * are small, and both are the parts that would otherwise be written a second
  * time inside the indexer.
@@ -25,9 +25,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { parseDocument } from './dom.js'
-import { pickMain, prune, metadata } from './html-extract.js'
-import { toMarkdown } from './html-to-md.js'
+import { extractHtml } from './extract-html.js'
 import { routeOf } from '../../theme/docpilot/route.js'
 
 /**
@@ -107,34 +105,26 @@ export function sitemapRoutes(xml) {
  * question than the one they asked. It warns, and skips the page.
  */
 export async function pageFromHtml(html, { select = '', base = '', warn = NO_WARN, id = '' } = {}) {
-  const document = await parseDocument(html)
-  const meta = metadata(document)
-
-  let root
-  if (select) {
-    root = document.querySelector(select)
-    if (!root) {
-      warn(`--html-select "${select}" matched nothing in ${id}`)
-      return null
-    }
-  } else {
-    root = pickMain(document)
+  const result = await extractHtml(html, { content: select, base, id, warn })
+  if (!result.ok) {
+    warn(`skipped ${id}: ${result.reason}`)
+    return null
   }
 
-  prune(root)
-  const { markdown } = toMarkdown(root, { origin: base })
-  if (!markdown.trim()) return null
-
-  const title = meta.title || ''
+  const { title, description, markdown } = result
   // Assembled the way an imported page is: one `#` title, the page's own
   // description under it, then the body at `##` and below. The description is
   // not decoration — it is the strongest dense signal a page has about itself,
   // and it belongs in the chunk that carries the title.
-  const src = [title ? `# ${title}` : '', meta.description || '', markdown]
-    .filter(Boolean)
-    .join('\n\n')
+  const src = [title ? `# ${title}` : '', description || '', markdown].filter(Boolean).join('\n\n')
 
-  return { src, title }
+  return {
+    src,
+    title,
+    canonical: result.canonical,
+    lang: result.lang,
+    dateModified: result.dateModified,
+  }
 }
 
 /**
@@ -180,7 +170,15 @@ export async function readHtmlDir({ dir, select = '', base = '', sitemap = '', w
     })
     if (!page) continue
 
-    out.push({ route, file, src: page.src, title: page.title })
+    out.push({
+      route,
+      file,
+      src: page.src,
+      title: page.title,
+      canonical: page.canonical,
+      lang: page.lang,
+      dateModified: page.dateModified,
+    })
   }
 
   return out
