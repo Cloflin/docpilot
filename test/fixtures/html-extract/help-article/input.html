@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reset a password | Acme Help Centre</title>
+<meta name="description" content="How to reset the password of an Acme account.">
+<link rel="canonical" href="https://help.acme.test/articles/reset-a-password">
+</head>
+<body>
+<main>
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <a href="/">Acme Help Centre</a> &rsaquo; <a href="/collections/account">Account</a> &rsaquo; <span>Reset a password</span>
+  </nav>
+  <article>
+    <h1>Reset a password</h1>
+    <div class="header-row">
+      <img class="photo" src="https://cdn.acme.test/people/dana.png" alt="">
+      <p>Written by Dana Reyes</p>
+      <p>Updated 3 days ago</p>
+    </div>
+    <h2>Table of contents</h2>
+    <ul>
+      <li><a href="#from-the-login-page">From the login page</a></li>
+      <li><a href="#from-the-shell">From the shell</a></li>
+      <li><a href="#if-you-are-locked-out">If you are locked out</a></li>
+    </ul>
+
+    <h2 id="from-the-login-page">From the login page</h2>
+    <p>Select Forgot password on the login page and enter the email address of your account. A reset link arrives within a few minutes.</p>
+
+    <h2 id="from-the-shell">From the shell</h2>
+    <p>If you work in a terminal, the command line tool sends the same email.</p>
+    <figure>
+      <pre><code>acme auth reset --email you@example.test</code></pre>
+      <figcaption>Send a reset email from the shell</figcaption>
+    </figure>
+
+    <h2 id="if-you-are-locked-out">If you are locked out</h2>
+    <p>After five failed attempts the account is locked for 15 minutes. Wait, then try the reset again.</p>
+
+    <div class="article-feedback">
+      <p>Was this article helpful?</p>
+      <button type="button">Yes</button>
+      <button type="button">No</button>
+    </div>
+    <section class="related-articles">
+      <h3>Related articles</h3>
+      <ul><li><a href="/articles/change-your-email">How to change your email</a></li></ul>
+    </section>
+    <div class="share-bar">
+      <span>Share this article</span>
+      <a href="https://social.acme.test/share?u=1">Post</a>
+      <button type="button">Copy link</button>
+    </div>
+  </article>
+</main>
+</body>
+</html>

@@ -23,9 +23,13 @@
  *
  * Landmarks first, because they are the ones the HTML spec already named — a
  * `<nav>` is navigation whatever its class attribute claims. Then the media and
- * scripting nodes, which carry no text an answer could cite. `img` and `figure`
- * are here for the same reason the skill gives: an import is text, and an image
- * that survived would be a link into a host we do not control.
+ * scripting nodes, which carry no text an answer could cite. `img` is here for
+ * the reason the skill gives: an import is text, and an image that survived
+ * would be a link into a host we do not control.
+ *
+ * `figure` is NOT here. A highlighter or a docs generator may wrap a code
+ * sample or a table in one, and dropping the wrapper took the sample with it
+ * (P-05); `dropReason` drops a figure that holds neither (engine-spec 043).
  */
 export const DROP_TAGS = [
   'nav',
@@ -50,14 +54,27 @@ export const DROP_TAGS = [
   'embed',
   'img',
   'picture',
-  'figure',
   'select',
   'input',
   'textarea',
 ]
 
-/** ARIA landmarks that mean the same thing as the tags above. */
-export const DROP_ROLES = ['navigation', 'banner', 'contentinfo', 'dialog', 'search', 'menubar']
+/**
+ * ARIA landmarks that mean the same thing as the tags above.
+ *
+ * `alertdialog` is a dialog that demands an answer, which is what a consent
+ * prompt is: the cookie notice of a page that marks it up as an alert dialog is
+ * the same furniture as one marked `dialog` (engine-spec 043, D-07).
+ */
+export const DROP_ROLES = [
+  'navigation',
+  'banner',
+  'contentinfo',
+  'dialog',
+  'alertdialog',
+  'search',
+  'menubar',
+]
 
 /**
  * Class and id fragments that name furniture.
@@ -90,6 +107,121 @@ export const DROP_HINTS = [
   'lang-switch',
   'language-switch',
 ]
+
+/**
+ * The named furniture lists of engine-spec 043 (D-07), one per kind of widget a
+ * reader scrolls past. Unlike DROP_HINTS they are matched against TOKENS, not
+ * substrings: a token equals the word, or has it at a `-` or `_` boundary, so
+ * `page-toc` matches `toc` and `stock-chart` does not. The haystack is the
+ * `class` tokens, the `id` and the `aria-label` of the element, lowercased.
+ * Every entry is a word a generator or a help centre really writes; a kind that
+ * a list misses is added here with its reason, never matched by a looser
+ * pattern. Every removal is reported with the kind that took it.
+ */
+
+/** Cookie and consent banners beyond the substring hints: a consent bar is never content. */
+export const CONSENT_TOKENS = ['cookiebar', 'cookie-banner', 'privacy-banner', 'cmp']
+
+/** "Was this helpful?" widgets: the question and its Yes/No buttons say nothing a reader asks about. */
+export const FEEDBACK_TOKENS = [
+  'feedback',
+  'article-feedback',
+  'was-this-helpful',
+  'article-votes',
+  'article-rating',
+  'reactions',
+]
+
+/** Share bars: links to other sites' share forms, with no text of the page in them. */
+export const SHARE_TOKENS = ['sharing', 'social-share', 'share-bar', 'share-buttons']
+
+/** Table-of-contents sidebars: a second copy of the headings, which the chunker rebuilds. */
+export const TOC_TOKENS = ['toc', 'table-of-contents', 'article-toc', 'page-toc', 'on-this-page']
+
+/** Breadcrumbs: the path to the page is the source row's job, not the body's. */
+export const BREADCRUMB_TOKENS = ['breadcrumbs', 'crumbs']
+
+/** Help-centre bylines and avatars: who wrote it and when is metadata, and a retrievable lie in a chunk. */
+export const BYLINE_TOKENS = [
+  'byline',
+  'author',
+  'article-author',
+  'author-info',
+  'article-meta',
+  'post-meta',
+  'avatar',
+]
+
+/**
+ * How much of a `class`, `id` or `aria-label` the token lists read. A page
+ * chooses its own attributes, and a megabyte class would make every list scan
+ * a megabyte; the words a list names sit in the first lines of any real one.
+ */
+const SIGNATURE_MAX = 2000
+
+/**
+ * The text rules below apply to an element with at most this many element
+ * children (a byline is a line, maybe with a name in a link and a date in a
+ * `<time>`) and at most FURNITURE_TEXT_MAX characters once collapsed. The
+ * length check comes BEFORE any regular expression, so a regex never sees more
+ * than FURNITURE_TEXT_MAX characters (T-02-18).
+ */
+export const FURNITURE_MAX_CHILDREN = 4
+export const FURNITURE_TEXT_MAX = 120
+
+/**
+ * The raw text above which an element is not measured at all. Template
+ * indentation and newlines inflate raw text, so this is far above
+ * FURNITURE_TEXT_MAX; it only keeps the whitespace collapse off a megabyte of
+ * text on every ancestor of a large block.
+ */
+const FURNITURE_RAW_MAX = 1000
+
+/**
+ * Help-centre furniture by its text, anchored and bounded: no nested
+ * quantifier, no unbounded repeat after the anchor (engine-spec 043, D-07).
+ *
+ * `UPDATED_TEXT` demands a year, a numeric date or a relative time, so
+ * "Updated pricing applies from May." is a sentence and stays. The rules are
+ * compared with lowercased NFC text, hence the `i` flag.
+ */
+export const BYLINE_TEXT = /^(?:written|posted|published|authored|created) by\s.{1,80}$/i
+export const UPDATED_TEXT =
+  /^(?:last )?(?:updated|modified|edited)\b[^.!?]{0,40}(?:\d{4}|\d{1,2}[./-]\d{1,2}|\bago\b|\byesterday\b|\btoday\b)[^.!?]{0,20}$/i
+export const TOC_TITLE_TEXT = /^(?:table of contents|contents|on this page|in this article)$/i
+export const FEEDBACK_TEXT = /^was this (?:article|page|answer|section) (?:helpful|useful)\b.{0,60}$/i
+
+/** Each text rule with the reason that reaches the report. */
+const TEXT_RULES = [
+  { rule: BYLINE_TEXT, reason: 'help-centre byline ("written by …")' },
+  { rule: UPDATED_TEXT, reason: 'help-centre date line ("updated …")' },
+  { rule: TOC_TITLE_TEXT, reason: 'table-of-contents title' },
+  { rule: FEEDBACK_TEXT, reason: 'feedback question ("was this helpful?")' },
+]
+
+/**
+ * Elements whose short text is DATA, not furniture: a table cell that reads
+ * "Updated 2026-03-01" is a changelog column, and a list item that does is an
+ * entry. The text rules skip them (a byline is never a cell).
+ */
+const DATA_TAGS = ['td', 'th', 'li', 'dt', 'dd', 'summary']
+
+/** The token lists with the kind each one names, in the order they are asked. */
+const NOISE_LISTS = [
+  { tokens: CONSENT_TOKENS, kind: 'consent banner' },
+  { tokens: FEEDBACK_TOKENS, kind: 'feedback widget' },
+  { tokens: SHARE_TOKENS, kind: 'share bar' },
+  { tokens: TOC_TOKENS, kind: 'table of contents' },
+  { tokens: BREADCRUMB_TOKENS, kind: 'breadcrumb' },
+  { tokens: BYLINE_TOKENS, kind: 'byline' },
+]
+
+/**
+ * The share of a list's text that must be link text for the list to be an
+ * in-page table of contents. A list of jump links with prose around them is
+ * content that happens to link to itself.
+ */
+const TOC_LINK_SHARE = 0.8
 
 /**
  * Hints that are furniture ONLY when they are not carrying content.
@@ -153,6 +285,61 @@ function signature(el) {
   return `${cls} ${id}`.toLowerCase()
 }
 
+/**
+ * The class tokens, the id and the aria-label as `-token-` strings, `_` read
+ * as `-`, so `-toc-` finds the word `toc` at a boundary and nowhere inside
+ * another word. The aria-label counts as one token with its spaces as `-`.
+ */
+function signatureTokens(el): string[] {
+  const read = (name: string) =>
+    String(el.getAttribute?.(name) || '')
+      .slice(0, SIGNATURE_MAX)
+      .normalize('NFC')
+      .toLowerCase()
+  const names = [
+    ...read('class').split(/\s+/),
+    read('id'),
+    read('aria-label').trim().replace(/\s+/g, '-'),
+  ]
+  return names.filter(Boolean).map((name) => `-${name.replace(/_/g, '-')}-`)
+}
+
+/** The reason an element goes by a named token list, or null. */
+function noiseListReason(el): string | null {
+  const names = signatureTokens(el)
+  for (const { tokens, kind } of NOISE_LISTS) {
+    for (const word of tokens) {
+      const needle = `-${word}-`
+      const hit = names.find((name) => name.includes(needle))
+      if (hit) return `class/id token "${hit.slice(1, -1)}" (${kind})`
+    }
+  }
+  if (String(el.getAttribute?.('itemtype') || '').slice(0, SIGNATURE_MAX).toLowerCase().includes('breadcrumblist')) {
+    return 'itemtype BreadcrumbList (breadcrumb)'
+  }
+  return null
+}
+
+/**
+ * The reason a short, block-free element goes by its text, or null.
+ *
+ * Every cheap test runs before the first regular expression, so no rule sees
+ * more than FURNITURE_TEXT_MAX characters (T-02-18). A match inside code is
+ * code, not furniture.
+ */
+function textRuleReason(el, tag: string): string | null {
+  if (DATA_TAGS.includes(tag)) return null
+  if ((el.children?.length || 0) > FURNITURE_MAX_CHILDREN) return null
+  if (String(el.textContent || '').length > FURNITURE_RAW_MAX) return null
+  const text = textOf(el).normalize('NFC')
+  if (!text || text.length > FURNITURE_TEXT_MAX) return null
+  if (el.querySelector?.('p, ul, ol, dl, table, pre')) return null
+  const found = TEXT_RULES.find(({ rule }) => rule.test(text))
+  if (!found) return null
+  if (el.closest?.('pre, code')) return null
+  return found.reason
+}
+
 /** The visible text of a subtree, whitespace collapsed. */
 export function textOf(el) {
   return String(el?.textContent || '')
@@ -177,6 +364,10 @@ export function dropReason(el) {
   const role = (el.getAttribute?.('role') || '').toLowerCase()
   if (DROP_ROLES.includes(role)) return `role="${role}"`
 
+  // A figure is a wrapper, and what is inside it decides (P-05): code and
+  // tables stay with their caption, a figure of pictures goes.
+  if (tag === 'figure' && !el.querySelector?.('pre, table')) return '<figure> with no code or table'
+
   // Hidden from the accessibility tree is hidden from the reader, and a reader
   // is who the corpus answers. `hidden` and `display:none` inline say the same.
   if ((el.getAttribute?.('aria-hidden') || '') === 'true') return 'aria-hidden'
@@ -186,6 +377,12 @@ export function dropReason(el) {
   const sig = signature(el)
   const hint = DROP_HINTS.find((h) => sig.includes(h))
   if (hint) return `class/id ~ "${hint}"`
+
+  const listed = noiseListReason(el)
+  if (listed) return listed
+
+  const worded = textRuleReason(el, tag)
+  if (worded) return worded
 
   const soft = SOFT_HINTS.find((h) => sig.includes(h))
   if (soft && !el.querySelector?.('table') && textOf(el).length < SOFT_TEXT_FLOOR) {
@@ -239,6 +436,42 @@ export function proseLength(el) {
 }
 
 /**
+ * Remove each in-page table of contents, with its title, and report both.
+ *
+ * A list of at least two links where EVERY link is fragment-only and the link
+ * text is at least TOC_LINK_SHARE of the list's text is a copy of the page's
+ * own headings. It has no class to match on in a lot of help centres, so it is
+ * recognised by what it is. The element just before it goes too when its text
+ * is a title ("Table of contents") — a title over nothing is an orphan line.
+ * A list of real links, or of one jump link, is content and stays.
+ */
+function dropTocLists(root, dropped) {
+  const reason = 'in-page table of contents'
+  for (const list of [...root.querySelectorAll('ul, ol')]) {
+    if (!root.contains(list)) continue
+    const links = [...list.querySelectorAll('a')]
+    if (links.length < 2) continue
+    if (!links.every((a) => String(a.getAttribute('href') || '').trim().startsWith('#'))) continue
+    const text = textOf(list)
+    const linkText = links.reduce((sum, a) => sum + textOf(a).length, 0)
+    if (!text || linkText < text.length * TOC_LINK_SHARE) continue
+
+    const title = list.previousElementSibling
+    if (
+      title &&
+      String(title.textContent || '').length <= FURNITURE_RAW_MAX &&
+      textOf(title).length <= FURNITURE_TEXT_MAX &&
+      TOC_TITLE_TEXT.test(textOf(title).normalize('NFC'))
+    ) {
+      dropped.push({ reason: `${reason} (title)`, text: textOf(title) })
+      title.remove()
+    }
+    dropped.push({ reason, text })
+    list.remove()
+  }
+}
+
+/**
  * Remove the furniture, in place, and report every removal.
  *
  * Depth-first with the children snapshotted before the walk, because removing a
@@ -250,6 +483,8 @@ export function proseLength(el) {
  */
 export function prune(root) {
   const dropped = []
+
+  dropTocLists(root, dropped)
 
   const walk = (el) => {
     for (const child of [...(el.children || [])]) {
