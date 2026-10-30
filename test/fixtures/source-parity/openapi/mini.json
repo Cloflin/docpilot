@@ -1,0 +1,43 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Mini Parity API", "version": "1.0.0" },
+  "paths": {
+    "/widgets": {
+      "get": {
+        "summary": "List widgets",
+        "description": "Returns every widget the caller may see.",
+        "parameters": [
+          { "name": "limit", "in": "query", "required": false, "description": "Page size.", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "A page of widgets." }, "401": { "description": "No credentials." } }
+      },
+      "post": {
+        "summary": "Create a widget",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "description": "The widget name." },
+                  "size": { "type": "integer", "description": "Size in cells." }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "The new widget." } }
+      }
+    },
+    "/widgets/{id}": {
+      "delete": {
+        "summary": "Delete a widget",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "description": "The widget id.", "schema": { "type": "string" } }
+        ],
+        "responses": { "204": { "description": "Deleted." }, "404": { "description": "No such widget." } }
+      }
+    }
+  }
+}

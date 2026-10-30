@@ -141,23 +141,29 @@ const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
 /**
  * @param {string} yamlText raw spec
  * @param {string} name file basename → route /reference/<name>
+ * @param {{ dereference?: ((text: string) => Promise<{ schema?: any }>) | null }} [options]
+ *   `dereference` replaces the optional parser. It exists so a test can run the
+ *   chunk building without the optional peer installed;
+ *   the build never passes it, and without it nothing below differs from before.
  */
-export async function chunkOpenapi(yamlText, name) {
+export async function chunkOpenapi(yamlText, name, { dereference: injected = null } = {}) {
   // Imported here rather than at module scope, and optional on purpose: a docs
   // site with no OpenAPI files should not have to install a spec parser to
   // build an index, and the failure when it is absent should name the fix
   // rather than arrive as an unresolved import three frames up.
-  let dereference
-  try {
-    // @ts-ignore — an optional peer the catch below reports as missing.
-    ;({ dereference } = await import('@scalar/openapi-parser'))
-  } catch {
-    throw new Error(
-      `[docpilot] found an OpenAPI file (${name}) but @scalar/openapi-parser is not installed.\n` +
-        '  npm i -D @scalar/openapi-parser   — or remove the YAML from your public/ directory.\n' +
-        '  Any version from 0.18 up: this file uses `dereference(yaml) → {schema}` and\n' +
-        '  nothing else, and that contract is unchanged across 0.18, 0.22 and 0.28.',
-    )
+  let dereference = injected
+  if (!dereference) {
+    try {
+      // @ts-ignore — an optional peer the catch below reports as missing.
+      ;({ dereference } = await import('@scalar/openapi-parser'))
+    } catch {
+      throw new Error(
+        `[docpilot] found an OpenAPI file (${name}) but @scalar/openapi-parser is not installed.\n` +
+          '  npm i -D @scalar/openapi-parser   — or remove the YAML from your public/ directory.\n' +
+          '  Any version from 0.18 up: this file uses `dereference(yaml) → {schema}` and\n' +
+          '  nothing else, and that contract is unchanged across 0.18, 0.22 and 0.28.',
+      )
+    }
   }
   const { schema } = await dereference(yamlText)
   if (!schema) return { chunks: [], title: name }

@@ -1,0 +1,17 @@
+{
+  "title": "Mini Parity API",
+  "chunks": [
+    {
+      "id": "reference/mini#get-widgets",
+      "text": "Mini Parity API — GET /widgets\nList widgets\nReturns every widget the caller may see.\nParameters:\n- limit (query): integer — Page size.\nResponses: 200 A page of widgets.; 401 No credentials."
+    },
+    {
+      "id": "reference/mini#post-widgets",
+      "text": "Mini Parity API — POST /widgets\nCreate a widget\nRequest body:\n- name: string (required) — The widget name.\n- size: integer — Size in cells.\nResponses: 201 The new widget."
+    },
+    {
+      "id": "reference/mini#delete-widgetsid",
+      "text": "Mini Parity API — DELETE /widgets/{id}\nDelete a widget\nParameters:\n- id (path): string (required) — The widget id.\nResponses: 204 Deleted.; 404 No such widget."
+    }
+  ]
+}
