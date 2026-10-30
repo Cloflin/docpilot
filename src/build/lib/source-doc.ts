@@ -27,7 +27,9 @@ export interface SourceDoc {
   id: string
   source: 'markdown' | 'kb' | 'html-dir' | 'openapi'
   /**
-   * Canonical URL. `null` where the route is the URL. A KB page carries its
+   * Canonical URL. `null` where the route is the URL. Since Phase 2 an html-dir
+   * document carries the page's own `<link rel="canonical">` here; the stage
+   * still cites the route of an html-dir page, never this `url`. A KB page carries its
    * front-matter `source:` here UNCHECKED: the allowlist runs inside
    * `documentsToChunks` (`originFor`) and does not rewrite this field, so it
    * must not become an `href` until a stage replaces it with the checked origin.
@@ -36,8 +38,11 @@ export interface SourceDoc {
   title: string | null
   body: SourceBody
   /**
-   * Never hashed and never written in Phase 1. It never comes from a file's
-   * mtime: that differs on every checkout, and an index must not.
+   * `updatedAt` and `locale` are never hashed. Since Phase 2 an html-dir
+   * document carries the page's own `dateModified` and `lang` from the
+   * extractor, and a KB document carries the front-matter keys `lang` and
+   * `dateModified` that `docpilot import` writes. `updatedAt` never comes from
+   * a file's mtime: that differs on every checkout, and an index must not.
    */
   updatedAt?: string
   locale?: string

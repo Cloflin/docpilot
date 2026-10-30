@@ -192,17 +192,67 @@ export async function readHtmlDocs({
 }): Promise<ReadDoc[]> {
   const optionsFor = (file: string) => htmlOptionsFor(html, file, { root, flags: { content: select, exclude } })
   const found = await readHtmlDir({ dir, select, exclude, base, sitemap, warn, optionsFor })
-  return found.map(({ route, file, src, title }) => ({
+  return found.map(htmlRecordToDoc)
+}
+
+/**
+ * One built page as a document. The page's own canonical, `lang` and
+ * `dateModified` ride on `url`, `locale` and `updatedAt` (D-12); none of the
+ * three is hashed, so no committed byte moves.
+ */
+export function htmlRecordToDoc({
+  route,
+  file,
+  src,
+  title,
+  canonical,
+  lang,
+  dateModified,
+}: {
+  route: string
+  file: string
+  src: string
+  title: string
+  canonical?: string | null
+  lang?: string
+  dateModified?: string | null
+}): ReadDoc {
+  return {
     id: route,
     source: 'html-dir',
-    url: null,
+    url: canonical || null,
     title,
     body: { format: 'markdown', markdown: src },
     file,
     visibility: 'public',
     breadcrumb: [],
     tags: [],
-  }))
+    locale: lang || undefined,
+    updatedAt: dateModified || undefined,
+  }
+}
+
+/**
+ * One scalar key of a page's front matter, or '' when absent.
+ *
+ * `splitFrontmatter` reads the keys the chunker needs and is shared with the
+ * Markdown path; `lang` and `dateModified` belong to the document metadata only
+ * (D-12), so they are read here and that function is left as it was. A
+ * double-quoted value is unquoted through JSON.parse, as `import` writes it.
+ */
+function frontmatterValue(src: string, key: string): string {
+  const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(withoutBom(src))
+  const m = block && new RegExp(`^${key}:[ \\t]*(.+)$`, 'm').exec(block[1])
+  if (!m) return ''
+  const raw = m[1].trim()
+  if (raw.startsWith('"')) {
+    try {
+      return String(JSON.parse(raw))
+    } catch {
+      // Not JSON after all; fall through to the plain form.
+    }
+  }
+  return raw.replace(/^['"]|['"]$/g, '')
 }
 
 /**
@@ -231,6 +281,9 @@ export function readKbDocs({
       visibility: 'public',
       breadcrumb: [],
       tags: [],
+      // `docpilot import` writes these keys (plan 02-06); neither is hashed (D-12).
+      locale: frontmatterValue(src, 'lang') || undefined,
+      updatedAt: frontmatterValue(src, 'dateModified') || undefined,
     }
   })
 }

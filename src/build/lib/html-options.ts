@@ -17,6 +17,10 @@
  * page, so a build cannot depend on it being reachable.
  */
 
+import path from 'node:path'
+
+import { parseAllowlist, checkSource } from './sources.js'
+
 /** What `extractHtml` takes from this file. */
 export interface HtmlOptions {
   content: string
@@ -47,12 +51,56 @@ function toSelector(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+/** A target written as a URL (a connector page) rather than a path (a built file). */
+const URL_TARGET = /^[a-z][a-z0-9+.-]*:\/\//i
+
+/**
+ * How well a `sources` key matches a target, or -1 for no match (D-21).
+ *
+ * A key that the `sources.allow` parser accepts is a URL key, matched with the
+ * allowlist's own segment rule so `https://acme.test/help` never matches
+ * `/helpdesk` (T-02-05). Any other key is a directory under the project root,
+ * matched at a path-segment boundary. Specificity is the length of what the key
+ * pins down, so the longest key wins. A URL key never matches a file target and
+ * a directory key never matches a URL target.
+ */
+function specificity(key: string, target: string, root: string): number {
+  const isUrlTarget = URL_TARGET.test(target)
+  const { entries } = parseAllowlist({ allow: [key] })
+  if (entries.length) {
+    if (!isUrlTarget) return -1
+    return 'href' in checkSource(target, entries) ? entries[0].origin.length + entries[0].prefix.length : -1
+  }
+  if (isUrlTarget) return -1
+  const dir = path.resolve(root, key)
+  const file = path.resolve(root, target)
+  return file === dir || file.startsWith(dir + path.sep) ? dir.length : -1
+}
+
+/**
+ * The `sources` level that applies to `target`: the highest specificity, and on
+ * a tie the first key in `Object.keys` order, so two runs agree (HTML-01).
+ */
+function sourceLevel(html: any, target: string, root: string): { content?: unknown; exclude?: unknown } | null {
+  const sources = html?.sources
+  if (!sources || typeof sources !== 'object') return null
+  let best = -1
+  let level = null
+  for (const key of Object.keys(sources)) {
+    const score = specificity(key, target, root)
+    if (score > best) {
+      best = score
+      level = sources[key]
+    }
+  }
+  return level && typeof level === 'object' ? level : null
+}
+
 /**
  * The `content` and `exclude` selectors for one target.
  *
- * `target` is the file or URL the page came from; Task 2 of plan 02-03 matches
- * it against `html.sources`. The project level and the flags are enough for a
- * run with no `sources`.
+ * `target` is the file or URL the page came from. Levels, most specific first:
+ * `flags`, the longest matching `html.sources` key, the project default.
  */
 export function htmlOptionsFor(
   html: any,
@@ -60,6 +108,8 @@ export function htmlOptionsFor(
   { root = process.cwd(), flags = {} }: { root?: string; flags?: HtmlFlags } = {},
 ): HtmlOptions {
   const levels: { content?: unknown; exclude?: unknown }[] = [flags]
+  const source = sourceLevel(html, target, root)
+  if (source) levels.push(source)
   if (html && typeof html === 'object') levels.push(html)
 
   let content = ''
@@ -69,4 +119,59 @@ export function htmlOptionsFor(
     if (!exclude.length) exclude = toList(level.exclude)
   }
   return { content, exclude }
+}
+
+const isPlain = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v)
+const isStringList = (v: unknown) => typeof v === 'string' || (Array.isArray(v) && v.every((x) => typeof x === 'string'))
+
+/**
+ * What is wrong with `docPilot.html`, one line per problem, naming the dotted
+ * key. A typo here must not silently change what is indexed, so the builder
+ * stops on any problem before it reads a page; this is a config error and not a
+ * bad page (D-11 covers pages only).
+ */
+export function htmlConfigProblems(html: unknown): string[] {
+  if (html === undefined || html === null) return []
+  if (!isPlain(html)) return ['docPilot.html must be an object']
+  const out: string[] = []
+  const h = html as Record<string, unknown>
+
+  // `fetcher` is validated by plan 02-06, which adds it to this list.
+  for (const key of Object.keys(h)) {
+    if (!['content', 'exclude', 'sources'].includes(key)) {
+      out.push(`docPilot.html.${key} is not a known key (content, exclude, sources)`)
+    }
+  }
+  if ('content' in h && typeof h.content !== 'string') out.push('docPilot.html.content must be a string')
+  if ('exclude' in h && !isStringList(h.exclude)) {
+    out.push('docPilot.html.exclude must be a string or a list of strings')
+  }
+  if ('sources' in h) {
+    if (!isPlain(h.sources)) {
+      out.push('docPilot.html.sources must be an object of { content, exclude } by source')
+    } else {
+      for (const [key, level] of Object.entries(h.sources as Record<string, unknown>)) {
+        const at = `docPilot.html.sources[${JSON.stringify(key)}]`
+        // A key written as a URL that the allowlist rules refuse (http, a query) would
+        // be read as a directory and match nothing: it is named instead.
+        if (URL_TARGET.test(key)) {
+          const { errors } = parseAllowlist({ allow: [key] })
+          if (errors.length) out.push(`${at} is not a valid source URL (https, no query or fragment)`)
+        }
+        if (!isPlain(level)) {
+          out.push(`${at} must be an object holding content and exclude`)
+          continue
+        }
+        const l = level as Record<string, unknown>
+        for (const k of Object.keys(l)) {
+          if (k !== 'content' && k !== 'exclude') out.push(`${at}.${k} is not a known key (content, exclude)`)
+        }
+        if ('content' in l && typeof l.content !== 'string') out.push(`${at}.content must be a string`)
+        if ('exclude' in l && !isStringList(l.exclude)) {
+          out.push(`${at}.exclude must be a string or a list of strings`)
+        }
+      }
+    }
+  }
+  return out
 }

@@ -19,6 +19,7 @@ import { pathToFileURL } from 'node:url'
 
 
 import { descriptionsFromLlms } from '../llms/about.js'
+import { htmlConfigProblems } from './lib/html-options.js'
 import { readMarkdownDocs, readHtmlDocs, readKbDocs, readOpenapiDocs, discoverOpenapiSpecs } from './lib/readers.js'
 import { documentsToChunks } from './lib/documents.js'
 import { shellManifest } from '../server/shell.js'
@@ -1298,6 +1299,10 @@ async function main() {
   const docs: ReadDoc[] = readMarkdownDocs({ docsDir: DOCS, root: ROOT, exclude: EXCLUDE, specRoutes, warn })
 
   if (HTML_DIR) {
+    // A malformed `docPilot.html` is a config error, not a bad page: it stops the
+    // run before any page is read, with each bad key named (T-02-06).
+    const htmlProblems = htmlConfigProblems((docPilot as any).html)
+    if (htmlProblems.length) die(`docPilot.html is not valid:\n  ${htmlProblems.join('\n  ')}`)
     try {
       docs.push(
         ...(await readHtmlDocs({
