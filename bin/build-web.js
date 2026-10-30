@@ -31,6 +31,7 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { webBuildOptions } from './web-build-config.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const outDir = path.join(root, 'dist')
@@ -95,56 +96,7 @@ try {
 
 mkdirSync(outDir, { recursive: true })
 
-const output = await build({
-  // The repo has no vite config and must not acquire one by accident: this
-  // build is a library, and a config written for the documentation site would
-  // apply its base, its aliases and its plugins to the published artifact.
-  configFile: false,
-  root,
-  logLevel: 'warn',
-  plugins: [vue()],
-  define: {
-    // Vue reads it at module scope and ships its whole dev-warning apparatus
-    // without it. Not `import.meta.env` — this artifact runs in hosts that
-    // never see a Vite transform.
-    'process.env.NODE_ENV': '"production"',
-  },
-  build: {
-    outDir,
-    // `build-css.js` has already written three files here.
-    emptyOutDir: false,
-    cssCodeSplit: false,
-    /**
-     * No source maps, and the trade is explicit: they came to 4.5 MB against a
-     * 1.5 MB artifact, inside a tarball that `files` publishes whole. The source
-     * ships anyway — `src/` is in `files[]` — so anyone who needs to step
-     * through this code can install `@cloflin/docpilot/mount` and get the
-     * unbundled original, which is a better debugging experience than a map
-     * over minified output.
-     */
-    sourcemap: false,
-    lib: {
-      entry: path.join(root, 'src/web.ts'),
-      name: 'DocPilot',
-      formats: ['es', 'iife'],
-      fileName: (format) => (format === 'es' ? 'docpilot.web.mjs' : 'docpilot.web.js'),
-      cssFileName: 'docpilot.web',
-    },
-    rollupOptions: {
-      // Deliberately empty. See the header: every host this artifact exists for
-      // is one that does not have Vue.
-      external: [],
-      output: {
-        // The ESM build code-splits — one chunk per grammar, so a reader who
-        // never sees a shell snippet never downloads the shell grammar. They go
-        // in a subdirectory because `dist/` also holds four stylesheets and two
-        // entry points, and a dozen hashed siblings beside them make it
-        // impossible to see at a glance what this package publishes.
-        chunkFileNames: 'web/[name]-[hash].js',
-      },
-    },
-  },
-})
+const output = await build(webBuildOptions({ root, outDir, vue }))
 
 /**
  * An empty or missing output is the failure a bundler invites — a plugin that
