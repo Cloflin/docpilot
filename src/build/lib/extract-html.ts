@@ -175,8 +175,12 @@ export function extractDocument(document, options: ExtractOptions = {}): Extract
   const { content = '', exclude = [], base = '', id = '' } = options
   try {
     const meta = metadata(document)
-    const title = meta.title.normalize('NFC')
-    const description = meta.description.normalize('NFC')
+    // One line each: a `<title>` laid out over several lines in the template
+    // would end the `#` heading at its first line and leave the rest as body
+    // text, and a newline in the manifest title is no title (WR-06). `import`
+    // collapses the same way in `composePage`.
+    const title = collapse(meta.title).normalize('NFC')
+    const description = collapse(meta.description).normalize('NFC')
     const lang = meta.lang
     const report = emptyReport()
     report.totalChars = points(textOf(document.body || document.documentElement))

@@ -60,7 +60,7 @@ const INERT = new Set(['script', 'style', 'template', 'svg', 'noscript'])
  * the brackets are live: a link the resolver never saw and the counters never
  * counted (WR-04, engine-spec 043).
  */
-function escapeInline(text) {
+export function escapeInline(text) {
   return (
     text
       .replace(/([\\[\]`])/g, '\\$1')
@@ -74,7 +74,7 @@ function escapeInline(text) {
 }
 
 /** A line that would be read as a block marker gets its leader escaped. */
-function escapeLeader(line) {
+export function escapeLeader(line) {
   return line.replace(/^(\s*)([-+*>#]|\d+[.)])(\s)/, '$1\\$2$3')
 }
 

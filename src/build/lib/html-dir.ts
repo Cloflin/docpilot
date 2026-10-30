@@ -26,6 +26,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { extractHtml } from './extract-html.js'
+import { escapeInline, escapeLeader } from './html-to-md.js'
 import { routeOf } from '../../theme/docpilot/route.js'
 
 /**
@@ -119,7 +120,13 @@ export async function pageFromHtml(
   // description under it, then the body at `##` and below. The description is
   // not decoration — it is the strongest dense signal a page has about itself,
   // and it belongs in the chunk that carries the title.
-  const src = [title ? `# ${title}` : '', description || '', markdown].filter(Boolean).join('\n\n')
+  //
+  // The description is page text like any other: a leading `#` or `-` would
+  // make it a heading or a list, and a decoded `<llm-exclude>` would be an
+  // annotation tag. It goes through the escaping the body uses (WR-06,
+  // engine-spec 043, T-02-17).
+  const lead = description ? escapeLeader(escapeInline(description)) : ''
+  const src = [title ? `# ${title}` : '', lead, markdown].filter(Boolean).join('\n\n')
 
   return {
     src,

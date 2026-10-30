@@ -94,6 +94,31 @@ describe('pageFromHtml', () => {
     expect(out.src).toContain('Every request is counted')
   })
 
+  it('writes a multi-line title on one line, in the heading and in the title', async () => {
+    const html = page('\n  Foo\n  Bar page\n', PROSE)
+    const out = await pageFromHtml(html)
+    expect(out.title).toBe('Foo Bar page')
+    expect(out.src.startsWith('# Foo Bar page\n\n')).toBe(true)
+  })
+
+  it('cannot let a description change the structure of the document', async () => {
+    const lead = (description) =>
+      pageFromHtml(
+        '<!doctype html><html><head><title>T</title>' +
+          `<meta name="description" content="${description}"></head>` +
+          `<body><main>${PROSE}</main></body></html>`,
+      )
+    const heading = await lead('# Injected heading')
+    expect(heading.src.split('\n\n')[1]).toBe('\\# Injected heading')
+    const item = await lead('- not a list')
+    expect(item.src.split('\n\n')[1]).toBe('\\- not a list')
+    const tag = await lead('before &lt;llm-exclude&gt; after')
+    expect(tag.src).not.toContain('<llm-exclude>')
+    expect(tag.src.split('\n\n')[1]).toBe('before &lt;llm-exclude> after')
+    const wrapped = await lead('first line\n  # second line')
+    expect(wrapped.src.split('\n\n')[1]).toBe('first line # second line')
+  })
+
   it('returns null for a page with no body text', async () => {
     expect(await pageFromHtml('<!doctype html><html><body><nav>a</nav></body></html>')).toBeNull()
   })
