@@ -52,6 +52,13 @@
  * is not counted. `stub.stall()` makes the next streamed reply send its opening
  * frame and then hang until the request is aborted. `stub.models` is the list of
  * model names the stub serves; any other name is a 404.
+ *
+ * `createHarness` returns at once (the server half boots in the background and
+ * every member that needs it waits), so `await createHarness(...)` and a plain
+ * call both work. `reset()` returns the harness to a clean start — session
+ * state, both storages, the log, the stub's controls — and leaves it installed;
+ * `close()` does that and then uninstalls every global it replaced, removes the
+ * server's index directory, and throws if any request went unrouted.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -282,32 +289,9 @@ export function createHarness({ runtime = 'browser', mode = 'hybrid', config = {
     return jsonResponse(200, { data: inputs.map((t, index) => ({ index, embedding: Array.from(stubVector(t)) })) })
   }
 
-  // ── the server, for the server runtime ─────────────────────────────────────
   let dir = null
   let dp = null
   let ready = Promise.resolve()
-  if (runtime === 'server') {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-chat-'))
-    writeFixtureDir(dir, { vectors: hybrid })
-    ready = (async () => {
-      dp = await createDocPilotServer({
-        settings: {
-          chat: { provider: 'custom', model: 'stub', baseURL: STUB_BASE },
-          embed: hybrid ? { provider: 'custom', model: EMBED_MODEL, baseURL: STUB_BASE } : false,
-          budget: false,
-          suggestions: [OPENER],
-          ...config,
-        },
-        env: { CUSTOM_BASE_URL: STUB_BASE, ...ENV },
-        index: dir,
-        log: null,
-      })
-      // The server probes the model for tool support at boot, without waiting
-      // for a reader. Let that settle so it belongs to the harness's start and
-      // never to the first question.
-      for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0))
-    })()
-  }
 
   // ── the router: every fetch in the process ends here ───────────────────────
   const route = async (input, init = {}) => {
@@ -353,6 +337,33 @@ export function createHarness({ runtime = 'browser', mode = 'hybrid', config = {
     throw new Error(`harness: unexpected fetch ${href}`)
   }
   vi.stubGlobal('fetch', route)
+
+  // ── the server, for the server runtime ─────────────────────────────────────
+  // AFTER the router is installed: the server probes the model during boot, and
+  // a probe sent before the stub is in place would be a real request.
+  if (runtime === 'server') {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-chat-'))
+    writeFixtureDir(dir, { vectors: hybrid })
+    ready = (async () => {
+      dp = await createDocPilotServer({
+        settings: {
+          chat: { provider: 'custom', model: 'stub', baseURL: STUB_BASE },
+          embed: hybrid ? { provider: 'custom', model: EMBED_MODEL, baseURL: STUB_BASE } : false,
+          budget: false,
+          suggestions: [OPENER],
+          ...config,
+        },
+        env: { CUSTOM_BASE_URL: STUB_BASE, ...ENV },
+        index: dir,
+        log: null,
+      })
+      // The server probes the model for tool support at boot, without waiting
+      // for a reader. Let that settle so it belongs to the harness's start and
+      // never to the first question.
+      for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0))
+    })()
+  }
+
 
   // ── the index and the history ──────────────────────────────────────────────
   let index = null
@@ -472,7 +483,9 @@ export function createHarness({ runtime = 'browser', mode = 'hybrid', config = {
     degraded: state.degraded,
     conversationId: alias('conv', state.conversationId),
     scope: { kind: state.scope.kind, paths: [...state.scope.paths] },
-    history: state.history.map((c) => ({ ...c, id: alias('conv', c.id), updatedAt: undefined })),
+    // A stored row's clock fields and index hash are left out: the first moves with
+    // the fake clock, the second with how many fixtures this process has built.
+    history: state.history.map(({ createdAt, updatedAt, hash, ...row }) => ({ ...row, id: alias('conv', row.id) })),
     turns: state.turns.map(normaliseTurn),
   })
 

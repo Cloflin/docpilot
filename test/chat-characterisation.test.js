@@ -44,3 +44,41 @@ describe('a cold question, browser runtime', () => {
     await expect(h.trace()).toMatchFileSnapshot('./traces/submit.browser.trace')
   })
 })
+
+describe('a cold question, server runtime', () => {
+  it('settles with the same outcome through the real turn endpoint, and the sequence is the committed trace', async () => {
+    const h = start({ runtime: 'server' })
+    const turn = await h.ask(COLD_QUESTION)
+    expect(turn.state).toBe('complete')
+    expect(turn.answerText).toContain('[1]')
+    expect(turn.sources.map((s) => s.id)).toEqual(['a#one'])
+    await expect(h.trace()).toMatchFileSnapshot('./traces/submit.server.trace')
+  })
+
+  it('never puts a provider key in the request the browser sends', async () => {
+    const h = start({ runtime: 'server' })
+    await h.ask(COLD_QUESTION)
+    const post = h.wire().find((w) => w.to === 'endpoint' && w.method === 'POST')
+    expect(post).toBeTruthy()
+    expect(JSON.stringify(post.body)).not.toMatch(/placeholder-key|apiKey|authorization/i)
+  })
+})
+
+describe('the harness contract', () => {
+  it('offers exactly the members the later phases build on', () => {
+    const h = start({ runtime: 'browser' })
+    expect(Object.keys(h).sort()).toEqual(
+      ['ask', 'close', 'reload', 'reset', 'restore', 'setScope', 'snapshot', 'stop', 'storage', 'stub', 'trace', 'wire'].sort(),
+    )
+    expect(Object.keys(h.stub).filter((k) => !k.startsWith('_')).sort()).toEqual(['answer', 'failFor', 'models', 'stall'])
+  })
+
+  it('refuses any request it does not route, so no test can reach a live host', async () => {
+    const h = start({ runtime: 'browser' })
+    await expect(fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', body: '{}' })).rejects.toThrow(
+      /harness: unexpected fetch https:\/\/api\.openai\.com/,
+    )
+    await expect(h.close()).rejects.toThrow(/unexpected fetch/)
+    harness = null
+  })
+})
