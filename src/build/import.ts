@@ -28,6 +28,7 @@ import { formatExtractionReport, rowFromResults } from './lib/extraction-report.
 import { parseDocument } from './lib/dom.js'
 import { annotate } from './lib/annotate.js'
 import type { Annotation } from './lib/annotate.js'
+import { htmlConfigProblems, htmlOptionsFor } from './lib/html-options.js'
 import { flagErrors, spaceFormWarning } from '../cli-flags.js'
 import { USAGE } from '../cli-exit.js'
 import {
@@ -147,7 +148,45 @@ export function composePage({
 }
 
 /**
- * The page's HTML, from the network or from a file the user already has.
+ * How long an import waits for one page. An import is one page and a person
+ * waits for it; a page silent for 30 s is behind a wall, and the fix is `--html`
+ * or a fetcher, not a longer wait (engine-spec 043, D-27, T-02-12).
+ */
+export const FETCH_TIMEOUT_MS = 30_000
+
+/** The refusal shared by a redirect and a fetcher result outside the allowlist. */
+const OUTSIDE_ALLOWLIST_HINT =
+  '      Add that origin deliberately, or import the final URL directly.'
+
+/** Header names lowercased, so `X-Robots-Tag` and `x-robots-tag` are one key. */
+const lowerKeys = (headers) =>
+  Object.fromEntries(Object.entries(headers || {}).map(([k, v]) => [String(k).toLowerCase(), String(v)]))
+
+/** Run `work` with an abort signal that fires after `timeoutMs`. */
+async function withTimeout(url, timeoutMs, work) {
+  const signal = AbortSignal.timeout(timeoutMs)
+  try {
+    return await work(signal)
+  } catch (e) {
+    if (signal.aborted) {
+      throw new Error(
+        `${url} did not answer within ${timeoutMs} ms. A page behind a bot wall or built by ` +
+          'JavaScript will not fetch — open it in a browser, copy the DOM, and pass it ' +
+          'with --html <file>, or give docPilot.html.fetcher.',
+      )
+    }
+    throw e
+  }
+}
+
+/**
+ * The page's HTML, from a file, from the owner's fetcher or from the network.
+ *
+ * Returns `{ html, url, headers }`: `url` is where the body came from and
+ * `headers` the response headers that matter to the extractor (lowercased keys),
+ * or null for a file or stdin. The order is `--html`, then `docPilot.html.fetcher`
+ * (D-09: a renderer for a page that only exists in a browser), then the built-in
+ * fetch.
  *
  * `accept-language` is sent and defaults to English, because a marketing site
  * negotiates on it and will happily answer in the language of whoever is
@@ -161,45 +200,86 @@ export async function readHtml({
   lang = 'en',
   allow = null,
   fetchImpl = fetch,
+  fetcher = null,
   stdin = process.stdin,
-}) {
+  timeoutMs = FETCH_TIMEOUT_MS,
+}: {
+  url: string
+  htmlFile?: string
+  lang?: string
+  allow?: ((u: string) => any) | null
+  fetchImpl?: any
+  fetcher?: ((url: string, init: { signal: AbortSignal }) => any) | null
+  stdin?: any
+  timeoutMs?: number
+}): Promise<{ html: string; url: string; headers: Record<string, string> | null }> {
   if (htmlFile === '-') {
     const chunks = []
     for await (const chunk of stdin) chunks.push(chunk)
-    return Buffer.concat(chunks).toString('utf8')
+    return { html: Buffer.concat(chunks).toString('utf8'), url, headers: null }
   }
-  if (htmlFile) return fs.readFileSync(htmlFile, 'utf8')
+  if (htmlFile) return { html: fs.readFileSync(htmlFile, 'utf8'), url, headers: null }
+
+  if (fetcher) {
+    const result = await withTimeout(url, timeoutMs, (signal) => fetcher(url, { signal }))
+    let got
+    if (typeof result === 'string') {
+      got = { html: result, url, headers: null }
+    } else if (result && typeof result === 'object' && typeof result.html === 'string') {
+      got = {
+        html: result.html,
+        url: typeof result.url === 'string' && result.url ? result.url : url,
+        headers: result.headers ? lowerKeys(result.headers) : null,
+      }
+    } else {
+      throw new Error(`the fetcher returned neither a string nor { html } for ${url}`)
+    }
+    // The owner's code ran, but the page and the URL it names came off a
+    // network. The returned URL passes the same boundary a redirect does
+    // (D-29, T-02-11); `source:` stays the URL the user asked for.
+    if (allow && got.url !== url && 'error' in allow(got.url)) {
+      throw new Error(
+        `${url}: the fetcher returned ${got.url}, which is outside docPilot.sources.allow.\n${OUTSIDE_ALLOWLIST_HINT}`,
+      )
+    }
+    return got
+  }
 
   // The allowlist checked the URL the user typed. An allowed origin that
   // redirects — to plain http, to another host, or to something on the internal
   // network of whatever machine is running the import — must not get that
   // request sent at all, so every hop is checked BEFORE it is requested, not
   // after the runtime has followed it.
-  const { res, refused } = await fetchWithin(url, {
-    allow,
-    fetchImpl,
-    init: {
-      headers: {
-        'user-agent': UA,
-        accept: 'text/html,application/xhtml+xml',
-        'accept-language': `${lang};q=1.0, *;q=0.1`,
+  return await withTimeout(url, timeoutMs, async (signal) => {
+    const { res, refused } = await fetchWithin(url, {
+      allow,
+      fetchImpl,
+      init: {
+        signal,
+        headers: {
+          'user-agent': UA,
+          accept: 'text/html,application/xhtml+xml',
+          'accept-language': `${lang};q=1.0, *;q=0.1`,
+        },
       },
-    },
+    })
+    if (refused) {
+      throw new Error(`${url} redirected to ${refused}, which is outside docPilot.sources.allow.\n${OUTSIDE_ALLOWLIST_HINT}`)
+    }
+    if (!res.ok) {
+      throw new Error(
+        `${url} answered ${res.status}. A page behind a bot wall or built by ` +
+          'JavaScript will not fetch — open it in a browser, copy the DOM, and ' +
+          'pass it with --html <file>.',
+      )
+    }
+    const robots = res.headers?.get?.('x-robots-tag')
+    return {
+      html: await res.text(),
+      url,
+      headers: robots ? { 'x-robots-tag': String(robots) } : {},
+    }
   })
-  if (refused) {
-    throw new Error(
-      `${url} redirected to ${refused}, which is outside docPilot.sources.allow.\n` +
-        '      Add that origin deliberately, or import the final URL directly.',
-    )
-  }
-  if (!res.ok) {
-    throw new Error(
-      `${url} answered ${res.status}. A page behind a bot wall or built by ` +
-        'JavaScript will not fetch — open it in a browser, copy the DOM, and ' +
-        'pass it with --html <file>.',
-    )
-  }
-  return await res.text()
 }
 
 /**
@@ -375,7 +455,7 @@ const mismatched = (pageLang, expectLang) =>
 
 /** Options as the CLI spells them. Unknown flags are an error, never a shrug. */
 export function parseImportFlags(argv) {
-  const out = { url: '', htmlFile: '', out: '', lang: 'en', annotate: true, alternate: true, dryRun: false, force: false, unknown: [] }
+  const out = { url: '', htmlFile: '', htmlSelect: '', htmlExclude: '', out: '', lang: 'en', annotate: true, alternate: true, dryRun: false, force: false, unknown: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--no-annotate') out.annotate = false
@@ -383,6 +463,10 @@ export function parseImportFlags(argv) {
     else if (a === '--dry-run' || a === '--dry') out.dryRun = true
     else if (a === '--force') out.force = true
     else if (a === '--html') out.htmlFile = argv[++i] || ''
+    else if (a === '--html-select') out.htmlSelect = argv[++i] || ''
+    else if (a === '--html-exclude') out.htmlExclude = argv[++i] || ''
+    else if (a.startsWith('--html-select=')) out.htmlSelect = a.slice(14)
+    else if (a.startsWith('--html-exclude=')) out.htmlExclude = a.slice(15)
     else if (a === '--out') out.out = argv[++i] || ''
     else if (a === '--lang') out.lang = argv[++i] || 'en'
     else if (a.startsWith('--lang=')) out.lang = a.slice(7)
@@ -425,9 +509,18 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
   if (!flags.url) {
     log.error(
       '[docpilot] usage: docpilot import <url> [--html <file|->] [--out <slug>]\n' +
+        '                              [--html-select <css>] [--html-exclude <css>]\n' +
         '                              [--lang <tag>] [--no-alternate] [--no-annotate]\n' +
         '                              [--dry-run] [--force]',
     )
+    return 1
+  }
+
+  // A typo in docPilot.html must not quietly change what an import keeps, so the
+  // config is checked before the allowlist and long before any request.
+  const htmlProblems = htmlConfigProblems(docPilot.html)
+  if (htmlProblems.length) {
+    for (const problem of htmlProblems) log.error(`[docpilot] ${problem}`)
     return 1
   }
 
@@ -457,13 +550,14 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
     return 1
   }
 
-  let html
+  let fetched
   try {
-    html = await readHtml({
+    fetched = await readHtml({
       url: flags.url,
       htmlFile: flags.htmlFile,
       lang: flags.lang,
       allow: (u) => checkSource(u, entries),
+      fetcher: docPilot.html?.fetcher ?? null,
     })
   } catch (e) {
     log.error(`[docpilot] ${printableLines(e.message)}`)
@@ -474,9 +568,17 @@ export async function runImport({ docPilot, argv, env = process.env, log = conso
   let built
   try {
     const { nodeChatTarget } = await import('../config.js')
+    const { content, exclude } = htmlOptionsFor(docPilot.html, verdict.href, {
+      root: process.cwd(),
+      flags: { content: flags.htmlSelect, exclude: flags.htmlExclude },
+    })
     built = await buildPage({
-      html,
+      html: fetched.html,
       source: verdict.href,
+      content,
+      exclude,
+      // The header the page was served with applies like its robots meta (D-27).
+      robots: fetched.headers?.['x-robots-tag'] ?? '',
       /**
        * A candidate `.md` is a URL this tool decided to request, so it crosses
        * the same boundary the one the user typed did. The allowlist is checked

@@ -1,8 +1,9 @@
 /**
  * The one object every HTML path reads (engine-spec 043, D-06, D-21).
  *
- * `docPilot.html = { content?, exclude?, sources?: { [key]: { content?, exclude? } }, fetcher? }`
- * (plan 02-06 validates `fetcher`). `content` is one CSS selector for the page
+ * `docPilot.html = { content?, exclude?, sources?: { [key]: { content?, exclude? } }, fetcher? }`.
+ * `fetcher(url, { signal })` is the owner's renderer for `docpilot import`: it
+ * returns a string or `{ html, url?, headers? }` (engine-spec 043, D-09). `content` is one CSS selector for the page
  * body; `exclude` is a selector or a list of them, removed from inside that
  * body. `index --html-dir` reads this object today, and the connectors of
  * Phase 3 pass the same `{ content, exclude }` pair to `extractHtml`.
@@ -136,11 +137,13 @@ export function htmlConfigProblems(html: unknown): string[] {
   const out: string[] = []
   const h = html as Record<string, unknown>
 
-  // `fetcher` is validated by plan 02-06, which adds it to this list.
   for (const key of Object.keys(h)) {
-    if (!['content', 'exclude', 'sources'].includes(key)) {
-      out.push(`docPilot.html.${key} is not a known key (content, exclude, sources)`)
+    if (!['content', 'exclude', 'sources', 'fetcher'].includes(key)) {
+      out.push(`docPilot.html.${key} is not a known key (content, exclude, sources, fetcher)`)
     }
+  }
+  if ('fetcher' in h && typeof h.fetcher !== 'function') {
+    out.push('docPilot.html.fetcher must be a function (url, { signal }) => string | { html, url?, headers? }')
   }
   if ('content' in h && typeof h.content !== 'string') out.push('docPilot.html.content must be a string')
   if ('exclude' in h && !isStringList(h.exclude)) {

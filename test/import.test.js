@@ -523,7 +523,7 @@ describe('import — the command', () => {
       }
     }
     const allow = (u) => ({ href: u })
-    expect(await readHtml({ url: 'https://acme.test/a', fetchImpl, allow })).toBe('<html>ok</html>')
+    expect((await readHtml({ url: 'https://acme.test/a', fetchImpl, allow })).html).toBe('<html>ok</html>')
 
     let calls = 0
     const loop = async (url) => {
