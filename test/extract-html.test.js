@@ -5,7 +5,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { extractHtml, EXTRACTOR_VERSION } from '../src/build/lib/extract-html.js'
+import { extractHtml, EXTRACTOR_VERSION, MAX_HTML_BYTES } from '../src/build/lib/extract-html.js'
+import { readHtmlDir, pageFromHtml } from '../src/build/lib/html-dir.js'
 
 /**
  * `extractHtml` — engine-spec 043, the one pipeline from HTML to Markdown.
@@ -97,5 +98,127 @@ describe('extractHtml — the pipeline', () => {
     expect(out.markdown).toContain('Café')
     expect(out.markdown).not.toContain('é')
     expect(out.description).toBe('Café hours')
+  })
+})
+
+/** A directory of built pages, written to a temp directory. */
+function site(files) {
+  const dir = tmp('dp-site-')
+  for (const [rel, body] of Object.entries(files)) {
+    const p = path.join(dir, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, body)
+  }
+  return dir
+}
+
+const SENTENCES = '<p>' + 'Every request is counted against a window. '.repeat(6) + '</p>'
+const good = (title) => `<!doctype html><html><head><title>${title}</title></head><body><main>${SENTENCES}</main></body></html>`
+
+describe('extractHtml — a bad page does not stop the directory', () => {
+  it.skipIf(typeof process.getuid === 'function' && process.getuid() === 0)(
+    'indexes the good page and warns for an unreadable one',
+    async () => {
+      const dir = site({ 'good.html': good('Good'), 'locked.html': good('Locked') })
+      const locked = path.join(dir, 'locked.html')
+      fs.chmodSync(locked, 0o000)
+      const warnings = []
+      try {
+        const out = await readHtmlDir({ dir, warn: (m) => warnings.push(m) })
+        expect(out.map((p) => p.route)).toEqual(['/good'])
+        expect(warnings.join('\n')).toContain('skipped locked.html:')
+      } finally {
+        fs.chmodSync(locked, 0o644)
+      }
+    },
+  )
+
+  // The walk overflows the stack near 5,000 levels, so 8,000 takes the same
+  // RangeError path as 20,000 in a fraction of the time: pickMain scores every
+  // div by its subtree, which is quadratic in the depth (13 s at 20,000).
+  it('never throws for a page nested 8,000 deep, and indexes the page beside it', async () => {
+    const deep = `<!doctype html><html><body>${'<div>'.repeat(8000)}bottom of the pile${'</div>'.repeat(8000)}</body></html>`
+    const out = await extractHtml(deep)
+    if (!out.ok) expect(out.reason).toMatch(/\S/)
+    const dir = site({ 'deep.html': deep, 'good.html': good('Good') })
+    const warnings = []
+    const pages = await readHtmlDir({ dir, warn: (m) => warnings.push(m) })
+    expect(pages.map((p) => p.route)).toContain('/good')
+    expect(warnings.join('\n')).toMatch(/skipped deep\.html: (extraction failed|near-empty)/)
+  }, 60000)
+
+  it('stops the directory only when nothing could be extracted', async () => {
+    const dir = site({ 'a.html': '<!doctype html><html><body><main>Loading…</main></body></html>' })
+    const warnings = []
+    await expect(readHtmlDir({ dir, warn: (m) => warnings.push(m) })).rejects.toThrow('no page could be extracted')
+    expect(warnings.join('\n')).toContain('skipped a.html: near-empty')
+  })
+
+  it('does not throw for an empty directory', async () => {
+    expect(await readHtmlDir({ dir: site({}) })).toEqual([])
+  })
+
+  it('skips a page larger than MAX_HTML_BYTES before parsing it', async () => {
+    const big = `<!doctype html><html><body><main><p>${'x'.repeat(MAX_HTML_BYTES + 1)}</p></main></body></html>`
+    const out = await extractHtml(big)
+    expect(out.ok).toBe(false)
+    expect(out.reason).toContain('too large')
+    const warnings = []
+    expect(await pageFromHtml(big, { id: 'big.html', warn: (m) => warnings.push(m) })).toBeNull()
+    expect(warnings[0]).toMatch(/^skipped big\.html: too large/)
+  })
+
+  it('names a page with only script, style, template, svg or noscript content near-empty', async () => {
+    const html =
+      '<!doctype html><html><body><script>var a = 1; var b = 2; var c = 3;</script>' +
+      '<style>body { color: red; margin: 0; padding: 0 }</style><template>not shown to anybody</template>' +
+      '<svg><text>vector label text here</text></svg><noscript>enable javascript please</noscript></body></html>'
+    const out = await extractHtml(html)
+    expect(out.ok).toBe(false)
+    expect(out.reason).toContain('near-empty')
+  })
+
+  it('counts code points, not UTF-16 units, against the floor', async () => {
+    // 13 astral characters are 26 UTF-16 units and 13 code points: under 24 either way
+    // for the code-point count, over it for the unit count.
+    const out = await extractHtml(`<!doctype html><html><body><main><p>${'\u{1F600}'.repeat(13)}</p></main></body></html>`)
+    expect(out.ok).toBe(false)
+    expect(out.reason).toContain('near-empty (13 characters)')
+  })
+})
+
+describe('extractHtml — links', () => {
+  const withLink = (href) =>
+    `<!doctype html><html><body><main>${SENTENCES}<p><a href="${href}">Install</a></p></main></body></html>`
+
+  it('turns a relative link with no base into its text, counts it and warns once', async () => {
+    const warnings = []
+    const out = await extractHtml(
+      withLink('guide/x').replace('</p></main>', '</p><p><a href="guide/y">Other</a></p></main>'),
+      { id: 'guide/index.html', warn: (m) => warnings.push(m) },
+    )
+    expect(out.ok).toBe(true)
+    expect(out.markdown).toContain('Install')
+    expect(out.markdown).not.toContain('guide/x')
+    expect(out.report.linksDegraded).toBe(2)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('guide/index.html')
+    expect(warnings[0]).toContain('guide/x')
+  })
+
+  it('resolves a relative link against the base', async () => {
+    const out = await extractHtml(withLink('guide/x'), { base: 'https://acme.test/docs/' })
+    expect(out.markdown).toContain('[Install](https://acme.test/docs/guide/x)')
+    expect(out.report.linksResolved).toBe(1)
+    expect(out.report.linksDegraded).toBe(0)
+  })
+
+  it('leaves a fragment link as text with no warning and no count', async () => {
+    const warnings = []
+    const out = await extractHtml(withLink('#top'), { warn: (m) => warnings.push(m) })
+    expect(out.markdown).toContain('Install')
+    expect(out.markdown).not.toContain('(#top)')
+    expect(out.report.linksDegraded).toBe(0)
+    expect(warnings).toEqual([])
   })
 })

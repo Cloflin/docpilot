@@ -146,6 +146,7 @@ export async function readHtmlDir({ dir, select = '', base = '', sitemap = '', w
 
   const out = []
   const seen = new Map()
+  let attempted = 0
 
   for (const file of walkHtml(dir)) {
     const route = routeForHtml(dir, file)
@@ -162,12 +163,16 @@ export async function readHtmlDir({ dir, select = '', base = '', sitemap = '', w
     }
     seen.set(route, file)
 
-    const page = await pageFromHtml(fs.readFileSync(file, 'utf8'), {
-      select,
-      base,
-      warn,
-      id: path.relative(dir, file),
-    })
+    attempted++
+    const rel = path.relative(dir, file)
+    // One page that cannot be read or extracted must not stop the other pages of
+    // the directory (engine-spec 043, D-11): it is named in a warning and skipped.
+    let page = null
+    try {
+      page = await pageFromHtml(fs.readFileSync(file, 'utf8'), { select, base, warn, id: rel })
+    } catch (e) {
+      warn(`skipped ${rel}: ${(e as Error)?.message || e}`)
+    }
     if (!page) continue
 
     out.push({
@@ -179,6 +184,14 @@ export async function readHtmlDir({ dir, select = '', base = '', sitemap = '', w
       lang: page.lang,
       dateModified: page.dateModified,
     })
+  }
+
+  // A directory that held pages and gave none is a wrong flag or a wrong
+  // directory, not a site with nothing to say: the build stops (D-12).
+  if (attempted > 0 && out.length === 0) {
+    throw new Error(
+      `--html-dir "${dir}": no page could be extracted (${attempted} skipped — the warnings above say why)`,
+    )
   }
 
   return out
