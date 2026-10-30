@@ -23,7 +23,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { chunkOpenapi } from '../src/build/lib/openapi-chunker.js'
-import { readMarkdownDocs, readOpenapiDocs, discoverOpenapiSpecs } from '../src/build/lib/readers.js'
+import { readMarkdownDocs, readKbDocs, readOpenapiDocs, discoverOpenapiSpecs } from '../src/build/lib/readers.js'
 import { documentsToChunks } from '../src/build/lib/documents.js'
 import { NonPublicDocument } from '../src/build/lib/source-doc.js'
 
@@ -110,6 +110,25 @@ describe('source parity — the OpenAPI chunk building, without the optional par
     await expect(chunkOpenapi(SPEC, 'mini')).rejects.toThrow(
       /found an OpenAPI file \(mini\) but @scalar\/openapi-parser is not installed/,
     )
+  })
+})
+
+describe('source parity — readers read front matter as the chunker does', () => {
+  it('finds the title and the source of a file that starts with a byte-order mark', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-bom-'))
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'page.md'),
+        '\uFEFF---\ntitle: With a mark\nsource: https://example.com/page\n---\n\n# Body\n\nWords.\n',
+      )
+      const [md] = readMarkdownDocs({ docsDir: dir, root: dir, exclude: new Set(), specRoutes: new Set(), warn: () => {} })
+      expect(md.title).toBe('With a mark')
+      const [kb] = readKbDocs({ kbDir: dir, externalPrefix: '/kb' })
+      expect(kb.title).toBe('With a mark')
+      expect(kb.url).toBe('https://example.com/page')
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

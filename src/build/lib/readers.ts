@@ -22,6 +22,13 @@ import { routeOf } from '../../theme/docpilot/route.js'
 import type { ReadDoc } from './source-doc.js'
 
 /**
+ * `normaliseMarkdown` drops a leading U+FEFF before it looks for the `---`
+ * fence, because the mark hides it. A reader that reads front matter must see
+ * the same title and `source:` the chunker sees, so it drops the mark too.
+ */
+const withoutBom = (src: string) => src.replace(/^\uFEFF/, '')
+
+/**
  * `.md` and `.mdx`.
  *
  * `.mdx` was missing while the Docusaurus adapter shipped — an adapter mounting
@@ -131,7 +138,7 @@ export function readMarkdownDocs({
     }
 
     const src = fs.readFileSync(file, 'utf8')
-    const fm = splitFrontmatter(src)
+    const fm = splitFrontmatter(withoutBom(src))
     docs.push({
       id: route,
       source: 'markdown',
@@ -204,7 +211,7 @@ export function readKbDocs({
 }): ReadDoc[] {
   return walkMarkdown(kbDir).map((file) => {
     const src = fs.readFileSync(file, 'utf8')
-    const fm = splitFrontmatter(src)
+    const fm = splitFrontmatter(withoutBom(src))
     return {
       id: externalIdFor(file, kbDir, externalPrefix),
       source: 'kb',
