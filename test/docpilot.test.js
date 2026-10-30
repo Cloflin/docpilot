@@ -274,8 +274,8 @@ describe('the index — which /reference/ routes a spec claims', () => {
     // this rule is about did not move: the route is the file name.
     expect(src).toMatch(/const specNameOf = \(f\) => path\.basename\(f\)/)
     expect(src).toMatch(/specRoutes = new Set\(\[\.\.\.specByName\.keys\(\)\]\.map\(/)
-    // Resolved above the markdown loop, which needs the answer before it decides.
-    expect(src.indexOf('const specRoutes')).toBeLessThan(src.indexOf('for (const file of files)'))
+    // Resolved above the markdown read, which needs the answer before it decides.
+    expect(src.indexOf('const specRoutes')).toBeLessThan(src.indexOf('readMarkdownDocs('))
   })
 
   /**

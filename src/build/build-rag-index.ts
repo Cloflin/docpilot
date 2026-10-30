@@ -22,11 +22,12 @@ import { chunkMarkdown } from './lib/chunker.js'
 import { descriptionsFromLlms } from '../llms/about.js'
 import { chunkOpenapi, specFiles } from './lib/openapi-chunker.js'
 import { readHtmlDir } from './lib/html-dir.js'
+import { readMarkdownDocs, walkMarkdown, externalIdFor, kindFor } from './lib/readers.js'
+import { documentsToChunks } from './lib/documents.js'
 import { resolveSections, orphanPages, tailFor } from './lib/sections.js'
 import { parseAllowlist, checkSource } from './lib/sources.js'
 import { discoverEmbedModels, embedPoolOf } from './lib/embed-discovery.js'
 import { providerFor } from '../theme/docpilot/providers.js'
-import { routeOf } from '../theme/docpilot/route.js'
 import { LEVER_NAMES } from '../theme/docpilot/retriever.js'
 import { nodeEmbedTarget, noEmbed, resolveEmbed, assertVocabulary } from '../config.js'
 import {
@@ -274,37 +275,6 @@ if (!DRY && !NO_EMBED && !EMBED_URL) {
 }
 
 /**
- * `.md` and `.mdx`.
- *
- * `.mdx` was missing while the Docusaurus adapter shipped — an adapter mounting
- * a panel over a corpus that contained none of the pages it was mounted on,
- * because a Docusaurus project writes `.mdx` and this walk did not look at it.
- * The module syntax MDX adds is removed in `normalise.js`; nothing else about
- * the two extensions differs here.
- */
-function walkMarkdown(dir, acc = []) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (entry.name !== '.vitepress' && entry.name !== 'public') walkMarkdown(p, acc)
-    } else if (/\.mdx?$/.test(entry.name)) acc.push(p)
-  }
-  return acc
-}
-
-/**
- * The route a page is published at.
- *
- * The mapping itself lives in `route.js` and is shared with the panel, which has
- * to name the SAME route for the current page or the *this page* scope matches
- * nothing. This function is now only the part that is genuinely the builder's:
- * turning an absolute path into one relative to `docsDir`.
- */
-function routeFor(file) {
-  return routeOf(path.relative(DOCS, file))
-}
-
-/**
  * Imported pages — RAG corpus only, no page on the site.
  *
  * They live OUTSIDE `docsDir` on purpose: VitePress never sees them, so no route
@@ -315,27 +285,11 @@ function routeFor(file) {
 const KB = docPilot.importDir ? path.resolve(ROOT, docPilot.importDir) : null
 
 /**
- * The id of an EXTERNAL page — one that lives under `importDir` and has no route
- * on this site at all.
- *
- * It looks like a route and is not one. Everything downstream keys a page by
- * `path` — `sourceRow`, `closest`, the citation validator, the golden set — so
- * an external page needs a value in that slot, and it needs to be one no real
- * route can collide with. Derived from the directory name rather than fixed, and
- * checked against the indexed routes below rather than assumed to be free.
+ * The id space of an EXTERNAL page — one under `importDir`, with no route on this
+ * site. `externalIdFor` (lib/readers.ts) builds the id from it, and the pipeline
+ * checks it against the indexed routes rather than assuming it is free.
  */
 const EXTERNAL_PREFIX = KB ? `/${path.basename(KB)}` : null
-
-function externalIdFor(file) {
-  const rel = path.relative(KB, file).replace(/\\/g, '/').replace(/\.mdx?$/, '')
-  return `${EXTERNAL_PREFIX}/${rel}`
-}
-
-function kindFor(route) {
-  if (route.startsWith('/reference/')) return 'reference'
-  if (route.startsWith('/extensions')) return 'extensions'
-  return 'guide'
-}
 
 /**
  * A batch response, in REQUEST order.
@@ -1292,9 +1246,6 @@ async function main() {
   const { entries: allowedOrigins, errors: allowErrors } = parseAllowlist(docPilot.sources)
   if (allowErrors.length) die(allowErrors.join('\n        '))
 
-  const files = walkMarkdown(DOCS)
-  const chunks = []
-  const pages = new Map()
   let llmsAbout = new Map<string, string>()
   if (LLMS_FILE) {
     try {
@@ -1304,7 +1255,6 @@ async function main() {
       die(`DOCPILOT_LLMS_FILE=${LLMS_FILE} could not be read: ${e?.message || e}`)
     }
   }
-  let rawBytes = 0
   let imported = 0
 
   // A declared `source` fails the BUILD rather than being dropped with a
@@ -1369,67 +1319,15 @@ async function main() {
   }
   const specRoutes = new Set([...specByName.keys()].map((n) => `/reference/${n}`))
 
-  /**
-   * TWO FILES, ONE ROUTE: `guide.md` beside `guide/index.md`, or `guide.md`
-   * beside `guide.mdx`. `routeOf` maps both to `/guide`, and `pages.set` below
-   * kept the second file's entry while the chunks of BOTH stayed in the index —
-   * one page row with one file's title and chunk count over two files' text,
-   * or, when both had a `## Setup`, a `duplicate chunk id` death far from the
-   * cause.
-   *
-   * The answer `readHtmlDir` gives a built site: warn, keep one. Which one is
-   * decided by the path, never by `readdirSync`, whose order is the
-   * filesystem's: the first in code-unit order, which puts `guide.md` before
-   * `guide.mdx` and `guide/index.md` — and `guide.md` is the page VitePress
-   * serves at `/guide`.
-   */
-  const ownerOf = new Map()
-  for (const file of files) {
-    const route = routeFor(file)
-    const prior = ownerOf.get(route)
-    if (!prior || path.relative(DOCS, file) < path.relative(DOCS, prior)) ownerOf.set(route, file)
-  }
-
-  for (const file of files) {
-    const route = routeFor(file)
-    if (EXCLUDE.has(route)) continue
-    if (specRoutes.has(route)) continue
-    const owner = ownerOf.get(route)
-    if (owner !== file) {
-      warn(
-        `two files claim ${route}: ${path.relative(ROOT, owner)} and ${path.relative(ROOT, file)} — the second is skipped`,
-      )
-      continue
-    }
-
-    const src = fs.readFileSync(file, 'utf8')
-    rawBytes += src.length
-    const { chunks: c, warnings, title, source, description } = chunkMarkdown({
-      src,
-      path: route,
-      kind: kindFor(route),
-      embedContext: EMBED_CONTEXT,
-      pageDescription: llmsAbout.get(route) ?? null,
-    })
-    warnings.forEach(warn)
-    if (!c.length) continue
-
-    const origin = source ? originFor(source, route) : null
-
-    chunks.push(...c)
-    const about = llmsAbout.get(route) || null
-    pages.set(route, {
-      path: route,
-      title,
-      kind: kindFor(route),
-      chunks: c.length,
-      ...(origin ? { origin } : {}),
-      // The page's own words about itself for the lexical channel: its note in
-      // llms.txt. Only when that file was read, so a default build's pages are
-      // the pages they always were. (`description` is already in the text.)
-      ...(about && about !== description ? { about } : {}),
-    })
-  }
+  // ── markdown ───────────────────────────────────────────────────────────────
+  // Read as documents, then chunked by the one stage every source goes through
+  // (lib/readers.ts, lib/documents.ts — engine-spec 041). The two-files-one-route
+  // rule lives with the reader that sees the files.
+  const docs = readMarkdownDocs({ docsDir: DOCS, root: ROOT, exclude: EXCLUDE, specRoutes, warn })
+  const staged = documentsToChunks(docs, { embedContext: EMBED_CONTEXT, llmsAbout, originFor, warn, die })
+  const chunks = staged.chunks
+  const pages = staged.pages
+  let rawBytes = staged.rawBytes
 
   // ── a built site ───────────────────────────────────────────────────────────
   // `--html-dir` only. Nothing here runs without the flag, and with it nothing
@@ -1509,7 +1407,7 @@ async function main() {
     }
 
     for (const file of walkMarkdown(KB)) {
-      const id = externalIdFor(file)
+      const id = externalIdFor(file, KB, EXTERNAL_PREFIX)
       if (pages.has(id)) die(`imported page id collides with a real route: ${id}`)
 
       const src = fs.readFileSync(file, 'utf8')

@@ -58,10 +58,15 @@ describe('routeOf', () => {
    * of, so the absence of a copy is what is asserted.
    */
   it('is not restated by the index builder', () => {
+    // The file-to-route step moved with the readers (engine-spec 041); the
+    // rule is still imported, never restated, in either file.
     const builder = read('src/build/build-rag-index.js')
-    expect(builder).toContain("import { routeOf } from '../theme/docpilot/route.js'")
-    expect(builder).toContain('return routeOf(path.relative(DOCS, file))')
-    expect(/\/\\\/index\$\//.test(builder), 'the builder still strips /index itself').toBe(false)
+    const readers = read('src/build/lib/readers.js')
+    expect(readers).toContain("import { routeOf } from '../../theme/docpilot/route.js'")
+    expect(readers).toContain('return routeOf(path.relative(docsDir, file))')
+    for (const [name, text] of [['the builder', builder], ['the readers', readers]]) {
+      expect(/\/\\\/index\$\//.test(text), `${name} still strips /index itself`).toBe(false)
+    }
   })
 })
 

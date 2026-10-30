@@ -23,6 +23,8 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { chunkOpenapi } from '../src/build/lib/openapi-chunker.js'
+import { readMarkdownDocs } from '../src/build/lib/readers.js'
+import { documentsToChunks } from '../src/build/lib/documents.js'
 
 const BIN = path.resolve('bin/docpilot.js')
 const FIXTURE = path.resolve('test/fixtures/source-parity')
@@ -108,4 +110,71 @@ describe('source parity — the OpenAPI chunk building, without the optional par
       /found an OpenAPI file \(mini\) but @scalar\/openapi-parser is not installed/,
     )
   })
+})
+
+/**
+ * Layer 1 of the byte gate — the repository's own corpus, offline.
+ *
+ * The committed indexes (`docs/public/rag`, `docs/public/rag-local`) were built
+ * from `docs/` by the unrefactored builder. Reading `docs/` through the readers
+ * and the pipeline stage must give back, chunk for chunk, what they hold; and
+ * because a shard is named by its own bytes, the shard names say the same thing
+ * about every byte of every chunk object. No embedding, no network: a vector is
+ * not an input to either claim.
+ */
+describe('source parity — the repository\'s own docs against both committed indexes', () => {
+  const SHARD_SIZE = 250 // build-rag-index.ts writes 250 chunks to a shard
+  const read = () => {
+    const docs = readMarkdownDocs({
+      docsDir: path.resolve('docs'),
+      root: process.cwd(),
+      // main()'s own: the home and scratch pages; this repository has no OpenAPI spec.
+      exclude: new Set(['/index', '/new-file']),
+      specRoutes: new Set(),
+      warn: () => {},
+    })
+    return documentsToChunks(docs, {
+      embedContext: 'off',
+      llmsAbout: new Map(),
+      originFor: () => {
+        throw new Error('this repository imports no page with a front-matter source')
+      },
+      warn: () => {},
+      die: (m) => {
+        throw new Error(m)
+      },
+    })
+  }
+
+  for (const dir of ['rag', 'rag-local']) {
+    const rag = path.resolve('docs', 'public', dir)
+    const manifest = JSON.parse(fs.readFileSync(path.join(rag, 'manifest.json'), 'utf8'))
+
+    it(`${dir}: yields the chunk ids, texts and order the index holds`, () => {
+      const { chunks } = read()
+      const held = manifest.shards.flatMap((f) => JSON.parse(fs.readFileSync(path.join(rag, f), 'utf8')))
+      expect(chunks.map((c) => c.id)).toEqual(held.map((c) => c.id))
+      expect(chunks.map((c) => c.text)).toEqual(held.map((c) => c.text))
+      expect(chunks).toHaveLength(manifest.chunkCount)
+    })
+
+    it(`${dir}: yields the page rows of the manifest, tail aside, in its key order`, () => {
+      const { pages } = read()
+      const held = manifest.pages.map(({ tail, ...row }) => row)
+      expect(JSON.stringify([...pages.values()])).toBe(JSON.stringify(held))
+    })
+
+    it(`${dir}: names its shards by the same bytes`, () => {
+      // main() writes the chunk objects to the shards as the stage returns
+      // them, so no step is repeated here before hashing.
+      const { chunks } = read()
+      const names = []
+      for (let i = 0; i < chunks.length; i += SHARD_SIZE) {
+        const bytes = Buffer.from(JSON.stringify(chunks.slice(i, i + SHARD_SIZE)))
+        const hex = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 8)
+        names.push(`chunks-${String(i / SHARD_SIZE).padStart(2, '0')}.${hex}.json`)
+      }
+      expect(names).toEqual(manifest.shards)
+    })
+  }
 })

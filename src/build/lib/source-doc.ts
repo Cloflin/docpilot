@@ -49,6 +49,13 @@ export interface SourceDoc {
 }
 
 /**
+ * What a reader returns: a document before the pipeline has stamped it. The
+ * reader reads files and says what it saw; `contentHash` is the pipeline's
+ * judgement of those bytes, so a reader never computes it (engine-spec 041).
+ */
+export type ReadDoc = Omit<SourceDoc, 'contentHash'>
+
+/**
  * sha256 hex of the UTF-8 JSON of `[id, title, description, text]`, taken over
  * the NORMALISED Markdown (`[id, yaml]` for OpenAPI). `updatedAt` is not an
  * input, so two documents that differ only in it hash equal. This is a
