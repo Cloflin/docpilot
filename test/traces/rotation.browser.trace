@@ -1,0 +1,21 @@
+turn[0].state: (none) -> retrieving
+busy: false -> true
+status: none -> searching
+-> embed POST /ai/v1/embeddings (inputs: 1)
+turn[0].state: retrieving -> thinking
+turn[0].streaming: false -> true
+-> model POST /ai/v1/chat/completions (messages: 3, tools: search_docs, fetch_section, expand_section, list_pages, answer)
+-> model POST /ai/v1/chat/completions (messages: 3, tools: search_docs, fetch_section, expand_section, list_pages, answer)
+turn[0].answer: 34 chars
+status: searching -> writing
+turn[0].sources: + a#one
+turn[0].citations: + a#one
+turn[0].state: thinking -> complete
+turn[0].streaming: true -> false
+busy: true -> false
+status: writing -> none
+conversation: none -> <conv:1>
+history: 0 conversation(s) -> 1 conversation(s)
+-- the models the stub received, in order
+head
+stub

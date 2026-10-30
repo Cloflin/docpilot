@@ -222,3 +222,211 @@ describe.each(RUNTIMES)('a scope change mid-thread, %s runtime', (runtime) => {
     expect(h.snapshot().turns).toHaveLength(2)
   })
 })
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/** Wait for something a settled promise cannot tell us: that a request is in flight, that text has been painted. */
+const until = async (condition, what) => {
+  for (let i = 0; i < 400; i++) {
+    if (condition()) return
+    await sleep(5)
+  }
+  throw new Error(`never reached: ${what}`)
+}
+
+const models = (h) => answerRequests(h.wire()).map((w) => w.body.model)
+
+const encoder = new TextEncoder()
+/**
+ * A reply that paints part of the answer and then hangs, the way a connection
+ * does when the service goes quiet mid-sentence. `fail()` ends it the way an
+ * aborted `fetch` ends its body: with an AbortError on the reader. `stub.stall()`
+ * cannot stand in for this, because it hangs BEFORE any text.
+ */
+const hangsAfterPartialAnswer = () => {
+  let controller
+  const args = JSON.stringify({ text: 'Send the token in a header and', citations: ['a#one'], confidence: 0.9 })
+  const frame = { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_answer', type: 'function', function: { name: 'answer', arguments: args.slice(0, -20) } }] } }] }
+  return {
+    reply: () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            controller = c
+            c.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`))
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+    fail: () => controller.error(new DOMException('The operation was aborted.', 'AbortError')),
+  }
+}
+
+describe.each(RUNTIMES)('stopping a turn mid-stream, %s runtime', (runtime) => {
+  it('settles a turn whose answer had begun as aborted, keeps what was painted, and writes nothing to it afterwards', async () => {
+    const h = start({ runtime })
+    const hang = hangsAfterPartialAnswer()
+    h.stub.answer(hang.reply)
+    const asked = h.ask(FIRST)
+    await until(() => h.snapshot().turns[0]?.answerText, 'some of the answer painted')
+    expect(h.snapshot().busy).toBe(true)
+
+    h.stop()
+    hang.fail()
+    const turn = await asked
+    expect(turn.state).toBe('aborted')
+    expect(turn.answerText).toBe('Send the token in a header and')
+    expect(h.snapshot().busy).toBe(false)
+
+    // The abort is the last word on the turn: waiting changes nothing, and neither does stopping again.
+    const settled = h.trace()
+    expect(settled).toMatch(/^turn\[0\]\.state: \w+ -> aborted$/m)
+    await sleep(60)
+    h.stop()
+    await sleep(20)
+    expect(h.trace()).toBe(settled)
+    const afterAbort = settled.slice(settled.indexOf('-> aborted'))
+    expect(afterAbort).not.toMatch(/turn\[0\]\.(answer|sources|citations|thought)/)
+  })
+
+  it('leaves the session able to take the next question', async () => {
+    const h = start({ runtime })
+    const hang = hangsAfterPartialAnswer()
+    h.stub.answer(hang.reply)
+    const asked = h.ask(FIRST)
+    await until(() => h.snapshot().turns[0]?.answerText, 'some of the answer painted')
+    h.stop()
+    hang.fail()
+    await asked
+
+    h.stub.answer(null)
+    const next = await h.ask(FOLLOW_UP)
+    expect(next.state).toBe('complete')
+    expect(h.snapshot().busy).toBe(false)
+    expect(h.snapshot().turns.map((t) => t.state)).toEqual(['aborted', 'complete'])
+  })
+
+  // 2.1.1 settles a stop BEFORE any text as `no-answer` with the `not-answerable`
+  // refusal, not as `aborted`: `aborted` needs an answer on screen to keep.
+  it('settles a turn stopped before any text as no-answer, not as aborted', async () => {
+    const h = start({ runtime })
+    h.stub.stall()
+    const asked = h.ask(FIRST)
+    await until(() => answerRequests(h.wire()).length > 0 && h.snapshot().busy, 'the stalled request in flight')
+    await sleep(20)
+    expect(h.snapshot().turns[0].answerText).toBe('')
+
+    h.stop()
+    const turn = await asked
+    expect(turn.state).toBe('no-answer')
+    expect(turn.refusal).toEqual({ cause: 'not-answerable' })
+    expect(h.snapshot().busy).toBe(false)
+
+    const settled = h.trace()
+    await sleep(60)
+    expect(h.trace()).toBe(settled)
+  })
+})
+
+describe.each(RUNTIMES)('a provider that errors, %s runtime', (runtime) => {
+  // `retry-after` keeps the browser's backoff in milliseconds; without it the
+  // panel waits out 0.5 s, 1 s, 2 s between attempts and the test times out.
+  const FAILING = { status: 500, headers: { 'retry-after': '0.01' } }
+
+  it('with retrieval rows settles as the search-only answer: the passages, flagged hybrid, no answer text', async () => {
+    const h = start({ runtime })
+    h.stub.failFor('stub', FAILING, 50)
+    const turn = await h.ask(FIRST)
+    expect(turn.state).toBe('results')
+    expect(turn.hybrid).toBe(true)
+    expect(turn.answerText).toBe('')
+    expect(turn.results.length).toBeGreaterThan(0)
+    expect(h.snapshot().busy).toBe(false)
+    // What the failure cost. The browser walks its attempts twice over (two passes of four,
+    // the pool being the retry); the server's single pass is four. A rewrite that retries
+    // differently fails here and is read as the change it is.
+    expect(models(h)).toHaveLength(runtime === 'browser' ? 8 : 4)
+  })
+
+  // 2.1.1 difference, named once. A question that retrieves NOTHING and then meets a failing model ends differently
+  // in the two runtimes: the browser still owns a (empty) retrieval, so it takes the search-only settle with zero
+  // rows; the server has nothing to show and the turn is the plain error. `lexical` mode and words the corpus
+  // does not contain make the retrieval empty.
+  it('with nothing retrieved: the browser settles search-only with no rows, the server settles as the plain error', async () => {
+    const h = start({ runtime, mode: 'lexical' })
+    h.stub.failFor('stub', { status: 404 }, 20)
+    const turn = await h.ask('zzqx plugh xyzzy')
+    expect(turn.answerText).toBe('')
+    expect(turn.results).toEqual([])
+    if (runtime === 'browser') {
+      expect(turn.state).toBe('results')
+      expect(turn.hybrid).toBe(true)
+      expect(models(h)).toHaveLength(2)
+    } else {
+      expect(turn.state).toBe('error')
+      expect(turn.hybrid).toBe(false)
+      expect(models(h)).toHaveLength(1)
+    }
+    expect(h.snapshot().busy).toBe(false)
+  })
+})
+
+describe.each(RUNTIMES)('a 429 and the next model, %s runtime', (runtime) => {
+  // A two-model chain: `head` first, `stub` behind it. The stub serves both names.
+  const CHAIN = { chat: { provider: 'custom', model: 'head', models: ['head', 'stub'], baseURL: 'http://stub.test' } }
+  const primed = () => {
+    const h = start({ runtime, config: CHAIN })
+    h.stub.models = ['head', 'stub']
+    return h
+  }
+
+  it('a 429 on the first model rotates to the next, and the turn still answers', async () => {
+    const h = primed()
+    // A long `retry-after`: if the panel waited it out instead of rotating, this test would time out.
+    h.stub.failFor('head', { status: 429, headers: { 'retry-after': '30' } }, 1)
+    const turn = await h.ask(FIRST)
+    expect(turn.state).toBe('complete')
+    expect(turn.answerText).toContain('[1]')
+    expect(models(h)).toEqual(['head', 'stub'])
+    expect(h.snapshot().busy).toBe(false)
+
+    // No server rotation trace: rotation there happens inside the server's turn, and
+    // the browser never sees the server's provider order. The browser's is the committed sequence.
+    if (runtime === 'browser') {
+      const order = ['-- the models the stub received, in order', ...models(h)]
+      await expect(`${h.trace()}${order.join('\n')}\n`).toMatchFileSnapshot('./traces/rotation.browser.trace')
+    }
+  })
+
+  // The model that failed is not asked again for the next question: it is cooling.
+  it('keeps the next question on the model that answered', async () => {
+    const h = primed()
+    h.stub.failFor('head', { status: 429, headers: { 'retry-after': '30' } }, 1)
+    await h.ask(FIRST)
+    const mark = answerRequests(h.wire()).length
+    const next = await h.ask(FOLLOW_UP)
+    expect(next.state).toBe('complete')
+    expect(models(h).slice(mark)).toEqual(['stub'])
+  })
+
+  it('every model returning 429 ends in the search-only answer, not in an error', async () => {
+    const h = primed()
+    const limited = { status: 429, headers: { 'retry-after': '0.01' } }
+    h.stub.failFor('head', limited, 50)
+    h.stub.failFor('stub', limited, 50)
+    const turn = await h.ask(FIRST)
+    // A minute's 429 is not the day's: `rate-limited` needs the service to say the DAY is spent
+    // (chat-outcomes.test.js pins that). Here every model refuses and the passages are the answer.
+    expect(turn.state).toBe('results')
+    expect(turn.hybrid).toBe(true)
+    expect(turn.results.length).toBeGreaterThan(0)
+    expect(turn.answerText).toBe('')
+    expect(h.snapshot().busy).toBe(false)
+    // The requests it took, in order. 2.1.1 gives each model its turn and then spends the rest on the last.
+    if (runtime === 'browser') {
+      expect(models(h)).toEqual(['head', 'stub', 'stub', 'stub', 'stub', 'stub', 'head', 'head', 'head', 'head'])
+    } else {
+      expect(models(h)).toEqual(['head', 'stub', 'stub', 'stub', 'stub'])
+    }
+  })
+})
