@@ -164,6 +164,7 @@
     "build:web": "node bin/build-web.js"
   },
   "dependencies": {
+    "linkedom": "0.18.14",
     "markdown-it": "^15.0.3",
     "minisearch": "^7.2.0"
   },
@@ -179,7 +180,6 @@
     "@vitejs/plugin-vue": "^6.0.10",
     "happy-dom": "^21.0.4",
     "highlight.js": "^11.12.0",
-    "linkedom": "^0.18.14",
     "prismjs": "^1.30.0",
     "sass": "^1.106.1",
     "typescript": "^7.0.2",

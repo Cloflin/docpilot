@@ -577,23 +577,13 @@ describe('publish metadata', () => {
 
   /**
    * The runtime half of the same decision: with no peer block, a module that is
-   * missing has to say so ITSELF. These two are build-time and are the ones a
-   * consumer meets by accident — an OpenAPI file appears in `public/`, or
-   * somebody runs `docpilot import` or `index --html-dir` — so each names its
-   * install command in the error it throws rather than failing on an unresolved
-   * import three frames up.
-   *
-   * `linkedom` moved from `import.js` into `lib/dom.js` when the second HTML
-   * reader arrived. The file named here is THE ONE PLACE the import is written,
-   * and that is what makes the message a consumer sees a single string rather
-   * than one per caller: a third reader that re-implements the try/catch instead
-   * of importing this module fails the second half of this test.
+   * missing has to say so ITSELF. The one that is still optional is the OpenAPI
+   * parser — a spec file appears in `public/` and the build meets it by accident
+   * — so it names its install command in the error it throws rather than failing
+   * on an unresolved import three frames up.
    */
   it('names the install command where an optional module is actually needed', () => {
-    const cases = [
-      ['src/build/lib/openapi-chunker.js', '@scalar/openapi-parser'],
-      ['src/build/lib/dom.js', 'linkedom'],
-    ]
+    const cases = [['src/build/lib/openapi-chunker.js', '@scalar/openapi-parser']]
     for (const [file, mod] of cases) {
       const src = srcText(file)
       expect(src, `${file} does not import ${mod} lazily`).toContain(`await import('${mod}')`)
@@ -601,17 +591,38 @@ describe('publish metadata', () => {
         new RegExp(`npm i[^\\n]*${mod.replace('/', '\\/')}`),
       )
     }
+  })
 
-    // One writer, one message. `test/` is excluded: the suite parses HTML with
-    // linkedom directly and always will — it is a devDependency there, which is
-    // exactly the situation this rule is protecting a CONSUMER from.
+  /**
+   * THE HTML PARSER IS NOT OPTIONAL ANY MORE (engine-spec 043, D-01, D-04).
+   *
+   * 3.0 makes HTML a first-class source, so `docpilot import` and
+   * `index --html-dir` must work after `npm i @cloflin/docpilot` with nothing
+   * else installed: linkedom is a regular dependency at an EXACT version, and
+   * the "install it yourself" hint is gone. It is imported statically, and from
+   * ONE file, `src/build/lib/dom.ts` — a second importer is a second place to
+   * change when the parser does, and a way for it to reach a bundle that must
+   * stay parser-free (test/bundle-report.test.js). `test/` is excluded: the suite
+   * parses HTML with linkedom directly.
+   */
+  it('reaches the HTML parser through dom.ts only, as a pinned regular dependency (D-01)', () => {
+    expect(pubPkg.dependencies.linkedom, 'linkedom is not a regular dependency').toBe('0.18.14')
+    expect(pubPkg.dependencies.linkedom, 'linkedom is not an exact version').toMatch(/^\d+\.\d+\.\d+$/)
+    expect(pubPkg.devDependencies?.linkedom, 'linkedom is still a devDependency').toBeUndefined()
+
+    const dom = srcText('src/build/lib/dom.js')
+    expect(dom, 'dom.ts does not import linkedom statically').toContain("from 'linkedom'")
+    expect(dom, 'dom.ts still imports linkedom lazily').not.toContain("import('linkedom')")
+    expect(dom, 'dom.ts still tells the consumer to install the parser').not.toContain('npm i -D linkedom')
+
     const strays = []
     const walk = (dir) => {
       for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
         const p = path.join(dir, e.name)
         if (e.isDirectory()) walk(p)
         else if (/\.(js|ts)$/.test(e.name) && !p.endsWith(path.join('lib', 'dom.ts'))) {
-          if (fs.readFileSync(p, 'utf8').includes("import('linkedom')")) strays.push(p)
+          const text = fs.readFileSync(p, 'utf8')
+          if (text.includes("from 'linkedom'") || text.includes("import('linkedom')")) strays.push(p)
         }
       }
     }
