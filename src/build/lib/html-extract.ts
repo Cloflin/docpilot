@@ -288,7 +288,7 @@ export function tooltips(el) {
       const definition = String(value).replace(/\s+/g, ' ').trim()
       const term = textOf(node)
       if (!definition || !term || definition === term) continue
-      const key = `${term} ${definition}`
+      const key = `${term}\u0000${definition}`
       if (seen.has(key)) continue
       seen.add(key)
       out.push({ term, definition })
@@ -298,13 +298,92 @@ export function tooltips(el) {
 }
 
 /**
- * Title and description, from the page's own metadata.
+ * A JSON-LD block is a few KB; a larger one is not metadata and is not parsed
+ * (engine-spec 043, T-02-08: a hostile page cannot make the build parse
+ * megabytes of "metadata").
+ */
+export const MAX_JSONLD_CHARS = 100_000
+
+/**
+ * How deep the JSON-LD walk goes into nested objects, arrays and `@graph`.
+ * An Article sits at depth 0 to 2 in practice (engine-spec 043, T-02-08).
+ */
+const JSONLD_DEPTH = 4
+
+/**
+ * A date is kept as the page wrote it when it is ISO 8601, and never parsed
+ * into a Date, so no clock or locale enters the output (engine-spec 043, D-12).
+ * Anchored, one optional group per part, no nested quantifier.
+ */
+const ISO_DATE =
+  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
+
+/** `<html lang>`, as a bare lowercase subtag; '' when the page names none. */
+export function langOf(document): string {
+  const raw = String(document.documentElement?.getAttribute?.('lang') || '')
+  return raw.trim().split(/[-_]/)[0].toLowerCase()
+}
+
+/**
+ * Does a robots value (a `<meta name="robots">` content or an `X-Robots-Tag`
+ * header) ask not to be indexed? `none` is `noindex, nofollow` by definition
+ * (engine-spec 043, D-27).
+ */
+export function robotsNoindex(value): boolean {
+  return String(value || '')
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .some((token) => token === 'noindex' || token === 'none')
+}
+
+/** The first string `dateModified` in a parsed JSON-LD value, '' when none. */
+function jsonLdDate(value, depth = 0): string {
+  if (!value || typeof value !== 'object' || depth > JSONLD_DEPTH) return ''
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = jsonLdDate(item, depth + 1)
+      if (found) return found
+    }
+    return ''
+  }
+  if (typeof value.dateModified === 'string') return value.dateModified.trim()
+  return jsonLdDate(value['@graph'], depth + 1)
+}
+
+/** The page's modification date as written, when it is ISO 8601; else ''. */
+function modifiedOf(document): string {
+  const accept = (raw) => {
+    const value = String(raw || '').trim()
+    return ISO_DATE.test(value) ? value : ''
+  }
+  for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
+    const text = script.textContent || ''
+    if (!text || text.length > MAX_JSONLD_CHARS) continue
+    try {
+      const found = accept(jsonLdDate(JSON.parse(text)))
+      if (found) return found
+    } catch {
+      /* not JSON: the page's own problem, and no date */
+    }
+  }
+  return (
+    accept(document.querySelector('meta[property="article:modified_time"]')?.getAttribute('content')) ||
+    accept(document.querySelector('meta[itemprop="dateModified"]')?.getAttribute('content')) ||
+    accept(document.querySelector('time[itemprop="dateModified"][datetime]')?.getAttribute('datetime'))
+  )
+}
+
+/**
+ * What the page claims about itself, read BEFORE anything is removed — a
+ * JSON-LD `dateModified` sits in a `<script>` the pruner deletes
+ * (engine-spec 043, D-12).
  *
- * Read rather than written: a description is the strongest dense lever the
- * corpus has, and one invented here would be a sentence nobody at the source
- * wrote sitting in the highest-weighted chunk of the page. What this returns is
- * what the page claims about itself; making it the question a reader would ask
- * is an editing decision, and the command says so when the page offered none.
+ * Title and description are read rather than written: a description is the
+ * strongest dense lever the corpus has, and one invented here would be a
+ * sentence nobody at the source wrote sitting in the highest-weighted chunk of
+ * the page. What this returns is what the page claims about itself; making it
+ * the question a reader would ask is an editing decision, and the command says
+ * so when the page offered none.
  */
 export function metadata(document) {
   const meta = (sel) => document.querySelector(sel)?.getAttribute('content')?.trim() || ''
@@ -315,6 +394,17 @@ export function metadata(document) {
     ''
   const description =
     meta('meta[name="description"]') || meta('meta[property="og:description"]') || ''
+  const canonicalLink = [...document.querySelectorAll('link[rel][href]')].find((link) =>
+    String(link.getAttribute('rel') || '')
+      .toLowerCase()
+      .split(/\s+/)
+      .includes('canonical'),
+  )
+  const robots = [...document.querySelectorAll('meta[name][content]')].some(
+    (m) =>
+      String(m.getAttribute('name') || '').trim().toLowerCase() === 'robots' &&
+      robotsNoindex(m.getAttribute('content')),
+  )
   return {
     // A site name glued on by a template — "Page — Acme" — is noise in a source
     // row that already names the host. The separator must be SURROUNDED BY
@@ -322,5 +412,10 @@ export function metadata(document) {
     // a separator, and a real page lost half its title to that.
     title: title.replace(/\s+[|·—–-]\s+[^|·—–-]{1,40}$/u, '').trim() || title,
     description,
+    canonical: String(canonicalLink?.getAttribute('href') || '').trim(),
+    baseHref: String(document.querySelector('base[href]')?.getAttribute('href') || '').trim(),
+    lang: langOf(document),
+    dateModified: modifiedOf(document),
+    noindex: robots,
   }
 }

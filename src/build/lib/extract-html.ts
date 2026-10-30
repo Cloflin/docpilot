@@ -20,7 +20,7 @@
  */
 
 import { parseDocument } from './dom.js'
-import { metadata, pickMain, prune, textOf } from './html-extract.js'
+import { metadata, pickMain, prune, robotsNoindex, textOf } from './html-extract.js'
 import { createLinkResolver } from './html-links.js'
 import { toMarkdown } from './html-to-md.js'
 
@@ -60,6 +60,12 @@ export interface ExtractOptions {
   exclude?: string | string[]
   /** The URL the page was served at; resolves relative links. */
   base?: string
+  /**
+   * The value of the HTTP `X-Robots-Tag` header the page was served with. It
+   * is applied with the same rule as `<meta name="robots">` (engine-spec 043,
+   * D-27); the caller that fetched the page passes it.
+   */
+  robots?: string
   /** The name a warning uses for this page. */
   id?: string
   warn?: (message: string) => void
@@ -134,10 +140,19 @@ function failure(reason: string, meta: Partial<ExtractMeta> = {}): ExtractResult
   }
 }
 
-/** The primary subtag of `<html lang>`, lowercased; '' when the page names none. */
-function langOf(document): string {
-  const raw = String(document.documentElement?.getAttribute?.('lang') || '')
-  return raw.trim().split(/[-_]/)[0].toLowerCase()
+/**
+ * An absolute http(s) URL for `value` against `base`, or '' when it is neither.
+ * Only http and https survive: a `javascript:` or `data:` canonical is ignored
+ * (engine-spec 043, T-02-07).
+ */
+function webUrl(value: string, base = ''): string {
+  if (!value) return ''
+  try {
+    const url = new URL(value, base || undefined)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : ''
+  } catch {
+    return ''
+  }
 }
 
 /** Extract an already parsed document. Synchronous. */
@@ -147,10 +162,16 @@ export function extractDocument(document, options: ExtractOptions = {}): Extract
     const meta = metadata(document)
     const title = meta.title.normalize('NFC')
     const description = meta.description.normalize('NFC')
-    const lang = langOf(document)
+    const lang = meta.lang
     const report = emptyReport()
     report.totalChars = points(textOf(document.body || document.documentElement))
-    const known = { title, description, lang, report }
+    const canonical = webUrl(meta.canonical, base) || null
+    const dateModified = meta.dateModified || null
+    const known = { title, description, lang, canonical, dateModified, report }
+    // A page that asks not to be indexed is never extracted (D-27).
+    if (meta.noindex || robotsNoindex(options.robots || '')) {
+      return failure('noindex', { ...known, noindex: true })
+    }
 
     let root
     const selector = String(content || '').trim()
@@ -221,8 +242,6 @@ export function extractDocument(document, options: ExtractOptions = {}): Extract
       scope,
       links: rendered.links as string[],
       ...known,
-      canonical: null,
-      dateModified: null,
       noindex: false,
     }
   } catch (e) {

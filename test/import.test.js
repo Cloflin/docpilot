@@ -243,7 +243,9 @@ describe('import — what the page says about itself', () => {
       <title>Product overview | Acme</title>
       <meta name="description" content="What the product does.">
     </head><body><h1>Product overview</h1></body></html>`)
-    expect(metadata(document)).toEqual({
+    // toMatchObject: metadata() also carries canonical, lang, dateModified and
+    // noindex since engine-spec 043 (D-12); this test is about title and description.
+    expect(metadata(document)).toMatchObject({
       title: 'Product overview',
       description: 'What the product does.',
     })
