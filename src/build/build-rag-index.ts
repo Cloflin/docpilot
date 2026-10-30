@@ -21,7 +21,7 @@ import { pathToFileURL } from 'node:url'
 import { descriptionsFromLlms } from '../llms/about.js'
 import { readMarkdownDocs, readHtmlDocs, readKbDocs, readOpenapiDocs, discoverOpenapiSpecs } from './lib/readers.js'
 import { documentsToChunks } from './lib/documents.js'
-import type { ReadDoc } from './lib/source-doc.js'
+import { limitsFor, type ReadDoc } from './lib/source-doc.js'
 import { resolveSections, orphanPages, tailFor } from './lib/sections.js'
 import { parseAllowlist, checkSource } from './lib/sources.js'
 import { discoverEmbedModels, embedPoolOf } from './lib/embed-discovery.js'
@@ -64,9 +64,6 @@ import {
 
 const SHARD_SIZE = 250
 const DF_TERMS = 4000
-const MANIFEST_MAX_BYTES = 64 * 1024
-const WARN_BYTES = 3 * 1024 * 1024
-const FAIL_BYTES = 5 * 1024 * 1024
 
 
 /**
@@ -1209,6 +1206,11 @@ async function main() {
     )
   }
 
+  // The ceilings are per runtime and come from nowhere else (engine-spec 041,
+  // D-12): only `docPilot.runtime: 'server'` in the config lifts them. No flag,
+  // no environment variable.
+  const LIMITS = limitsFor(docPilot.runtime)
+
   // ── sidebar ────────────────────────────────────────────────────────────────
   // `?? {}` because the DEFAULT export is optional: the settings come from the
   // named `docPilot` export, and a project whose site is not VitePress — a config
@@ -1817,8 +1819,12 @@ async function main() {
   // Bytes, not UTF-16 units: the ceiling is what the reader downloads, and a
   // page title outside ASCII is two or three bytes a character.
   const manifestBytes = Buffer.byteLength(manifestJson)
-  if (manifestBytes > MANIFEST_MAX_BYTES) {
-    die(`manifest is ${manifestBytes} bytes, over the ${MANIFEST_MAX_BYTES} ceiling`)
+  if (manifestBytes > LIMITS.manifestMaxBytes) {
+    die(
+      `manifest is ${manifestBytes} bytes, over the ${LIMITS.manifestMaxBytes} ceiling — the browser downloads it when the panel opens. ` +
+        `Set docPilot.runtime: 'server' (then only docpilot serve reads the index and the browser gets its shell), ` +
+        `or shard the corpus into smaller indexes (engine-spec 041).`,
+    )
   }
   fs.writeFileSync(path.join(STAGE, 'manifest.json'), manifestJson)
 
@@ -1841,7 +1847,7 @@ async function main() {
 
   // The last check that can fail, so it runs on the stage — and the swap after
   // it is the only line in this file that changes `indexDir`.
-  if (total > FAIL_BYTES) die(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB, over the 5 MB ceiling`)
+  if (total > LIMITS.failBytes) die(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB, over the 5 MB ceiling`)
   fs.rmSync(RETIRED, { recursive: true, force: true })
   try {
     fs.renameSync(OUT, RETIRED)
@@ -1866,7 +1872,7 @@ async function main() {
   }
   console.log(`  hash ${hash}`)
 
-  if (total > WARN_BYTES) warn(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB — Plan B applies (RAG-SPEC 2.4)`)
+  if (total > LIMITS.warnBytes) warn(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB — Plan B applies (RAG-SPEC 2.4)`)
   flushWarnings()
   console.log('')
 }
