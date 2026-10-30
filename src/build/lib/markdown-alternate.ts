@@ -29,6 +29,8 @@
  * `looksLikeMarkdown` is what decides, and it defaults to no.
  */
 
+import { MAX_HTML_BYTES } from './extract-html.js'
+import { DeadlineExceeded, FETCH_TIMEOUT_MS, readBodyCapped, withDeadline } from './fetch-bounds.js'
 import { replaceInProse } from './markdown-code.js'
 import { fetchWithin } from './redirects.js'
 
@@ -250,40 +252,65 @@ function absolute(href, base) {
  *   boundary the one the user typed did
  * @param {Function} o.fetchImpl
  * @param {Record<string, string>} [o.headers]
+ * @param {number} [o.timeoutMs] a deadline per candidate
+ * @param {number} [o.maxBytes] a size ceiling per candidate body
  * Always returns the attempt list, found or not: "it looked and found nothing"
  * and "it never looked" are different facts, and only one of them is a reason to
  * go and publish a `.md`.
  *
  * @returns {Promise<{url: string|null, body: string, tried: {url: string, why: string}[]}>}
  */
-export async function findMarkdown({ urls, allow, fetchImpl, headers = {} }) {
-  const tried = []
+export async function findMarkdown({
+  urls,
+  allow,
+  fetchImpl,
+  headers = {},
+  timeoutMs = FETCH_TIMEOUT_MS,
+  maxBytes = MAX_HTML_BYTES,
+}: {
+  urls: string[]
+  allow: (url: string) => any
+  fetchImpl: any
+  headers?: Record<string, string>
+  /** The deadline for each candidate, redirects and body included. */
+  timeoutMs?: number
+  /** The ceiling for each candidate's body. */
+  maxBytes?: number
+}) {
+  const tried: { url: string; why: string }[] = []
   for (const url of urls) {
     const verdict = allow(url)
     if ('error' in verdict) {
       tried.push({ url, why: 'outside the allowlist' })
       continue
     }
-    let res
+    // A candidate is a request this tool decided to make, to a host that may
+    // answer slowly or with a body of any size, so it has the page's deadline and
+    // the page's size ceiling (engine-spec 043, D-27, T-02-12). A miss on either
+    // is one more reason in `tried`, not a failure of the import.
+    let read
     try {
-      // Same reason as `readHtml`: the per-candidate check above covers the URL
-      // requested, and every redirect target is checked before it is requested.
-      const walked = await fetchWithin(url, { allow, fetchImpl, init: { headers } })
-      if (walked.refused) {
-        tried.push({ url, why: `redirected outside the allowlist (${walked.refused})` })
-        continue
-      }
-      res = walked.res
+      read = await withDeadline(timeoutMs, async (signal) => {
+        // Same reason as `readHtml`: the per-candidate check above covers the URL
+        // requested, and every redirect target is checked before it is requested.
+        const walked = await fetchWithin(url, { allow, fetchImpl, init: { headers, signal } })
+        if (walked.refused) return { why: `redirected outside the allowlist (${walked.refused})` }
+        const res = walked.res
+        if (!res.ok) return { why: `${res.status}` }
+        const body = await readBodyCapped(res, maxBytes)
+        if ('tooLarge' in body) return { why: `too large (over ${maxBytes} bytes)` }
+        return { res, text: body.text }
+      })
     } catch (e) {
-      tried.push({ url, why: String(e?.message || e) })
+      tried.push({ url, why: e instanceof DeadlineExceeded ? `no answer within ${timeoutMs} ms` : String(e?.message || e) })
       continue
     }
-    if (!res.ok) {
-      tried.push({ url, why: `${res.status}` })
+    if (!('res' in read)) {
+      tried.push({ url, why: read.why })
       continue
     }
-    const body = await res.text()
-    const type = res.headers?.get?.('content-type') || ''
+    const body = read.text
+    const type = read.res.headers?.get?.('content-type') || ''
     if (!looksLikeMarkdown(body, type)) {
       tried.push({ url, why: `not markdown (${type || 'no content-type'})` })
       continue

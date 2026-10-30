@@ -4,7 +4,9 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { parseImportFlags, readHtml, runImport } from '../src/build/import.js'
+import { MAX_HTML_BYTES } from '../src/build/lib/extract-html.js'
 import { htmlConfigProblems } from '../src/build/lib/html-options.js'
+import { findMarkdown } from '../src/build/lib/markdown-alternate.js'
 import { checkSource, parseAllowlist } from '../src/build/lib/sources.js'
 import { resolveDocPilot, themeDocPilot } from '../src/config.js'
 
@@ -146,6 +148,80 @@ describe('import — the fetcher hook', () => {
     await expect(readHtml({ url: SOURCE, allow, fetchImpl, timeoutMs: 50 })).rejects.toThrow(
       /did not answer within 50 ms/,
     )
+  })
+
+  /** A response whose body is `chunks` pieces of `size` bytes, pulled lazily and counted. */
+  const streamed = (chunks, size, headers = {}) => {
+    const state = { pulled: 0, cancelled: false }
+    const body = new ReadableStream({
+      pull(controller) {
+        if (state.pulled >= chunks) return controller.close()
+        state.pulled++
+        controller.enqueue(new Uint8Array(size).fill(120))
+      },
+      cancel() {
+        state.cancelled = true
+      },
+    })
+    return { state, res: new Response(body, { status: 200, headers }) }
+  }
+
+  it('refuses a page body as too large while it is read, not after it is buffered (WR-11)', async () => {
+    const { state, res } = streamed(1000, 1024 * 1024)
+    await expect(readHtml({ url: SOURCE, allow, fetchImpl: async () => res })).rejects.toThrow(/too large/)
+    // 8 MiB is the ceiling: a handful of pulls past it, never the 1000 MiB the server offered.
+    expect(state.pulled).toBeLessThan(MAX_HTML_BYTES / (1024 * 1024) + 5)
+    expect(state.cancelled).toBe(true)
+  })
+
+  it('refuses a page whose content-length is over the ceiling without reading it (WR-11)', async () => {
+    const { state, res } = streamed(10, 1024, { 'content-length': String(MAX_HTML_BYTES + 1) })
+    await expect(readHtml({ url: SOURCE, allow, fetchImpl: async () => res })).rejects.toThrow(/too large/)
+    // A stream primes one chunk on construction; nothing is pulled after the refusal.
+    expect(state.pulled).toBeLessThanOrEqual(1)
+    expect(state.cancelled).toBe(true)
+  })
+
+  it('still reads a page that fits, as the same text (WR-11)', async () => {
+    const out = await readHtml({ url: SOURCE, allow, fetchImpl: async () => new Response(PAGE, { status: 200 }) })
+    expect(out.html).toBe(PAGE)
+  })
+
+  describe('the .md alternate search is bounded too (WR-11)', () => {
+    const urls = ['https://acme.test/a.md', 'https://acme.test/b.md']
+
+    it('gives each candidate a signal, cuts off one that never answers, and goes on to the next', async () => {
+      const signals = []
+      const found = await findMarkdown({
+        urls,
+        allow,
+        timeoutMs: 80,
+        fetchImpl: (url, init) => {
+          signals.push(typeof init.signal)
+          if (url.endsWith('/a.md')) return new Promise(() => {})
+          return Promise.resolve(
+            new Response('# A page\n\nBody text.', { status: 200, headers: { 'content-type': 'text/markdown' } }),
+          )
+        },
+      })
+      expect(signals).toEqual(['object', 'object'])
+      expect(found.url).toBe('https://acme.test/b.md')
+      expect(found.tried).toEqual([{ url: 'https://acme.test/a.md', why: 'no answer within 80 ms' }])
+    })
+
+    it('refuses a candidate body over the ceiling before buffering it, and records why', async () => {
+      const { state, res } = streamed(1000, 1024, { 'content-type': 'text/markdown' })
+      const found = await findMarkdown({
+        urls: [urls[0]],
+        allow,
+        maxBytes: 4096,
+        fetchImpl: async () => res,
+      })
+      expect(found.url).toBe(null)
+      expect(found.tried).toEqual([{ url: urls[0], why: 'too large (over 4096 bytes)' }])
+      expect(state.pulled).toBeLessThan(10)
+      expect(state.cancelled).toBe(true)
+    })
   })
 
   it('--html <file> wins over a configured fetcher', async () => {

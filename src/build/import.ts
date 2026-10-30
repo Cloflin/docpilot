@@ -21,6 +21,7 @@ import path from 'node:path'
 
 import { parseAllowlist, checkSource } from './lib/sources.js'
 import { fetchWithin } from './lib/redirects.js'
+import { DeadlineExceeded, FETCH_TIMEOUT_MS, readBodyCapped, withDeadline } from './lib/fetch-bounds.js'
 import { printable, printableLines } from './lib/terminal.js'
 import { metadata, robotsNoindex } from './lib/html-extract.js'
 import { extractDocument, EXTRACTOR_VERSION, MAX_HTML_BYTES } from './lib/extract-html.js'
@@ -147,12 +148,8 @@ export function composePage({
   return `${front}\n\n# ${oneLineTitle}\n\n${attribution}\n\n${markdown}\n`
 }
 
-/**
- * How long an import waits for one page. An import is one page and a person
- * waits for it; a page silent for 30 s is behind a wall, and the fix is `--html`
- * or a fetcher, not a longer wait (engine-spec 043, D-27, T-02-12).
- */
-export const FETCH_TIMEOUT_MS = 30_000
+/** Re-exported: the deadline lives with the other fetch bounds. */
+export { FETCH_TIMEOUT_MS }
 
 /** The refusal shared by a redirect and a fetcher result outside the allowlist. */
 const OUTSIDE_ALLOWLIST_HINT =
@@ -163,33 +160,15 @@ const lowerKeys = (headers) =>
   Object.fromEntries(Object.entries(headers || {}).map(([k, v]) => [String(k).toLowerCase(), String(v)]))
 
 /**
- * Run `work` with an abort signal that fires after `timeoutMs`, and give up on
- * it when the signal fires.
- *
- * The signal alone is a request, not a deadline: a fetcher that ignores it, or a
- * body read that never ends, would hold the import for ever. So the call is
- * RACED against the signal, and the deadline holds whether or not `work`
- * listens (engine-spec 043, D-27, T-02-12). The timer is an ordinary ref'd one,
- * not `AbortSignal.timeout`'s unref'd one: with nothing else pending, an unref'd
- * timer lets Node exit with the import unfinished and no message. It is cleared,
- * with its listener, on every way out.
+ * `work` under the shared deadline (`withDeadline`), with the sentence an owner
+ * can act on when it passes: the page is behind a wall, and the way round it is
+ * `--html` or a fetcher.
  */
-async function withTimeout(url, timeoutMs, work) {
-  const controller = new AbortController()
-  const { signal } = controller
-  let timer
-  let onAbort
-  const expired = new Promise<never>((_, reject) => {
-    onAbort = () => reject(signal.reason)
-    signal.addEventListener('abort', onAbort, { once: true })
-    timer = setTimeout(() => controller.abort(new DOMException('The operation timed out.', 'TimeoutError')), timeoutMs)
-  })
-  // `work` may lose the race and reject later; that rejection is already handled.
-  expired.catch(() => {})
+async function withTimeout(url, timeoutMs, work): Promise<any> {
   try {
-    return await Promise.race([work(signal), expired])
+    return await withDeadline(timeoutMs, work)
   } catch (e) {
-    if (signal.aborted) {
+    if (e instanceof DeadlineExceeded) {
       throw new Error(
         `${url} did not answer within ${timeoutMs} ms. A page behind a bot wall or built by ` +
           'JavaScript will not fetch — open it in a browser, copy the DOM, and pass it ' +
@@ -197,9 +176,6 @@ async function withTimeout(url, timeoutMs, work) {
       )
     }
     throw e
-  } finally {
-    clearTimeout(timer)
-    signal.removeEventListener('abort', onAbort)
   }
 }
 
@@ -298,8 +274,17 @@ export async function readHtml({
       )
     }
     const robots = res.headers?.get?.('x-robots-tag')
+    // Counted while it is read: `res.text()` would hold a data dump in memory
+    // before `buildPage` could call it too large.
+    const body = await readBodyCapped(res)
+    if ('tooLarge' in body) {
+      throw new Error(
+        `${url} is too large: more than ${MAX_HTML_BYTES} bytes. A page that size is a data dump, ` +
+          'not documentation — import a smaller page, or pass the part you want with --html <file>.',
+      )
+    }
     return {
-      html: await res.text(),
+      html: body.text,
       url,
       headers: robots ? { 'x-robots-tag': String(robots) } : {},
     }
