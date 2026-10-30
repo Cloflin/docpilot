@@ -1,0 +1,19 @@
+## Reset a password
+
+### From the login page {#from-the-login-page}
+
+Select Forgot password on the login page and enter the email address of your account. A reset link arrives within a few minutes.
+
+### From the shell {#from-the-shell}
+
+If you work in a terminal, the command line tool sends the same email.
+
+```
+acme auth reset --email you@example.test
+```
+
+Send a reset email from the shell
+
+### If you are locked out {#if-you-are-locked-out}
+
+After five failed attempts the account is locked for 15 minutes. Wait, then try the reset again.

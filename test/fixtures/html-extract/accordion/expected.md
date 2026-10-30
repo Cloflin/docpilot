@@ -1,0 +1,25 @@
+## Billing questions
+
+These are the questions the support team answers most often.
+
+**How do I change my plan?**
+
+Open Settings, choose Billing, and pick a new plan. The change applies at the next invoice.
+
+**Where can I find my invoices?**
+
+Every invoice is listed under Settings, Billing, Invoices as a PDF you can download.
+
+**Do you offer refunds?**
+
+A refund is possible within 14 days of the first payment on an annual plan.
+
+### Account questions
+
+**Can I export my data?**
+
+Yes. The export button in Settings builds an archive of your projects and sends a download link by email.
+
+**How many seats can I add?**
+
+There is no limit. Each seat is billed once per month.
