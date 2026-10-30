@@ -71,6 +71,17 @@ describe('html extraction fixtures', () => {
     })
   }
 
+  // The owner rule (D-14): no vendor or real product named. html-furniture.test.js
+  // holds five of the six directories and three of the four files; this holds all.
+  it('names no vendor or product in any of the six fixtures, in any of the four files (owner rule)', () => {
+    const forbidden = new RegExp(['s' + 'tripo', 'one' + 'trust', 'cookie' + 'bot', 'inter' + 'com'].join('|'), 'i')
+    for (const name of NAMES) {
+      for (const file of ['input.html', 'truth.txt', 'noise.txt', 'expected.md']) {
+        expect(read(name, file), `${name}/${file}`).not.toMatch(forbidden)
+      }
+    }
+  })
+
   it('openapi-article: the relative link resolves against the canonical URL', async () => {
     const result = await run('openapi-article')
     expect(result.markdown).toContain('](https://help.acme.test/reference/messages)')

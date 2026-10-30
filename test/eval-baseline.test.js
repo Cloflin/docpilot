@@ -27,6 +27,7 @@ import {
 import { hasSecret } from '../src/theme/docpilot/credentials.js'
 import { readIndexDir } from '../src/server/index.js'
 import { underPath } from '../src/eval/metrics.js'
+import { lintRecords } from '../src/eval/lint-golden.js'
 
 /**
  * THE RANKING ENGINE AND THE BASELINE ENGINE, on an index that lives in memory.
@@ -719,4 +720,41 @@ describe('eval --baseline= with a file that is not a baseline', () => {
     expect(r.stderr).toMatch(/cannot read the baseline/)
     expect(r.stderr).toMatch(/--update-baseline/)
   })
+})
+
+/**
+ * The committed golden set against every committed index (plan 02-12, engine-spec 043 D-18).
+ *
+ * A re-indexed corpus can rename a page a record names as gold, and the record
+ * then scores a flat 0 that reads as a retrieval regression. `lintRecords` calls
+ * that an ERROR, so the two committed indexes must lint clean. READ-ONLY here.
+ */
+describe('docpilot/golden.jsonl lints with no error against each committed index', () => {
+  const records = fs
+    .readFileSync(GOLDEN_FILE, 'utf8')
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l))
+
+  const indexOf = (dir) => {
+    const root = path.join(ROOT, dir)
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'))
+    const ids = new Set(
+      manifest.shards.flatMap((n) => JSON.parse(fs.readFileSync(path.join(root, n), 'utf8'))).map((c) => c.id),
+    )
+    return { ids, pages: new Set(manifest.pages.map((p) => p.path)), indexHash: manifest.hash }
+  }
+
+  for (const dir of ['docs/public/rag', 'docs/public/rag-local']) {
+    it(`${dir}: no error, and a gold chunk that does not exist is an error`, () => {
+      const index = indexOf(dir)
+      expect(index.ids.size).toBeGreaterThan(0)
+      const { errors } = lintRecords(records, index)
+      expect(errors).toEqual([])
+      // Positive control: the same lint is live against this very index.
+      const answer = records.find((r) => r.expect === 'answer')
+      const broken = { ...answer, id: 'control-broken', gold_chunks: ['no-such-page#nowhere'] }
+      expect(lintRecords([broken], index).errors.length).toBeGreaterThan(0)
+    })
+  }
 })

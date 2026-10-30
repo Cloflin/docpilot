@@ -147,6 +147,18 @@ describe('extractHtml — a bad page does not stop the directory', () => {
     expect(warnings.join('\n')).toMatch(/skipped deep\.html: (extraction failed|near-empty)/)
   }, 60000)
 
+  it('skips a page whose body is literally empty as near-empty, and indexes the page beside it (HTML-09)', async () => {
+    const empty = '<!doctype html><html><head><title>Void</title></head><body></body></html>'
+    const out = await extractHtml(empty)
+    expect(out.ok).toBe(false)
+    expect(out.reason).toContain('near-empty')
+    const dir = site({ 'void.html': empty, 'good.html': good('Good') })
+    const warnings = []
+    const pages = await readHtmlDir({ dir, warn: (m) => warnings.push(m) })
+    expect(pages.map((p) => p.route)).toEqual(['/good'])
+    expect(warnings.join('\n')).toContain('skipped void.html: near-empty')
+  })
+
   it('stops the directory only when nothing could be extracted', async () => {
     const dir = site({ 'a.html': '<!doctype html><html><body><main>Loading…</main></body></html>' })
     const warnings = []

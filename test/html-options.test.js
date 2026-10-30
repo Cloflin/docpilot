@@ -1,4 +1,4 @@
-import { afterAll, describe, it, expect } from 'vitest'
+import { afterAll, describe, it, expect, vi } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -6,6 +6,7 @@ import path from 'node:path'
 
 import { htmlOptionsFor, htmlConfigProblems } from '../src/build/lib/html-options.js'
 import { extractHtml } from '../src/build/lib/extract-html.js'
+import { resolveDocPilot } from '../src/config.js'
 import { htmlRecordToDoc, readKbDocs } from '../src/build/lib/readers.js'
 
 /**
@@ -99,6 +100,15 @@ describe('index --html-dir reads docPilot.html', () => {
   it('removes the excluded block from every built page', () => {
     const root = withPage({ exclude: '.editor-note' })
     const r = build(root, '--html-dir=html')
+    expect(r.status, r.stderr + r.stdout).toBe(0)
+    const text = chunkText(root)
+    expect(text).not.toContain('Internal editor note')
+    expect(text).toContain('The rollout checklist records each window')
+  })
+
+  it('removes the block named by --html-exclude with no config at all (engine-spec 043, D-22)', () => {
+    const root = withPage(null)
+    const r = build(root, '--html-dir=html', '--html-exclude=.editor-note')
     expect(r.status, r.stderr + r.stdout).toBe(0)
     const text = chunkText(root)
     expect(text).not.toContain('Internal editor note')
@@ -274,5 +284,33 @@ describe('page metadata on the document (D-12)', () => {
     expect(a.updatedAt).toBe('2026-03-04')
     expect(b.locale).toBeUndefined()
     expect(b.updatedAt).toBeUndefined()
+  })
+})
+
+describe('config — every docPilot.html key is a known setting (plan 02-12, HTML-01)', () => {
+  const warned = (settings) => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      resolveDocPilot(settings, {})
+      return spy.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('unknown setting'))
+    } finally {
+      spy.mockRestore()
+    }
+  }
+
+  it('warns about none of content, exclude, sources or fetcher, and does warn about a misspelt one', () => {
+    const lines = warned({
+      html: {
+        content: '#article',
+        exclude: ['.toc'],
+        sources: { html: { content: 'main' }, 'https://acme.test/help': { exclude: '.nav' } },
+        fetcher: async () => '',
+      },
+    })
+    expect(lines).toEqual([])
+    // Positive control: the check is live, so a silent result above means something.
+    const typo = warned({ html: { contnet: '#article' } })
+    expect(typo).toHaveLength(1)
+    expect(typo[0]).toContain('unknown setting "html.contnet"')
   })
 })

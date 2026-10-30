@@ -25,6 +25,28 @@ const BODY =
 const page = (head, htmlAttrs = '') =>
   `<!doctype html><html ${htmlAttrs}><head><title>Billing</title>${head}</head><body>${BODY}</body></html>`
 
+describe('metadata: title and description precedence (HTML-06)', () => {
+  const OG = '<meta property="og:title" content="Open Graph Heading">'
+  const OGD = '<meta property="og:description" content="Social summary of the page.">'
+  const DESC = '<meta name="description" content="Plain summary of the page.">'
+  const body = '<main><h1>Visible Heading</h1></main>'
+
+  it('takes og:title over the h1, and the h1 over the title element', () => {
+    const all = doc(`<title>Browser Tab Name</title>${OG}`, body)
+    expect(metadata(all).title).toBe('Open Graph Heading')
+    const noOg = doc('<title>Browser Tab Name</title>', body)
+    expect(metadata(noOg).title).toBe('Visible Heading')
+    const onlyTitle = doc('<title>Browser Tab Name</title>', '<main><p>No heading here.</p></main>')
+    expect(metadata(onlyTitle).title).toBe('Browser Tab Name')
+  })
+
+  it('takes meta description over og:description, and falls back to og:description', () => {
+    expect(metadata(doc(`${OGD}${DESC}`)).description).toBe('Plain summary of the page.')
+    expect(metadata(doc(OGD)).description).toBe('Social summary of the page.')
+    expect(metadata(doc('')).description).toBe('')
+  })
+})
+
 describe('metadata: dateModified', () => {
   it('reads a JSON-LD Article date', () => {
     const d = doc(ld({ '@type': 'Article', dateModified: '2026-01-02T10:00:00Z' }))

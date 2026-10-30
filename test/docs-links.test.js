@@ -526,3 +526,24 @@ describe('docs — the printed eval figures match the code that produces them', 
     expect(stale).toEqual([])
   })
 })
+
+/**
+ * The owner rule (engine-spec 043 D-14, plan 02-12): the reference vendor is named
+ * nowhere in the published corpus. The token is built from split strings so
+ * that this file does not name it either.
+ */
+describe('the corpus names no reference vendor (owner rule)', () => {
+  it('holds in every Markdown page of the corpus', () => {
+    const vendor = new RegExp('s' + 'tripo', 'i')
+    const pages = walkCorpus(DOCS)
+    expect(pages.length).toBeGreaterThan(0)
+    for (const file of pages) {
+      expect(fs.readFileSync(file, 'utf8'), path.relative(ROOT, file)).not.toMatch(vendor)
+    }
+  })
+
+  it('holds in engine-spec 043', () => {
+    const vendor = new RegExp('s' + 'tripo', 'i')
+    expect(fs.readFileSync(path.join(ROOT, 'engine-specs', '043-html-extraction.md'), 'utf8')).not.toMatch(vendor)
+  })
+})

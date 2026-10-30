@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, it, expect } from 'vitest'
+import { afterAll, describe, it, expect } from 'vitest'
 import { parseHTML } from 'linkedom'
 
 import {
@@ -13,6 +13,7 @@ import {
   proseLength,
 } from '../src/build/lib/html-extract.js'
 import { toMarkdown } from '../src/build/lib/html-to-md.js'
+import { MAX_HTML_BYTES } from '../src/build/lib/extract-html.js'
 import { fetchWithin, MAX_HOPS } from '../src/build/lib/redirects.js'
 import { printable } from '../src/build/lib/terminal.js'
 import { annotate, stripAnnotations, verifyAnnotation } from '../src/build/lib/annotate.js'
@@ -34,6 +35,7 @@ import {
   declaredAlternates,
   derivedCandidates,
   findMarkdown,
+  absolutiseLinks,
   looksLikeMarkdown,
   prepareMarkdown,
   splitFrontmatter,
@@ -734,6 +736,17 @@ describe('import — a published .md beats converting the HTML', () => {
     expect(out.markdown).toContain('[the API](https://acme.test/reference/api)')
   })
 
+  it('makes a relative image absolute, keeps its title, and writes it as its alt text with no base (HTML-03)', () => {
+    const base = 'https://acme.test/help/rate-limits.md'
+    expect(absolutiseLinks('![shot](/img/a.png "Shot")', base)).toBe('![shot](https://acme.test/img/a.png "Shot")')
+    // Path-relative: resolved against the FILE's URL, so it lands under /help/.
+    expect(absolutiseLinks('![d](img/b.png)', base)).toBe('![d](https://acme.test/help/img/b.png)')
+    // No usable base: the image is its alt text, and the failure is reported.
+    const degraded = []
+    expect(absolutiseLinks('See ![d](img/b.png) here', null, (h) => degraded.push(h))).toBe('See d here')
+    expect(degraded).toEqual(['img/b.png'])
+  })
+
   it('builds the page from the markdown, converting nothing', async () => {
     const built = await buildPage({
       html: head('<link rel="alternate" type="text/markdown" href="/x.md">'),
@@ -838,8 +851,13 @@ describe('import — the shared extractor and its report', () => {
   const article =
     '<main><h1>Rate limits</h1><p>Every plan is capped at sixty requests a minute, and the cap resets on the hour.</p></main>'
 
+  // Every run leaves a scratch directory, and the over-size case writes 8 MiB into one.
+  const made = []
+  afterAll(() => made.forEach((d) => fs.rmSync(d, { recursive: true, force: true })))
+
   const run = async (html, extra = []) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-import-'))
+    made.push(dir)
     const htmlFile = path.join(dir, 'page.html')
     fs.writeFileSync(htmlFile, html)
     const said = []
@@ -931,6 +949,49 @@ describe('import — the shared extractor and its report', () => {
     const { out } = await run(page({}, big))
     expect(out).toMatch(/\s1500\s/)
     expect(out).not.toMatch(/1[,.\u00a0\u202f]500/)
+  })
+
+  it('--html-exclude removes the named block and the report names it (engine-spec 043, D-22)', async () => {
+    const body = `<main><h1>Rate limits</h1><p>Every plan is capped at sixty requests a minute, and the cap resets on the hour.</p><div class="editor-note">Internal note text</div></main>`
+    const control = await run(page({}, body))
+    expect(control.code).toBe(0)
+    expect(control.out).not.toContain('"Internal note text"')
+    const { code, out } = await run(page({}, body), ['--html-exclude=.editor-note'])
+    expect(code).toBe(0)
+    expect(out).toMatch(/exclude\s+"\.editor-note"\s+"Internal note text"/)
+  })
+
+  it('--html-select with a selector that matches nothing skips the page and exits 1', async () => {
+    const { code, out } = await run(page({}, article), ['--html-select=.nowhere'])
+    expect(code).toBe(1)
+    expect(out).toContain('matched nothing')
+    expect(out).toMatch(/https:\/\/acme\.test\/help\/rate-limits\s+0\s+0\s+0\s+0\s+0/)
+  })
+
+  it('prints the count of dropped blocks, the five largest with a reason, and the rest as a number (HTML-10)', async () => {
+    // Ten blocks that named token lists certainly drop: consent, share, toc.
+    const classes = ['privacy-banner', 'cmp', 'sharing', 'social-share', 'share-bar', 'share-buttons', 'toc', 'table-of-contents', 'page-toc', 'on-this-page']
+    const furniture = classes.map((c, i) => `<div class="${c}">Furniture ${i}</div>`).join('')
+    const { code, out } = await run(page({}, article.replace('</main>', `${furniture}</main>`)))
+    expect(code).toBe(0)
+    const lines = out.split('\n')
+    const at = lines.findIndex((l) => /^ {2}dropped {6}\d+ blocks:$/.test(l))
+    expect(at, out).toBeGreaterThan(-1)
+    const count = Number(lines[at].match(/(\d+) blocks/)[1])
+    expect(count).toBeGreaterThanOrEqual(6)
+    const printed = lines.slice(at + 1, at + 6)
+    for (const l of printed) expect(l).toMatch(/^ {15}\S.*\S\s+"Furniture \d"$/)
+    // Each reason is the text before the quoted block, and not blank.
+    for (const l of printed) expect(l.trim().replace(/\s+"Furniture \d"$/, '').length).toBeGreaterThan(0)
+    expect(lines[at + 6]).toBe(`               …and ${count - 5} more`)
+  })
+
+  it('skips a page larger than MAX_HTML_BYTES, prints a 0-pages row with the size reason and exits 1', async () => {
+    const huge = page({}, article) + `<!--${'x'.repeat(MAX_HTML_BYTES)}-->`
+    const { code, out } = await run(huge)
+    expect(code).toBe(1)
+    expect(out).toMatch(/https:\/\/acme\.test\/help\/rate-limits\s+0\s+0\s+0\s+0\s+0/)
+    expect(out).toMatch(/skipped https:\/\/acme\.test\/help\/rate-limits: too large \(\d+ bytes\)/)
   })
 
   it('every HTML path goes through the one extractor', () => {

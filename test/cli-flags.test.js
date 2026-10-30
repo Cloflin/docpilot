@@ -58,6 +58,15 @@ describe('the flag table', () => {
  * the four spent money doing it.
  */
 describe('flagErrors', () => {
+  // Plan 02-12, engine-spec 043 D-22: the selector flags are declared for both
+  // commands that read built HTML; a typo in one is refused, not dropped.
+  it('accepts --html-select and --html-exclude on index and import, and refuses a misspelt one', () => {
+    expect(flagErrors('index', ['--html-dir=html', '--html-select=main', '--html-exclude=.toc'])).toEqual([])
+    expect(flagErrors('import', ['https://acme.test/x', '--html-select=main', '--html-exclude=.toc'])).toEqual([])
+    expect(flagErrors('index', ['--html-dir=html', '--html-exclud=.toc'])[0]).toMatch(/unknown flag --html-exclud=\.toc/)
+    expect(flagErrors('import', ['https://acme.test/x', '--html-exclud=.toc'])[0]).toMatch(/unknown flag --html-exclud/)
+  })
+
   it('refuses a flag no command has, rather than dropping it', () => {
     expect(flagErrors('calibrate', ['--sweeponly'])[0]).toMatch(/unknown flag --sweeponly/)
     expect(flagErrors('eval', ['--limt=3'])[0]).toMatch(/unknown flag --limt=3/)

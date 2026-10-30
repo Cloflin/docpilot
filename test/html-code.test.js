@@ -5,6 +5,7 @@ import { parseHTML } from 'linkedom'
 
 import { pickMain, prune } from '../src/build/lib/html-extract.js'
 import { toMarkdown } from '../src/build/lib/html-to-md.js'
+import { fenceLanguage, LANG_ANCESTOR_DEPTH } from '../src/build/lib/html-code.js'
 import { extractHtml } from '../src/build/lib/extract-html.js'
 
 /**
@@ -70,6 +71,19 @@ describe('html code blocks — precision edge', () => {
 
   it('takes the first language token inside one class attribute', () => {
     expect(md('<pre><code class="hljs language-bash language-sh">x</code></pre>')).toBe('```bash\nx\n```')
+  })
+
+  it('reads data-language, and a class on the LANG_ANCESTOR_DEPTH-th ancestor but not one level further', () => {
+    expect(md('<pre data-language="Python"><code>x</code></pre>')).toBe('```python\nx\n```')
+    // `levels` wrappers between the page and the pre; the outermost carries the class.
+    const nested = (levels) => {
+      const open = Array.from({ length: levels }, (_, i) => `<div${i === 0 ? ' class="language-go"' : ''}>`).join('')
+      const html = `${open}<pre>x</pre>${'</div>'.repeat(levels)}`
+      const { document } = parseHTML(`<!doctype html><html><body>${html}</body></html>`)
+      return fenceLanguage(document.querySelector('pre'))
+    }
+    expect(nested(LANG_ANCESTOR_DEPTH)).toBe('go')
+    expect(nested(LANG_ANCESTOR_DEPTH + 1)).toBe('')
   })
 
   it('turns U+00A0 into a space and changes no other character', () => {
