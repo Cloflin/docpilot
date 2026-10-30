@@ -15,12 +15,20 @@ import { closesFence, openFence } from './normalise.js'
 /**
  * The inline code spans of `line` as `[start, end)` ranges. A span opens at a
  * backtick run and closes at the next run of the same length (CommonMark); a run
- * that never closes is literal text.
+ * that never closes is literal text. A backslash-escaped backtick is text and not
+ * an opener: the extractor writes a literal backtick in page text as `\``, and
+ * reading it as an opener would hide a real link between two of them. The closer
+ * scan stays literal, because a backslash inside a span is literal (WR-16,
+ * engine-spec 043).
  */
 function codeSpans(line: string): Array<[number, number]> {
   const spans: Array<[number, number]> = []
   let i = 0
   while (i < line.length) {
+    if (line[i] === '\\') {
+      i += 2
+      continue
+    }
     if (line[i] !== '`') {
       i++
       continue

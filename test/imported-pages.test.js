@@ -175,6 +175,20 @@ describe('imported pages — a dead link degrades to its text (D-10, F-08)', () 
     expect(links[0]).not.toContain('/guide/example')
   })
 
+  it('degrades a dead link between two escaped backticks, and warns once (WR-16)', async () => {
+    const c = ctx()
+    const { chunks } = await documentsToChunks(
+      [kbPage('/kb/one', 'Press \\`a [dead](/guide/dead) b\\` now, then `[kept](/guide/code)` stays.')],
+      c,
+    )
+    const text = textOf(chunks)
+    expect(text).toContain('a dead b')
+    expect(text).not.toContain('/guide/dead')
+    const links = c.said.warn.filter((m) => m.includes('not a page of this site'))
+    expect(links).toHaveLength(1)
+    expect(links[0]).toContain('/guide/dead')
+  })
+
   it('leaves a link in a fence inside a list item, a quote and an indented block verbatim (WR-03)', async () => {
     const c = ctx()
     const body = [

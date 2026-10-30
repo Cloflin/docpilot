@@ -840,6 +840,22 @@ describe('import — a published .md beats converting the HTML', () => {
     expect(bare).toEqual(['/guide'])
   })
 
+  it('does not read a backslash-escaped backtick as a code span, and still masks a real one (WR-16)', () => {
+    const base = 'https://acme.test/help/rate-limits.md'
+    // A real link between two escaped backticks is a link.
+    const escaped = absolutiseLinks('Use \\`a [x](/guide) b\\` now', base)
+    expect(escaped).toBe('Use \\`a [x](https://acme.test/guide) b\\` now')
+    const degraded = []
+    expect(absolutiseLinks('Use \\`a [x](/guide) b\\` now', null, (h) => degraded.push(h))).toBe('Use \\`a x b\\` now')
+    expect(degraded).toEqual(['/guide'])
+    // A real span still masks its contents, and a backslash inside it is literal.
+    expect(absolutiseLinks('Use `a [x](/guide) b` now', base)).toBe('Use `a [x](/guide) b` now')
+    // (`a\` closes at the next backtick, so the link after it is prose.)
+    expect(absolutiseLinks('Use `a\\` [x](/guide) b` now', base)).toBe('Use `a\\` [x](https://acme.test/guide) b` now')
+    // An escaped backtick before a real span leaves the span a span.
+    expect(absolutiseLinks('Use \\` and `[x](/guide)` now', base)).toBe('Use \\` and `[x](/guide)` now')
+  })
+
   it('builds the page from the markdown, converting nothing', async () => {
     const built = await buildPage({
       html: head('<link rel="alternate" type="text/markdown" href="/x.md">'),
