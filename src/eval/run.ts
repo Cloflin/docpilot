@@ -65,6 +65,7 @@ import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 import { chainTexts, resolveChain } from './conversation.js'
 import { rankRecords } from './ranking.js'
 import {
+  BASELINE_SCHEMA,
   goldenShaOf,
   originOnly,
   ollamaHost,
@@ -2129,13 +2130,28 @@ async function settleBaseline(runs) {
   } catch (e) {
     die(`cannot read the baseline ${rel} — ${e.message}\n        write it with --baseline=${BASELINE} --update-baseline`)
   }
+  // A file that is not a baseline of this shape cannot be compared: a bundle
+  // report passed by mistake, `{}`, or a shape from another schema version. Say
+  // which, instead of throwing from `Object.keys(undefined)` further down.
+  if (baseline?.meta?.schema !== BASELINE_SCHEMA || typeof baseline.records !== 'object' || baseline.records === null) {
+    die(`${rel} is not a schema-${BASELINE_SCHEMA} baseline\n        regenerate it with --baseline=${BASELINE} --update-baseline`)
+  }
   const narrowed = RUN_LEVEL !== DEFAULT_RUN_LEVEL || Boolean(LIMIT) || Boolean(SPLIT)
   const ranIds = new Set(records.map((r) => r.id))
   const total = Object.keys(baseline.records ?? {}).length
   console.log(
     `\nbaseline ${rel} — ${narrowed ? `compared ${Object.keys(baseline.records).filter((id) => ranIds.has(id)).length} of ${total} baseline records` : `${total} records`}`,
   )
-  const now = { indexHash: manifest.hash, goldenSha: goldenSha(), lexical: LEXICAL, embedModel: manifest.embedModel }
+  // `runtime` and `gateOnly` too: a server run read against a browser baseline
+  // (or a gate-only one against a full one) reports every record as moved.
+  const now = {
+    indexHash: manifest.hash,
+    goldenSha: goldenSha(),
+    lexical: LEXICAL,
+    embedModel: manifest.embedModel,
+    runtime: run.server ? 'server' : 'browser',
+    gateOnly: GATE_ONLY,
+  }
   for (const [key, value] of Object.entries(now)) {
     if (baseline.meta?.[key] !== value) {
       console.log(`  warning: the baseline was taken with ${key} ${baseline.meta?.[key] ?? 'unknown'}, this run has ${value}`)
