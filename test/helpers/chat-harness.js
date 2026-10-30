@@ -399,7 +399,23 @@ export function createHarness({ runtime = 'browser', mode = 'hybrid', config = {
   }
   const clearState = () => {
     session.stop()
-    Object.assign(state, { index: null, degraded: false, busy: false, turns: [], conversationId: null, status: null, ready: false })
+    // The session is a module singleton, so everything a turn or a restore can
+    // leave behind is put back here — `history` included, because it is only
+    // rewritten by `refreshHistory` and a stale list would outlive the test.
+    Object.assign(state, {
+      index: null,
+      degraded: false,
+      busy: false,
+      turns: [],
+      conversationId: null,
+      conversationStale: false,
+      history: [],
+      status: null,
+      ready: false,
+      unread: false,
+      dockPanel: null,
+      pendingScope: null,
+    })
     state.scope = { kind: 'all', paths: [], label: 'All docs' }
   }
 
