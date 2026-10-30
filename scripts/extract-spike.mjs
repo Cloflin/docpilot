@@ -146,7 +146,7 @@ const collapse = (text) => String(text).replace(/\s+/g, ' ').trim()
 const round = (x) => Math.round(x * 1e4) / 1e4
 
 /** Mean of the two middle values for an even count. */
-function median(values) {
+export function median(values) {
   if (!values.length) return 0
   const s = [...values].sort((x, y) => x - y)
   const mid = s.length >> 1
@@ -383,7 +383,7 @@ async function score(pages, arms, readText) {
   return results
 }
 
-function summarise(results, armName) {
+export function summarise(results, armName) {
   const rows = results.filter((r) => r.arms[armName])
   const f1s = rows.map((r) => r.arms[armName].f1)
   const base = rows.map((r) => r.arms.rules.f1)
@@ -413,7 +413,7 @@ function summarise(results, armName) {
 }
 
 /** D-02, D-19: switch only when a differing page scores higher under parse5. */
-function parserDecision(results) {
+export function parserDecision(results) {
   const differing = results.filter((r) => (r.parserDiff || 0) > 0)
   const better = differing.filter((r) => {
     const a = r.arms.rules
@@ -435,7 +435,7 @@ function parserDecision(results) {
 }
 
 /** D-08: a candidate wins only by the margin, with no loss on code or noise. */
-function fallbackDecision(results, names) {
+export function fallbackDecision(results, names) {
   const measurable = results.length >= MIN_SPIKE_PAGES
   const rules = summarise(results, 'rules')
   const out = {}
@@ -570,7 +570,12 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+// Run only as a script. A test imports `median`, `summarise` and the two
+// decision functions to hold the adoption rule of engine-spec 043, and `main()`
+// reads a built docs site and exits 2 without one (IN-11).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
+}
