@@ -32,7 +32,6 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import crypto from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
 import { assembleIndex } from '../theme/docpilot/store.js'
@@ -65,6 +64,17 @@ import { filterByLevel, parseLevelArg, splitOf, DEFAULT_RUN_LEVEL } from './leve
 import { chainDepth, isFollowUp, priorQuestions } from './record.js'
 import { chainTexts, resolveChain } from './conversation.js'
 import { rankRecords } from './ranking.js'
+import {
+  goldenShaOf,
+  originOnly,
+  ollamaHost,
+  recordOf,
+  captureBaseline,
+  replayBaseline,
+  diffBaseline,
+  encodeVector,
+} from './baseline.js'
+import { hasSecret } from '../theme/docpilot/credentials.js'
 import { keyForBase, nodeEmbedTarget } from '../config.js'
 import { evalTurnPolicy, serverRows } from './server-eval.js'
 import { adversarialSummary, asRecord, loadProbes } from './adversarial.js'
@@ -254,6 +264,41 @@ if (GATE_ONLY && RUNTIME === 'server') {
   )
   process.exit(USAGE)
 }
+
+/**
+ * A FROZEN RANKING BASELINE — D-03, src/eval/baseline.ts.
+ *
+ * `--baseline=<file>` compares this run's ranking with the file and exits 1 on
+ * any moved record; with `--update-baseline` it writes the file instead. Both
+ * are read here and registered in `COMMANDS` by the plan that also writes their
+ * rows in docs/reference/cli.md (test/cli-flags.test.js wants the three in one
+ * commit), so until then `arg()` and `has()` answer "absent" and a run is what
+ * it always was.
+ *
+ * A baseline freezes the WHOLE set, on ONE model, on the golden questions: a
+ * file cut from a head-slice would label 10 records as the set, and the next
+ * full run would report 86 of them "added". The checks are here, at module
+ * scope beside the other flag checks, and exit `2` like them.
+ */
+const BASELINE = arg('baseline') ?? null
+const UPDATE_BASELINE = has('update-baseline')
+if (UPDATE_BASELINE && !BASELINE) {
+  printError('--update-baseline writes the file --baseline= names, and none was given')
+  process.exit(USAGE)
+}
+if (UPDATE_BASELINE && (RUN_LEVEL !== DEFAULT_RUN_LEVEL || LIMIT || SPLIT || MODELS.length > 1)) {
+  printError(
+    'a baseline freezes the whole set — --update-baseline takes no --level, --limit,\n' +
+      '        --split or more than one model',
+  )
+  process.exit(USAGE)
+}
+if (BASELINE && SET !== 'golden') {
+  // The file names its golden set by sha; a baseline of the security probes
+  // would carry the sha of a file it was not measured on.
+  printError('--baseline= is defined over the golden set — drop --set=')
+  process.exit(USAGE)
+}
 /**
  * The flag is one of two routes into the same measurement; a vectorless index is
  * the other, and `main()` raises this once the manifest has been read.
@@ -339,7 +384,7 @@ const PACKAGE_VERSION = (() => {
  */
 const goldenSha = () => {
   try {
-    return crypto.createHash('sha1').update(fs.readFileSync(GOLDEN)).digest('hex').slice(0, 16)
+    return goldenShaOf(fs.readFileSync(GOLDEN))
   } catch {
     return null
   }
@@ -427,14 +472,7 @@ export function abKnobs() {
  * API family, not the host that answered it. The ORIGIN is the fact worth
  * keeping; a full URL can carry a key in its query and this file is committed.
  */
-const originOf = (url) => {
-  if (!url) return null
-  try {
-    return new URL(url).origin
-  } catch {
-    return null
-  }
-}
+const originOf = originOnly
 
 // Same three adapters the panel uses, so an eval run measures the transport the
 // readers will actually get. Keys come from the environment; nothing is stored.
@@ -527,6 +565,33 @@ function endpointHelp(what, url, provider, e) {
  * which lives there and is worded better than anything a batcher could say.
  */
 const PREFETCHED = new Map<string, Float64Array>()
+
+/**
+ * Under `--baseline=`: every text the ranking ASKED for, with the vector it
+ * got — and not what was prefetched. `chainTexts` over-enumerates (both composed
+ * variants of every hop), so freezing the prefetch would commit a vector per text
+ * nothing reads. Held in memory and written into the baseline file alone: the
+ * embed cache (docpilot/embed-cache/) is never touched, because its `commit()`
+ * is self-evicting and a query-side write into the chunk namespace would evict
+ * the chunk vectors.
+ */
+const ASKED = new Map<string, Float64Array>()
+
+/**
+ * What `main()` ranked, kept for `settleBaseline` — which runs after every report
+ * is written and the hard gates are known. `probes` is null for a server run,
+ * whose rows are the whole evidence; `rows` is null when no model ran or the
+ * model was resumed from a saved report.
+ */
+let BASELINE_RUN: null | {
+  index: any
+  guard: any
+  records: any[]
+  probes: any[] | null
+  rows: any[] | null
+  summary: Record<string, any> | null
+  server: boolean
+} = null
 
 async function embed(text, model) {
   // The batch and the per-text path produce the same vector to the bit —
@@ -630,7 +695,9 @@ async function probeRecords(index, guard, records) {
     records,
     embed: async (text) => {
       try {
-        return await embed(text, index.manifest.embedModel)
+        const vec = await embed(text, index.manifest.embedModel)
+        if (BASELINE) ASKED.set(text, vec as Float64Array)
+        return vec
       } catch (e) {
         die(endpointHelp('embed', EMBED_BASE, EMBED_PROVIDER, e))
       }
@@ -1701,6 +1768,7 @@ async function runServerRuntime({ index, guard, records, securityProbes, vectorl
     const s: Record<string, any> = summarise(rows)
     if (securityProbes) s.adversarial = adversarialSummary(rows, securityProbes)
     printSummary(s)
+    if (BASELINE) BASELINE_RUN ??= { index, guard, records, probes: null, rows, summary: s, server: true }
     const meta = {
       model: label,
       fallback: null,
@@ -1812,6 +1880,7 @@ async function main() {
 
   console.log('  retrieval + gate (shared across the matrix)…')
   const probes = await probeRecords(index, guard, records)
+  if (BASELINE) BASELINE_RUN = { index, guard, records, probes, rows: null, summary: null, server: false }
 
   const runs = []
   for (const model of GATE_ONLY ? ['(gate only)'] : MODELS) {
@@ -1869,6 +1938,8 @@ async function main() {
     const s: Record<string, any> = summarise(rows)
     if (securityProbes) s.adversarial = adversarialSummary(rows, securityProbes)
     printSummary(s)
+    // The first model of the matrix; `--update-baseline` allows only one.
+    if (BASELINE_RUN && !BASELINE_RUN.rows) Object.assign(BASELINE_RUN, { rows, summary: s })
 
     const meta = {
       model,
@@ -1931,6 +2002,149 @@ async function main() {
 }
 
 /**
+ * `--baseline=<file>`: write the frozen ranking (`--update-baseline`) or compare
+ * this run with it. Runs after every report is written and BEFORE the hard-gate
+ * exit below — a breached gate must still exit 1, but only after the baseline is
+ * on disk, and the file records `hardGatesFailed` so a baseline taken on a model
+ * that breaches a gate says so.
+ *
+ * Writing: for a browser run with an embedder, the vectors the ranking asked for
+ * are rounded to int8, the ranking is REPLAYED from the rounded vectors, and the
+ * replayed records are what is stored — replay from the file is then exact by
+ * construction. The records whose live-float ranking differs from the replayed
+ * one are listed in `meta.vectors.liveDivergence`, so the rounding is visible
+ * and never a failure. Comparing: a narrowed run (`--level`, `--limit`, `--split`)
+ * compares only the baseline records it ran and never reports the rest missing.
+ *
+ * @returns the number of moved records (compare mode), else 0
+ */
+async function settleBaseline(runs) {
+  const run = BASELINE_RUN
+  if (!BASELINE || !run) return 0
+  const file = path.resolve(ROOT, BASELINE)
+  const rel = path.relative(ROOT, file)
+  const rowOf = new Map((run.rows ?? []).map((r) => [r.id, r]))
+  // A model or a server decided an outcome; a gate-only pass decided none.
+  const outcomeOf = (id) => (GATE_ONLY && !run.server ? null : (rowOf.get(id) ?? null))
+  const current = run.probes
+    ? run.probes.map((p) => recordOf(p, outcomeOf(p.rec.id)))
+    : (run.rows ?? []).map((r) => recordOf(null, r))
+  const manifest = run.index.manifest
+
+  // THE RANKING THAT IS STORED AND COMPARED IS THE ONE THE ROUNDED VECTORS GIVE.
+  // The file keeps int8 vectors, so the ranking a baseline holds is the replay of
+  // those; comparing a run's live-float ranking with it would report a regression
+  // wherever the rounding alone moves a tie — measured on this corpus, about half
+  // the records. So both modes round the vectors the run asked for and replay
+  // them, and `liveDivergence` says which records the rounding touched.
+  let records = current
+  let vectors: Map<string, Float64Array> | null = null
+  let liveDivergence: string[] = []
+  if (run.probes && !LEXICAL && ASKED.size) {
+    const frozen = { vectors: Object.fromEntries([...ASKED].map(([t, v]) => [t, encodeVector(v)])) }
+    const replayed = await replayBaseline({
+      index: run.index,
+      guard: run.guard,
+      records: run.records,
+      baseline: frozen,
+    })
+    records = replayed.map((p) => recordOf(p, outcomeOf(p.rec.id)))
+    const liveById = Object.fromEntries(current.map(({ id, ...r }) => [id, r]))
+    liveDivergence = [...new Set(diffBaseline({ records: liveById }, records).map((d) => d.id))]
+    vectors = ASKED
+  }
+
+  if (UPDATE_BASELINE) {
+    // `chatBase` and `embedBase` are dropped: they name the configured hosts whether
+    // or not this run used them. `host` below names the ones it did.
+    const { ranAt, chatBase, embedBase, ...prov } = provenance()
+    const isLocal = (o) => o !== null && ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(o).hostname)
+    const localBase = [originOnly(EMBED_BASE), originOnly(BASE)].find(isLocal) ?? null
+    const model = GATE_ONLY ? null : (runs[0]?.meta?.model ?? MODELS[0])
+    const failed = runs.filter((r) => hardGatesFailed(r.summary)).map((r) => r.meta.model)
+    const meta = {
+      ...prov,
+      capturedAt: ranAt,
+      indexDir: path.relative(ROOT, RAG) || '.',
+      indexHash: manifest.hash,
+      embedModel: manifest.embedModel,
+      dims: manifest.dims,
+      // An int8 build writes no `quant` key; the store reads absence as int8.
+      quant: manifest.quant ?? 'int8',
+      chunkCount: manifest.chunkCount,
+      guard: run.guard,
+      levers: leverFingerprint(manifest.tuning),
+      runtime: run.server ? 'server' : 'browser',
+      gateOnly: GATE_ONLY,
+      lexical: LEXICAL,
+      model,
+      // Origins only: the base URLs can carry a key, and this file is committed.
+      host: {
+        chat: GATE_ONLY ? null : run.server ? (ENDPOINT ? originOnly(ENDPOINT) : originOnly(docPilot.chat?.baseURL ?? null)) : originOnly(BASE),
+        embed: LEXICAL ? null : originOnly(EMBED_BASE),
+        ollama: localBase
+          ? await ollamaHost(localBase, [...new Set([...(model ? [model] : []), manifest.embedModel])])
+          : null,
+      },
+      hardGatesFailed: failed,
+      vectors: vectors ? { liveDivergence } : undefined,
+    }
+    // The origins above are the only environment-derived text in the meta; if a
+    // credential-shaped string got in anyway, the file is not written.
+    if (hasSecret(JSON.stringify(meta))) die('the baseline meta carries a credential-shaped string — not written')
+    const baseline = captureBaseline({ meta, records, vectors, summary: GATE_ONLY ? null : run.summary })
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, `${JSON.stringify(baseline, null, 2)}\n`)
+    console.log(
+      `\n[docpilot] baseline written: ${rel} (${records.length} records, ${Object.keys(baseline.vectors ?? {}).length} vectors)`,
+    )
+    if (localBase && !meta.host.ollama) {
+      console.log(`  warning: the Ollama at ${localBase} did not answer — meta.host.ollama is null, so the baseline names no version or digests`)
+    }
+    if (liveDivergence.length) {
+      console.log(
+        `  ${liveDivergence.length} record(s) rank differently from the live floats once the vectors are rounded to int8 — meta.vectors.liveDivergence`,
+      )
+    }
+    return 0
+  }
+
+  let baseline
+  try {
+    baseline = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (e) {
+    die(`cannot read the baseline ${rel} — ${e.message}\n        write it with --baseline=${BASELINE} --update-baseline`)
+  }
+  const narrowed = RUN_LEVEL !== DEFAULT_RUN_LEVEL || Boolean(LIMIT) || Boolean(SPLIT)
+  const ranIds = new Set(records.map((r) => r.id))
+  const total = Object.keys(baseline.records ?? {}).length
+  console.log(
+    `\nbaseline ${rel} — ${narrowed ? `compared ${Object.keys(baseline.records).filter((id) => ranIds.has(id)).length} of ${total} baseline records` : `${total} records`}`,
+  )
+  const now = { indexHash: manifest.hash, goldenSha: goldenSha(), lexical: LEXICAL, embedModel: manifest.embedModel }
+  for (const [key, value] of Object.entries(now)) {
+    if (baseline.meta?.[key] !== value) {
+      console.log(`  warning: the baseline was taken with ${key} ${baseline.meta?.[key] ?? 'unknown'}, this run has ${value}`)
+    }
+  }
+  const diffs = diffBaseline(baseline, records, { partial: narrowed })
+  for (const d of diffs) {
+    console.log(`  ${d.id}  ${d.field}: ${JSON.stringify(d.before)} → ${JSON.stringify(d.after)}`)
+  }
+  if (baseline.summary && run.summary) {
+    for (const [key, before] of Object.entries(baseline.summary)) {
+      const after = run.summary[key]
+      if (typeof before === 'number' && typeof after === 'number' && Math.abs(after - before) > 1e-9) {
+        console.log(`  Δ ${key}: ${before} → ${after}`)
+      }
+    }
+  }
+  console.log(diffs.length ? `  ${diffs.length} difference(s) from the baseline` : '  ranking unchanged from the baseline')
+  if (diffs.length) process.exitCode = FAILED
+  return diffs.length
+}
+
+/**
  * A breached hard gate exits 1 AFTER every model has run and every report has
  * been written.
  *
@@ -1948,7 +2162,8 @@ async function main() {
 // the test process.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main()
-    .then((runs) => {
+    .then(async (runs) => {
+      await settleBaseline(runs)
       const failed = runs.filter((r) => hardGatesFailed(r.summary)).map((r) => r.meta.model)
       if (!failed.length) return
       printError(
