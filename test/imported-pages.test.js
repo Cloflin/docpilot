@@ -144,6 +144,61 @@ describe('imported pages — a dead link degrades to its text (D-10, F-08)', () 
     expect(links[0]).toContain('/guide/real')
   })
 
+  it('degrades a dead link whose label is code, and warns (WR-03)', async () => {
+    const c = ctx()
+    const { chunks } = await documentsToChunks(
+      [kbPage('/kb/one', 'See [`handler`](/guide/dead) and [plain](/guide/other) now.')],
+      c,
+    )
+    const text = textOf(chunks)
+    expect(text).toContain('See `handler` and plain now.')
+    expect(text).not.toContain('/guide/dead')
+    const links = c.said.warn.filter((m) => m.includes('not a page of this site'))
+    expect(links).toHaveLength(2)
+    expect(links[0]).toContain('/guide/dead')
+  })
+
+  it('leaves a link in a fence inside a list item, a quote and an indented block verbatim (WR-03)', async () => {
+    const c = ctx()
+    const body = [
+      '',
+      '1. Install it:',
+      '',
+      '   ```js',
+      '   call([listed](/guide/listed))',
+      '   ```',
+      '',
+      '> ```md',
+      '> [quoted](/guide/quoted)',
+      '> ```',
+      '',
+      'An ordinary paragraph, then a code block:',
+      '',
+      '    [indented](/guide/indented)',
+      '',
+      'After them, [real](/guide/real) is a link.',
+    ].join('\n')
+    const { chunks } = await documentsToChunks([kbPage('/kb/one', body)], c)
+    const text = textOf(chunks)
+    expect(text).toContain('[listed](/guide/listed)')
+    // The chunker flattens link syntax outside a fence to `text (href)` for every page;
+    // the href surviving is what a degrade would have removed.
+    expect(text).toContain('quoted (/guide/quoted)')
+    expect(text).toContain('indented (/guide/indented)')
+    expect(text).toContain('After them, real is a link.')
+    const links = c.said.warn.filter((m) => m.includes('not a page of this site'))
+    expect(links).toHaveLength(1)
+    expect(links[0]).toContain('/guide/real')
+  })
+
+  it('still reads a paragraph indented under a list item as prose (WR-03)', async () => {
+    const c = ctx()
+    const body = ['', '- A step.', '', '    Continue with [dead](/guide/dead).'].join('\n')
+    const { chunks } = await documentsToChunks([kbPage('/kb/one', body)], c)
+    expect(textOf(chunks)).toContain('Continue with dead.')
+    expect(c.said.warn.filter((m) => m.includes('not a page of this site'))).toHaveLength(1)
+  })
+
   it('keeps a link to a route, an OpenAPI route, another imported page, the home page and an asset', async () => {
     const c = ctx({ specRoutes: new Set(['/reference/mini']) })
     const body =

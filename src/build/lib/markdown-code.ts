@@ -52,17 +52,6 @@ function codeSpans(line: string): Array<[number, number]> {
   return spans
 }
 
-/** One line of prose with its inline code spans copied unchanged. */
-export function mapProse(line: string, fn: (prose: string) => string): string {
-  let out = ''
-  let from = 0
-  for (const [start, end] of codeSpans(line)) {
-    out += fn(line.slice(from, start)) + line.slice(start, end)
-    from = end
-  }
-  return out + fn(line.slice(from))
-}
-
 /**
  * `pattern` replaced in `text`, matched ACROSS code spans: a link whose label is
  * code, ``[`code`](/a)``, is still a link. Each span is masked with a same-length
@@ -87,20 +76,45 @@ function replaceAcrossCode(text: string, pattern: RegExp, fn: (...groups: string
   return out + text.slice(from)
 }
 
+/** A fence opener may sit in a list item, ``- ```js``, or after a quote marker, ``> ```js``. */
+const LIST_MARKER = /^\s*(?:[-*+]|\d{1,9}[.)])\s+/
+const QUOTE_MARKER = /^\s*(?:>\s?)+/
+/** Four spaces or a tab: an indented code block, when nothing opens a list above it. */
+const INDENTED = /^(?: {4}|\t)/
+/** A list item starts at an indent below four, with a marker. */
+const LIST_ITEM = /^ {0,3}(?:[-*+]|\d{1,9}[.)])\s/
+
+/** The fence a line opens, looking through a quote marker and a list marker. */
+function openFenceIn(line: string): ReturnType<typeof openFence> {
+  const quoted = line.replace(QUOTE_MARKER, '')
+  return openFence(quoted) || openFence(quoted.replace(LIST_MARKER, ''))
+}
+
 /**
- * The document with `fn` applied to each prose paragraph; fenced code is copied
- * as written. `fn` owns the inline code inside a paragraph.
+ * The document with `fn` applied to each prose paragraph; fenced code and
+ * indented code blocks are copied as written. `fn` owns the inline code inside a
+ * paragraph.
  *
  * `fn` sees a whole paragraph (consecutive prose lines joined by `\n`), not one
  * line, because a link label may wrap across lines and `fn` must still match it.
  * A blank line or a fence ends the paragraph, so a stray backtick in one cannot
  * pair with one in the next. An unclosed fence runs to the end, as in
  * `normalise.ts`.
+ *
+ * A fence inside a list item or a block quote is code (WR-03): the sample shown
+ * under a step is the commonest place for one. An indented code block starts at
+ * a line indented four spaces after a blank line, unless a list item opened
+ * above it, where that indent is a continuation paragraph and still prose. The
+ * list rule errs towards prose: a link in a sample that sits in a list is then
+ * read as a link, which is the 2.x behaviour for every sample.
  */
 function mapProseBlocks(md: string, fn: (prose: string) => string): string {
   const out: string[] = []
   let para: string[] = []
   let fence: ReturnType<typeof openFence> = null
+  let indented = false
+  let inList = false
+  let prevBlank = true
   const flush = () => {
     if (para.length) out.push(fn(para.join('\n')))
     para = []
@@ -108,24 +122,44 @@ function mapProseBlocks(md: string, fn: (prose: string) => string): string {
   for (const raw of md.split('\n')) {
     // A CR left on the line would stop the fence pattern matching its end.
     const line = raw.replace(/\r$/, '')
+    const blank = !line.trim()
     if (fence) {
-      if (closesFence(line, fence)) fence = null
+      if (closesFence(line.replace(QUOTE_MARKER, ''), fence)) fence = null
       out.push(raw)
       continue
     }
-    const opens = openFence(line)
+    if (indented) {
+      if (blank || INDENTED.test(line)) {
+        out.push(raw)
+        prevBlank = blank
+        continue
+      }
+      indented = false
+    }
+    const opens = openFenceIn(line)
     if (opens) {
       flush()
       fence = opens
       out.push(raw)
       continue
     }
-    if (!line.trim()) {
+    if (blank) {
       flush()
       out.push(raw)
+      prevBlank = true
       continue
     }
+    if (prevBlank && !inList && INDENTED.test(line)) {
+      flush()
+      indented = true
+      out.push(raw)
+      prevBlank = false
+      continue
+    }
+    if (LIST_ITEM.test(line)) inList = true
+    else if (prevBlank && !/^\s/.test(line)) inList = false
     para.push(raw)
+    prevBlank = false
   }
   flush()
   return out.join('\n')

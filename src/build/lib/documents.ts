@@ -21,8 +21,7 @@
 import path from 'node:path'
 
 import { chunkMarkdown } from './chunker.js'
-import { closesFence, openFence } from './normalise.js'
-import { mapProse } from './markdown-code.js'
+import { replaceInProse } from './markdown-code.js'
 import { EXTRACTOR_VERSION } from './extract-html.js'
 import { chunkOpenapi } from './openapi-chunker.js'
 import { frontmatterValue, kindFor } from './readers.js'
@@ -114,35 +113,12 @@ const ROOT_LINK = /(?<!!)\[([^\]]*)\]\((\/[^)\s#]*)(#[^)\s]*)?(\s+(?:"[^"]*"|'[^
 function degradeDeadLinks(src: string, known: (route: string) => boolean, onDead: (href: string) => void): string {
   const front = /^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(src)
   const head = front ? front[0] : ''
-  let fence: ReturnType<typeof openFence> = null
-  const body = src
-    .slice(head.length)
-    .split('\n')
-    .map((raw) => {
-      // A CR left on the line would stop the fence pattern matching its end.
-      const line = raw.replace(/\r$/, '')
-      const tail = raw.slice(line.length)
-      if (fence) {
-        if (closesFence(line, fence)) fence = null
-        return raw
-      }
-      const opens = openFence(line)
-      if (opens) {
-        fence = opens
-        return raw
-      }
-      return (
-        mapProse(line, (prose) =>
-          prose.replace(ROOT_LINK, (whole, text, href) => {
-            const route = href.replace(/\/$/, '') || '/'
-            if (route === '/' || ASSET_PATH.test(route) || known(route)) return whole
-            onDead(href)
-            return text
-          }),
-        ) + tail
-      )
-    })
-    .join('\n')
+  const body = replaceInProse(src.slice(head.length), ROOT_LINK, (whole, text, href) => {
+    const route = href.replace(/\/$/, '') || '/'
+    if (route === '/' || ASSET_PATH.test(route) || known(route)) return whole
+    onDead(href)
+    return text
+  })
   return head + body
 }
 
