@@ -572,7 +572,7 @@ frozenBaselineSuite({
  */
 const PRIVATE_HOST = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]|10\.[\d.]+|192\.168\.[\d.]+|172\.(1[6-9]|2\d|3[01])\.[\d.]+)(:\d+)?$/
 
-function answerBaselineSuite({ title, baselineFile, runtime }) {
+function answerBaselineSuite({ title, baselineFile, runtime, vectors }) {
   const rel = `docpilot/baselines/${baselineFile}`
 
   describe(title, () => {
@@ -647,6 +647,12 @@ function answerBaselineSuite({ title, baselineFile, runtime }) {
       expect(host.ollama.models[manifest.embedModel]).toMatch(/^[0-9a-f]{12}$/)
     })
 
+    // The server embeds inside its own turn, so a server run has no query vectors to freeze.
+    it(vectors ? 'freezes the int8 query vectors of the browser run' : 'carries no vectors', () => {
+      if (vectors) expect(Object.keys(baseline.vectors).length).toBe(baseline.meta.vectors.count)
+      else expect(baseline.vectors).toBeUndefined()
+    })
+
     it('carries no credential-shaped string', () => {
       expect(hasSecret(baselineText)).toBe(false)
     })
@@ -657,4 +663,12 @@ answerBaselineSuite({
   title: 'the 2.1.1 answer baseline — rag-local, browser',
   baselineFile: '2.1.1.rag-local.answers.json',
   runtime: 'browser',
+  vectors: true,
+})
+
+answerBaselineSuite({
+  title: 'the 2.1.1 server baseline — rag-local',
+  baselineFile: '2.1.1.rag-local.server.json',
+  runtime: 'server',
+  vectors: false,
 })
