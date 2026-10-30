@@ -19,9 +19,10 @@
  * been written and the origin forgotten — is not possible.
  */
 
-import { textOf, tooltips } from './html-extract.js'
+import { textOf } from './html-extract.js'
 import { codeBlock, isCodeBlock } from './html-code.js'
 import { createLinkResolver } from './html-links.js'
+import { tableBlock } from './html-table.js'
 import { renderBlocks } from './ir.js'
 
 /** Block elements that end a paragraph run. Everything else is inline. */
@@ -112,36 +113,6 @@ function inline(node, ctx) {
     default:
       return kids()
   }
-}
-
-/** One table row's cells, already inline-serialised and pipe-safe. */
-function rowCells(tr, ctx) {
-  return [...tr.children]
-    .filter((c) => /^(td|th)$/i.test(c.tagName || ''))
-    .map((c) => inline(c, ctx).replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim())
-}
-
-/**
- * A GFM table, or null when the element is a layout table rather than data.
- *
- * The distinction is not cosmetic: a one-column "table" is a list, and marketing
- * pages use tables for columns of unrelated blocks. Emitting those as tables
- * produces chunks whose every line is a pipe, which retrieves for nothing.
- */
-function table(el, ctx) {
-  const rows = [...el.querySelectorAll('tr')].map((tr) => rowCells(tr, ctx)).filter((r) => r.length)
-  if (rows.length < 2) return null
-  const width = Math.max(...rows.map((r) => r.length))
-  if (width < 2) return null
-
-  const pad = (r) => [...r, ...Array(width - r.length).fill('')]
-  const head = pad(rows[0])
-  const body = rows.slice(1).map(pad)
-  return [
-    `| ${head.join(' | ')} |`,
-    `| ${Array(width).fill('---').join(' | ')} |`,
-    ...body.map((r) => `| ${r.join(' | ')} |`),
-  ].join('\n')
 }
 
 /** A `<ul>`/`<ol>`, nested lists included, at the given indent. */
@@ -260,9 +231,9 @@ function* blocks(el, ctx) {
     }
 
     if (tag === 'table') {
-      const text = table(node, ctx)
-      if (text) {
-        yield { kind: 'table', text, notes: tooltips(node) }
+      const found = tableBlock(node, { inline: (n) => inline(n, ctx) })
+      if (found) {
+        yield found
         continue
       }
       // A layout table is a container, so walk into it rather than past it.
