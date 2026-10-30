@@ -1,0 +1,40 @@
+-> model POST /v1/chat/completions (tool probe, messages: 1, tools: search_docs, fetch_section, expand_section, list_pages, answer)
+-> endpoint GET /ai/turn/manifest
+turn[0].state: (none) -> retrieving
+busy: false -> true
+status: none -> searching
+conversation: none -> <conv:1>
+-> endpoint POST /ai/turn
+-> embed POST /v1/embeddings (inputs: 1)
+-> model POST /v1/chat/completions (messages: 4, tools: none)
+status: searching -> writing
+turn[0].streaming: false -> true
+turn[0].answer: 34 chars
+turn[0].sources: + a#one
+turn[0].citations: + a#one
+turn[0].state: retrieving -> complete
+turn[0].streaming: true -> false
+busy: true -> false
+status: writing -> none
+history: 0 conversation(s) -> 1 conversation(s)
+turn[1].state: (none) -> retrieving
+busy: false -> true
+status: none -> searching
+-> endpoint POST /ai/turn
+-> embed POST /v1/embeddings (inputs: 2)
+-> model POST /v1/chat/completions (messages: 6, tools: none)
+status: searching -> writing
+turn[1].streaming: false -> true
+turn[1].answer: 34 chars
+turn[1].sources: + a#one
+turn[1].citations: + a#one
+turn[1].state: retrieving -> complete
+turn[1].streaming: true -> false
+busy: true -> false
+status: writing -> none
+-- the follow-up, as the embedder and the model received it
+embedded: ["and how do I limit it?","How is the alpha token passed in a header?\nand how do I limit it?"]
+retrieval channel: composed
+retrieved on: "How is the alpha token passed in a header?\nand how do I limit it?"
+history sent [0]: "How is the alpha token passed in a header?" -> "The documentation covers this [1]."
+turn POST history: 1 turn(s), scope []

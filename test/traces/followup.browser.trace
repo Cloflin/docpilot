@@ -1,0 +1,37 @@
+turn[0].state: (none) -> retrieving
+busy: false -> true
+status: none -> searching
+-> embed POST /ai/v1/embeddings (inputs: 1)
+turn[0].state: retrieving -> thinking
+turn[0].streaming: false -> true
+-> model POST /ai/v1/chat/completions (messages: 3, tools: search_docs, fetch_section, expand_section, list_pages, answer)
+turn[0].answer: 34 chars
+status: searching -> writing
+turn[0].sources: + a#one
+turn[0].citations: + a#one
+turn[0].state: thinking -> complete
+turn[0].streaming: true -> false
+busy: true -> false
+status: writing -> none
+conversation: none -> <conv:1>
+history: 0 conversation(s) -> 1 conversation(s)
+turn[1].state: (none) -> retrieving
+busy: false -> true
+status: none -> searching
+-> embed POST /ai/v1/embeddings (inputs: 2)
+turn[1].state: retrieving -> thinking
+turn[1].streaming: false -> true
+-> model POST /ai/v1/chat/completions (messages: 5, tools: search_docs, fetch_section, expand_section, list_pages, answer)
+turn[1].answer: 34 chars
+status: searching -> writing
+turn[1].sources: + a#one
+turn[1].citations: + a#one
+turn[1].state: thinking -> complete
+turn[1].streaming: true -> false
+busy: true -> false
+status: writing -> none
+-- the follow-up, as the embedder and the model received it
+embedded: ["and how do I limit it?","How is the alpha token passed in a header?\nand how do I limit it?"]
+retrieval channel: composed
+retrieved on: "How is the alpha token passed in a header?\nand how do I limit it?"
+history sent [0]: "How is the alpha token passed in a header?" -> "The documentation covers this [1]."
