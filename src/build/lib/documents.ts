@@ -77,6 +77,23 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
     if (e instanceof NonPublicDocument) die(e.message)
     throw e
   }
+  // A DOCUMENT THAT NO PASS BELOW WOULD READ IS A BUILD FAILURE. The passes
+  // select by `source` and by body format, and a document that matches none of
+  // them used to vanish from the index without a word — the silent-loss class
+  // the old `/reference/` prefix skip was (readers.ts). A connector's documents
+  // (Phase 3) must not meet it.
+  const orphans = readDocs.filter((d) => {
+    if (d.source === 'openapi') return d.body.format !== 'openapi'
+    if (d.source === 'kb') return !ctx.externalPrefix || d.body.format !== 'markdown'
+    if (d.source === 'markdown' || d.source === 'html-dir') return d.body.format !== 'markdown'
+    return true
+  })
+  if (orphans.length) {
+    die(
+      `no stage reads: ${orphans.map((d) => `${d.id} (${d.source}, ${d.body.format})`).join(', ')}.\n` +
+        `        A kb document needs externalPrefix, and a body format must match its source.`,
+    )
+  }
   const docs: SourceDoc[] = readDocs.map((d) => ({ ...d, contentHash: contentHashOf(d) }))
   const of = (source: SourceDoc['source']) => docs.filter((d) => d.source === source)
   const markdownOf = (doc: SourceDoc) => (doc.body.format === 'markdown' ? doc.body.markdown : '')

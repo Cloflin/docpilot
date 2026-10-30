@@ -296,6 +296,19 @@ describe('source parity — documentsToChunks, in process', () => {
     await expect(documentsToChunks([kb], c)).rejects.toThrow(/has no frontmatter source/)
   })
 
+  it('stops, naming the document, when no stage would read it', async () => {
+    // a kb page without externalPrefix, a source nobody stages, a body of the wrong format
+    for (const bad of [
+      doc({ id: '/kb/a', source: 'kb' }),
+      doc({ id: '/x/conn', source: 'connector' }),
+      doc({ id: '/guide/yaml', body: { format: 'openapi', yaml: 'openapi: 3.0.0' } }),
+    ]) {
+      const c = ctx()
+      await expect(documentsToChunks([doc(), bad], c)).rejects.toThrow(/no stage reads/)
+      expect(c.said.die[0]).toContain(bad.id)
+    }
+  })
+
   it('reads an OpenAPI file as a document and hands it to the OpenAPI chunker', async () => {
     // A spec is a YAML file; the fixture's JSON is valid YAML, copied under that name.
     const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dp-spec-')), 'mini.yaml')
