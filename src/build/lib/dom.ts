@@ -43,8 +43,57 @@ export const PARSER_PINS = {
 } as const
 
 /**
+ * The elements that belong in `<head>` when a page leaves its own head out.
+ * `script` and `style` are not here: they can sit in a body too, and pruning
+ * handles them wherever they are.
+ */
+const HEAD_ELEMENTS = new Set(['TITLE', 'META', 'LINK', 'BASE'])
+
+/**
+ * Give a page with no `<html>` or `<body>` the shape every reader below assumes
+ * (engine-spec 043, WR-02).
+ *
+ * linkedom does not run HTML tree construction. For `<article>…</article>` the
+ * first element becomes the document element, and for `<html><head>…</head><div>`
+ * the `div` sits beside an empty body that `document.body` makes up on first
+ * read. Valid HTML5 may leave both tags out, and a DOM pasted through
+ * `--html -` or returned by a fetcher is often a fragment, so the extraction saw
+ * an empty page and reported it as "near-empty (0 characters)". Nothing here
+ * touches `document.body` before the repair: that getter writes a head and a
+ * body into whatever the document element is.
+ *
+ * A page that has a `<body>` is returned as it is. Head elements that stand
+ * outside a head (`title`, `meta`, `link`, `base`) move into one, so the
+ * metadata is still read; everything else moves into the body.
+ */
+function ensureBody(document: any): void {
+  if (!document.documentElement) return
+  let html = document.documentElement
+  if (html.tagName !== 'HTML') {
+    // A fragment: the top-level nodes are siblings of the document element.
+    const top = [...document.childNodes].filter((node: any) => node.nodeType !== 10) // not the doctype
+    html = document.createElement('html')
+    for (const node of top) html.append(node)
+    document.append(html)
+  }
+  const kids = [...html.childNodes]
+  if (kids.some((node: any) => node.tagName === 'BODY')) return
+  const head = kids.find((node: any) => node.tagName === 'HEAD') || document.createElement('head')
+  const body = document.createElement('body')
+  for (const node of kids) {
+    if (node === head) continue
+    if (HEAD_ELEMENTS.has(node.tagName)) head.append(node)
+    else body.append(node)
+  }
+  html.prepend(head)
+  html.append(body)
+}
+
+/**
  * Still async, so the callers that awaited the old lazy import need no change.
  */
 export async function parseDocument(html: string): Promise<any> {
-  return parseHTML(html).document
+  const { document } = parseHTML(html)
+  ensureBody(document)
+  return document
 }

@@ -199,6 +199,56 @@ describe('extractHtml — a bad page does not stop the directory', () => {
   })
 })
 
+describe('extractHtml — a page with no html or body tag (WR-02)', () => {
+  // The parser does not build the tree, so these pages used to read as empty.
+  const PROSE = 'Every request is counted against a window. '.repeat(6)
+
+  it('extracts an article fragment', async () => {
+    const out = await extractHtml(`<article><h2>Limits</h2><p>${PROSE}</p></article>`)
+    expect(out.ok).toBe(true)
+    expect(out.markdown).toContain('## Limits')
+    expect(out.markdown).toContain('Every request is counted')
+  })
+
+  it('extracts an html element with no body, and still reads its head', async () => {
+    const out = await extractHtml(
+      `<!doctype html><html lang="de"><head><title>Rate limits</title></head><div><p>${PROSE}</p></div></html>`,
+    )
+    expect(out.ok).toBe(true)
+    expect(out.title).toBe('Rate limits')
+    expect(out.lang).toBe('de')
+    expect(out.markdown).toContain('Every request is counted')
+  })
+
+  it('does not drop a short landmark that the body would not hold either', async () => {
+    const out = await extractHtml('<main><p>This short paragraph is the whole page, and it is long enough.</p></main>')
+    expect(out.ok).toBe(true)
+    expect(out.markdown).toContain('This short paragraph is the whole page')
+  })
+
+  it('reads title and meta that stand with the content and no head', async () => {
+    const out = await extractHtml(
+      `<title>Loose title</title><meta name="description" content="A loose description"><p>${PROSE}</p>`,
+    )
+    expect(out.ok).toBe(true)
+    expect(out.title).toBe('Loose title')
+    expect(out.description).toBe('A loose description')
+    expect(out.markdown).not.toContain('Loose title')
+  })
+
+  it('extracts a body element with no html element around it', async () => {
+    const out = await extractHtml(`<body><p>${PROSE}</p>`)
+    expect(out.ok).toBe(true)
+    expect(out.markdown).toContain('Every request is counted')
+  })
+
+  it('keeps every top-level block of a fragment', async () => {
+    const out = await extractHtml(`<p>${PROSE}</p><p>The second block names a window too and is kept.</p>`)
+    expect(out.ok).toBe(true)
+    expect(out.markdown).toContain('The second block names a window')
+  })
+})
+
 describe('extractHtml — links', () => {
   const withLink = (href) =>
     `<!doctype html><html><body><main>${SENTENCES}<p><a href="${href}">Install</a></p></main></body></html>`
