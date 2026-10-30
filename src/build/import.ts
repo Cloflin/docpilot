@@ -162,11 +162,32 @@ const OUTSIDE_ALLOWLIST_HINT =
 const lowerKeys = (headers) =>
   Object.fromEntries(Object.entries(headers || {}).map(([k, v]) => [String(k).toLowerCase(), String(v)]))
 
-/** Run `work` with an abort signal that fires after `timeoutMs`. */
+/**
+ * Run `work` with an abort signal that fires after `timeoutMs`, and give up on
+ * it when the signal fires.
+ *
+ * The signal alone is a request, not a deadline: a fetcher that ignores it, or a
+ * body read that never ends, would hold the import for ever. So the call is
+ * RACED against the signal, and the deadline holds whether or not `work`
+ * listens (engine-spec 043, D-27, T-02-12). The timer is an ordinary ref'd one,
+ * not `AbortSignal.timeout`'s unref'd one: with nothing else pending, an unref'd
+ * timer lets Node exit with the import unfinished and no message. It is cleared,
+ * with its listener, on every way out.
+ */
 async function withTimeout(url, timeoutMs, work) {
-  const signal = AbortSignal.timeout(timeoutMs)
+  const controller = new AbortController()
+  const { signal } = controller
+  let timer
+  let onAbort
+  const expired = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    timer = setTimeout(() => controller.abort(new DOMException('The operation timed out.', 'TimeoutError')), timeoutMs)
+  })
+  // `work` may lose the race and reject later; that rejection is already handled.
+  expired.catch(() => {})
   try {
-    return await work(signal)
+    return await Promise.race([work(signal), expired])
   } catch (e) {
     if (signal.aborted) {
       throw new Error(
@@ -176,6 +197,9 @@ async function withTimeout(url, timeoutMs, work) {
       )
     }
     throw e
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', onAbort)
   }
 }
 

@@ -118,6 +118,28 @@ describe('import — the fetcher hook', () => {
     )
   })
 
+  it('cuts off a fetcher that ignores its signal and never settles (WR-01, T-02-12)', async () => {
+    const started = Date.now()
+    await expect(readHtml({ url: SOURCE, allow, fetcher: () => new Promise(() => {}), timeoutMs: 100 })).rejects.toThrow(
+      /did not answer within 100 ms/,
+    )
+    // A bound well above the deadline and far below "for ever".
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  it('cuts off a built-in fetch that ignores its signal, and a call in time clears its timer', async () => {
+    const fetchImpl = () => new Promise(() => {})
+    await expect(readHtml({ url: SOURCE, allow, fetchImpl, timeoutMs: 100 })).rejects.toThrow(
+      /did not answer within 100 ms/,
+    )
+    // A call that finishes in time clears its own timer.
+    const cleared = vi.spyOn(globalThis, 'clearTimeout')
+    const out = await readHtml({ url: SOURCE, allow, fetcher: async () => PAGE, timeoutMs: 60_000 })
+    expect(out.html).toBe(PAGE)
+    expect(cleared).toHaveBeenCalled()
+    cleared.mockRestore()
+  })
+
   it('aborts the built-in fetch on the same timeout', async () => {
     const fetchImpl = (url, init) =>
       new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)))
