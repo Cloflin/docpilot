@@ -13564,13 +13564,14 @@ describe('the environment, and who wins', () => {
  * deployment's levers.
  *
  * `run.js` was given `tuning: index.manifest.tuning` when the levers learned to
- * travel; its two siblings were not. Read from the source because all three
+ * travel; its two siblings were not. Its retrieval is built in `ranking.js` since
+ * the stage-A extraction, so that is the file asserted here. Read from the source because all three
  * start a CLI on import — and asserted over EVERY `createRetrieval` call in each
  * file rather than a known line, since the defect was one call site of two in
  * calibrate.js and the next one added would be the same bug again.
  */
 describe('the eval commands — retrieval is built from the manifest levers', () => {
-  const FILES = ['run.js', 'calibrate.js', 'answer-bench.js']
+  const FILES = ['ranking.js', 'calibrate.js', 'answer-bench.js']
 
   it.each(FILES)('%s passes manifest.tuning at every createRetrieval', (file) => {
     const src = srcText(`src/eval/${file}`)
