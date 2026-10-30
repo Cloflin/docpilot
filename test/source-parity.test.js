@@ -23,8 +23,9 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { chunkOpenapi } from '../src/build/lib/openapi-chunker.js'
-import { readMarkdownDocs } from '../src/build/lib/readers.js'
+import { readMarkdownDocs, readOpenapiDocs, discoverOpenapiSpecs } from '../src/build/lib/readers.js'
 import { documentsToChunks } from '../src/build/lib/documents.js'
+import { NonPublicDocument } from '../src/build/lib/source-doc.js'
 
 const BIN = path.resolve('bin/docpilot.js')
 const FIXTURE = path.resolve('test/fixtures/source-parity')
@@ -124,7 +125,7 @@ describe('source parity — the OpenAPI chunk building, without the optional par
  */
 describe('source parity — the repository\'s own docs against both committed indexes', () => {
   const SHARD_SIZE = 250 // build-rag-index.ts writes 250 chunks to a shard
-  const read = () => {
+  const read = async () => {
     const docs = readMarkdownDocs({
       docsDir: path.resolve('docs'),
       root: process.cwd(),
@@ -150,24 +151,24 @@ describe('source parity — the repository\'s own docs against both committed in
     const rag = path.resolve('docs', 'public', dir)
     const manifest = JSON.parse(fs.readFileSync(path.join(rag, 'manifest.json'), 'utf8'))
 
-    it(`${dir}: yields the chunk ids, texts and order the index holds`, () => {
-      const { chunks } = read()
+    it(`${dir}: yields the chunk ids, texts and order the index holds`, async () => {
+      const { chunks } = await read()
       const held = manifest.shards.flatMap((f) => JSON.parse(fs.readFileSync(path.join(rag, f), 'utf8')))
       expect(chunks.map((c) => c.id)).toEqual(held.map((c) => c.id))
       expect(chunks.map((c) => c.text)).toEqual(held.map((c) => c.text))
       expect(chunks).toHaveLength(manifest.chunkCount)
     })
 
-    it(`${dir}: yields the page rows of the manifest, tail aside, in its key order`, () => {
-      const { pages } = read()
+    it(`${dir}: yields the page rows of the manifest, tail aside, in its key order`, async () => {
+      const { pages } = await read()
       const held = manifest.pages.map(({ tail, ...row }) => row)
       expect(JSON.stringify([...pages.values()])).toBe(JSON.stringify(held))
     })
 
-    it(`${dir}: names its shards by the same bytes`, () => {
+    it(`${dir}: names its shards by the same bytes`, async () => {
       // main() writes the chunk objects to the shards as the stage returns
       // them, so no step is repeated here before hashing.
-      const { chunks } = read()
+      const { chunks } = await read()
       const names = []
       for (let i = 0; i < chunks.length; i += SHARD_SIZE) {
         const bytes = Buffer.from(JSON.stringify(chunks.slice(i, i + SHARD_SIZE)))
@@ -177,4 +178,133 @@ describe('source parity — the repository\'s own docs against both committed in
       expect(names).toEqual(manifest.shards)
     })
   }
+})
+
+/**
+ * The stage on its own — what `main()` cannot be asked in process, because it
+ * calls `process.exit` where the stage calls the `die` it is given.
+ */
+describe('source parity — documentsToChunks, in process', () => {
+  const doc = (over = {}) => ({
+    id: '/guide/one',
+    source: 'markdown',
+    url: null,
+    title: null,
+    body: { format: 'markdown', markdown: '# One\n\nSome words about the first page.\n' },
+    visibility: 'public',
+    breadcrumb: [],
+    tags: [],
+    ...over,
+  })
+  const ctx = (over = {}) => {
+    const said = { warn: [], die: [] }
+    return {
+      said,
+      embedContext: 'off',
+      llmsAbout: new Map(),
+      originFor: () => {
+        throw new Error('no source expected')
+      },
+      warn: (m) => said.warn.push(m),
+      die: (m) => {
+        said.die.push(m)
+        throw new Error(m)
+      },
+      ...over,
+    }
+  }
+
+  it('stops on a document marked internal, naming it, before any chunk is produced', async () => {
+    const c = ctx()
+    let chunked = 0
+    const docs = [doc(), doc({ id: '/guide/secret', visibility: 'internal' })]
+    await expect(documentsToChunks(docs, { ...c, originFor: () => (chunked++, 'x') })).rejects.toThrow(
+      /not public: \/guide\/secret/,
+    )
+    expect(c.said.die).toHaveLength(1)
+    expect(c.said.die[0]).toContain('/guide/secret')
+    expect(c.said.die[0]).not.toContain('/guide/one')
+    expect(chunked).toBe(0)
+  })
+
+  it('refuses a document whose visibility is missing, as it refuses an internal one', async () => {
+    const { visibility, ...bare } = doc()
+    await expect(documentsToChunks([bare], ctx())).rejects.toThrow(NonPublicDocument.name === 'NonPublicDocument' ? /not public/ : /./)
+  })
+
+  it('returns no chunks and no pages for no documents', async () => {
+    const r = await documentsToChunks([], ctx())
+    expect(r.chunks).toEqual([])
+    expect([...r.pages]).toEqual([])
+    expect(r.rawBytes).toBe(0)
+    expect(r.counts).toEqual({ htmlPages: 0, htmlShadowed: 0, external: 0 })
+  })
+
+  it('skips a document that yields no chunks, without a page row', async () => {
+    const home = doc({
+      id: '/home',
+      body: { format: 'markdown', markdown: '---\nlayout: home\n---\n\n# Welcome\n' },
+    })
+    const r = await documentsToChunks([home, doc()], ctx())
+    expect([...r.pages.keys()]).toEqual(['/guide/one'])
+  })
+
+  it('stamps every document with a contentHash, and keeps the input order of one source', async () => {
+    const docs = [doc({ id: '/b' }), doc({ id: '/a' })]
+    const r = await documentsToChunks(docs, ctx())
+    expect(r.docs.map((d) => d.id)).toEqual(['/b', '/a'])
+    expect(r.docs.every((d) => /^[0-9a-f]{64}$/.test(d.contentHash))).toBe(true)
+    expect([...r.pages.keys()]).toEqual(['/b', '/a'])
+  })
+
+  it('says today\'s warning for a built page that produces no chunks, and for an empty --html-dir', async () => {
+    const empty = doc({
+      id: '/built',
+      source: 'html-dir',
+      title: 'Built',
+      file: path.resolve('built.html'),
+      body: { format: 'markdown', markdown: '---\nlayout: home\n---\n' },
+    })
+    const c = ctx({ root: process.cwd(), htmlDir: 'site' })
+    await documentsToChunks([empty], c)
+    expect(c.said.warn).toContain('built page produced no chunks: built.html')
+    expect(c.said.warn).toContain('--html-dir site produced no pages')
+  })
+
+  it('stops an imported page that has no front-matter source', async () => {
+    const kb = doc({ id: '/kb/topic', source: 'kb', file: path.resolve('kb/topic.md') })
+    const c = ctx({ externalPrefix: '/kb', importDir: 'kb', docsDir: 'docs' })
+    await expect(documentsToChunks([kb], c)).rejects.toThrow(/has no frontmatter source/)
+  })
+
+  it('reads an OpenAPI file as a document and hands it to the OpenAPI chunker', async () => {
+    // A spec is a YAML file; the fixture's JSON is valid YAML, copied under that name.
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dp-spec-')), 'mini.yaml')
+    fs.copyFileSync(path.join(FIXTURE, 'openapi', 'mini.json'), file)
+    const [d] = readOpenapiDocs([file])
+    expect(d.id).toBe('/reference/mini')
+    expect(d.body.format).toBe('openapi')
+    expect(d.visibility).toBe('public')
+    // Without the optional parser the chunker says so, which proves the stage
+    // reached chunkOpenapi and not a Markdown path.
+    await expect(documentsToChunks([d], ctx())).rejects.toThrow(/@scalar\/openapi-parser is not installed/)
+  })
+
+  it('stops when two spec files claim one /reference/ route', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-specs-'))
+    for (const v of ['v1', 'v2']) {
+      fs.mkdirSync(path.join(root, v))
+      fs.writeFileSync(path.join(root, v, 'api.yaml'), 'openapi: 3.0.0\n')
+    }
+    const said = []
+    const die = (m) => {
+      said.push(m)
+      throw new Error(m)
+    }
+    expect(() => discoverOpenapiSpecs({ configured: ['v1', 'v2'], fallbackDir: 'none', root, die })).toThrow(
+      /two OpenAPI specs claim \/reference\/api/,
+    )
+    const found = discoverOpenapiSpecs({ configured: ['v1'], fallbackDir: 'none', root, die })
+    expect([...found.routes]).toEqual(['/reference/api'])
+  })
 })

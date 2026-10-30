@@ -18,12 +18,10 @@ import zlib from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 
 
-import { chunkMarkdown } from './lib/chunker.js'
 import { descriptionsFromLlms } from '../llms/about.js'
-import { chunkOpenapi, specFiles } from './lib/openapi-chunker.js'
-import { readHtmlDir } from './lib/html-dir.js'
-import { readMarkdownDocs, walkMarkdown, externalIdFor, kindFor } from './lib/readers.js'
+import { readMarkdownDocs, readHtmlDocs, readKbDocs, readOpenapiDocs, discoverOpenapiSpecs } from './lib/readers.js'
 import { documentsToChunks } from './lib/documents.js'
+import type { ReadDoc } from './lib/source-doc.js'
 import { resolveSections, orphanPages, tailFor } from './lib/sections.js'
 import { parseAllowlist, checkSource } from './lib/sources.js'
 import { discoverEmbedModels, embedPoolOf } from './lib/embed-discovery.js'
@@ -1239,7 +1237,7 @@ async function main() {
   }
   const sidebar = config.themeConfig?.sidebar || {}
 
-  // ── markdown ───────────────────────────────────────────────────────────────
+  // ── allowed origins ────────────────────────────────────────────────────────
   // The allowlist is declared beside every other DocPilot decision and read here,
   // not restated: a second copy is a copy that drifts, and this one decides what
   // may become an `href` in the answer panel.
@@ -1272,205 +1270,58 @@ async function main() {
     return checked.href
   }
 
-  /**
-   * Which `/reference/` routes an OpenAPI spec is about to claim.
-   *
-   * Discovered here rather than in the openapi block below, which runs after this
-   * loop, because the markdown pass needs the answer before it decides what to
-   * skip. The skip used to be the whole PREFIX — `/reference/` was read as
-   * "generated stubs, the YAML is indexed instead" — and that is true only of the
-   * stub a spec generates. Every hand-written reference page a project keeps under
-   * that path was dropped from its own index in silence: this package's own
-   * `config`, `cli`, `highlighting` and `skills` pages among them, which is how a
-   * question about a documented setting came back as not covered by the docs, and
-   * why `sidebar link has no indexed content: /reference/config` printed on every
-   * build. A spec claims one route; it does not claim the directory.
-   */
-  const { files: specs, errors: specErrors } = specFiles(
-    docPilot.openapi,
-    path.join(docPilot.docsDir, 'public', 'openapi'),
-    ROOT,
-  )
-  if (specErrors.length) die(specErrors.join('\n        '))
+  // ── the sources, read as documents ─────────────────────────────────────────
+  // Four readers, one stage (lib/readers.ts, lib/documents.ts — engine-spec 041).
+  // Specs are discovered first because the Markdown read needs to know which
+  // `/reference/` routes they are about to claim; the documents are then read in
+  // the order the builder has always indexed them — Markdown, built site,
+  // imported pages, OpenAPI — and `documentsToChunks` is the only way any of
+  // them reaches a chunker.
+  const { files: specFilesFound, routes: specRoutes } = discoverOpenapiSpecs({
+    configured: docPilot.openapi,
+    fallbackDir: path.join(docPilot.docsDir, 'public', 'openapi'),
+    root: ROOT,
+    die,
+  })
 
-  /**
-   * A spec is named by its BASENAME, and the basename is the route.
-   *
-   * That was harmless while every spec lived in one directory, where the
-   * filesystem enforced uniqueness for free. `docPilot.openapi` can name two
-   * directories, and `v1/api.yaml` beside `v2/api.yaml` then claims
-   * `/reference/api` twice — the second silently overwriting the first's page
-   * entry while both sets of chunks stay in the index under one id space.
-   * Which one should win is not a decision this package can make.
-   */
-  const specNameOf = (f) => path.basename(f).replace(/\.ya?ml$/i, '')
-  const specByName = new Map()
-  for (const f of specs) {
-    const name = specNameOf(f)
-    const prior = specByName.get(name)
-    if (prior) {
-      die(
-        `two OpenAPI specs claim /reference/${name}:\n` +
-          `        ${path.relative(ROOT, prior)}\n        ${path.relative(ROOT, f)}\n` +
-          `        Rename one of them — the file name is the route.`,
-      )
-    }
-    specByName.set(name, f)
-  }
-  const specRoutes = new Set([...specByName.keys()].map((n) => `/reference/${n}`))
+  const docs: ReadDoc[] = readMarkdownDocs({ docsDir: DOCS, root: ROOT, exclude: EXCLUDE, specRoutes, warn })
 
-  // ── markdown ───────────────────────────────────────────────────────────────
-  // Read as documents, then chunked by the one stage every source goes through
-  // (lib/readers.ts, lib/documents.ts — engine-spec 041). The two-files-one-route
-  // rule lives with the reader that sees the files.
-  const docs = readMarkdownDocs({ docsDir: DOCS, root: ROOT, exclude: EXCLUDE, specRoutes, warn })
-  const staged = documentsToChunks(docs, { embedContext: EMBED_CONTEXT, llmsAbout, originFor, warn, die })
-  const chunks = staged.chunks
-  const pages = staged.pages
-  let rawBytes = staged.rawBytes
-
-  // ── a built site ───────────────────────────────────────────────────────────
-  // `--html-dir` only. Nothing here runs without the flag, and with it nothing
-  // above changes: markdown has already claimed its routes and keeps them, so
-  // the two sources cannot disagree about a page — the source file wins over the
-  // artefact built from it, which is the only ordering that is ever right.
-  let htmlPages = 0
-  let htmlShadowed = 0
   if (HTML_DIR) {
-    const dir = path.resolve(ROOT, HTML_DIR)
-    let found
     try {
-      found = await readHtmlDir({
-        dir,
-        select: HTML_SELECT,
-        base: HTML_BASE,
-        sitemap: SITEMAP ? path.resolve(ROOT, SITEMAP) : '',
-        warn,
-      })
+      docs.push(
+        ...(await readHtmlDocs({
+          dir: path.resolve(ROOT, HTML_DIR),
+          select: HTML_SELECT,
+          base: HTML_BASE,
+          sitemap: SITEMAP ? path.resolve(ROOT, SITEMAP) : '',
+          warn,
+        })),
+      )
     } catch (e) {
       die(String(e?.message || e))
     }
-
-    for (const { route, file, src, title } of found) {
-      if (EXCLUDE.has(route)) continue
-      if (specRoutes.has(route)) continue
-      if (pages.has(route)) {
-        htmlShadowed++
-        continue
-      }
-
-      rawBytes += src.length
-      const { chunks: c, warnings } = chunkMarkdown({
-        src,
-        path: route,
-        kind: kindFor(route),
-        sidebarTitle: title,
-        embedContext: EMBED_CONTEXT,
-      })
-      warnings.forEach(warn)
-      if (!c.length) {
-        warn(`built page produced no chunks: ${path.relative(ROOT, file)}`)
-        continue
-      }
-
-      chunks.push(...c)
-      pages.set(route, { path: route, title: title || route, kind: kindFor(route), chunks: c.length })
-      htmlPages++
-    }
-
-    if (!htmlPages) {
-      warn(
-        `--html-dir ${HTML_DIR} produced no pages` +
-          (htmlShadowed ? ` (${htmlShadowed} shadowed by markdown of the same route)` : ''),
-      )
-    }
   }
 
-  // ── imported pages ─────────────────────────────────────────────────────────
-  // Same chunker, same rules, one extra obligation: an external page has no
-  // route, so a missing or unusable `source` leaves its citation pointing at a
-  // page that does not exist. That is a build failure, not a warning.
-  let external = 0
-  const externalLinks = []
-  if (KB && fs.existsSync(KB)) {
-    // `EXTERNAL_PREFIX` is an id space, and an id space that collides with a
-    // real route makes a citation ambiguous. Checked against the routes just
-    // collected rather than assumed to be free.
-    for (const route of pages.keys()) {
-      if (route === EXTERNAL_PREFIX || route.startsWith(`${EXTERNAL_PREFIX}/`)) {
-        die(
-          `importDir "${docPilot.importDir}" claims the id prefix "${EXTERNAL_PREFIX}", ` +
-            `which is already a route of this site: ${route}.\n` +
-            `        Rename the import directory, or move that page.`,
-        )
-      }
-    }
+  const kbPresent = !!(KB && fs.existsSync(KB))
+  if (kbPresent) docs.push(...readKbDocs({ kbDir: KB, externalPrefix: EXTERNAL_PREFIX }))
+  docs.push(...readOpenapiDocs(specFilesFound))
 
-    for (const file of walkMarkdown(KB)) {
-      const id = externalIdFor(file, KB, EXTERNAL_PREFIX)
-      if (pages.has(id)) die(`imported page id collides with a real route: ${id}`)
-
-      const src = fs.readFileSync(file, 'utf8')
-      rawBytes += src.length
-
-      // `vitepress build` checks dead links for every page it renders, and it
-      // never sees this one. Collected here and checked below, once the real
-      // routes — including the generated `/reference/` ones — are all known.
-      for (const m of src.matchAll(/\]\((\/[^)\s#]*)(?:#[^)\s]*)?\)/g)) {
-        externalLinks.push({ file: path.relative(ROOT, file), href: m[1] })
-      }
-      const { chunks: c, warnings, title, source } = chunkMarkdown({ src, path: id, kind: 'guide', embedContext: EMBED_CONTEXT })
-      warnings.forEach(warn)
-      if (!c.length) {
-        warn(`imported page produced no chunks: ${path.relative(ROOT, file)}`)
-        continue
-      }
-      if (!source) {
-        die(
-          `${path.relative(ROOT, file)} has no frontmatter source.\n` +
-            `        A page under ${docPilot.importDir}/ has no route on this site, so its citation has\n` +
-            `        nowhere else to point. Add "source: https://…" or move the page into ${docPilot.docsDir}/.`,
-        )
-      }
-
-      chunks.push(...c)
-      pages.set(id, {
-        path: id,
-        title,
-        kind: 'guide',
-        chunks: c.length,
-        origin: originFor(source, path.relative(ROOT, file)),
-        // Read by the client as "this path is not navigable": its source row and
-        // its `[n]` marker open the origin, and the citation validator must not
-        // treat the id as a link the model may emit.
-        external: true,
-      })
-      external++
-    }
-  }
-
-  // ── openapi ────────────────────────────────────────────────────────────────
-  // Optional, and absent in most projects — `specs` is resolved above the
-  // markdown pass, which needs to know which routes these will claim. A missing
-  // default directory is legal and yields an empty list; a path somebody WROTE in
-  // `docPilot.openapi` and got wrong stops the build there rather than here.
-  for (const f of specs) {
-    const name = specNameOf(f)
-    const yamlText = fs.readFileSync(f, 'utf8')
-    rawBytes += yamlText.length
-    const { chunks: c, title } = await chunkOpenapi(yamlText, name)
-    if (!c.length) {
-      warn(`openapi spec produced no operations: ${f}`)
-      continue
-    }
-    chunks.push(...c)
-    pages.set(`/reference/${name}`, {
-      path: `/reference/${name}`,
-      title,
-      kind: 'reference',
-      chunks: c.length,
-    })
-  }
+  const staged = await documentsToChunks(docs, {
+    embedContext: EMBED_CONTEXT,
+    llmsAbout,
+    originFor,
+    warn,
+    die,
+    root: ROOT,
+    exclude: EXCLUDE,
+    specRoutes,
+    htmlDir: HTML_DIR,
+    externalPrefix: kbPresent ? EXTERNAL_PREFIX : null,
+    importDir: docPilot.importDir,
+    docsDir: docPilot.docsDir,
+  })
+  const { chunks, pages, rawBytes, externalLinks } = staged
+  const { htmlPages, htmlShadowed, external } = staged.counts
 
   if (!chunks.length) die('empty index — 0 chunks')
 

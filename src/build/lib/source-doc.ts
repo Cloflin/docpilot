@@ -44,6 +44,12 @@ export interface SourceDoc {
   visibility: 'public' | 'internal'
   breadcrumb: string[]
   tags: string[]
+  /**
+   * The absolute path a reader read this document from, when it came from a
+   * file. For build messages only (`built page produced no chunks: <path>`):
+   * never hashed, never written, and absent for a document that is not a file.
+   */
+  file?: string
   /** Computed by the pipeline with `contentHashOf`; in memory only in Phase 1. */
   contentHash: string
 }

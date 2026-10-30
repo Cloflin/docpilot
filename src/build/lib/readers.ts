@@ -16,6 +16,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { splitFrontmatter } from './normalise.js'
+import { readHtmlDir } from './html-dir.js'
+import { specFiles } from './openapi-chunker.js'
 import { routeOf } from '../../theme/docpilot/route.js'
 import type { ReadDoc } from './source-doc.js'
 
@@ -136,10 +138,151 @@ export function readMarkdownDocs({
       url: fm.source ?? null,
       title: fm.title ?? null,
       body: { format: 'markdown', markdown: src },
+      file,
       visibility: 'public',
       breadcrumb: [],
       tags: [],
     })
   }
   return docs
+}
+
+/**
+ * A built site (`--html-dir`), one document per page.
+ *
+ * `readHtmlDir` already does the reading: the main element, the pruning, the
+ * conversion to Markdown, the sitemap filter, and the one-file-per-route rule
+ * among HTML pages. What it returns is the Markdown it assembled, so the body is
+ * `markdown` and the stage chunks it as it chunks a `.md` file. A failure
+ * (a missing directory, a sitemap that cannot be read) is thrown, not said: the
+ * builder owns how a build stops.
+ *
+ * `title` is the page's own `<title>` text and may be empty; the stage turns an
+ * empty one into the route in the page row, as it always did.
+ */
+export async function readHtmlDocs({
+  dir,
+  select,
+  base,
+  sitemap,
+  warn,
+}: {
+  dir: string
+  select: string
+  base: string
+  sitemap: string
+  warn: (message: string) => void
+}): Promise<ReadDoc[]> {
+  const found = await readHtmlDir({ dir, select, base, sitemap, warn })
+  return found.map(({ route, file, src, title }) => ({
+    id: route,
+    source: 'html-dir',
+    url: null,
+    title,
+    body: { format: 'markdown', markdown: src },
+    file,
+    visibility: 'public',
+    breadcrumb: [],
+    tags: [],
+  }))
+}
+
+/**
+ * Imported pages (`importDir`, the `--kb` pages), one document per file in the
+ * walk order. The `url` is the page's front-matter `source:`, UNCHECKED: the
+ * stage runs it through the allowlist (`originFor`) because the allowlist is a
+ * decision about what may become an `href`, and a reader decides nothing.
+ */
+export function readKbDocs({
+  kbDir,
+  externalPrefix,
+}: {
+  kbDir: string
+  externalPrefix: string
+}): ReadDoc[] {
+  return walkMarkdown(kbDir).map((file) => {
+    const src = fs.readFileSync(file, 'utf8')
+    const fm = splitFrontmatter(src)
+    return {
+      id: externalIdFor(file, kbDir, externalPrefix),
+      source: 'kb',
+      url: fm.source ?? null,
+      title: fm.title ?? null,
+      body: { format: 'markdown', markdown: src },
+      file,
+      visibility: 'public',
+      breadcrumb: [],
+      tags: [],
+    }
+  })
+}
+
+/**
+ * A spec is named by its BASENAME, and the basename is the route.
+ */
+export const specNameOf = (f) => path.basename(f).replace(/\.ya?ml$/i, '')
+
+/**
+ * Which OpenAPI specs there are, and which `/reference/` routes they claim.
+ *
+ * Discovered before the Markdown is read, because the Markdown pass needs the
+ * answer before it decides what to skip. The skip used to be the whole PREFIX —
+ * `/reference/` was read as "generated stubs, the YAML is indexed instead" — and
+ * that is true only of the stub a spec generates. Every hand-written reference
+ * page a project keeps under that path was dropped from its own index in
+ * silence. A spec claims one route; it does not claim the directory.
+ *
+ * That was harmless while every spec lived in one directory, where the
+ * filesystem enforced uniqueness for free. `docPilot.openapi` can name two
+ * directories, and `v1/api.yaml` beside `v2/api.yaml` then claims
+ * `/reference/api` twice — the second silently overwriting the first's page
+ * entry while both sets of chunks stay in the index under one id space. Which
+ * one should win is not a decision this package can make, so it stops.
+ */
+export function discoverOpenapiSpecs({
+  configured,
+  fallbackDir,
+  root,
+  die,
+}: {
+  configured: string[] | null | undefined
+  fallbackDir: string
+  root: string
+  die: (message: string) => void
+}): { files: string[]; routes: Set<string> } {
+  const { files, errors } = specFiles(configured, fallbackDir, root)
+  if (errors.length) die(errors.join('\n        '))
+
+  const byName = new Map()
+  for (const f of files) {
+    const name = specNameOf(f)
+    const prior = byName.get(name)
+    if (prior) {
+      die(
+        `two OpenAPI specs claim /reference/${name}:\n` +
+          `        ${path.relative(root, prior)}\n        ${path.relative(root, f)}\n` +
+          `        Rename one of them — the file name is the route.`,
+      )
+    }
+    byName.set(name, f)
+  }
+  return { files, routes: new Set([...byName.keys()].map((n) => `/reference/${n}`)) }
+}
+
+/**
+ * The OpenAPI files themselves, as documents whose body is the YAML text: the
+ * chunker for them builds its chunks from the spec, not from Markdown.
+ */
+export function readOpenapiDocs(files: string[]): ReadDoc[] {
+  return files.map((file) => ({
+    id: `/reference/${specNameOf(file)}`,
+    source: 'openapi',
+    url: null,
+    title: null,
+    body: { format: 'openapi', yaml: fs.readFileSync(file, 'utf8') },
+    file,
+    visibility: 'public',
+    breadcrumb: [],
+    tags: [],
+  }))
 }

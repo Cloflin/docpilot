@@ -258,7 +258,12 @@ describe('normalise — llm content tags', () => {
  * its own documented settings with "not in the docs". A spec claims one route.
  */
 describe('the index — which /reference/ routes a spec claims', () => {
-  const src = srcText('src/build/build-rag-index.js')
+  // The reads moved out of the builder with the SourceDoc pipeline (engine-spec 041):
+  // the discovery and the Markdown skip are in the readers, the --html-dir skip in
+  // the stage. The rules are the same ones; only the file that holds them moved.
+  const builder = srcText('src/build/build-rag-index.js')
+  const readers = srcText('src/build/lib/readers.js')
+  const src = builder + readers + srcText('src/build/lib/documents.js')
 
   it('skips no route on a project that publishes no spec', () => {
     // The blanket prefix skip and the comment that justified it. `kindFor` still
@@ -272,10 +277,10 @@ describe('the index — which /reference/ routes a spec claims', () => {
     // `docPilot.openapi` made the spec list a set of PATHS rather than the
     // contents of one directory, so the name is now the basename of each. What
     // this rule is about did not move: the route is the file name.
-    expect(src).toMatch(/const specNameOf = \(f\) => path\.basename\(f\)/)
-    expect(src).toMatch(/specRoutes = new Set\(\[\.\.\.specByName\.keys\(\)\]\.map\(/)
+    expect(readers).toMatch(/const specNameOf = \(f\) => path\.basename\(f\)/)
+    expect(readers).toMatch(/routes: new Set\(\[\.\.\.byName\.keys\(\)\]\.map\(/)
     // Resolved above the markdown read, which needs the answer before it decides.
-    expect(src.indexOf('const specRoutes')).toBeLessThan(src.indexOf('readMarkdownDocs('))
+    expect(builder.indexOf('discoverOpenapiSpecs(')).toBeLessThan(builder.indexOf('readMarkdownDocs('))
   })
 
   /**
