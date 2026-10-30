@@ -25,7 +25,6 @@ import path from 'node:path'
 import { chunkOpenapi } from '../src/build/lib/openapi-chunker.js'
 import { readMarkdownDocs, readKbDocs, readOpenapiDocs, discoverOpenapiSpecs } from '../src/build/lib/readers.js'
 import { documentsToChunks } from '../src/build/lib/documents.js'
-import { NonPublicDocument } from '../src/build/lib/source-doc.js'
 
 const BIN = path.resolve('bin/docpilot.js')
 const FIXTURE = path.resolve('test/fixtures/source-parity')
@@ -257,7 +256,7 @@ describe('source parity — documentsToChunks, in process', () => {
 
   it('refuses a document whose visibility is missing, as it refuses an internal one', async () => {
     const { visibility, ...bare } = doc()
-    await expect(documentsToChunks([bare], ctx())).rejects.toThrow(NonPublicDocument.name === 'NonPublicDocument' ? /not public/ : /./)
+    await expect(documentsToChunks([bare], ctx())).rejects.toThrow(/not public: \/guide\/one/)
   })
 
   it('returns no chunks and no pages for no documents', async () => {
