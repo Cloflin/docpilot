@@ -36,6 +36,28 @@ describe('html code blocks — lines and the info string', () => {
     expect(md('<pre><code class="highlight-source-js">x</code></pre>')).toBe('```\nx\n```')
   })
 
+  it('does not take a locale class on a content wrapper for the language', () => {
+    // `md()` wraps its HTML in a <main>; each case below makes the class the page's own.
+    const page = (attrs, inner) => {
+      const { document } = parseHTML(`<!doctype html><html><body><main${attrs}>${inner}</main></body></html>`)
+      const root = pickMain(document)
+      prune(root)
+      return toMarkdown(root).markdown
+    }
+    expect(page(' class="content language-en"', '<pre>echo hi</pre>')).toBe('```\necho hi\n```')
+    expect(page(' class="content language-en"', '<p>Intro text of the page.</p><pre>echo hi</pre>')).toBe(
+      'Intro text of the page.\n\n```\necho hi\n```',
+    )
+    expect(md('<div class="content language-en"><pre>echo hi</pre><p>' + 'Prose. '.repeat(20) + '</p></div>')).toContain(
+      '```\necho hi\n```',
+    )
+  })
+
+  it('still takes a two-letter language class from a wrapper that holds only the sample', () => {
+    expect(md('<div class="language-js"><pre>let a</pre></div>')).toBe('```js\nlet a\n```')
+    expect(md('<div class="language-js"><div class="highlight"><pre>let a</pre></div></div>')).toBe('```js\nlet a\n```')
+  })
+
   it('reads data-lang on the pre', () => {
     expect(md('<pre data-lang="yaml"><code>k: v</code></pre>')).toBe('```yaml\nk: v\n```')
   })

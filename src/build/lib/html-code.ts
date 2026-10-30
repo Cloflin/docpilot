@@ -83,16 +83,40 @@ function hasHintBeneath(el): boolean {
   return false
 }
 
+/**
+ * Elements that are the page's own structure, never a code wrapper. A
+ * `language-en` on one of them is the page's locale (`<main class="content
+ * language-en">`), and it would otherwise read as the language of any one
+ * sample it holds (IN-06, engine-spec 043).
+ */
+const PAGE_LANDMARKS = new Set(['html', 'body', 'main', 'article', 'section', 'aside', 'header', 'footer', 'nav'])
+
+/**
+ * Does this ancestor wrap `block` as its one code block, with no more text than
+ * a label beside it? Only then is the ancestor's `language-` class about the
+ * block. A wrapper that holds an article is the page's, and a landmark is
+ * never a wrapper, even when the sample is all it holds (IN-06).
+ */
+function wrapsOnly(el, block): boolean {
+  if (PAGE_LANDMARKS.has(tagOf(el))) return false
+  const same = el.querySelectorAll?.(tagOf(block)) || []
+  return same.length === 1 && textOutside(el, same[0]).length <= CODE_LABEL_MAX
+}
+
 /** The language a `pre`, a `code` or a block-level `code` names, or ''. */
 export function fenceLanguage(pre): string {
   const code = tagOf(pre) === 'code' ? pre : pre.querySelector?.('code')
-  const chain = [code, pre].filter(Boolean)
+  const own = [code, pre].filter(Boolean)
+  const ups = []
   let up = pre.parentElement
-  for (let depth = 0; up && depth < LANG_ANCESTOR_DEPTH; depth++, up = up.parentElement) chain.push(up)
+  for (let depth = 0; up && depth < LANG_ANCESTOR_DEPTH; depth++, up = up.parentElement) ups.push(up)
+  const chain = [...own, ...ups]
 
   for (const el of chain) {
     const m = LANG_TOKEN.exec(String(el.getAttribute?.('class') || ''))
-    if (m) return m[1].toLowerCase()
+    if (!m) continue
+    if (ups.includes(el) && !wrapsOnly(el, pre)) continue
+    return m[1].toLowerCase()
   }
   for (const el of chain) {
     for (const attr of ['data-lang', 'data-language']) {
