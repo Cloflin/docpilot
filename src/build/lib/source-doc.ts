@@ -26,7 +26,12 @@ export interface SourceDoc {
   /** Today's chunk `path`: a route, `EXTERNAL_PREFIX/rel` for a KB page, `/reference/<name>`. */
   id: string
   source: 'markdown' | 'kb' | 'html-dir' | 'openapi'
-  /** Canonical URL. A KB page: its allow-checked `source:` href; elsewhere the route is the URL. */
+  /**
+   * Canonical URL. `null` where the route is the URL. A KB page carries its
+   * front-matter `source:` here UNCHECKED: the allowlist runs inside
+   * `documentsToChunks` (`originFor`) and does not rewrite this field, so it
+   * must not become an `href` until a stage replaces it with the checked origin.
+   */
   url: string | null
   title: string | null
   body: SourceBody

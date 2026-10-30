@@ -52,7 +52,7 @@ the connector contract is designed in Phase 3 against real connectors.
 |---|---|---|
 | `id` | today's chunk `path`: the route (`/guide/x`); `EXTERNAL_PREFIX/rel` for `--kb`; `/reference/<name>` for OpenAPI | yes |
 | `source` | `'markdown'`, `'kb'`, `'html-dir'` or `'openapi'` | no |
-| `url` | `--kb`: the allow-checked `source:` href. Others: `null`, the route is the URL | no |
+| `url` | `--kb`: the front-matter `source:` href, UNCHECKED (the allowlist runs in `documentsToChunks` and does not rewrite it; it is not an `href` until a stage replaces it). Others: `null`, the route is the URL | no |
 | `title` | what the reader passes to the chunker; the chunker still derives the final title | no |
 | `body` | `{ format: 'markdown', markdown }` or `{ format: 'openapi', yaml }` | yes |
 | `updatedAt` | `undefined` for files. Never read from mtime: it differs on every checkout | never |

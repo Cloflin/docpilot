@@ -135,7 +135,9 @@ export function readMarkdownDocs({
     docs.push({
       id: route,
       source: 'markdown',
-      url: fm.source ?? null,
+      // The route is the URL for a docs page (engine-spec 041). A `source:` key
+      // on such a page is a citation href the chunker handles, not a document URL.
+      url: null,
       title: fm.title ?? null,
       body: { format: 'markdown', markdown: src },
       file,
