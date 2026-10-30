@@ -230,10 +230,66 @@ export async function replayBaseline({
     lexical,
     embed: async (text) => {
       const vec = frozen.get(text)
-      if (!vec) throw new Error(`the baseline holds no vector for the query "${text}"`)
+      if (!vec) throw new MissingVector(text)
       return vec
     },
   })
+}
+
+/** A replay asked for a text the baseline holds no vector for. `text` is what it asked. */
+export class MissingVector extends Error {
+  text: string
+  constructor(text: string) {
+    super(`the baseline holds no vector for the query "${text}"`)
+    this.name = 'MissingVector'
+    this.text = text
+  }
+}
+
+/**
+ * The capture's replay: `replayBaseline` over `asked`, taking a text the live
+ * ranking never asked for from `borrow` instead of stopping.
+ *
+ * WHY THIS EXISTS. The records are ranked from the ROUNDED vectors, and a chain
+ * composes its next question from the gates that passed earlier in the chain. A
+ * gate that sits within one int8 step of tau can pass live and fail rounded (or
+ * the reverse), so the rounded replay composes a question the live run never
+ * composed and `asked` holds no vector for it. Found on the 4096-dimension hosted
+ * index, where a depth-3 chain asked for a composition the live floats had not.
+ * The text was not unbought: the live run enumerates both composed variants of
+ * every hop (`chainTexts`) and buys them all in the batcher, so `borrow` is a
+ * lookup in what was already paid for. A text `borrow` cannot supply is still an
+ * error — the capture does not spend to complete itself.
+ *
+ * @param asked   text -> live vector in the index domain; the borrowed texts are
+ *   added to it, so the caller stores exactly what the replay read
+ * @returns the replay and the texts it had to borrow, in the order it asked
+ */
+export async function replayBorrowing({
+  index,
+  guard,
+  records,
+  asked,
+  borrow,
+}: {
+  index: any
+  guard: any
+  records: any[]
+  asked: Map<string, ArrayLike<number>>
+  borrow: (text: string) => ArrayLike<number> | undefined
+}) {
+  const borrowed: string[] = []
+  for (;;) {
+    const baseline = { vectors: Object.fromEntries([...asked].map(([t, v]) => [t, encodeVector(v)])) }
+    try {
+      return { replayed: await replayBaseline({ index, guard, records, baseline }), borrowed }
+    } catch (e) {
+      const vec = e instanceof MissingVector && !asked.has(e.text) ? borrow(e.text) : undefined
+      if (!vec) throw e
+      asked.set(e.text, vec)
+      borrowed.push(e.text)
+    }
+  }
 }
 
 /**

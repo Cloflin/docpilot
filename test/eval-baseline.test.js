@@ -18,6 +18,8 @@ import {
   recordOf,
   captureBaseline,
   replayBaseline,
+  replayBorrowing,
+  MissingVector,
   diffBaseline,
 } from '../src/eval/baseline.js'
 import { hasSecret } from '../src/theme/docpilot/credentials.js'
@@ -302,6 +304,45 @@ describe('captureBaseline, replayBaseline and diffBaseline', () => {
     await expect(
       replayBaseline({ index, guard: GUARD, records: [RECORDS[0]], baseline: stripped }),
     ).rejects.toThrow(RECORDS[0].question)
+  })
+
+  it('carries the missing text on the error, so a capture can look it up', async () => {
+    const { index } = await capture()
+    const err = await replayBaseline({ index, guard: GUARD, records: [RECORDS[0]], baseline: { vectors: {} } }).catch((e) => e)
+    expect(err).toBeInstanceOf(MissingVector)
+    expect(err.text).toBe(RECORDS[0].question)
+  })
+
+  it('borrows a text the live run never asked for, and stores it with the others', async () => {
+    const { index, baseline } = await capture()
+    const all = decodeVectors(baseline)
+    const [taken] = [...all.keys()]
+    const asked = new Map([...all].filter(([t]) => t !== taken))
+    const { replayed, borrowed } = await replayBorrowing({
+      index,
+      guard: GUARD,
+      records: RECORDS,
+      asked,
+      borrow: (t) => all.get(t),
+    })
+    expect(borrowed).toEqual([taken])
+    expect(asked.has(taken)).toBe(true)
+    expect(diffBaseline(baseline, replayed)).toEqual([])
+  })
+
+  it('does not borrow when nothing is missing, and refuses what the lender cannot supply', async () => {
+    const { index, baseline } = await capture()
+    const all = decodeVectors(baseline)
+    const lend = vi.fn(() => undefined)
+    const full = await replayBorrowing({ index, guard: GUARD, records: RECORDS, asked: new Map(all), borrow: lend })
+    expect(full.borrowed).toEqual([])
+    expect(lend).not.toHaveBeenCalled()
+    const [taken] = [...all.keys()]
+    const short = new Map([...all].filter(([t]) => t !== taken))
+    await expect(
+      replayBorrowing({ index, guard: GUARD, records: RECORDS, asked: short, borrow: lend }),
+    ).rejects.toBeInstanceOf(MissingVector)
+    expect(lend).toHaveBeenCalledWith(taken)
   })
 
   it('writes records sorted by id and vectors sorted by text, byte-identical across captures', async () => {

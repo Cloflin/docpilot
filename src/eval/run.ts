@@ -70,9 +70,8 @@ import {
   ollamaHost,
   recordOf,
   captureBaseline,
-  replayBaseline,
+  replayBorrowing,
   diffBaseline,
-  encodeVector,
 } from './baseline.js'
 import { hasSecret } from '../theme/docpilot/credentials.js'
 import { keyForBase, nodeEmbedTarget } from '../config.js'
@@ -2040,14 +2039,22 @@ async function settleBaseline(runs) {
   let records = current
   let vectors: Map<string, Float64Array> | null = null
   let liveDivergence: string[] = []
+  let borrowed: string[] = []
   if (run.probes && !LEXICAL && ASKED.size) {
-    const frozen = { vectors: Object.fromEntries([...ASKED].map(([t, v]) => [t, encodeVector(v)])) }
-    const replayed = await replayBaseline({
+    // A rounded replay can compose a chain question the live floats never did (see
+    // `replayBorrowing`); the vector is then taken from the batch already bought.
+    const replay = await replayBorrowing({
       index: run.index,
       guard: run.guard,
       records: run.records,
-      baseline: frozen,
+      asked: ASKED,
+      borrow: (t) => PREFETCHED.get(t),
     })
+    const replayed = replay.replayed
+    borrowed = replay.borrowed
+    if (borrowed.length) {
+      console.log(`  ${borrowed.length} quer${borrowed.length === 1 ? 'y' : 'ies'} the rounded replay composed differently, taken from the prefetched batch`)
+    }
     records = replayed.map((p) => recordOf(p, outcomeOf(p.rec.id)))
     const liveById = Object.fromEntries(current.map(({ id, ...r }) => [id, r]))
     liveDivergence = [...new Set(diffBaseline({ records: liveById }, records).map((d) => d.id))]
@@ -2092,7 +2099,7 @@ async function settleBaseline(runs) {
           : null,
       },
       hardGatesFailed: failed,
-      vectors: vectors ? { liveDivergence } : undefined,
+      vectors: vectors ? { liveDivergence, ...(borrowed.length ? { borrowedFromPrefetch: borrowed.length } : {}) } : undefined,
     }
     // The origins above are the only environment-derived text in the meta; if a
     // credential-shaped string got in anyway, the file is not written.
