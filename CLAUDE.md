@@ -32,6 +32,7 @@ Conventional Commits with a scope, as in the history: `feat(cli)`, `fix(docs)`, 
 
 - `docs/public/rag/` and `rag-local/` are committed on purpose (`.gitignore` explains why). Editing docs without reindexing fails `test/docs-links.test.js` on the corpus hash.
 - The printed index figures in the docs are held by that same test. Fix them with `node scripts/refresh-figures.mjs` (run `--check` first). Order is index → refresh-figures → index.
+- The frozen baselines in `docpilot/baselines/` pin `meta.indexHash` and `meta.goldenSha`, and `test/eval-baseline.test.js` asserts both. A docs edit or a `golden.jsonl` edit therefore turns `npm test` and `verify` red until the baselines are re-taken. Order: index → refresh-figures → index → `eval --gate-only --baseline=<file> --update-baseline` for each baseline. The `rag` one needs the metered embedder, the `rag-local` ones need the LAN Ollama; do not run them without a price check and a "yes". A refresh re-freezes the ranking as it is now, so read the diff before committing it.
 - `dist/` is gitignored, but nearly every `exports` subpath resolves into it and several tests spawn `node` against a built artifact — build first on a fresh clone.
 - CI runs Node 20 and 24 on every push; publishing happens only on a `v*` tag, via trusted publishing.
 
