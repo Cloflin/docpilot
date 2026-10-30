@@ -55,6 +55,7 @@ import { entryFlagError, flagValue } from '../cli-flags.js'
 import { printError, FAILED, USAGE } from '../cli-exit.js'
 import { meter } from '../cli-ui.js'
 import { EXTRACTOR_VERSION } from './lib/extract-html.js'
+import { printableLines } from './lib/terminal.js'
 import {
   terms,
   estTokens,
@@ -259,7 +260,11 @@ const EXCLUDE = new Set(['/index', '/new-file'])
 const warned = new Map<string, number>()
 const warn = (m) => warned.set(String(m), (warned.get(String(m)) ?? 0) + 1)
 const flushWarnings = () => {
-  for (const [m, n] of warned) console.warn(`  warn  ${m}${n > 1 ? `  ×${n}` : ''}`)
+  // A warning can carry text from a page or a front-matter value (a link target,
+  // a `source:`, a file name), so each goes through `printableLines`: the
+  // message's own line breaks stay, every control byte is shown as `\xNN`
+  // (engine-spec 043, W-02-01, WR-10).
+  for (const [m, n] of warned) console.warn(`  warn  ${printableLines(m)}${n > 1 ? `  ×${n}` : ''}`)
   warned.clear()
 }
 const die = (m) => {

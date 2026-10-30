@@ -27,6 +27,7 @@ import { EXTRACTOR_VERSION } from './extract-html.js'
 import { chunkOpenapi } from './openapi-chunker.js'
 import { frontmatterValue, kindFor } from './readers.js'
 import { assertPublic, contentHashOf, NonPublicDocument } from './source-doc.js'
+import { printable } from './terminal.js'
 import type { ReadDoc, SourceDoc } from './source-doc.js'
 
 export interface DocumentsContext {
@@ -357,7 +358,7 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
           `(this build's is ${EXTRACTOR_VERSION}); re-import to apply the current rules:\n` +
           stale
             .slice(0, MAX_STALE_LISTED)
-            .map((p) => `        npx docpilot import ${p.source ? shellWord(p.source) : '<source>'} --out ${shellWord(p.slug)} --force`)
+            .map((p) => `        npx docpilot import ${p.source ? shellWord(printable(p.source)) : '<source>'} --out ${shellWord(p.slug)} --force`)
             .join('\n') +
           (stale.length > MAX_STALE_LISTED ? `\n        …and ${stale.length - MAX_STALE_LISTED} more` : ''),
       )

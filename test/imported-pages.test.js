@@ -246,6 +246,29 @@ describe('imported pages — an older extractor is named with the command that r
     expect(stale(c)[0]).toContain("npx docpilot import 'https://example.com/a?x=1&y=2' --out one --force")
   })
 
+  it('shows a control byte in a source as an escape in the re-import command (W-02-01)', async () => {
+    const c = ctx()
+    await documentsToChunks([imported('/kb/one', 'https://example.com/a\u001b]52;c;eA==\u0007')], c)
+    const [message] = stale(c)
+    expect(message).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/)
+    expect(message).toContain('\\x1b]52;c;eA==\\x07')
+  })
+
+  it('shows no control byte from a page or a file name on stderr when `index` warns (WR-10)', () => {
+    const root = copyFixture()
+    // A link target with no base to resolve against: the degrade warning names it.
+    const hostile = '<!doctype html><html><head><title>Hostile</title></head><body><main><h2>Notes</h2><p>' +
+      'The notes page explains how the batch counter resets after every window, and how a window is chosen. '.repeat(4) +
+      '<a href="rel\u001b]52;c;eA==\u0007path">a relative link</a></p></main></body></html>'
+    fs.writeFileSync(path.join(root, 'html', 'guide', 'hostile.html'), hostile)
+    const r = build(root, '--html-dir=html')
+    const said = r.stderr + r.stdout
+    expect(said).toContain('had no usable base URL')
+    expect(said).not.toMatch(/[\u0000-\u0008\u000b-\u001a\u001c-\u001f\u007f-\u009f]/)
+    expect(said).not.toContain('\u001b')
+    expect(said).toContain('rel\\x1b]52;c;eA==\\x07path')
+  })
+
   it('does not flag a page stamped with the current extractor, and says a newer one is newer', async () => {
     const c = ctx()
     await documentsToChunks(
