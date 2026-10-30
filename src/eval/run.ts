@@ -320,7 +320,9 @@ function loadBaselineToCompare(name) {
   // `typeof [] === 'object'`, so an array has to be refused by name.
   const records = parsed?.records
   if (parsed?.meta?.schema !== BASELINE_SCHEMA || typeof records !== 'object' || records === null || Array.isArray(records)) {
-    die(`${rel} is not a schema-${BASELINE_SCHEMA} baseline\n        regenerate it with --baseline=${name} --update-baseline`)
+    // No "regenerate it" hint here: the file exists and is usually not a baseline at all (the
+    // bundle report), so following that hint would overwrite it. Name the files to pass instead.
+    die(`${rel} is not a schema-${BASELINE_SCHEMA} baseline\n        pass one of docpilot/baselines/2.1.1.*.json — or a new path with --update-baseline to write one`)
   }
   return parsed
 }
