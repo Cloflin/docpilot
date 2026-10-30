@@ -149,7 +149,9 @@ function list(el, ctx, depth = 0) {
   const ordered = /^ol$/i.test(el.tagName || '')
   const indent = '  '.repeat(depth)
   const out = []
-  let n = Number(el.getAttribute?.('start') || 1)
+  // A non-numeric `start` is 1: `Number('abc')` wrote `NaN.` as a marker (IN-03).
+  const start = Number.parseInt(el.getAttribute?.('start') || '1', 10)
+  let n = Number.isFinite(start) ? start : 1
 
   for (const li of [...(el.children || [])].filter((c) => /^li$/i.test(c.tagName || ''))) {
     const nested = []

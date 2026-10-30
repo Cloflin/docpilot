@@ -174,6 +174,7 @@ describe('html structure — headings, details, lists, text', () => {
     const out = md('<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>')
     expect(out).toBe('- a\n  - b\n    - c')
     expect(md('<ol start="3"><li>x</li><li>y</li></ol>')).toBe('3. x\n4. y')
+    expect(md('<ol start="abc"><li>x</li><li>y</li></ol>')).toBe('1. x\n2. y')
   })
 
   it('keeps a definition list and the paragraphs of a blockquote', () => {
