@@ -119,6 +119,20 @@ describe('pageFromHtml', () => {
     expect(wrapped.src.split('\n\n')[1]).toBe('first line # second line')
   })
 
+  it('cannot let a title change the structure of the document (WR-13)', async () => {
+    const titled = (title) =>
+      pageFromHtml(`<!doctype html><html><head><title>${title}</title></head><body><main>${PROSE}</main></body></html>`)
+    const tag = await titled('&lt;llm-exclude&gt; hi')
+    expect(tag.src.split('\n\n')[0]).toBe('# &lt;llm-exclude> hi')
+    expect(tag.src).not.toContain('<llm-exclude>')
+    // The title field keeps the page's own words, for the manifest and the front matter.
+    expect(tag.title).toBe('<llm-exclude> hi')
+    const link = await titled('[click](https://evil.example/x) now')
+    expect(link.src.split('\n\n')[0]).toBe('# \\[click\\](https://evil.example/x) now')
+    const code = await titled('`a`, # x')
+    expect(code.src.split('\n\n')[0]).toBe('# \\`a\\`, # x')
+  })
+
   it('returns null for a page with no body text', async () => {
     expect(await pageFromHtml('<!doctype html><html><body><nav>a</nav></body></html>')).toBeNull()
   })

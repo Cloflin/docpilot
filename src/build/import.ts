@@ -24,6 +24,7 @@ import { fetchWithin } from './lib/redirects.js'
 import { DeadlineExceeded, FETCH_TIMEOUT_MS, readBodyCapped, withDeadline } from './lib/fetch-bounds.js'
 import { printable, printableLines } from './lib/terminal.js'
 import { metadata, robotsNoindex } from './lib/html-extract.js'
+import { escapeInline } from './lib/html-to-md.js'
 import { extractDocument, EXTRACTOR_VERSION, MAX_HTML_BYTES } from './lib/extract-html.js'
 import { formatExtractionReport, rowFromResults } from './lib/extraction-report.js'
 import { parseDocument } from './lib/dom.js'
@@ -161,7 +162,9 @@ export function composePage({
     ':::',
   ].join('\n')
 
-  return `${front}\n\n# ${oneLineTitle}\n\n${attribution}\n\n${markdown}\n`
+  // Page text, escaped as the body is: the title can hold `<llm-exclude>` or
+  // link syntax, and neither may change the document (WR-13, T-02-17).
+  return `${front}\n\n# ${escapeInline(oneLineTitle)}\n\n${attribution}\n\n${markdown}\n`
 }
 
 /** Re-exported: the deadline lives with the other fetch bounds. */

@@ -125,8 +125,13 @@ export async function pageFromHtml(
   // make it a heading or a list, and a decoded `<llm-exclude>` would be an
   // annotation tag. It goes through the escaping the body uses (WR-06,
   // engine-spec 043, T-02-17).
+  //
+  // The title is the same: the `#` line is page text too. A title that held
+  // `<llm-exclude>` dropped the rest of the page, and link syntax in it was a
+  // live link nothing counted (WR-13). The leader needs no escape, the line
+  // starts with `# `. The manifest and the front matter keep the raw title.
   const lead = description ? escapeLeader(escapeInline(description)) : ''
-  const src = [title ? `# ${title}` : '', lead, markdown].filter(Boolean).join('\n\n')
+  const src = [title ? `# ${escapeInline(title)}` : '', lead, markdown].filter(Boolean).join('\n\n')
 
   return {
     src,

@@ -470,6 +470,30 @@ describe('import — the command', () => {
     expect(file).toContain('# Rate limits source: https://evil.test/other layout: home')
   })
 
+  it('a remote title cannot change the document through the H1: no annotation tag, no live link (WR-13)', () => {
+    const heading = (title) =>
+      composePage({
+        title,
+        description: 'One line.',
+        source: 'https://acme.test/help/rate-limits',
+        markdown: 'Body.',
+        now: Date.UTC(2026, 7, 15),
+      })
+        .split('\n')
+        .find((l) => l.startsWith('# '))
+    expect(heading('<llm-exclude> hi')).toBe('# &lt;llm-exclude> hi')
+    expect(heading('[click](https://evil.example/x) now')).toBe('# \\[click\\](https://evil.example/x) now')
+    // The front matter keeps the title as the page wrote it.
+    const file = composePage({
+      title: '<llm-exclude> hi',
+      description: '',
+      source: 'https://acme.test/help/rate-limits',
+      markdown: 'Body.',
+      now: Date.UTC(2026, 7, 15),
+    })
+    expect(splitPageFrontmatter(file).title).toBe('<llm-exclude> hi')
+  })
+
   it('the human date is UTC, not the timezone of whoever ran the import', () => {
     expect(dates(Date.UTC(2026, 7, 15)).human).toBe('15 August 2026')
     expect(dates(Date.UTC(2026, 7, 15)).iso).toBe('2026-08-15')
