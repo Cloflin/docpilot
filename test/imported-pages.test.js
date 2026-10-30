@@ -11,6 +11,7 @@
  */
 import { afterAll, describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -57,8 +58,8 @@ const docOf = (id, source, markdown, over = {}) => ({
 })
 const guide = (route) => docOf(route, 'markdown', `# ${route}\n\n${SENTENCE}\n`)
 /** A kb page as `readKbDocs` returns it: the whole file, front matter included. */
-const kbPage = (id, body, front = 'source: https://example.com/topic') =>
-  docOf(id, 'kb', `---\ntitle: Page\n${front}\n---\n\n# Page\n\n${SENTENCE} ${body}\n`, { url: 'https://example.com/topic' })
+const kbPage = (id, body, front = 'source: https://example.com/topic', url = 'https://example.com/topic') =>
+  docOf(id, 'kb', `---\ntitle: Page\n${front}\n---\n\n# Page\n\n${SENTENCE} ${body}\n`, { url })
 
 function ctx(over = {}) {
   const said = { warn: [], die: [] }
@@ -199,5 +200,105 @@ describe('imported pages — through the CLI', () => {
     const r = build(root, '--html-dir=html')
     expect(r.status, r.stderr + r.stdout).not.toBe(0)
     expect(r.stderr + r.stdout).toContain('has no frontmatter source')
+  })
+})
+
+/** A page `docpilot import` wrote: `importedAt:` always, `extractor:` from extractor 2 on. */
+const imported = (id, source, extractor) =>
+  kbPage(
+    id,
+    'Imported words.',
+    [`source: ${source}`, 'importedAt: 2026-10-01', ...(extractor === undefined ? [] : [`extractor: ${extractor}`])].join('\n'),
+    source,
+  )
+const stale = (c) => c.said.warn.filter((m) => /written by extractor/.test(m))
+const newer = (c) => c.said.warn.filter((m) => /newer extractor/.test(m))
+
+describe('imported pages — an older extractor is named with the command that refreshes it (D-05)', () => {
+  it('counts two pages with importedAt and no extractor in one warning, with a re-import command each', async () => {
+    const c = ctx()
+    await documentsToChunks(
+      [imported('/kb/one', 'https://example.com/a'), imported('/kb/two', 'https://example.com/b')],
+      c,
+    )
+    expect(stale(c)).toHaveLength(1)
+    const [message] = stale(c)
+    expect(message).toContain('2 imported page(s)')
+    expect(message).toContain('extractor 1')
+    expect(message).toContain('npx docpilot import https://example.com/a --out one --force')
+    expect(message).toContain('npx docpilot import https://example.com/b --out two --force')
+    expect(c.said.die).toEqual([])
+  })
+
+  it('lists five commands and counts the rest', async () => {
+    const c = ctx()
+    const docs = Array.from({ length: 7 }, (_, i) => imported(`/kb/p${i}`, `https://example.com/p${i}`))
+    await documentsToChunks(docs, c)
+    const [message] = stale(c)
+    expect(message).toContain('7 imported page(s)')
+    expect(message.match(/npx docpilot import/g)).toHaveLength(5)
+    expect(message).toContain('…and 2 more')
+  })
+
+  it('quotes a source that the shell would read as something else', async () => {
+    const c = ctx()
+    await documentsToChunks([imported('/kb/one', 'https://example.com/a?x=1&y=2')], c)
+    expect(stale(c)[0]).toContain("npx docpilot import 'https://example.com/a?x=1&y=2' --out one --force")
+  })
+
+  it('does not flag a page stamped with the current extractor, and says a newer one is newer', async () => {
+    const c = ctx()
+    await documentsToChunks(
+      [imported('/kb/one', 'https://example.com/a', 2), imported('/kb/two', 'https://example.com/b', 3)],
+      c,
+    )
+    expect(stale(c)).toEqual([])
+    expect(newer(c)).toHaveLength(1)
+    expect(newer(c)[0]).toContain('kb/two.md')
+    expect(newer(c)[0]).not.toContain('kb/one.md')
+    expect(c.said.die).toEqual([])
+  })
+
+  it('never flags a hand-written kb page, which has no importedAt', async () => {
+    const c = ctx()
+    await documentsToChunks([kbPage('/kb/one', 'Hand-written.'), kbPage('/kb/two', 'Also by hand.', 'source: https://example.com/b\nextractor: 1')], c)
+    expect(stale(c)).toEqual([])
+    expect(newer(c)).toEqual([])
+  })
+})
+
+describe('imported pages — no term in the corpus hash (D-26)', () => {
+  /** The manifest hash and the plain formula over the chunks the build wrote. */
+  function hashes(root) {
+    const rag = path.join(root, 'docs', 'public', 'rag')
+    const manifest = JSON.parse(fs.readFileSync(path.join(rag, 'manifest.json'), 'utf8'))
+    const chunks = manifest.shards.flatMap((f) => JSON.parse(fs.readFileSync(path.join(rag, f), 'utf8')))
+    const plain = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(chunks.map((c) => c.id + c.text)))
+      .digest('hex')
+      .slice(0, 8)
+    return { manifest: manifest.hash, plain }
+  }
+
+  it('is the plain formula for a corpus with kb pages, whatever extractor stamp they carry', () => {
+    const stamped = (stamp) => {
+      const root = copyFixture()
+      const file = path.join(root, 'kb', 'topic.md')
+      fs.writeFileSync(
+        file,
+        fs.readFileSync(file, 'utf8').replace('source: https://example.com/topic\n', `source: https://example.com/topic\nimportedAt: 2026-10-01\n${stamp}`),
+      )
+      const r = build(root)
+      expect(r.status, r.stderr + r.stdout).toBe(0)
+      return { r, ...hashes(root) }
+    }
+    const old = stamped('')
+    const current = stamped('extractor: 2\n')
+    expect(old.manifest).toBe(old.plain)
+    expect(current.manifest).toBe(current.plain)
+    expect(current.manifest).toBe(old.manifest)
+    expect(old.r.stderr).toContain('npx docpilot import https://example.com/topic --out topic --force')
+    expect(current.r.stderr).not.toContain('npx docpilot import')
   })
 })

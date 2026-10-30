@@ -240,7 +240,7 @@ export function htmlRecordToDoc({
  * (D-12), so they are read here and that function is left as it was. A
  * double-quoted value is unquoted through JSON.parse, as `import` writes it.
  */
-function frontmatterValue(src: string, key: string): string {
+export function frontmatterValue(src: string, key: string): string {
   const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(withoutBom(src))
   const m = block && new RegExp(`^${key}:[ \\t]*(.+)$`, 'm').exec(block[1])
   if (!m) return ''

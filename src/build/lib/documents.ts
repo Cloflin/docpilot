@@ -22,8 +22,9 @@ import path from 'node:path'
 
 import { chunkMarkdown } from './chunker.js'
 import { closesFence, openFence } from './normalise.js'
+import { EXTRACTOR_VERSION } from './extract-html.js'
 import { chunkOpenapi } from './openapi-chunker.js'
-import { kindFor } from './readers.js'
+import { frontmatterValue, kindFor } from './readers.js'
 import { assertPublic, contentHashOf, NonPublicDocument } from './source-doc.js'
 import type { ReadDoc, SourceDoc } from './source-doc.js'
 
@@ -60,6 +61,28 @@ export interface DocumentsResult {
   rawBytes: number
   counts: { htmlPages: number; htmlShadowed: number; external: number }
 }
+
+/**
+ * How many re-import commands the stale-extractor warning lists. A site that
+ * changed extractors holds dozens of old pages and a warning that long is not
+ * read; the full list is one command away in `docpilot doctor` (plan 02-10)
+ * (engine-spec 043, D-05).
+ */
+export const MAX_STALE_LISTED = 5
+
+/**
+ * The extractor stamp of an imported page. `docpilot import` writes `extractor:`
+ * from extractor 2; the 2.x extractor wrote none, so a page with `importedAt:`
+ * and no usable stamp reads as 1 (engine-spec 043, D-05).
+ */
+function extractorOf(src: string): number {
+  const n = Number(frontmatterValue(src, 'extractor'))
+  return Number.isInteger(n) && n > 0 ? n : 1
+}
+
+/** A word safe in a shell command as it stands; anything else is single-quoted. */
+const SHELL_SAFE = /^[A-Za-z0-9_\-./:@%+=,~]+$/
+const shellWord = (w: string) => (SHELL_SAFE.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`)
 
 /**
  * A link target an imported page may keep: `/`, an asset (a path ending in an
@@ -305,12 +328,30 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
     const kbIds = new Set(of('kb').map((d) => d.id))
     const known = (route: string) => pages.has(route) || specRoutes.has(route) || kbIds.has(route)
 
+    // Imported pages an older (or newer) extractor wrote, named after the loop.
+    // Only a page `docpilot import` wrote has `importedAt:`; a hand-written one
+    // has none and is never flagged. The warning changes no byte of the index:
+    // the Markdown on disk already reflects the extractor that wrote it, so the
+    // corpus hash takes no extractor term for these pages (D-05, D-26).
+    const stale: { file: string; source: string; slug: string; extractor: number }[] = []
+    const newer: { file: string; extractor: number }[] = []
+
     for (const doc of of('kb')) {
       const id = doc.id
       if (pages.has(id)) die(`imported page id collides with a real route: ${id}`)
 
       const original = markdownOf(doc)
       rawBytes += original.length
+
+      if (frontmatterValue(original, 'importedAt')) {
+        const extractor = extractorOf(original)
+        const file = rel(doc)
+        if (extractor < EXTRACTOR_VERSION) {
+          stale.push({ file, source: doc.url ?? '', slug: path.basename(file).replace(/\.md$/i, ''), extractor })
+        } else if (extractor > EXTRACTOR_VERSION) {
+          newer.push({ file, extractor })
+        }
+      }
 
       // A dead link in imported content is the page's, not the owner's: it
       // degrades to text with a warning, and the build goes on (D-10).
@@ -347,6 +388,25 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
         external: true,
       })
       external++
+    }
+
+    if (stale.length) {
+      const old = [...new Set(stale.map((p) => p.extractor))].sort((a, b) => a - b).join(' and ')
+      warn(
+        `${stale.length} imported page(s) under ${ctx.importDir}/ were written by extractor ${old} ` +
+          `(this build's is ${EXTRACTOR_VERSION}); re-import to apply the current rules:\n` +
+          stale
+            .slice(0, MAX_STALE_LISTED)
+            .map((p) => `        npx docpilot import ${p.source ? shellWord(p.source) : '<source>'} --out ${shellWord(p.slug)} --force`)
+            .join('\n') +
+          (stale.length > MAX_STALE_LISTED ? `\n        …and ${stale.length - MAX_STALE_LISTED} more` : ''),
+      )
+    }
+    for (const p of newer) {
+      warn(
+        `${p.file}: written by a newer extractor (${p.extractor}) than this build's (${EXTRACTOR_VERSION}); ` +
+          `update docpilot to read it as it was written`,
+      )
     }
   }
 
