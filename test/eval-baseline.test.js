@@ -555,3 +555,106 @@ frozenBaselineSuite({
   baselineFile: '2.1.1.rag.json',
   kind: 'openrouter',
 })
+
+/**
+ * THE 2.1.1 ANSWER-QUALITY BASELINES — well-formedness only (D-06, D-07).
+ *
+ * `2.1.1.rag-local.answers.json` (browser runtime) and `2.1.1.rag-local.server.json`
+ * (the in-process server turn) are what a model answered on one host. A model call
+ * cannot be replayed offline, so verify does not compare them: `eval --baseline=<file>`
+ * does, on the same host, and its exit code follows the rankings alone. What verify can
+ * hold is that each file is the whole golden set, that it names the machine and the
+ * models that produced it, and that it carries no credential.
+ *
+ * The host is whatever Ollama the maintainer measured on (plan 01-09 used the LAN box,
+ * not 127.0.0.1) — never a hosted origin, because an answer baseline that quietly came
+ * from a metered provider would not be comparable with a local rerun.
+ */
+const PRIVATE_HOST = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]|10\.[\d.]+|192\.168\.[\d.]+|172\.(1[6-9]|2\d|3[01])\.[\d.]+)(:\d+)?$/
+
+function answerBaselineSuite({ title, baselineFile, runtime }) {
+  const rel = `docpilot/baselines/${baselineFile}`
+
+  describe(title, () => {
+    let manifest
+    let golden
+    let baselineText
+    let baseline
+
+    beforeAll(() => {
+      vi.stubGlobal('fetch', () => {
+        throw new Error('the offline baseline checks must not reach the network')
+      })
+      manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs/public/rag-local/manifest.json'), 'utf8'))
+      golden = fs
+        .readFileSync(GOLDEN_FILE, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l))
+      baselineText = fs.readFileSync(path.join(ROOT, rel), 'utf8')
+      baseline = JSON.parse(baselineText)
+    })
+
+    afterAll(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('holds one record per golden record, each with a ranking and an outcome', () => {
+      expect(Object.keys(baseline.records).sort()).toEqual(golden.map((r) => r.id).sort())
+      for (const [id, rec] of Object.entries(baseline.records)) {
+        expect(Array.isArray(rec.rankedIds), `${id}.rankedIds`).toBe(true)
+        expect(typeof rec.outcome, `${id}.outcome`).toBe('string')
+      }
+    })
+
+    it('names the index, the golden set, the model and the runtime it was measured on', () => {
+      expect(baseline.meta.schema).toBe(BASELINE_SCHEMA)
+      expect(baseline.meta.indexHash).toBe(manifest.hash)
+      expect(baseline.meta.embedModel).toBe(manifest.embedModel)
+      expect(baseline.meta.goldenSha).toBe(goldenShaOf(fs.readFileSync(GOLDEN_FILE, 'utf8')))
+      expect(baseline.meta.runtime).toBe(runtime)
+      expect(baseline.meta.gateOnly).toBe(false)
+      expect(baseline.meta.model).toBe('qwen3:8b')
+    })
+
+    it('summarises recall, ranking, groundedness and both refusal rates', () => {
+      for (const key of [
+        'recall8',
+        'mrr',
+        'citationPrecision',
+        'supportPrecision',
+        'unsupportedAnswerRate',
+        'gateOverRefusal',
+        'answerOverRefusal',
+      ]) {
+        expect(typeof baseline.summary[key], `summary.${key}`).toBe('number')
+      }
+    })
+
+    it('names the mapping Phase 10 compares groundedness by', () => {
+      expect(baseline.meta.groundedness).toEqual(GROUNDEDNESS_KEYS)
+      for (const key of GROUNDEDNESS_KEYS) expect(typeof baseline.summary[key]).toBe('number')
+    })
+
+    it('names the Ollama host, its version and the digest of the chat and embed models (D-07)', () => {
+      const host = baseline.meta.host
+      expect(host.chat).toMatch(PRIVATE_HOST)
+      expect(host.embed).toMatch(PRIVATE_HOST)
+      expect(originOnly(host.chat)).toBe(host.chat)
+      expect(host.ollama.base).toBe(host.embed)
+      expect(host.ollama.version).toMatch(/^\d+\.\d+\.\d+/)
+      expect(host.ollama.models['qwen3:8b']).toMatch(/^[0-9a-f]{12}$/)
+      expect(host.ollama.models[manifest.embedModel]).toMatch(/^[0-9a-f]{12}$/)
+    })
+
+    it('carries no credential-shaped string', () => {
+      expect(hasSecret(baselineText)).toBe(false)
+    })
+  })
+}
+
+answerBaselineSuite({
+  title: 'the 2.1.1 answer baseline — rag-local, browser',
+  baselineFile: '2.1.1.rag-local.answers.json',
+  runtime: 'browser',
+})
