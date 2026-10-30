@@ -21,6 +21,7 @@ import { pathToFileURL } from 'node:url'
 import { descriptionsFromLlms } from '../llms/about.js'
 import { readMarkdownDocs, readHtmlDocs, readKbDocs, readOpenapiDocs, discoverOpenapiSpecs } from './lib/readers.js'
 import { documentsToChunks } from './lib/documents.js'
+import { shellManifest } from '../server/shell.js'
 import { limitsFor, type ReadDoc } from './lib/source-doc.js'
 import { resolveSections, orphanPages, tailFor } from './lib/sections.js'
 import { parseAllowlist, checkSource } from './lib/sources.js'
@@ -1847,7 +1848,13 @@ async function main() {
 
   // The last check that can fail, so it runs on the stage — and the swap after
   // it is the only line in this file that changes `indexDir`.
-  if (total > LIMITS.failBytes) die(`artefacts total ${(total / 1024 / 1024).toFixed(1)} MB, over the 5 MB ceiling`)
+  if (total > LIMITS.failBytes) {
+    die(
+      `artefacts total ${(total / 1024 / 1024).toFixed(1)} MB, over the ${LIMITS.failBytes / 1024 / 1024} MB ceiling — a reader downloads the shards it needs from this. ` +
+        `Set docPilot.runtime: 'server' (then only docpilot serve reads the index and the browser gets its shell), ` +
+        `or shard the corpus into smaller indexes (engine-spec 041).`,
+    )
+  }
   fs.rmSync(RETIRED, { recursive: true, force: true })
   try {
     fs.renameSync(OUT, RETIRED)
@@ -1861,6 +1868,12 @@ async function main() {
     `\n  written to ${path.relative(ROOT, OUT)}/  ${(total / 1024).toFixed(0)} KB total · ${(wire / 1024).toFixed(0)} KB on the wire (brotli)`,
   )
   console.log(`    manifest.json    ${(manifestJson.length / 1024).toFixed(1)} KB`)
+  // Information only (D-13): on a server build the browser downloads the shell,
+  // not this manifest, and no limit applies to either.
+  if (docPilot.runtime === 'server') {
+    const shellBytes = Buffer.byteLength(JSON.stringify(shellManifest(manifest)))
+    console.log(`    shell manifest   ${(shellBytes / 1024).toFixed(1)} KB  (the browser downloads this when the panel opens)`)
+  }
   if (vecName) console.log(`    ${vecName}  ${(flat.length / 1024).toFixed(0)} KB`)
   else console.log('    no vectors file  lexical-only — this index carries no embeddings')
   console.log(`    ${shards.length} chunk shard(s)`)
