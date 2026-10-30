@@ -354,10 +354,19 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
           (stale.length > MAX_STALE_LISTED ? `\n        …and ${stale.length - MAX_STALE_LISTED} more` : ''),
       )
     }
-    for (const p of newer) {
+    // One line for all of them, as for the older ones: a site imported with a
+    // newer release has a page per file, and lines that differ only by file name
+    // are not merged by `warn` (IN-09).
+    if (newer.length) {
+      const ahead = [...new Set(newer.map((p) => p.extractor))].sort((a, b) => a - b).join(' and ')
+      const named = newer
+        .slice(0, MAX_STALE_LISTED)
+        .map((p) => printable(p.file))
+        .join(', ')
       warn(
-        `${p.file}: written by a newer extractor (${p.extractor}) than this build's (${EXTRACTOR_VERSION}); ` +
-          `update docpilot to read it as it was written`,
+        `${newer.length} imported page(s) under ${ctx.importDir}/ were written by a newer extractor (${ahead}) ` +
+          `than this build's (${EXTRACTOR_VERSION}); update docpilot to read them as they were written: ${named}` +
+          (newer.length > MAX_STALE_LISTED ? ` …and ${newer.length - MAX_STALE_LISTED} more` : ''),
       )
     }
   }

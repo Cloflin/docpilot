@@ -345,6 +345,19 @@ describe('imported pages — an older extractor is named with the command that r
     expect(c.said.die).toEqual([])
   })
 
+  it('names pages of a newer extractor in one line, with a count and at most five file names (IN-09)', async () => {
+    const c = ctx()
+    const docs = Array.from({ length: 7 }, (_, i) => imported(`/kb/p${i}`, `https://example.com/p${i}`, 3 + (i % 2)))
+    await documentsToChunks(docs, c)
+    expect(newer(c)).toHaveLength(1)
+    const [message] = newer(c)
+    expect(message).toContain('7 imported page(s)')
+    expect(message).toContain('(3 and 4)')
+    expect(message.match(/kb\/p\d\.md/g)).toHaveLength(5)
+    expect(message).toContain('…and 2 more')
+    expect(message).not.toContain('\n')
+  })
+
   it('never flags a hand-written kb page, which has no importedAt', async () => {
     const c = ctx()
     await documentsToChunks([kbPage('/kb/one', 'Hand-written.'), kbPage('/kb/two', 'Also by hand.', 'source: https://example.com/b\nextractor: 1')], c)
