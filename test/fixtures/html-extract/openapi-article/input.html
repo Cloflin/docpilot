@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Send a message | Acme Help Centre</title>
+<meta name="description" content="How to send a message to a customer with the Acme Messages API.">
+<link rel="canonical" href="https://help.acme.test/articles/send-a-message">
+</head>
+<body>
+<header>
+  <nav>
+    <a href="/">Acme Help</a>
+    <a href="/collections/api">API collections</a>
+    <a href="/contact">Contact support</a>
+  </nav>
+</header>
+<main>
+<article>
+  <h1>Send a message to a customer</h1>
+  <div class="article-meta">
+    <div class="avatar-name">Written by Dana Reyes</div>
+    <div class="updated">Updated over a week ago</div>
+  </div>
+  <p>Use the Messages API to send a message into an open conversation. The full list of fields is in the <a href="../reference/messages">Messages API reference</a>.</p>
+
+  <h2>Request</h2>
+  <p><code>POST /v1/messages<br>Authorization: Bearer &lt;token&gt;<br>Content-Type: application/json</code></p>
+
+  <h2>Body</h2>
+  <div class="language-json vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">json</span><pre class="shiki"><code><span class="line"><span>{</span></span>
+<span class="line"><span>  "conversation": "c_1042",</span></span>
+<span class="line"><span>  "text": "Fish &amp; chips are ready",</span></span>
+<span class="line"><span>  "notify": true</span></span>
+<span class="line"><span>}</span></span></code></pre></div>
+
+  <p>The same call from a shell:</p>
+  <pre><code class="hljs language-bash"><table class="hljs-ln"><tbody><tr><td class="hljs-ln-line hljs-ln-numbers"><div class="hljs-ln-n" data-line-number="1"></div></td><td class="hljs-ln-line hljs-ln-code">curl -X POST https://api.acme.test/v1/messages \</td></tr><tr><td class="hljs-ln-line hljs-ln-numbers"><div class="hljs-ln-n" data-line-number="2"></div></td><td class="hljs-ln-line hljs-ln-code">  -H "Authorization: Bearer $TOKEN" \</td></tr><tr><td class="hljs-ln-line hljs-ln-numbers"><div class="hljs-ln-n" data-line-number="3"></div></td><td class="hljs-ln-line hljs-ln-code">  -d @message.json</td></tr></tbody></table></code></pre>
+
+  <h2>Parameters</h2>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>conversation</td><td>string</td><td>The id of an open conversation</td></tr>
+      <tr><td>text</td><td>string</td><td>The message body, up to 4000 characters</td></tr>
+      <tr><td>notify</td><td>boolean</td><td>Send the customer a notification</td></tr>
+    </tbody>
+  </table>
+
+  <div class="feedback"><p>Was this article helpful?</p><span>Yes</span><span>No</span></div>
+</article>
+</main>
+<footer>Acme Help Centre, a service of Acme Ltd.</footer>
+</body>
+</html>

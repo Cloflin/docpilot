@@ -43,7 +43,15 @@ export const LANG_ANCESTOR_DEPTH = 3
  * raw substring, so `client` never matches `lnt` and Chroma's `lntd`, which
  * marks both of its cells, is not a gutter.
  */
-export const LINE_NUMBER_HINTS: string[] = []
+export const LINE_NUMBER_HINTS = [
+  'line-number',
+  'line-numbers',
+  'linenumber',
+  'linenos',
+  'hljs-ln-numbers',
+  'lnt',
+  'gutter',
+]
 
 /**
  * A wrapper's own text outside its `pre` is chrome when it is this short
@@ -66,6 +74,13 @@ const classTokens = (el): string[] =>
 /** Does this element carry a line-number class? */
 function hasHint(el): boolean {
   return classTokens(el).some((t) => LINE_NUMBER_HINTS.some((h) => t === h || t.startsWith(`${h}-`)))
+}
+
+/** Does this element, or anything beneath it, carry a line-number class? */
+function hasHintBeneath(el): boolean {
+  if (hasHint(el)) return true
+  for (const child of [...(el.children || [])]) if (hasHintBeneath(child)) return true
+  return false
 }
 
 /** The language a `pre`, a `code` or a block-level `code` names, or ''. */
@@ -146,6 +161,41 @@ function textOutside(el, skip): string {
   return out.join('').replace(/\s+/g, ' ').trim()
 }
 
+const cellsOf = (tr): any[] => [...(tr.children || [])].filter((c) => /^(td|th)$/i.test(c.tagName || ''))
+
+const digitsOnly = (cell): boolean => /^\d[\d\s]*$/.test(String(cell.textContent || '').trim())
+
+/** A gutter cell: it carries a line-number class, or only digits. */
+const isGutterCell = (cell): boolean => hasHintBeneath(cell) || digitsOnly(cell)
+
+/**
+ * A table that is a highlighter's layout (engine-spec 043): a gutter cell next
+ * to a cell that holds the code.
+ *
+ * The test is narrow on purpose. A data table with a numeric first column is
+ * not code, so a digits-only cell counts as a gutter only when the cell beside
+ * it holds a `pre`, and a hinted gutter needs a `pre` or a `code` beside it.
+ */
+function isCodeTable(table): boolean {
+  const cells = [...table.querySelectorAll('tr')].flatMap(cellsOf)
+  const gutters = cells.filter(isGutterCell)
+  const others = cells.filter((c) => !isGutterCell(c))
+  if (!gutters.length || !others.length) return false
+
+  if (others.some((c) => c.querySelector('pre'))) return true
+  return gutters.some(hasHintBeneath) && others.some((c) => c.querySelector('code'))
+}
+
+/**
+ * A `p` or `div` whose only content is one `code` holding `<br>` lines: how a
+ * help-centre editor writes a request sample.
+ */
+function isBlockCode(el): boolean {
+  const kids = [...(el.children || [])]
+  if (kids.length !== 1 || tagOf(kids[0]) !== 'code' || !kids[0].querySelector('br')) return false
+  return ![...(el.childNodes || [])].some((n) => n.nodeType === 3 && String(n.data || '').trim())
+}
+
 /** A wrapper with a `language-` class around exactly one `pre` and a short label. */
 function isWrappedPre(el): boolean {
   if (!LANG_TOKEN.test(String(el.getAttribute?.('class') || ''))) return false
@@ -156,12 +206,47 @@ function isWrappedPre(el): boolean {
 
 /** Does this element read as one code block? */
 export function isCodeBlock(node): boolean {
-  return tagOf(node) === 'pre' || isWrappedPre(node)
+  const tag = tagOf(node)
+  if (tag === 'pre') return true
+  if (tag === 'table') return isCodeTable(node)
+  if ((tag === 'p' || tag === 'div') && isBlockCode(node)) return true
+  return isWrappedPre(node)
 }
 
 /** The code block an element stands for, or null when it holds no code. */
 export function codeBlock(node): Block | null {
-  const pre = tagOf(node) === 'pre' ? node : node.querySelector('pre')
-  const text = codeText(pre)
-  return text.trim() ? { kind: 'code', lang: fenceLanguage(pre), text } : null
+  const tag = tagOf(node)
+  let text = ''
+  let lang = ''
+
+  if (tag === 'pre') {
+    text = codeText(node)
+    lang = fenceLanguage(node)
+  } else if (tag === 'table') {
+    const cells = [...node.querySelectorAll('tr')].flatMap(cellsOf).filter((c) => !isGutterCell(c))
+    const pres = cells.map((c) => c.querySelector('pre')).filter(Boolean)
+    if (pres.length) {
+      text = pres.map(codeText).join('\n')
+      lang = fenceLanguage(pres[0])
+    } else {
+      const rows = [...node.querySelectorAll('tr')].map((tr) =>
+        cellsOf(tr)
+          .filter((c) => !isGutterCell(c))
+          .map((c) => codeText(c))
+          .join(''),
+      )
+      text = rows.join('\n').replace(/\n+$/, '')
+      lang = fenceLanguage(cells[0].querySelector('code') || cells[0])
+    }
+  } else if (isBlockCode(node)) {
+    const code = node.children[0]
+    text = codeText(code)
+    lang = fenceLanguage(code)
+  } else {
+    const pre = node.querySelector('pre')
+    text = codeText(pre)
+    lang = fenceLanguage(pre)
+  }
+
+  return text.trim() ? { kind: 'code', lang, text } : null
 }

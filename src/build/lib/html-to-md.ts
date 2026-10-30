@@ -50,6 +50,14 @@ function escapeLeader(line) {
   return line.replace(/^(\s*)([-+*>#]|\d+[.)])(\s)/, '$1\\$2$3')
 }
 
+/** The text of an inline code span, a `br` read as the space it stands for. */
+function spanText(node) {
+  if (node.nodeType === 3) return String(node.data || '')
+  if (node.nodeType !== 1) return ''
+  if (String(node.tagName || '').toLowerCase() === 'br') return ' '
+  return [...(node.childNodes || [])].map(spanText).join('')
+}
+
 /**
  * Inline serialisation: the text of a node with its emphasis kept.
  *
@@ -86,7 +94,7 @@ function inline(node, ctx) {
     case 'samp': {
       // Backticks inside the sample decide the fence width, so a snippet
       // containing a backtick still round-trips.
-      const raw = String(node.textContent || '').replace(/\s+/g, ' ').trim()
+      const raw = spanText(node).replace(/\s+/g, ' ').trim()
       if (!raw) return ''
       const ticks = '`'.repeat(Math.max(...[...raw.matchAll(/`+/g)].map((m) => m[0].length), 0) + 1)
       return `${ticks}${raw}${ticks}`

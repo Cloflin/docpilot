@@ -1,8 +1,11 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { parseHTML } from 'linkedom'
 
 import { pickMain, prune } from '../src/build/lib/html-extract.js'
 import { toMarkdown } from '../src/build/lib/html-to-md.js'
+import { extractHtml } from '../src/build/lib/extract-html.js'
 
 /**
  * Code blocks — engine-spec 043, HTML-02.
@@ -71,5 +74,91 @@ describe('html code blocks — precision edge', () => {
 
   it('turns U+00A0 into a space and changes no other character', () => {
     expect(md('<pre><code>a&nbsp;b\tc  d</code></pre>')).toBe('```\na b\tc  d\n```')
+  })
+})
+
+describe('html code blocks — gutters and chrome', () => {
+  it('drops the line-number column of a highlight.js table', () => {
+    const html =
+      '<pre><code class="hljs language-bash"><table class="hljs-ln"><tr>' +
+      '<td class="hljs-ln-line hljs-ln-numbers"><div class="hljs-ln-n" data-line-number="1"></div></td>' +
+      '<td class="hljs-ln-line hljs-ln-code">npm i</td></tr><tr>' +
+      '<td class="hljs-ln-line hljs-ln-numbers"><div class="hljs-ln-n" data-line-number="2"></div></td>' +
+      '<td class="hljs-ln-line hljs-ln-code">npm test</td></tr></table></code></pre>'
+    expect(md(html)).toBe('```bash\nnpm i\nnpm test\n```')
+  })
+
+  it('reads a Hugo lntable as one fence with the code cell only', () => {
+    const html =
+      '<div class="highlight"><div class="chroma"><table class="lntable"><tr>' +
+      '<td class="lntd"><pre class="chroma"><code><span class="lnt">1\n</span><span class="lnt">2\n</span></code></pre></td>' +
+      '<td class="lntd"><pre class="chroma"><code class="language-go">package main\nfunc main() {}\n</code></pre></td>' +
+      '</tr></table></div></div>'
+    expect(md(html)).toBe('```go\npackage main\nfunc main() {}\n```')
+  })
+
+  it('skips a line-number span inside a pre', () => {
+    expect(md('<pre><code><span class="line-number">1</span>x</code></pre>')).toBe('```\nx\n```')
+  })
+
+  it('does not take a data table with a numeric first column for code', () => {
+    const out = md('<table><tr><th>Code</th><th>Meaning</th></tr><tr><td>200</td><td><code>OK</code></td></tr></table>')
+    expect(out).toContain('| 200 | `OK` |')
+    expect(out).not.toContain('```')
+  })
+
+  it('does not match a gutter hint inside a longer class token', () => {
+    expect(md('<pre><code><span class="client">x</span></code></pre>')).toBe('```\nx\n```')
+  })
+})
+
+describe('html code blocks — block-level code', () => {
+  it('reads a p holding one code with br lines as a two-line fence', () => {
+    expect(md('<p><code>GET /a<br>Host: acme.test</code></p>')).toBe('```\nGET /a\nHost: acme.test\n```')
+  })
+
+  it('leaves a code span with a br inside a sentence as prose', () => {
+    const out = md('<p>Run <code>a<br>b</code> now</p>')
+    expect(out).toBe('Run `a b` now')
+  })
+})
+
+describe('html code blocks — the OpenAPI-in-article fixture', () => {
+  const dir = path.resolve('test/fixtures/html-extract/openapi-article')
+  const read = (name) => fs.readFileSync(path.join(dir, name), 'utf8')
+  const lines = (text) => text.split('\n').filter((l) => l !== '')
+
+  const truth = lines(read('truth.txt'))
+  const between = (from, to) => truth.slice(truth.indexOf(from) + 1, truth.indexOf(to))
+  const requestLines = between('Request', 'Body')
+  const bodyLines = between('Body', 'The same call from a shell:')
+  const curlLines = between('The same call from a shell:', 'Parameters')
+
+  const fences = (markdown) => [...markdown.matchAll(/^(`{3,})([^\n]*)\n([\s\S]*?)\n\1$/gm)].map((m) => ({ lang: m[2], text: m[3] }))
+  const extract = async () => (await extractHtml(read('input.html'), { base: 'https://help.acme.test/articles/send-a-message' })).markdown
+
+  it('keeps every code line of the ground truth inside a fence', async () => {
+    const found = fences(await extract())
+    const inside = found.map((f) => f.text).join('\n')
+    for (const line of [...requestLines, ...bodyLines, ...curlLines]) expect(inside.split('\n')).toContain(line)
+  })
+
+  it('writes the request block as one three-line fence', async () => {
+    const found = fences(await extract())
+    const request = found.find((f) => f.text.startsWith('POST /v1/messages'))
+    expect(request.text.split('\n')).toEqual(requestLines)
+    expect(request.lang).toBe('')
+  })
+
+  it('opens the JSON body and the shell sample with their languages', async () => {
+    const found = fences(await extract())
+    expect(found.find((f) => f.text.startsWith('{')).lang).toBe('json')
+    expect(found.find((f) => f.text.startsWith('curl')).lang).toBe('bash')
+    expect(found).toHaveLength(3)
+  })
+
+  it('holds no noise string inside a fence', async () => {
+    const inside = fences(await extract()).map((f) => f.text).join('\n')
+    for (const noise of lines(read('noise.txt'))) expect(inside).not.toContain(noise)
   })
 })
