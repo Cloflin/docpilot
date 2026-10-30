@@ -2068,10 +2068,11 @@ async function settleBaseline(runs) {
     const { ranAt, chatBase, embedBase, ...prov } = provenance()
     // A loopback address, or a private-network one (RFC 1918): the maintainer's LAN Ollama
     // (plan 01-07) is not loopback, and its version and digests are what D-07 asks for.
+    // A full dotted quad only: `10.example.com` begins with `10.` and is a DNS name.
+    const PRIVATE_V4 = /^(10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})$/
     const isLocal = (o) =>
       o !== null &&
-      (['127.0.0.1', 'localhost', '[::1]'].includes(new URL(o).hostname) ||
-        /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(new URL(o).hostname))
+      (['127.0.0.1', 'localhost', '[::1]'].includes(new URL(o).hostname) || PRIVATE_V4.test(new URL(o).hostname))
     // A gate-only run never calls the chat host (`host.chat` is null above), so a local
     // chat base the environment happens to name is not part of the measurement.
     const localBase = [originOnly(EMBED_BASE), ...(GATE_ONLY ? [] : [originOnly(BASE)])].find(isLocal) ?? null
