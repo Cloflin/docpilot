@@ -9,10 +9,12 @@
  *   1. parse, then read the metadata BEFORE any removal (a title can sit in
  *      the `<header>` the pruner is about to take);
  *   2. choose the root (a content selector, else `pickMain`);
- *   3. remove the `exclude` selectors, then `prune` the furniture;
- *   4. serialise the root to Markdown;
- *   5. normalise to NFC;
- *   6. refuse a page with nothing left in it.
+ *   3. unfold tab panels and accordions, so each panel is visible and carries
+ *      its label (html-tabs.ts);
+ *   4. remove the `exclude` selectors, then `prune` the furniture;
+ *   5. serialise the root to Markdown;
+ *   6. normalise to NFC;
+ *   7. refuse a page with nothing left in it.
  *
  * It makes no network call, reads no clock or locale and calls no model. A
  * page-level problem is a typed result (`ok: false` plus a reason), never a
@@ -22,6 +24,7 @@
 import { parseDocument } from './dom.js'
 import { metadata, pickMain, prune, robotsNoindex, textOf } from './html-extract.js'
 import { createLinkResolver } from './html-links.js'
+import { unfoldPanels } from './html-tabs.js'
 import { toMarkdown } from './html-to-md.js'
 
 /**
@@ -197,6 +200,11 @@ export function extractDocument(document, options: ExtractOptions = {}): Extract
     } else {
       root = pickMain(document)
     }
+
+    // Pipeline step 5 of the research diagram: it must precede `exclude` and
+    // the prune, which would delete every inactive panel as `hidden` and every
+    // tab label as a `button` (P-01, P-02; engine-spec 043, HTML-05).
+    unfoldPanels(root)
 
     const dropped: { reason: string; text: string }[] = []
     const excludes = (Array.isArray(exclude) ? exclude : [exclude])

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Install the Acme CLI | Acme Docs</title>
+<meta name="description" content="Install the Acme command line tool on Linux, Windows or in a container.">
+<link rel="canonical" href="https://docs.acme.test/install">
+</head>
+<body>
+<header>
+  <nav>
+    <a href="/">Acme Docs home</a>
+    <a href="/guides">Browse all guides</a>
+    <a href="/api">API overview</a>
+  </nav>
+</header>
+<main>
+<article>
+  <h1>Install the Acme CLI</h1>
+  <p>Pick the install method that fits your machine. Every method gives you the same acme command.</p>
+
+  <h2>Operating systems</h2>
+  <div class="install-tabs">
+    <div role="tablist" aria-label="Install method">
+      <button role="tab" id="tab-bash" aria-controls="panel-bash" aria-selected="true">Bash</button>
+      <button role="tab" id="tab-ps" aria-controls="panel-ps" aria-selected="false">PowerShell</button>
+      <button role="tab" id="tab-docker" aria-controls="panel-docker" aria-selected="false">Docker</button>
+    </div>
+    <div role="tabpanel" id="panel-bash" aria-labelledby="tab-bash"><pre><code>curl -fsSL https://get.acme.test/install.sh | sh
+acme --version</code></pre></div>
+    <div role="tabpanel" id="panel-ps" aria-labelledby="tab-ps" hidden><pre><code>iwr https://get.acme.test/install.ps1 | iex
+acme --version</code></pre></div>
+    <div role="tabpanel" id="panel-docker" aria-labelledby="tab-docker" hidden><pre><code>docker pull acme/cli:latest
+docker run --rm acme/cli:latest --version</code></pre></div>
+  </div>
+
+  <h2>Package managers</h2>
+  <p>The same command is published to the common package managers.</p>
+  <div class="vp-code-group"><div class="tabs"><input type="radio" name="group-1" id="tab-pm-1" checked><label data-title="npm" for="tab-pm-1">npm</label><input type="radio" name="group-1" id="tab-pm-2"><label data-title="yarn" for="tab-pm-2">yarn</label><input type="radio" name="group-1" id="tab-pm-3"><label data-title="pnpm" for="tab-pm-3">pnpm</label></div><div class="blocks"><div class="language-sh vp-adaptive-theme active"><button title="Copy Code" class="copy"></button><span class="lang">sh</span><pre class="shiki"><code><span class="line"><span>npm install --global @acme/cli</span></span></code></pre></div><div class="language-sh vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">sh</span><pre class="shiki"><code><span class="line"><span>yarn global add @acme/cli</span></span></code></pre></div><div class="language-sh vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">sh</span><pre class="shiki"><code><span class="line"><span>pnpm add --global @acme/cli</span></span></code></pre></div></div></div>
+
+  <p>Run acme login after the install to connect the command to your account.</p>
+</article>
+</main>
+<footer>
+  <p>Copyright Acme Ltd. All rights reserved.</p>
+  <a href="/privacy">Privacy policy</a>
+  <a href="/terms">Terms of service</a>
+</footer>
+</body>
+</html>

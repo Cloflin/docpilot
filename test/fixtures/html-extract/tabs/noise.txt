@@ -1,0 +1,7 @@
+Acme Docs home
+Browse all guides
+API overview
+Copyright Acme Ltd. All rights reserved.
+Privacy policy
+Terms of service
+Install method
