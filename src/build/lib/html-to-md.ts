@@ -144,6 +144,54 @@ function inline(node, ctx) {
   }
 }
 
+/**
+ * What one `li` holds, in source order: a line of text, a code block, or a
+ * nested list already written at its own indent.
+ *
+ * Inline content between blocks is one line of text, joined as it always was.
+ * A `p` or a `div` is a line of its own, and a block of code stays a block: the
+ * old reading ran every child through `inline()` and joined with a space, so
+ * `npm install` and `npm test` in a step's sample became one line of prose and
+ * two paragraphs became one (WR-08, engine-spec 043, F-01).
+ */
+function itemParts(li, ctx, depth) {
+  const parts = []
+  let run = []
+  const flush = () => {
+    const text = run.join(' ').replace(/\s+/g, ' ').trim()
+    run = []
+    if (text) parts.push({ text })
+  }
+  const walk = (parent) => {
+    for (const child of [...(parent.childNodes || [])]) {
+      const tag = String(child.tagName || '').toLowerCase()
+      if (tag === 'ul' || tag === 'ol') {
+        flush()
+        const nested = list(child, ctx, depth + 1)
+        if (nested) parts.push({ nested })
+      } else if (child.nodeType === 1 && isCodeBlock(child)) {
+        flush()
+        const block = codeBlock(child)
+        if (block) parts.push({ block })
+      } else if (tag === 'div' && containsBlock(child)) {
+        // A wrapper around a sample or a list: its blocks are the item's.
+        flush()
+        walk(child)
+        flush()
+      } else if (tag === 'p' || tag === 'div') {
+        flush()
+        run.push(inline(child, ctx))
+        flush()
+      } else {
+        run.push(inline(child, ctx))
+      }
+    }
+  }
+  walk(li)
+  flush()
+  return parts
+}
+
 /** A `<ul>`/`<ol>`, nested lists included, at the given indent. */
 function list(el, ctx, depth = 0) {
   const ordered = /^ol$/i.test(el.tagName || '')
@@ -154,23 +202,26 @@ function list(el, ctx, depth = 0) {
   let n = Number.isFinite(start) ? start : 1
 
   for (const li of [...(el.children || [])].filter((c) => /^li$/i.test(c.tagName || ''))) {
-    const nested = []
-    const own = []
-    for (const child of [...(li.childNodes || [])]) {
-      const tag = String(child.tagName || '').toLowerCase()
-      if (tag === 'ul' || tag === 'ol') {
-        nested.push(list(child, ctx, depth + 1))
-      } else if (tag === 'p' || tag === 'div') {
-        own.push(inline(child, ctx))
-      } else {
-        own.push(inline(child, ctx))
-      }
-    }
-    const text = own.join(' ').replace(/\s+/g, ' ').trim()
-    if (!text && !nested.length) continue
+    const parts = itemParts(li, ctx, depth)
+    if (!parts.length) continue
     const marker = ordered ? `${n++}.` : '-'
-    out.push(`${indent}${marker} ${text}`.trimEnd())
-    for (const block of nested) if (block) out.push(block)
+
+    // The first line of text sits on the marker's line. Everything after it is
+    // a continuation line under the item's text, with no blank line between:
+    // the chunker splits on blank lines, and a split would cut a step from its
+    // own sample.
+    const lead = parts[0] as any
+    const first = typeof lead.text === 'string' ? lead.text : ''
+    out.push(`${indent}${marker} ${first}`.trimEnd())
+
+    const under = indent + ' '.repeat(marker.length + 1)
+    for (const part of (first ? parts.slice(1) : parts) as any[]) {
+      if (part.nested) out.push(part.nested)
+      else if (part.block) {
+        const fenced = renderBlocks([part.block]).markdown
+        out.push(fenced.split('\n').map((l) => (l ? under + l : l)).join('\n'))
+      } else out.push(under + escapeLeader(part.text))
+    }
   }
   return out.join('\n')
 }

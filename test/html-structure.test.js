@@ -177,6 +177,34 @@ describe('html structure — headings, details, lists, text', () => {
     expect(md('<ol start="abc"><li>x</li><li>y</li></ol>')).toBe('1. x\n2. y')
   })
 
+  it('keeps a code sample in a step as a fence nested under the item', () => {
+    const out = md(
+      '<ol><li>Run this:<pre><code class="language-bash">npm install\nnpm test</code></pre></li>' +
+        '<li>Then deploy.</li></ol>',
+    )
+    expect(out).toBe('1. Run this:\n   ```bash\n   npm install\n   npm test\n   ```\n2. Then deploy.')
+  })
+
+  it('keeps a blank line and a longer fence inside a code sample in a list item', () => {
+    const out = md('<ul><li>Sample<pre>a\n\n```\nb</pre></li></ul>')
+    expect(out).toBe('- Sample\n  ````\n  a\n\n  ```\n  b\n  ````')
+  })
+
+  it('joins the paragraphs of an item as continuation lines, not with a space', () => {
+    expect(md('<ul><li><p>One</p><p>Two</p></li></ul>')).toBe('- One\n  Two')
+    expect(md('<ol><li><div>One</div><div>Two</div></li></ol>')).toBe('1. One\n   Two')
+  })
+
+  it('reads a sample inside a wrapper div in an item as a fence, and keeps the text after it', () => {
+    const out = md('<ol><li><div class="highlight"><pre>y\nz</pre></div><p>after</p></li></ol>')
+    expect(out).toBe('1.\n   ```\n   y\n   z\n   ```\n   after')
+  })
+
+  it('writes a simple list exactly as before', () => {
+    expect(md('<ul><li>a<b>b</b> c</li><li>d<ul><li>e</li></ul></li></ul>')).toBe('- a **b** c\n- d\n  - e')
+    expect(md('<ul><li><p>solo</p></li></ul>')).toBe('- solo')
+  })
+
   it('keeps a definition list and the paragraphs of a blockquote', () => {
     expect(md('<dl><dt>Seat</dt><dd>One user</dd></dl>')).toBe('- **Seat** — One user')
     expect(md('<blockquote><p>One.</p><p>Two.</p></blockquote>')).toBe('> One.\n>\n> Two.')
