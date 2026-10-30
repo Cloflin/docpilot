@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 
 import { assembleIndex } from '../src/theme/docpilot/store.js'
 import { createRetrieval } from '../src/theme/docpilot/retriever.js'
@@ -19,6 +21,8 @@ import {
   diffBaseline,
 } from '../src/eval/baseline.js'
 import { hasSecret } from '../src/theme/docpilot/credentials.js'
+import { readIndexDir } from '../src/server/index.js'
+import { underPath } from '../src/eval/metrics.js'
 
 /**
  * THE RANKING ENGINE AND THE BASELINE ENGINE, on an index that lives in memory.
@@ -380,4 +384,126 @@ describe('provenance helpers', () => {
     expect(await ollamaHost('http://127.0.0.1:1', undefined, down)).toBeNull()
     expect(await ollamaHost('http://127.0.0.1:1', undefined, async () => ({ ok: false, status: 500 }))).toBeNull()
   })
+})
+
+/**
+ * THE 2.1.1 BASELINES, REPLAYED OFFLINE (D-02, EVAL-01, EVAL-02).
+ *
+ * `docpilot/baselines/2.1.1.<index>.json` freezes what 2.1.1 ranks for every
+ * golden record, together with the int8 query vectors the ranking came from. This
+ * block loads the COMMITTED index off disk, replays the ranking from the frozen
+ * vectors and fails on any record whose `rankedIds`, `retrievedIds`, `channel` or
+ * gate result moved. `fetch` throws for the length of the block: the gate is
+ * offline by construction, so it runs on a machine with no Ollama and no key.
+ *
+ * A deliberate ranking change is reviewed as the diff of the baseline file:
+ * rewrite it with the command each failure message names.
+ *
+ * The same block pins two provenance rules. The baseline names the index it was
+ * taken on (`meta.indexHash`) and the golden set (`meta.goldenSha`); when either
+ * moved, the file is stale and the message says how to refresh it. And the
+ * committed manifest carries a MEASURED guard (EVAL-02): `source` is not
+ * 'provisional' and `calibratedAt` is the manifest's own hash, because
+ * `guardFor` inlines a calibration only when the two agree.
+ */
+const ROOT = path.resolve(import.meta.dirname, '..')
+const GOLDEN_FILE = path.join(ROOT, 'docpilot/golden.jsonl')
+
+/** The ids and pages of a loaded index, the way `lint` resolves a gold entry. */
+function resolvesInIndex(index, gold) {
+  const ids = index.chunks.map((c) => c.id)
+  const pages = new Set(index.chunks.map((c) => c.path))
+  return ids.includes(gold) || pages.has(`/${gold}`) || pages.has(gold) || ids.some((id) => underPath(id, gold))
+}
+
+function frozenBaselineSuite({ label, indexDir, baselineFile, kind }) {
+  const rel = `docpilot/baselines/${baselineFile}`
+  const refresh =
+    `node bin/docpilot.js eval --gate-only --baseline=${rel} --update-baseline` +
+    ` (against ${path.basename(indexDir)})`
+
+  describe(`the 2.1.1 baseline — ${label}`, () => {
+    let index
+    let manifest
+    let golden
+    let goldenText
+    let baselineText
+    let baseline
+    let replayed
+
+    beforeAll(async () => {
+      vi.stubGlobal('fetch', () => {
+        throw new Error('the offline baseline gate must not reach the network')
+      })
+      index = readIndexDir(path.join(ROOT, indexDir))
+      manifest = index.manifest
+      goldenText = fs.readFileSync(GOLDEN_FILE, 'utf8')
+      golden = goldenText
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l))
+      baselineText = fs.readFileSync(path.join(ROOT, rel), 'utf8')
+      baseline = JSON.parse(baselineText)
+      replayed = await replayBaseline({ index, guard: manifest.guard, records: golden, baseline })
+    })
+
+    afterAll(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('names the index and the golden set it was taken on, and both are still the committed ones', () => {
+      expect(baseline.meta.schema, rel).toBe(BASELINE_SCHEMA)
+      expect(baseline.meta.indexHash, `the index moved since the baseline was taken — ${refresh}`).toBe(manifest.hash)
+      expect(baseline.meta.goldenSha, `docpilot/golden.jsonl changed since the baseline was taken — ${refresh}`).toBe(
+        goldenShaOf(goldenText),
+      )
+      expect(baseline.meta.embedModel).toBe(manifest.embedModel)
+      expect(baseline.meta.guard).toEqual(manifest.guard)
+    })
+
+    it('carries a measured guard stamped for this corpus (EVAL-02)', () => {
+      expect(manifest.guard.source).not.toBe('provisional')
+      expect(manifest.guard.calibratedAt).toBe(manifest.hash)
+    })
+
+    it('holds one record per golden record, and a vector for every question it asks', () => {
+      expect(Object.keys(baseline.records).sort()).toEqual(golden.map((r) => r.id).sort())
+      expect(baseline.meta.vectors.count).toBe(Object.keys(baseline.vectors).length)
+      expect(replayed).toHaveLength(golden.length)
+    })
+
+    it('ranks every golden record exactly as the frozen run did', () => {
+      const diffs = diffBaseline(baseline, replayed)
+      expect(diffs, `${diffs.length} record field(s) moved — ${refresh}`).toEqual([])
+    })
+
+    it('names a gold chunk that exists in the index, for every golden record', () => {
+      const missing = golden.flatMap((r) =>
+        (r.gold_chunks || []).filter((g) => !resolvesInIndex(index, g)).map((g) => `${r.id}: ${g}`),
+      )
+      expect(missing).toEqual([])
+    })
+
+    it('names the host that measured it, and carries no credential-shaped string', () => {
+      expect(hasSecret(baselineText)).toBe(false)
+      const host = baseline.meta.host
+      expect(originOnly(host.embed)).toBe(host.embed)
+      if (kind === 'ollama') {
+        // D-07: an Ollama build and a model digest are part of the measurement.
+        expect(host.ollama.base).toBe(host.embed)
+        expect(host.ollama.version).toMatch(/^\d+\.\d+\.\d+/)
+        expect(host.ollama.models[manifest.embedModel]).toMatch(/^[0-9a-f]{12}$/)
+      } else {
+        expect(host.embed).toBe('https://openrouter.ai')
+        expect(host.ollama).toBeNull()
+      }
+    })
+  })
+}
+
+frozenBaselineSuite({
+  label: 'rag-local',
+  indexDir: 'docs/public/rag-local',
+  baselineFile: '2.1.1.rag-local.json',
+  kind: 'ollama',
 })

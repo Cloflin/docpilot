@@ -193,11 +193,6 @@
 {"id":"s-24","question":"What does a narrowed sweep write?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
 {"id":"s-25","question":"When does a new calibration take effect?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
 {"id":"s-26","question":"What does bench compare and what does it not measure?","stratum":"S","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
-{"id":"s-27","question":"Is the limit on requests or on tokens?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
-{"id":"s-28","question":"What does one turn cost in requests?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
-{"id":"s-29","question":"Which four failures do not rotate?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
-{"id":"s-30","question":"What does DocPilot do without being asked?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
-{"id":"s-31","question":"What do I have to decide myself?","stratum":"S","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
 {"id":"s-32","question":"What is stored, and where?","stratum":"S","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
 {"id":"s-33","question":"What happens across two tabs?","stratum":"S","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
 {"id":"s-34","question":"What happens to a thread when the docs change?","stratum":"S","scope":{"kind":"section","paths":["/guide/history"],"label":"Conversation history"}}
@@ -426,7 +421,6 @@
 {"id":"p-01","question":"What is the default value of guard.tau?","stratum":"P","scope":{"kind":"section","paths":["/concepts/the-gate"],"label":"The refusal gate"}}
 {"id":"p-02","question":"Which flag makes calibrate skip the embedding pass?","stratum":"P","scope":{"kind":"section","paths":["/guide/evaluation"],"label":"Calibration and evaluation"}}
 {"id":"p-03","question":"What is the exact request-per-day number on the free tier?","stratum":"P","scope":{"kind":"section","paths":["/concepts/the-ladder"],"label":"The answer ladder"}}
-{"id":"p-04","question":"Which model does the free pool try third?","stratum":"P","scope":{"kind":"section","paths":["/guide/free-tier"],"label":"Living on the free tier"}}
 {"id":"p-05","question":"What is the default chunk size in characters?","stratum":"P","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
 {"id":"p-06","question":"How many dimensions does the default embedder produce?","stratum":"P","scope":{"kind":"section","paths":["/guide/indexing"],"label":"Building the index"}}
 {"id":"p-07","question":"What is the default value of ui.prefetch?","stratum":"P","scope":{"kind":"section","paths":["/guide/panel"],"label":"The assistant panel"}}
@@ -598,8 +592,6 @@
 {"id":"f-61","question":"Which of them is allowed to clear it alone?","stratum":"F","prev_questions":["What is the refusal gate?","And what are its two channels?"],"gold_page":"/concepts/the-gate"}
 {"id":"f-62","question":"А если он задан не на том языке, на котором написана документация?","stratum":"F","prev_questions":["Что такое шлюз отказа?","А как он ведёт себя с уточняющим вопросом?"],"gold_page":"/concepts/the-gate"}
 {"id":"f-63","question":"And what makes it move on to the next one?","stratum":"F","prev_questions":["What is the answer ladder?","Which rung does it try first?"],"gold_page":"/concepts/the-ladder"}
-{"id":"f-64","question":"And what do I have to set afterwards?","stratum":"F","prev_questions":["What is OpenRouter's free tier limit?","Does buying credits move it?"],"gold_page":"/guide/free-tier"}
-{"id":"f-65","question":"А во что обойдётся третий?","stratum":"F","prev_questions":["Что происходит, если во время сборки индекса заканчивается дневной лимит бесплатных запросов?","А что делать, чтобы всё-таки её закончить?"],"gold_page":"/guide/free-tier"}
 {"id":"f-66","question":"And which of them is missing when I pass --no-embed?","stratum":"F","prev_questions":["What files does npx docpilot index write?","Where does it put them?"],"gold_page":"/guide/indexing"}
 {"id":"f-67","question":"And which is the one where the structure could not be preserved?","stratum":"F","prev_questions":["Which warnings does the chunker print?","What does the second one mean?"],"gold_page":"/guide/indexing"}
 {"id":"f-68","question":"And what happens when the answer turns out to be somewhere else?","stratum":"F","prev_questions":["How do I narrow a question to a single page?","Does that stop the model reading anything else?"]}

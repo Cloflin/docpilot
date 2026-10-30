@@ -640,7 +640,7 @@ It scores every probe in `calibration.jsonl` against every configured opener. A
 probe is not an opener, so **every score it produces is a false positive waiting
 to happen**, and the highest of them is the floor `matchTau` has to sit above.
 
-Measured on this project's corpus, 639 probes × 3 openers = 1,917 pairs:
+Measured on this project's corpus, 631 probes × 3 openers = 1,893 pairs:
 
 ```
     0.500  "What does the docs-rag skill do?"

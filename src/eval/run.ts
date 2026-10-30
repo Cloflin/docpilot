@@ -2058,7 +2058,12 @@ async function settleBaseline(runs) {
     // `chatBase` and `embedBase` are dropped: they name the configured hosts whether
     // or not this run used them. `host` below names the ones it did.
     const { ranAt, chatBase, embedBase, ...prov } = provenance()
-    const isLocal = (o) => o !== null && ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(o).hostname)
+    // A loopback address, or a private-network one (RFC 1918): the maintainer's LAN Ollama
+    // (plan 01-07) is not loopback, and its version and digests are what D-07 asks for.
+    const isLocal = (o) =>
+      o !== null &&
+      (['127.0.0.1', 'localhost', '[::1]'].includes(new URL(o).hostname) ||
+        /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(new URL(o).hostname))
     const localBase = [originOnly(EMBED_BASE), originOnly(BASE)].find(isLocal) ?? null
     const model = GATE_ONLY ? null : (runs[0]?.meta?.model ?? MODELS[0])
     const failed = runs.filter((r) => hardGatesFailed(r.summary)).map((r) => r.meta.model)
