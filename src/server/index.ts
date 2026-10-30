@@ -28,6 +28,7 @@ import { createTurnLog, type TurnLogOptions } from './log.js'
 import { parseTurnInput } from './input.js'
 import { runServerTurn, startToolProbe } from './turn.js'
 import { createMetrics } from './metrics.js'
+import { shellManifest } from './shell.js'
 import { clientKey, createLimiter, isLoopback } from './limits.js'
 import { createLru } from './cache.js'
 import { resolveServerOptions } from './options.js'
@@ -35,6 +36,7 @@ import { serverSecret } from './sign.js'
 import { createLeakGuard } from './leak.js'
 
 export { runServerTurn, sourceChunk, startToolProbe } from './turn.js'
+export { shellManifest } from './shell.js'
 export { parseTurnInput } from './input.js'
 export { createTurnLog, prune } from './log.js'
 export { createMetrics } from './metrics.js'
@@ -142,23 +144,6 @@ async function fetchIndex(base) {
   const dfDoc = await json(manifest.df)
   const openersDoc = manifest.openers ? await json(manifest.openers).catch(() => null) : null
   return assembleIndex({ manifest, shards, vectorBuffer, dfDoc, openersDoc })
-}
-
-/**
- * The manifest minus everything that is the server's business — engine-spec
- * 028 §2. Pages and sections are what the scope picker and the link checker
- * need, and they are the site's own navigation already. Thresholds, levers,
- * vocabulary and the names of the files that hold the corpus are not.
- */
-export function shellManifest(manifest) {
-  return {
-    version: manifest.version,
-    hash: manifest.hash,
-    chunkCount: manifest.chunkCount,
-    pages: manifest.pages,
-    sections: manifest.sections,
-    orphanPages: manifest.orphanPages || [],
-  }
 }
 
 const SSE_HEADERS = {
