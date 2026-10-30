@@ -200,6 +200,12 @@ describe('html structure — headings, details, lists, text', () => {
     expect(out).toBe('1.\n   ```\n   y\n   z\n   ```\n   after')
   })
 
+  it('keeps the first line of a list item as text, as its continuation lines are (IN-12)', () => {
+    const out = md('<ul><li>- not nested</li><li># hash</li><li>1. num</li><li>> quote</li></ul>')
+    expect(out).toBe('- \\- not nested\n- \\# hash\n- \\1. num\n- \\> quote')
+    expect(md('<ol><li>+ plus</li></ol>')).toBe('1. \\+ plus')
+  })
+
   it('writes a simple list exactly as before', () => {
     expect(md('<ul><li>a<b>b</b> c</li><li>d<ul><li>e</li></ul></li></ul>')).toBe('- a **b** c\n- d\n  - e')
     expect(md('<ul><li><p>solo</p></li></ul>')).toBe('- solo')

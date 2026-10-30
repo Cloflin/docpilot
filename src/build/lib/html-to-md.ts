@@ -211,7 +211,9 @@ function list(el, ctx, depth = 0) {
     // the chunker splits on blank lines, and a split would cut a step from its
     // own sample.
     const lead = parts[0] as any
-    const first = typeof lead.text === 'string' ? lead.text : ''
+    // Escaped as the continuation lines are: after `- ` the text starts a line
+    // of the item, and `<li>- x</li>` would be a nested list (IN-12).
+    const first = typeof lead.text === 'string' ? escapeLeader(lead.text) : ''
     out.push(`${indent}${marker} ${first}`.trimEnd())
 
     const under = indent + ' '.repeat(marker.length + 1)
