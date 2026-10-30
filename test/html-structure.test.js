@@ -199,6 +199,12 @@ describe('html structure — headings, details, lists, text', () => {
     expect(md('<ul><li>a</li></ul><ul><li>b</li></ul>')).toBe('- a\n\n- b')
   })
 
+  it('escapes a backslash in page text so that it cannot form a link', () => {
+    const out = md('<p>text \\[click\\](https://evil.example/x) more</p>')
+    expect(out).toBe('text \\\\\\[click\\\\\\](https://evil.example/x) more')
+    expect(out).not.toMatch(/(?<!\\)\[[^\]]*\]\(/)
+  })
+
   it('decodes entities', () => {
     expect(md('<p>caf&eacute; &#x1F600; &amp; more</p>')).toBe('café 😀 & more')
   })

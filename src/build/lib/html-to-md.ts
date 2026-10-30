@@ -54,11 +54,16 @@ const INERT = new Set(['script', 'style', 'template', 'svg', 'noscript'])
  * sentence beginning "- " becomes a list, "# " becomes a heading. So inline
  * escaping covers the two delimiters that pair up (`[`, `` ` ``) and the rest is
  * handled per line, at the only place it can be a marker.
+ *
+ * The backslash comes first. Left alone, page text `\[a\](https://x.test)`
+ * became `\\[a\\](https://x.test)`, where `\\` is a literal backslash and
+ * the brackets are live: a link the resolver never saw and the counters never
+ * counted (WR-04, engine-spec 043).
  */
 function escapeInline(text) {
   return (
     text
-      .replace(/([[\]`])/g, '\\$1')
+      .replace(/([\\[\]`])/g, '\\$1')
       // A decoded `&lt;llm-exclude&gt;` is the text `<llm-exclude>`, and left raw
       // it is an annotation tag: `applyLlmTags` would drop the rest of the page
       // (engine-spec 043, T-02-17). `&lt;` renders as `<` (markdown-it, html:
