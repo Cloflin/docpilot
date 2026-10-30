@@ -162,6 +162,31 @@ describe('html code blocks — gutters and chrome', () => {
     expect(out).toBe('```\nnpm i\nnpm test\n```')
   })
 
+  it('reads a multi-line digits cell next to one pre as a gutter when the numbers count lines', () => {
+    const out = md('<table><tr><td>1\n2\n3</td><td><pre>a\nb\nc</pre></td></tr></table>')
+    expect(out).toBe('```\na\nb\nc\n```')
+  })
+
+  it('keeps both columns of a headerless two-cell table of status numbers and pre cells', () => {
+    const out = md('<table><tr><td>404</td><td><pre>GET /x</pre></td></tr><tr><td>500</td><td><pre>GET /y</pre></td></tr></table>')
+    for (const text of ['404', 'GET /x', '500', 'GET /y']) expect(out).toContain(text)
+  })
+
+  it('keeps a lone number beside a pre as data, with or without a header row', () => {
+    const bare = md('<table><tr><td>404</td><td><pre>GET /x</pre></td></tr></table>')
+    expect(bare).toContain('404')
+    expect(bare).toContain('GET /x')
+    const headed = md('<table><tr><th>Code</th><th>Example</th></tr><tr><td>404</td><td><pre>GET /x</pre></td></tr></table>')
+    expect(headed).toContain('404')
+    expect(headed).toContain('GET /x')
+  })
+
+  it('reads numbers that skip a line as data, not as a gutter', () => {
+    const out = md('<table><tr><td>1</td><td><pre>a</pre></td></tr><tr><td>3</td><td><pre>b</pre></td></tr></table>')
+    expect(out).toContain('3')
+    expect(out).not.toMatch(/^```/)
+  })
+
   it('does not match a gutter hint inside a longer class token', () => {
     expect(md('<pre><code><span class="client">x</span></code></pre>')).toBe('```\nx\n```')
   })

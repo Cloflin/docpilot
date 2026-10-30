@@ -211,13 +211,41 @@ function isCodeRow(cells): boolean {
 }
 
 /**
+ * The largest first number a digits-only gutter may start at. A highlighter
+ * counts lines from 1 (a 0-based one from 0). A status-code or error-code table
+ * starts at 200 or 404, so a start above this is data. A quoted excerpt that
+ * starts at line 40 is read as data too: that costs a column of numbers in the
+ * chunk, never a lost column, and the other way round loses data (CR-01).
+ */
+export const GUTTER_START_MAX = 1
+
+/**
+ * Do the digits-only gutter cells of these rows count lines? Read in order,
+ * across the rows, each number is the one before it plus one and the first is
+ * at most `GUTTER_START_MAX`. `404 | <pre>` then `500 | <pre>` is a data table
+ * whose rows share a shape with a gutter, and only this run tells them apart.
+ * A hinted gutter (a line-number class) is accepted on its class and not read
+ * here (CR-01, engine-spec 043).
+ */
+function digitGuttersCount(rows): boolean {
+  const numbers: number[] = []
+  for (const cells of rows) {
+    if (hasHintBeneath(cells[0])) continue
+    for (const part of String(cells[0].textContent || '').trim().split(/\s+/)) numbers.push(Number(part))
+  }
+  if (!numbers.length) return true
+  if (numbers[0] > GUTTER_START_MAX) return false
+  return numbers.every((n, i) => i === 0 || n === numbers[i - 1] + 1)
+}
+
+/**
  * A table that is a highlighter's layout (engine-spec 043): every row is a
  * gutter cell next to a cell that holds the code. One row that is not that is
  * a data table, and `tableBlock` keeps all of its columns.
  */
 function isCodeTable(table): boolean {
   const rows = [...table.querySelectorAll('tr')].map(cellsOf).filter((cells) => cells.length)
-  return rows.length > 0 && rows.every(isCodeRow)
+  return rows.length > 0 && rows.every(isCodeRow) && digitGuttersCount(rows)
 }
 
 /**
