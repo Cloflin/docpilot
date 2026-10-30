@@ -378,6 +378,36 @@ export function textOf(el) {
 }
 
 /**
+ * Elements whose text is code or markup for a machine, never prose: the report
+ * does not count it as text the page had (WR-09).
+ */
+export const NON_TEXT_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG'])
+
+/**
+ * `textOf` without the text of `NON_TEXT_TAGS`. The extraction report's
+ * `totalChars` is the baseline that `droppedChars` is read against, and an inline
+ * tracking script is not text the extractor dropped: counting it made a page full
+ * of scripts read as a large loss. The walk keeps its own stack, so a page nested
+ * thousands deep costs memory, not a RangeError.
+ */
+export function visibleTextOf(el) {
+  const parts: string[] = []
+  const stack = el ? [el] : []
+  while (stack.length) {
+    const node = stack.pop()
+    if (node.nodeType === 3) {
+      parts.push(String(node.data ?? node.textContent ?? ''))
+      continue
+    }
+    if (node.nodeType !== 1 && node.nodeType !== 9 && node.nodeType !== 11) continue
+    if (node !== el && NON_TEXT_TAGS.has(String(node.tagName || '').toUpperCase())) continue
+    const kids = node.childNodes
+    for (let i = (kids?.length || 0) - 1; i >= 0; i--) stack.push(kids[i])
+  }
+  return parts.join('').replace(/\s+/g, ' ').trim()
+}
+
+/**
  * Is this element furniture?
  *
  * Ordered cheapest-first, and each branch returns the REASON rather than a

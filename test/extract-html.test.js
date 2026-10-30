@@ -190,6 +190,29 @@ describe('extractHtml — a bad page does not stop the directory', () => {
     expect(out.reason).toContain('near-empty')
   })
 
+  it('measures the floor on the text left, not on the Markdown written from it (IN-02)', async () => {
+    // 3 characters of text and a 70-character URL: the Markdown is long, the page is not.
+    const long = 'https://example.com/' + 'a/very/long/path/'.repeat(4)
+    const out = await extractHtml(`<!doctype html><html><body><main><p>Hi <a href="${long}">x</a></p></main></body></html>`)
+    expect(out.ok).toBe(false)
+    expect(out.reason).toContain('near-empty (4 characters)')
+  })
+
+  it('does not count inline script, style, template, svg or noscript text as text the page had (WR-09)', async () => {
+    const noise =
+      `<script>${'track(1);'.repeat(600)}</script><style>${'a{color:red}'.repeat(500)}</style>` +
+      `<template>${'t'.repeat(300)}</template><svg><text>${'v'.repeat(300)}</text></svg>` +
+      `<noscript>${'n'.repeat(300)}</noscript>`
+    const paragraph = 'Every request is counted against a window of sixty seconds.'
+    const out = await extractHtml(
+      `<!doctype html><html><head><title>T</title>${noise}</head><body>${noise}<main><p>${paragraph}</p></main></body></html>`,
+    )
+    expect(out.ok).toBe(true)
+    expect(out.report.totalChars).toBe(paragraph.length)
+    expect(out.report.keptChars).toBe(paragraph.length)
+    expect(out.report.droppedChars).toBe(0)
+  })
+
   it('counts code points, not UTF-16 units, against the floor', async () => {
     // 13 astral characters are 26 UTF-16 units and 13 code points: under 24 either way
     // for the code-point count, over it for the unit count.

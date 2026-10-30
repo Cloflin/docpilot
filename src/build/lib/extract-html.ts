@@ -22,7 +22,7 @@
  */
 
 import { parseDocument } from './dom.js'
-import { metadata, pickMain, prune, robotsNoindex, textOf } from './html-extract.js'
+import { metadata, pickMain, prune, robotsNoindex, textOf, visibleTextOf } from './html-extract.js'
 import { createLinkResolver } from './html-links.js'
 import { unfoldPanels } from './html-tabs.js'
 import { toMarkdown } from './html-to-md.js'
@@ -183,7 +183,7 @@ export function extractDocument(document, options: ExtractOptions = {}): Extract
     const description = collapse(meta.description).normalize('NFC')
     const lang = meta.lang
     const report = emptyReport()
-    report.totalChars = points(textOf(document.body || document.documentElement))
+    report.totalChars = points(visibleTextOf(document.body || document.documentElement))
     const canonical = webUrl(meta.canonical, base) || null
     const dateModified = meta.dateModified || null
     const known = { title, description, lang, canonical, dateModified, report }
@@ -250,7 +250,10 @@ export function extractDocument(document, options: ExtractOptions = {}): Extract
       options.warn?.(line)
     }
 
-    const size = points(collapse(markdown))
+    // The text that is left, not the Markdown written from it: link targets,
+    // `**`, table pipes and fence marks are syntax, and a page of one short
+    // word and a long URL is not a page (IN-02).
+    const size = points(textOf(root).normalize('NFC'))
     if (size < MIN_EXTRACTED_CHARS) {
       return failure(`near-empty (${size} characters)`, known)
     }
