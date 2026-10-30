@@ -162,7 +162,7 @@ function collect(node, out: string[]): void {
 export function codeText(el): string {
   const out: string[] = []
   collect(el, out)
-  let text = out.join('').replace(/\r\n?/g, '\n').replace(/ /g, ' ')
+  let text = out.join('').replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
 
   const first = el.firstChild
   if (tagOf(el) === 'pre' && first?.nodeType === 3 && /^[\r\n]/.test(String(first.data || ''))) {
