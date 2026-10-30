@@ -1,5 +1,7 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 
 import { assembleIndex } from '../src/theme/docpilot/store.js'
@@ -671,4 +673,50 @@ answerBaselineSuite({
   baselineFile: '2.1.1.rag-local.server.json',
   runtime: 'server',
   vectors: false,
+})
+
+/**
+ * A FILE THAT CANNOT BE COMPARED WITH IS REFUSED BEFORE THE RUN SPENDS ANYTHING.
+ *
+ * The check sits at module scope in src/eval/run.ts, so these runs end before an
+ * index is read or a request is made — which is also what keeps them offline.
+ * They need the built `dist/`, like every test that spawns the CLI.
+ */
+describe('eval --baseline= with a file that is not a baseline', () => {
+  let dir
+  const evalWith = (file) =>
+    spawnSync(process.execPath, [path.join(ROOT, 'bin/docpilot.js'), 'eval', `--baseline=${file}`], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: os.tmpdir() },
+    })
+  const write = (name, body) => {
+    const file = path.join(dir, name)
+    fs.writeFileSync(file, body)
+    return file
+  }
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docpilot-baseline-'))
+  })
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it.each([
+    ['a file with no meta.schema (the bundle report)', 'bundle.json', JSON.stringify({ files: [] })],
+    ['a baseline whose records are an array', 'array.json', JSON.stringify({ meta: { schema: BASELINE_SCHEMA }, records: [] })],
+    ['a baseline whose records are missing', 'norecords.json', JSON.stringify({ meta: { schema: BASELINE_SCHEMA } })],
+  ])('exits 1 on %s', (_label, name, body) => {
+    const r = evalWith(write(name, body))
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/is not a schema-1 baseline/)
+  })
+
+  it('exits 1 on a file that is not there, and says how to write it', () => {
+    const r = evalWith(path.join(dir, 'missing.json'))
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/cannot read the baseline/)
+    expect(r.stderr).toMatch(/--update-baseline/)
+  })
 })

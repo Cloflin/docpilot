@@ -300,6 +300,31 @@ if (BASELINE && SET !== 'golden') {
   process.exit(USAGE)
 }
 /**
+ * THE FILE TO COMPARE WITH, READ BEFORE THE RUN SPENDS ANYTHING.
+ *
+ * `settleBaseline` runs after every model and report, so a mistyped path or a
+ * file that is not a baseline (the bundle report is the usual one) used to be
+ * found only once the run had used its embedding and chat requests. Here the
+ * file is read and its shape checked first, and the parsed object is kept for
+ * `settleBaseline`. Exits `1` like the check it replaces.
+ */
+const COMPARE_BASELINE = BASELINE && !UPDATE_BASELINE ? loadBaselineToCompare(BASELINE) : null
+function loadBaselineToCompare(name) {
+  const rel = path.relative(ROOT, path.resolve(ROOT, name))
+  let parsed
+  try {
+    parsed = JSON.parse(fs.readFileSync(path.resolve(ROOT, name), 'utf8'))
+  } catch (e) {
+    die(`cannot read the baseline ${rel} — ${e.message}\n        write it with --baseline=${name} --update-baseline`)
+  }
+  // `typeof [] === 'object'`, so an array has to be refused by name.
+  const records = parsed?.records
+  if (parsed?.meta?.schema !== BASELINE_SCHEMA || typeof records !== 'object' || records === null || Array.isArray(records)) {
+    die(`${rel} is not a schema-${BASELINE_SCHEMA} baseline\n        regenerate it with --baseline=${name} --update-baseline`)
+  }
+  return parsed
+}
+/**
  * The flag is one of two routes into the same measurement; a vectorless index is
  * the other, and `main()` raises this once the manifest has been read.
  *
@@ -2125,18 +2150,8 @@ async function settleBaseline(runs) {
     return 0
   }
 
-  let baseline
-  try {
-    baseline = JSON.parse(fs.readFileSync(file, 'utf8'))
-  } catch (e) {
-    die(`cannot read the baseline ${rel} — ${e.message}\n        write it with --baseline=${BASELINE} --update-baseline`)
-  }
-  // A file that is not a baseline of this shape cannot be compared: a bundle
-  // report passed by mistake, `{}`, or a shape from another schema version. Say
-  // which, instead of throwing from `Object.keys(undefined)` further down.
-  if (baseline?.meta?.schema !== BASELINE_SCHEMA || typeof baseline.records !== 'object' || baseline.records === null) {
-    die(`${rel} is not a schema-${BASELINE_SCHEMA} baseline\n        regenerate it with --baseline=${BASELINE} --update-baseline`)
-  }
+  // Read and shape-checked at module scope, before the run (`COMPARE_BASELINE`).
+  const baseline = COMPARE_BASELINE
   const narrowed = RUN_LEVEL !== DEFAULT_RUN_LEVEL || Boolean(LIMIT) || Boolean(SPLIT)
   const ranIds = new Set(records.map((r) => r.id))
   const total = Object.keys(baseline.records ?? {}).length
