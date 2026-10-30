@@ -1,0 +1,11 @@
+turn[0].state: (none) -> retrieving
+turn[0].opener: (none) -> exact baked
+turn[0].sources: + c#one
+turn[0].citations: + c#one
+turn[0].streaming: false -> true
+turn[0].answer: 60 chars
+turn[0].streaming: true -> false
+turn[0].answer: 63 chars
+turn[0].state: retrieving -> complete
+conversation: none -> <conv:1>
+history: 0 conversation(s) -> 1 conversation(s)

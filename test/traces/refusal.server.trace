@@ -1,0 +1,13 @@
+-> model POST /v1/chat/completions (tool probe, messages: 1, tools: search_docs, fetch_section, expand_section, list_pages, answer)
+-> endpoint GET /ai/turn/manifest
+turn[0].state: (none) -> retrieving
+busy: false -> true
+status: none -> searching
+conversation: none -> <conv:1>
+-> endpoint POST /ai/turn
+-> embed POST /v1/embeddings (inputs: 1)
+turn[0].state: retrieving -> no-answer
+turn[0].refusal: (none) -> no-evidence
+busy: true -> false
+status: searching -> none
+history: 0 conversation(s) -> 1 conversation(s)

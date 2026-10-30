@@ -1,0 +1,10 @@
+turn[0].state: (none) -> retrieving
+busy: false -> true
+status: none -> searching
+-> embed POST /ai/v1/embeddings (inputs: 1)
+turn[0].state: retrieving -> no-answer
+turn[0].refusal: (none) -> no-evidence
+busy: true -> false
+status: searching -> none
+conversation: none -> <conv:1>
+history: 0 conversation(s) -> 1 conversation(s)
