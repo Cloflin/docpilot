@@ -69,6 +69,7 @@ The rule this directory exists to enforce:
 | [040](040-what-the-first-question-pays-for.md) | the `openai` row states OpenAI's reasoning rules up front — no refusals on the first question of a page load (34 requests and 8 refusals → 27 and 0 on ten live turns); a refused `'none'` is not a refused reasoning field; a search names its query and one that finds nothing new is one line |
 | [041](041-source-documents-and-the-pipeline.md) | one internal `SourceDoc` shape for every source, `assertPublic` (deny by default), and size ceilings that apply to the browser runtime only; `shellManifest` gets its own module |
 | [042](042-both-ends-of-mcp.md) | an MCP endpoint (`/mcp`, dual-era, four reads that call no model) and an MCP client on the server whose tools the assistant calls as 038 function tools — under one owner policy that tokens, annotations and the reader can only narrow |
+| [043](043-html-extraction.md) | one `extractHtml` pipeline for every HTML path — code, tables, tabs, links and metadata survive, one bad page never stops a run; the parser and a Readability-class fallback measured on 78 labelled pages and neither adopted |
 
 ## Shape of a spec
 
