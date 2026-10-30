@@ -1341,21 +1341,10 @@ async function main() {
     importDir: docPilot.importDir,
     docsDir: docPilot.docsDir,
   })
-  const { chunks, pages, rawBytes, externalLinks } = staged
+  const { chunks, pages, rawBytes } = staged
   const { htmlPages, htmlShadowed, external } = staged.counts
 
   if (!chunks.length) die('empty index — 0 chunks')
-
-  // A link out of an imported page into the docs. An asset (`/img/…`) is skipped
-  // by its extension; `/` is the home page, which is `layout: home` and produces
-  // no chunk by design.
-  for (const { file, href } of externalLinks) {
-    const p = href.replace(/\/$/, '') || '/'
-    if (p === '/' || /\.\w+$/.test(p)) continue
-    if (!pages.has(p)) {
-      die(`${file}: link to "${href}", which is not a page of this site`)
-    }
-  }
 
   // Ids address chunks everywhere downstream — in emittedIds, in citations, in
   // the golden set. A duplicate makes a citation ambiguous, so it fails here.

@@ -21,6 +21,7 @@
 import path from 'node:path'
 
 import { chunkMarkdown } from './chunker.js'
+import { closesFence, openFence } from './normalise.js'
 import { chunkOpenapi } from './openapi-chunker.js'
 import { kindFor } from './readers.js'
 import { assertPublic, contentHashOf, NonPublicDocument } from './source-doc.js'
@@ -58,8 +59,107 @@ export interface DocumentsResult {
   /** Raw source size in characters, as the corpus figures print it. */
   rawBytes: number
   counts: { htmlPages: number; htmlShadowed: number; external: number }
-  /** Links out of imported pages into the docs, checked once every route is known. */
-  externalLinks: { file: string; href: string }[]
+}
+
+/**
+ * A link target an imported page may keep: `/`, an asset (a path ending in an
+ * extension, the 2.x rule) or a route this build has. Anything else is a route
+ * of the site the page was copied from.
+ */
+const ASSET_PATH = /\.\w+$/
+
+/**
+ * `[text](/path)`, `[text](/path#frag)` and `[text](/path "title")`. An image
+ * (`![alt](…)`) is not matched: degrading one would leave a stray `!` and the
+ * panel never follows an image href. The text may not hold `]`, so a link with
+ * nested brackets is left as written rather than half-rewritten.
+ */
+const ROOT_LINK = /(?<!!)\[([^\]]*)\]\((\/[^)\s#]*)(#[^)\s]*)?(\s+(?:"[^"]*"|'[^']*'))?\)/g
+
+/**
+ * One line of prose with its inline code spans copied unchanged. A span opens at
+ * a backtick run and closes at the next run of the same length (CommonMark); a
+ * run that never closes on the line is literal text.
+ */
+function mapProse(line: string, fn: (prose: string) => string): string {
+  let out = ''
+  let from = 0
+  let i = 0
+  while (i < line.length) {
+    if (line[i] !== '`') {
+      i++
+      continue
+    }
+    let n = 0
+    while (line[i + n] === '`') n++
+    let j = i + n
+    let close = -1
+    while (j < line.length) {
+      if (line[j] !== '`') {
+        j++
+        continue
+      }
+      let m = 0
+      while (line[j + m] === '`') m++
+      if (m === n) {
+        close = j
+        break
+      }
+      j += m
+    }
+    if (close < 0) {
+      i += n
+      continue
+    }
+    out += fn(line.slice(from, i)) + line.slice(i, close + n)
+    from = i = close + n
+  }
+  return out + fn(line.slice(from))
+}
+
+/**
+ * An imported page's links, held to this site's routes (D-10, F-08).
+ *
+ * `vitepress build` checks dead links for every page it renders and never sees
+ * an imported one, whose links point at the routes of the site it was copied
+ * from. A link to a route this build lacks is written as its text, so the panel
+ * never renders a link into a missing page, and `onDead` reports it. Fenced
+ * code and inline code spans are samples, not links: they are never read and
+ * never rewritten. The front matter is copied unchanged.
+ */
+function degradeDeadLinks(src: string, known: (route: string) => boolean, onDead: (href: string) => void): string {
+  const front = /^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(src)
+  const head = front ? front[0] : ''
+  let fence: ReturnType<typeof openFence> = null
+  const body = src
+    .slice(head.length)
+    .split('\n')
+    .map((raw) => {
+      // A CR left on the line would stop the fence pattern matching its end.
+      const line = raw.replace(/\r$/, '')
+      const tail = raw.slice(line.length)
+      if (fence) {
+        if (closesFence(line, fence)) fence = null
+        return raw
+      }
+      const opens = openFence(line)
+      if (opens) {
+        fence = opens
+        return raw
+      }
+      return (
+        mapProse(line, (prose) =>
+          prose.replace(ROOT_LINK, (whole, text, href) => {
+            const route = href.replace(/\/$/, '') || '/'
+            if (route === '/' || ASSET_PATH.test(route) || known(route)) return whole
+            onDead(href)
+            return text
+          }),
+        ) + tail
+      )
+    })
+    .join('\n')
+  return head + body
 }
 
 export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsContext): Promise<DocumentsResult> {
@@ -183,7 +283,6 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
   // route, so a missing or unusable `source` leaves its citation pointing at a
   // page that does not exist. That is a build failure, not a warning.
   let external = 0
-  const externalLinks = []
   const prefix = ctx.externalPrefix
   if (prefix) {
     // `externalPrefix` is an id space, and an id space that collides with a
@@ -199,19 +298,28 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
       }
     }
 
+    // What an imported page may link to: the routes collected so far (Markdown
+    // and `--html-dir`), the OpenAPI routes, and every imported page — all known
+    // before the first one is chunked, which is why the check can live here and
+    // not in the builder after the fact.
+    const kbIds = new Set(of('kb').map((d) => d.id))
+    const known = (route: string) => pages.has(route) || specRoutes.has(route) || kbIds.has(route)
+
     for (const doc of of('kb')) {
       const id = doc.id
       if (pages.has(id)) die(`imported page id collides with a real route: ${id}`)
 
-      const src = markdownOf(doc)
-      rawBytes += src.length
+      const original = markdownOf(doc)
+      rawBytes += original.length
 
-      // `vitepress build` checks dead links for every page it renders, and it
-      // never sees this one. Collected here and checked by the builder, once the
-      // real routes — including the generated `/reference/` ones — are all known.
-      for (const m of src.matchAll(/\]\((\/[^)\s#]*)(?:#[^)\s]*)?\)/g)) {
-        externalLinks.push({ file: rel(doc), href: m[1] })
-      }
+      // A dead link in imported content is the page's, not the owner's: it
+      // degrades to text with a warning, and the build goes on (D-10).
+      const src = degradeDeadLinks(original, known, (href) =>
+        warn(
+          `${rel(doc)}: link to "${href}" is not a page of this site — written as text ` +
+            `(an imported page is not held to this site's routes; engine-spec 043)`,
+        ),
+      )
       const { chunks: c, warnings, title, source } = chunkMarkdown({ src, path: id, kind: 'guide', embedContext })
       warnings.forEach(warn)
       if (!c.length) {
@@ -264,5 +372,5 @@ export async function documentsToChunks(readDocs: ReadDoc[], ctx: DocumentsConte
     })
   }
 
-  return { docs, chunks, pages, rawBytes, counts: { htmlPages, htmlShadowed, external }, externalLinks }
+  return { docs, chunks, pages, rawBytes, counts: { htmlPages, htmlShadowed, external } }
 }
