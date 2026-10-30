@@ -113,6 +113,38 @@ describe('bundle report — the real IIFE, built in memory', () => {
   it('is deterministic: the same build gives the same report', () => {
     expect(reportFor({ ...built, meta: { builtFrom: { package: 'test', commit: null } } })).toEqual(report)
   })
+
+  /**
+   * THE READER'S BUNDLE CARRIES NO HTML PARSER (engine-spec 043, D-04).
+   *
+   * linkedom is a regular dependency since 3.0, installed on every consumer
+   * machine, and that is exactly why the browser bundle needs a gate: the day a
+   * build-side module reaches the entry, the parser and its closure ship to every
+   * reader. `entities` is deliberately absent from the list: markdown-it ships its
+   * own copy into the bundle, and scripts/bundle-report.mjs files it under
+   * markdownIt. A contributor id for a repository file reads `src/<path>`.
+   */
+  it('carries no HTML parser module (D-04)', () => {
+    const PARSER_MODULES = [
+      'linkedom',
+      'htmlparser2',
+      'css-select',
+      'css-what',
+      'domhandler',
+      'domutils',
+      'dom-serializer',
+      'domelementtype',
+      'boolbase',
+      'nth-check',
+      '@acemir/cssom',
+      'uhyphen',
+      'html-escaper',
+      'parse5',
+    ]
+    const ids = report.contributors.map((c) => c.id)
+    expect(ids.filter((id) => PARSER_MODULES.includes(id)), 'a parser module is in the IIFE').toEqual([])
+    expect(ids.filter((id) => id.includes('src/build/')), 'a build-side file is in the IIFE').toEqual([])
+  })
 })
 
 describe('bundle report — the frozen 2.1.1 composition', () => {

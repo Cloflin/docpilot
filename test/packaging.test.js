@@ -631,6 +631,54 @@ describe('publish metadata', () => {
   })
 
   /**
+   * THE PARSER'S OWN DEPENDENCIES ARE PINNED BY THIS TEST (D-16, research P-11).
+   *
+   * linkedom is exact in package.json, but it declares CARET ranges for
+   * htmlparser2 and css-select, and htmlparser2 does for entities — so a fresh
+   * install can resolve a different tokenizer and change the Markdown that comes
+   * out of the same HTML. The lock holds one resolution; this holds the lock to
+   * the set the extractor was measured with. A package is read from the
+   * directory that resolves it FROM ITS PARENT, because that is the copy the
+   * parser loads, not the one markdown-it brings.
+   */
+  it('installs the parser versions the extractor was measured with (D-16)', async () => {
+    const { PARSER_PINS } = await import('../src/build/lib/dom.js')
+    expect(PARSER_PINS, 'dom.ts exports no PARSER_PINS').toBeTypeOf('object')
+
+    // The nearest package.json above the resolved entry that names the package.
+    const rootOf = (name, from) => {
+      let dir = path.dirname(createRequire(path.join(from, 'package.json')).resolve(name))
+      for (;;) {
+        const file = path.join(dir, 'package.json')
+        if (fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).name === name) return dir
+        const up = path.dirname(dir)
+        if (up === dir) throw new Error(`no package.json named ${name} above its entry`)
+        dir = up
+      }
+    }
+    const versionOf = (dir) => JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version
+
+    const linkedom = rootOf('linkedom', abs(''))
+    const htmlparser2 = rootOf('htmlparser2', linkedom)
+    const found = {
+      linkedom: versionOf(linkedom),
+      htmlparser2: versionOf(htmlparser2),
+      'css-select': versionOf(rootOf('css-select', linkedom)),
+      entities: versionOf(rootOf('entities', htmlparser2)),
+    }
+    for (const name of Object.keys(found)) {
+      expect(
+        found[name],
+        `${name} resolved to ${found[name]}, the extractor was measured with ${PARSER_PINS?.[name]}: ` +
+          're-measure and bump EXTRACTOR_VERSION in src/build/lib/extract-html.ts, then update PARSER_PINS',
+      ).toBe(PARSER_PINS?.[name])
+    }
+    expect(Object.keys(PARSER_PINS).sort(), 'PARSER_PINS names a package this test does not resolve').toEqual(
+      Object.keys(found).sort(),
+    )
+  })
+
+  /**
    * NO CARET ON A `0.x` PEER, and this rule was written by a released defect.
    *
    * `^1.29.0` admits everything up to 2.0. `^0.22.0` admits `0.22.x` and nothing
