@@ -158,6 +158,23 @@ describe('imported pages — a dead link degrades to its text (D-10, F-08)', () 
     expect(links[0]).toContain('/guide/dead')
   })
 
+  it('leaves backslash-escaped link text as written, unreported, beside a real dead link (WR-12)', async () => {
+    const c = ctx()
+    const { chunks } = await documentsToChunks(
+      [kbPage('/kb/one', 'Write \\[label\\](/guide/example) to link, but [real](/guide/dead) is a link.')],
+      c,
+    )
+    const text = textOf(chunks)
+    // The chunker's own plain-text pass rewrites the escaped brackets; what holds
+    // here is that the href is still in the text and only the real link degraded.
+    expect(text).toContain('/guide/example')
+    expect(text).toContain('but real is a link.')
+    const links = c.said.warn.filter((m) => m.includes('not a page of this site'))
+    expect(links).toHaveLength(1)
+    expect(links[0]).toContain('/guide/dead')
+    expect(links[0]).not.toContain('/guide/example')
+  })
+
   it('leaves a link in a fence inside a list item, a quote and an indented block verbatim (WR-03)', async () => {
     const c = ctx()
     const body = [

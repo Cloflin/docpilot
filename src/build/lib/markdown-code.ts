@@ -57,13 +57,19 @@ function codeSpans(line: string): Array<[number, number]> {
  * code, ``[`code`](/a)``, is still a link. Each span is masked with a same-length
  * run of `x` before matching, so a bracket or a parenthesis inside code can
  * neither start nor end a match, and the replacer reads the original text by
- * offset. `pattern` must carry the `g` flag.
+ * offset. A backslash-escaped pair is masked the same way (WR-12). `pattern`
+ * must carry the `g` flag.
  */
 function replaceAcrossCode(text: string, pattern: RegExp, fn: (...groups: string[]) => string): string {
   let masked = text
   for (const [start, end] of codeSpans(text)) {
     masked = masked.slice(0, start) + 'x'.repeat(end - start) + masked.slice(end)
   }
+  // A backslash and the character it escapes are text, never syntax: the
+  // extractor writes page text that looks like a link as `\[a\](/b)`, and a
+  // pattern that starts at the bracket would read that as a link. Masked after
+  // the code spans, so a backslash inside a span is not read twice (WR-12).
+  masked = masked.replace(/\\[\s\S]/g, (pair) => 'x'.repeat(pair.length))
   const re = new RegExp(pattern.source, pattern.flags.includes('d') ? pattern.flags : `${pattern.flags}d`)
   let out = ''
   let from = 0

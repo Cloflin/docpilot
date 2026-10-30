@@ -802,6 +802,20 @@ describe('import — a published .md beats converting the HTML', () => {
     expect(bare).toEqual(['/guide', '/ref'])
   })
 
+  it('leaves backslash-escaped link text alone and still resolves a real link beside it (WR-12)', () => {
+    const base = 'https://acme.test/help/rate-limits.md'
+    const degraded = []
+    const raw = 'Write \\[a\\](/docs/path) as text, then [real](/guide) and \\\\\\[x\\\\\\](/y).'
+    const out = absolutiseLinks(raw, base, (h) => degraded.push(h))
+    expect(out).toContain('Write \\[a\\](/docs/path) as text')
+    expect(out).toContain('[real](https://acme.test/guide)')
+    expect(out).toContain('\\\\\\[x\\\\\\](/y).')
+    expect(degraded).toEqual([])
+    const bare = []
+    expect(absolutiseLinks(raw, null, (h) => bare.push(h))).toContain('Write \\[a\\](/docs/path) as text, then real and')
+    expect(bare).toEqual(['/guide'])
+  })
+
   it('builds the page from the markdown, converting nothing', async () => {
     const built = await buildPage({
       html: head('<link rel="alternate" type="text/markdown" href="/x.md">'),
