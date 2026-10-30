@@ -1,0 +1,846 @@
+{
+  "schema": 1,
+  "builtFrom": {
+    "package": "2.1.1",
+    "commit": "be8ba6e"
+  },
+  "file": "dist/docpilot.web.js",
+  "totals": {
+    "raw": 1191377,
+    "gzip": 296259,
+    "brotli": 242554
+  },
+  "groups": {
+    "vue": 77287,
+    "shiki": 714270,
+    "markdownIt": 98060,
+    "minisearch": 17621,
+    "panelRuntime": 123860,
+    "panelComponents": 60812,
+    "optionalFeatures": 58830,
+    "other": 1230,
+    "unmapped": 39407
+  },
+  "contributors": [
+    {
+      "id": "@shikijs/langs",
+      "group": "shiki",
+      "bytes": 524168,
+      "share": 0.44
+    },
+    {
+      "id": "markdown-it",
+      "group": "markdownIt",
+      "bytes": 51034,
+      "share": 0.0428
+    },
+    {
+      "id": "@vue/runtime-core",
+      "group": "vue",
+      "bytes": 43353,
+      "share": 0.0364
+    },
+    {
+      "id": "@shikijs/vscode-textmate",
+      "group": "shiki",
+      "bytes": 42574,
+      "share": 0.0357
+    },
+    {
+      "id": "src/theme/docpilot/session.ts",
+      "group": "panelRuntime",
+      "bytes": 27204,
+      "share": 0.0228
+    },
+    {
+      "id": "oniguruma-to-es",
+      "group": "shiki",
+      "bytes": 24502,
+      "share": 0.0206
+    },
+    {
+      "id": "@shikijs/core",
+      "group": "shiki",
+      "bytes": 23946,
+      "share": 0.0201
+    },
+    {
+      "id": "entities",
+      "group": "markdownIt",
+      "bytes": 23645,
+      "share": 0.0198
+    },
+    {
+      "id": "oniguruma-parser",
+      "group": "shiki",
+      "bytes": 23151,
+      "share": 0.0194
+    },
+    {
+      "id": "@shikijs/themes",
+      "group": "shiki",
+      "bytes": 22533,
+      "share": 0.0189
+    },
+    {
+      "id": "src/theme/docpilot/social.ts",
+      "group": "optionalFeatures",
+      "bytes": 19846,
+      "share": 0.0167
+    },
+    {
+      "id": "property-information",
+      "group": "shiki",
+      "bytes": 17860,
+      "share": 0.015
+    },
+    {
+      "id": "minisearch",
+      "group": "minisearch",
+      "bytes": 17621,
+      "share": 0.0148
+    },
+    {
+      "id": "@vue/reactivity",
+      "group": "vue",
+      "bytes": 16313,
+      "share": 0.0137
+    },
+    {
+      "id": "@vue/runtime-dom",
+      "group": "vue",
+      "bytes": 13802,
+      "share": 0.0116
+    },
+    {
+      "id": "src/theme/docpilot/prompt.ts",
+      "group": "panelRuntime",
+      "bytes": 13566,
+      "share": 0.0114
+    },
+    {
+      "id": "@shikijs/primitive",
+      "group": "shiki",
+      "bytes": 13383,
+      "share": 0.0112
+    },
+    {
+      "id": "src/theme/docpilot/llm.ts",
+      "group": "panelRuntime",
+      "bytes": 13080,
+      "share": 0.011
+    },
+    {
+      "id": "linkify-it",
+      "group": "markdownIt",
+      "bytes": 11160,
+      "share": 0.0094
+    },
+    {
+      "id": "src/theme/docpilot/providers.ts",
+      "group": "panelRuntime",
+      "bytes": 10887,
+      "share": 0.0091
+    },
+    {
+      "id": "src/theme/docpilot/harness.ts",
+      "group": "panelRuntime",
+      "bytes": 9676,
+      "share": 0.0081
+    },
+    {
+      "id": "src/theme/components/Panel.vue",
+      "group": "panelComponents",
+      "bytes": 9651,
+      "share": 0.0081
+    },
+    {
+      "id": "src/theme/docpilot/i18n.ts",
+      "group": "panelRuntime",
+      "bytes": 8123,
+      "share": 0.0068
+    },
+    {
+      "id": "src/theme/docpilot/credentials.ts",
+      "group": "optionalFeatures",
+      "bytes": 7972,
+      "share": 0.0067
+    },
+    {
+      "id": "src/theme/docpilot/retriever.ts",
+      "group": "panelRuntime",
+      "bytes": 7928,
+      "share": 0.0067
+    },
+    {
+      "id": "hast-util-to-html",
+      "group": "shiki",
+      "bytes": 7841,
+      "share": 0.0066
+    },
+    {
+      "id": "src/theme/docpilot/tools.ts",
+      "group": "optionalFeatures",
+      "bytes": 7283,
+      "share": 0.0061
+    },
+    {
+      "id": "src/theme/docpilot/switches.ts",
+      "group": "panelRuntime",
+      "bytes": 7103,
+      "share": 0.006
+    },
+    {
+      "id": "src/theme/docpilot/budget.ts",
+      "group": "optionalFeatures",
+      "bytes": 6267,
+      "share": 0.0053
+    },
+    {
+      "id": "src/theme/docpilot/text.ts",
+      "group": "panelRuntime",
+      "bytes": 5775,
+      "share": 0.0048
+    },
+    {
+      "id": "uc.micro",
+      "group": "markdownIt",
+      "bytes": 5242,
+      "share": 0.0044
+    },
+    {
+      "id": "src/theme/docpilot/history.ts",
+      "group": "optionalFeatures",
+      "bytes": 4945,
+      "share": 0.0042
+    },
+    {
+      "id": "src/theme/components/panel/ScopePicker.vue",
+      "group": "panelComponents",
+      "bytes": 4899,
+      "share": 0.0041
+    },
+    {
+      "id": "mdurl",
+      "group": "markdownIt",
+      "bytes": 4620,
+      "share": 0.0039
+    },
+    {
+      "id": "src/theme/components/panel/ToolActions.vue",
+      "group": "panelComponents",
+      "bytes": 4379,
+      "share": 0.0037
+    },
+    {
+      "id": "src/theme/docpilot/markdown.ts",
+      "group": "panelRuntime",
+      "bytes": 4235,
+      "share": 0.0036
+    },
+    {
+      "id": "@vue/shared",
+      "group": "vue",
+      "bytes": 3819,
+      "share": 0.0032
+    },
+    {
+      "id": "src/theme/docpilot/ui.ts",
+      "group": "panelRuntime",
+      "bytes": 3343,
+      "share": 0.0028
+    },
+    {
+      "id": "src/theme/components/panel/Results.vue",
+      "group": "panelComponents",
+      "bytes": 3187,
+      "share": 0.0027
+    },
+    {
+      "id": "regex-recursion",
+      "group": "shiki",
+      "bytes": 3145,
+      "share": 0.0026
+    },
+    {
+      "id": "src/theme/components/panel/Turn.vue",
+      "group": "panelComponents",
+      "bytes": 3127,
+      "share": 0.0026
+    },
+    {
+      "id": "character-entities-html4",
+      "group": "shiki",
+      "bytes": 2770,
+      "share": 0.0023
+    },
+    {
+      "id": "src/theme/docpilot/gate.ts",
+      "group": "panelRuntime",
+      "bytes": 2569,
+      "share": 0.0022
+    },
+    {
+      "id": "src/theme/components/Trigger.vue",
+      "group": "panelComponents",
+      "bytes": 2457,
+      "share": 0.0021
+    },
+    {
+      "id": "punycode.js",
+      "group": "markdownIt",
+      "bytes": 2359,
+      "share": 0.002
+    },
+    {
+      "id": "src/theme/docpilot/selection.ts",
+      "group": "optionalFeatures",
+      "bytes": 2272,
+      "share": 0.0019
+    },
+    {
+      "id": "src/theme/components/panel/Question.vue",
+      "group": "panelComponents",
+      "bytes": 2251,
+      "share": 0.0019
+    },
+    {
+      "id": "src/theme/docpilot/feedback.ts",
+      "group": "optionalFeatures",
+      "bytes": 2224,
+      "share": 0.0019
+    },
+    {
+      "id": "regex",
+      "group": "shiki",
+      "bytes": 2171,
+      "share": 0.0018
+    },
+    {
+      "id": "src/theme/components/panel/Refusal.vue",
+      "group": "panelComponents",
+      "bytes": 2139,
+      "share": 0.0018
+    },
+    {
+      "id": "src/theme/docpilot/openers.ts",
+      "group": "optionalFeatures",
+      "bytes": 2124,
+      "share": 0.0018
+    },
+    {
+      "id": "@shikijs/engine-javascript",
+      "group": "shiki",
+      "bytes": 1950,
+      "share": 0.0016
+    },
+    {
+      "id": "src/theme/components/panel/Field.vue",
+      "group": "panelComponents",
+      "bytes": 1906,
+      "share": 0.0016
+    },
+    {
+      "id": "src/theme/components/panel/PromptDoc.vue",
+      "group": "panelComponents",
+      "bytes": 1860,
+      "share": 0.0016
+    },
+    {
+      "id": "src/theme/docpilot/highlight.ts",
+      "group": "optionalFeatures",
+      "bytes": 1779,
+      "share": 0.0015
+    },
+    {
+      "id": "src/theme/components/panel/History.vue",
+      "group": "panelComponents",
+      "bytes": 1768,
+      "share": 0.0015
+    },
+    {
+      "id": "src/theme/components/panel/Sources.vue",
+      "group": "panelComponents",
+      "bytes": 1715,
+      "share": 0.0014
+    },
+    {
+      "id": "src/theme/docpilot/markers.ts",
+      "group": "panelRuntime",
+      "bytes": 1693,
+      "share": 0.0014
+    },
+    {
+      "id": "stringify-entities",
+      "group": "shiki",
+      "bytes": 1655,
+      "share": 0.0014
+    },
+    {
+      "id": "src/theme/components/panel/AnswerActions.vue",
+      "group": "panelComponents",
+      "bytes": 1617,
+      "share": 0.0014
+    },
+    {
+      "id": "src/theme/components/panel/Feedback.vue",
+      "group": "panelComponents",
+      "bytes": 1600,
+      "share": 0.0013
+    },
+    {
+      "id": "src/theme/docpilot/scope.ts",
+      "group": "optionalFeatures",
+      "bytes": 1579,
+      "share": 0.0013
+    },
+    {
+      "id": "src/theme/docpilot/store.ts",
+      "group": "panelRuntime",
+      "bytes": 1522,
+      "share": 0.0013
+    },
+    {
+      "id": "src/theme/components/panel/Header.vue",
+      "group": "panelComponents",
+      "bytes": 1497,
+      "share": 0.0013
+    },
+    {
+      "id": "src/theme/docpilot/glyphs.ts",
+      "group": "panelRuntime",
+      "bytes": 1455,
+      "share": 0.0012
+    },
+    {
+      "id": "src/theme/docpilot/embed.ts",
+      "group": "panelRuntime",
+      "bytes": 1415,
+      "share": 0.0012
+    },
+    {
+      "id": "src/theme/components/Quote.vue",
+      "group": "panelComponents",
+      "bytes": 1385,
+      "share": 0.0012
+    },
+    {
+      "id": "src/theme/components/panel/lens.ts",
+      "group": "panelComponents",
+      "bytes": 1374,
+      "share": 0.0012
+    },
+    {
+      "id": "src/theme/components/panel/EmptyState.vue",
+      "group": "panelComponents",
+      "bytes": 1373,
+      "share": 0.0012
+    },
+    {
+      "id": "src/theme/components/panel/Composer.vue",
+      "group": "panelComponents",
+      "bytes": 1325,
+      "share": 0.0011
+    },
+    {
+      "id": "src/theme/docpilot/host.ts",
+      "group": "panelRuntime",
+      "bytes": 1288,
+      "share": 0.0011
+    },
+    {
+      "id": "src/theme/components/panel/Failure.vue",
+      "group": "panelComponents",
+      "bytes": 1259,
+      "share": 0.0011
+    },
+    {
+      "id": "src/theme/docpilot/remote.ts",
+      "group": "optionalFeatures",
+      "bytes": 1249,
+      "share": 0.001
+    },
+    {
+      "id": "src/theme/components/panel/Footnote.vue",
+      "group": "panelComponents",
+      "bytes": 1239,
+      "share": 0.001
+    },
+    {
+      "id": "src/mount.ts",
+      "group": "other",
+      "bytes": 1162,
+      "share": 0.001
+    },
+    {
+      "id": "src/theme/components/panel/links.ts",
+      "group": "panelComponents",
+      "bytes": 1097,
+      "share": 0.0009
+    },
+    {
+      "id": "regex-utilities",
+      "group": "shiki",
+      "bytes": 1009,
+      "share": 0.0008
+    },
+    {
+      "id": "src/theme/components/panel/quoting.ts",
+      "group": "panelComponents",
+      "bytes": 965,
+      "share": 0.0008
+    },
+    {
+      "id": "src/theme/docpilot/support.ts",
+      "group": "panelRuntime",
+      "bytes": 943,
+      "share": 0.0008
+    },
+    {
+      "id": "src/theme/docpilot/highlighters/shiki.ts",
+      "group": "optionalFeatures",
+      "bytes": 865,
+      "share": 0.0007
+    },
+    {
+      "id": "src/theme/components/panel/progress.ts",
+      "group": "panelComponents",
+      "bytes": 823,
+      "share": 0.0007
+    },
+    {
+      "id": "src/theme/components/panel/limits.ts",
+      "group": "panelComponents",
+      "bytes": 816,
+      "share": 0.0007
+    },
+    {
+      "id": "src/theme/components/panel/Bar.vue",
+      "group": "panelComponents",
+      "bytes": 813,
+      "share": 0.0007
+    },
+    {
+      "id": "src/theme/components/panel/autoscroll.ts",
+      "group": "panelComponents",
+      "bytes": 751,
+      "share": 0.0006
+    },
+    {
+      "id": "src/theme/components/Icons.vue",
+      "group": "panelComponents",
+      "bytes": 739,
+      "share": 0.0006
+    },
+    {
+      "id": "src/theme/components/panel/push.ts",
+      "group": "panelComponents",
+      "bytes": 671,
+      "share": 0.0006
+    },
+    {
+      "id": "src/theme/components/panel/docks.ts",
+      "group": "panelComponents",
+      "bytes": 636,
+      "share": 0.0005
+    },
+    {
+      "id": "character-entities-legacy",
+      "group": "shiki",
+      "bytes": 633,
+      "share": 0.0005
+    },
+    {
+      "id": "src/theme/docpilot/results.ts",
+      "group": "panelRuntime",
+      "bytes": 544,
+      "share": 0.0005
+    },
+    {
+      "id": "src/theme/components/panel/Icon.vue",
+      "group": "panelComponents",
+      "bytes": 532,
+      "share": 0.0004
+    },
+    {
+      "id": "src/theme/components/panel/draft.ts",
+      "group": "panelComponents",
+      "bytes": 532,
+      "share": 0.0004
+    },
+    {
+      "id": "src/theme/docpilot/unload.ts",
+      "group": "panelRuntime",
+      "bytes": 453,
+      "share": 0.0004
+    },
+    {
+      "id": "src/theme/docpilot/prompt-store.ts",
+      "group": "optionalFeatures",
+      "bytes": 425,
+      "share": 0.0004
+    },
+    {
+      "id": "src/theme/docpilot/hotkey.ts",
+      "group": "panelRuntime",
+      "bytes": 308,
+      "share": 0.0003
+    },
+    {
+      "id": "src/theme/components/panel/announcer.ts",
+      "group": "panelComponents",
+      "bytes": 273,
+      "share": 0.0002
+    },
+    {
+      "id": "zwitch",
+      "group": "shiki",
+      "bytes": 273,
+      "share": 0.0002
+    },
+    {
+      "id": "src/theme/docpilot/excerpt.ts",
+      "group": "panelRuntime",
+      "bytes": 237,
+      "share": 0.0002
+    },
+    {
+      "id": "src/theme/docpilot/follow.ts",
+      "group": "panelRuntime",
+      "bytes": 203,
+      "share": 0.0002
+    },
+    {
+      "id": "src/theme/docpilot/status.ts",
+      "group": "panelRuntime",
+      "bytes": 190,
+      "share": 0.0002
+    },
+    {
+      "id": "ccount",
+      "group": "shiki",
+      "bytes": 168,
+      "share": 0.0001
+    },
+    {
+      "id": "html-void-elements",
+      "group": "shiki",
+      "bytes": 157,
+      "share": 0.0001
+    },
+    {
+      "id": "src/theme/components/panel/context.ts",
+      "group": "panelComponents",
+      "bytes": 156,
+      "share": 0.0001
+    },
+    {
+      "id": "hast-util-whitespace",
+      "group": "shiki",
+      "bytes": 141,
+      "share": 0.0001
+    },
+    {
+      "id": "comma-separated-tokens",
+      "group": "shiki",
+      "bytes": 129,
+      "share": 0.0001
+    },
+    {
+      "id": "src/theme/docpilot/route.ts",
+      "group": "panelRuntime",
+      "bytes": 120,
+      "share": 0.0001
+    },
+    {
+      "id": "@shikijs/types",
+      "group": "shiki",
+      "bytes": 70,
+      "share": 0.0001
+    },
+    {
+      "id": "src/web.ts",
+      "group": "other",
+      "bytes": 68,
+      "share": 0.0001
+    },
+    {
+      "id": "space-separated-tokens",
+      "group": "shiki",
+      "bytes": 41,
+      "share": 0
+    }
+  ],
+  "files": [
+    {
+      "id": "src/theme/docpilot/session.ts",
+      "group": "panelRuntime",
+      "bytes": 27204,
+      "share": 0.0228
+    },
+    {
+      "id": "src/theme/docpilot/social.ts",
+      "group": "optionalFeatures",
+      "bytes": 19846,
+      "share": 0.0167
+    },
+    {
+      "id": "src/theme/docpilot/prompt.ts",
+      "group": "panelRuntime",
+      "bytes": 13566,
+      "share": 0.0114
+    },
+    {
+      "id": "src/theme/docpilot/llm.ts",
+      "group": "panelRuntime",
+      "bytes": 13080,
+      "share": 0.011
+    },
+    {
+      "id": "src/theme/docpilot/providers.ts",
+      "group": "panelRuntime",
+      "bytes": 10887,
+      "share": 0.0091
+    },
+    {
+      "id": "src/theme/docpilot/harness.ts",
+      "group": "panelRuntime",
+      "bytes": 9676,
+      "share": 0.0081
+    },
+    {
+      "id": "src/theme/components/Panel.vue",
+      "group": "panelComponents",
+      "bytes": 9651,
+      "share": 0.0081
+    },
+    {
+      "id": "src/theme/docpilot/i18n.ts",
+      "group": "panelRuntime",
+      "bytes": 8123,
+      "share": 0.0068
+    },
+    {
+      "id": "src/theme/docpilot/credentials.ts",
+      "group": "optionalFeatures",
+      "bytes": 7972,
+      "share": 0.0067
+    },
+    {
+      "id": "src/theme/docpilot/retriever.ts",
+      "group": "panelRuntime",
+      "bytes": 7928,
+      "share": 0.0067
+    },
+    {
+      "id": "src/theme/docpilot/tools.ts",
+      "group": "optionalFeatures",
+      "bytes": 7283,
+      "share": 0.0061
+    },
+    {
+      "id": "src/theme/docpilot/switches.ts",
+      "group": "panelRuntime",
+      "bytes": 7103,
+      "share": 0.006
+    },
+    {
+      "id": "src/theme/docpilot/budget.ts",
+      "group": "optionalFeatures",
+      "bytes": 6267,
+      "share": 0.0053
+    },
+    {
+      "id": "src/theme/docpilot/text.ts",
+      "group": "panelRuntime",
+      "bytes": 5775,
+      "share": 0.0048
+    },
+    {
+      "id": "src/theme/docpilot/history.ts",
+      "group": "optionalFeatures",
+      "bytes": 4945,
+      "share": 0.0042
+    }
+  ],
+  "esm": [
+    {
+      "file": "docpilot.web.mjs",
+      "raw": 590128,
+      "gzip": 191204,
+      "brotli": 161772
+    },
+    {
+      "file": "web/dist-CQ8hnDd0.js",
+      "raw": 73650,
+      "gzip": 22399,
+      "brotli": 20118
+    },
+    {
+      "file": "web/dist-Kezqwi39.js",
+      "raw": 142274,
+      "gzip": 38941,
+      "brotli": 33930
+    },
+    {
+      "file": "web/github-dark-xcSqNsVI.js",
+      "raw": 12792,
+      "gzip": 2625,
+      "brotli": 2256
+    },
+    {
+      "file": "web/github-light-BNubH2n_.js",
+      "raw": 12556,
+      "gzip": 2591,
+      "brotli": 2217
+    },
+    {
+      "file": "web/html-BDdNlKQL.js",
+      "raw": 118804,
+      "gzip": 23799,
+      "brotli": 20750
+    },
+    {
+      "file": "web/javascript-BSjxD7Ei.js",
+      "raw": 184864,
+      "gzip": 16433,
+      "brotli": 12075
+    },
+    {
+      "file": "web/json-CWJmcBQn.js",
+      "raw": 3191,
+      "gzip": 794,
+      "brotli": 680
+    },
+    {
+      "file": "web/jsonc-IKox2JSV.js",
+      "raw": 3476,
+      "gzip": 812,
+      "brotli": 689
+    },
+    {
+      "file": "web/rolldown-runtime-CGnMp29N.js",
+      "raw": 228,
+      "gzip": 200,
+      "brotli": 168
+    },
+    {
+      "file": "web/shellscript-CB7IBf-7.js",
+      "raw": 45419,
+      "gzip": 6129,
+      "brotli": 5438
+    },
+    {
+      "file": "web/typescript-DcJ-ca4B.js",
+      "raw": 190676,
+      "gzip": 16112,
+      "brotli": 11588
+    },
+    {
+      "file": "web/yaml-CcAIbj8h.js",
+      "raw": 11579,
+      "gzip": 2278,
+      "brotli": 2030
+    }
+  ]
+}
