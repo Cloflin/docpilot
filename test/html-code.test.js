@@ -167,6 +167,18 @@ describe('html code blocks — gutters and chrome', () => {
     expect(out).toBe('```\na\nb\nc\n```')
   })
 
+  it('reads a gutter whose numbers are split by br, with no whitespace, as line numbers (IN-15)', () => {
+    expect(md('<table><tr><td>1<br>2<br>3</td><td><pre>a\nb\nc</pre></td></tr></table>')).toBe('```\na\nb\nc\n```')
+    expect(md('<table><tr><td><span>1</span><br><span>2</span></td><td><pre>a\nb</pre></td></tr></table>')).toBe('```\na\nb\n```')
+  })
+
+  it('still reads br-split numbers that do not count lines as data (IN-15)', () => {
+    const out = md('<table><tr><td>404<br>500</td><td><pre>GET /x\nGET /y</pre></td></tr></table>')
+    expect(out).toContain('404')
+    expect(out).toContain('500')
+    expect(out).not.toMatch(/^```/)
+  })
+
   it('keeps both columns of a headerless two-cell table of status numbers and pre cells', () => {
     const out = md('<table><tr><td>404</td><td><pre>GET /x</pre></td></tr><tr><td>500</td><td><pre>GET /y</pre></td></tr></table>')
     for (const text of ['404', 'GET /x', '500', 'GET /y']) expect(out).toContain(text)

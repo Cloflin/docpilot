@@ -231,7 +231,11 @@ function digitGuttersCount(rows): boolean {
   const numbers: number[] = []
   for (const cells of rows) {
     if (hasHintBeneath(cells[0])) continue
-    for (const part of String(cells[0].textContent || '').trim().split(/\s+/)) numbers.push(Number(part))
+    // Read like code: a `br` ends a line. `textContent` would join `1<br>2<br>3`
+    // into `123`, a number no run can start at (IN-15).
+    const text: string[] = []
+    collect(cells[0], text)
+    for (const part of text.join('').trim().split(/\s+/)) numbers.push(Number(part))
   }
   if (!numbers.length) return true
   if (numbers[0] > GUTTER_START_MAX) return false
