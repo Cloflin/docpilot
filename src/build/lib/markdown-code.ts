@@ -188,3 +188,43 @@ function mapProseBlocks(md: string, fn: (prose: string) => string): string {
 export function replaceInProse(md: string, pattern: RegExp, fn: (...groups: string[]) => string): string {
   return mapProseBlocks(md, (para) => replaceAcrossCode(para, pattern, fn))
 }
+
+/**
+ * `fn` applied to the prose of `md` with every code span and fenced or indented
+ * block copied as written: the text BETWEEN code, in order.
+ */
+function mapOutsideCode(md: string, fn: (text: string) => string): string {
+  return mapProseBlocks(md, (para) => {
+    let out = ''
+    let from = 0
+    for (const [start, end] of codeSpans(para)) {
+      out += fn(para.slice(from, start)) + para.slice(start, end)
+      from = end
+    }
+    return out + fn(para.slice(from))
+  })
+}
+
+/**
+ * The inverse of `escapeInline` (`html-to-md.ts`), for the text an index holds
+ * (WR-15, engine-spec 043).
+ *
+ * The extractor writes page text that Markdown would read as syntax with an
+ * escape: `\`, `\[`, `\]`, a backslash before a backtick, and `&lt;` for a `<`
+ * before a letter. That is right for the page VitePress renders, and wrong for a
+ * chunk title or chunk text, which are read as plain words: a heading
+ * `Array<T>` was cited as `Array&lt;T>` and indexed with the entity, so the
+ * embedder and the lexical half both saw a word the page never had, and the
+ * anchor was slugged from it (`array-lt-t`, which the page does not carry).
+ *
+ * Prose only. A code span or a fenced block keeps its backslashes and its
+ * entities, because there they are the characters the author wrote. `chunker.ts`
+ * runs this AFTER it has split, never before: an escaped run of three backticks
+ * at the start of a line is text, and unescaped early it would open a fence.
+ * Hand-written Markdown gets the same rule, since `\[` there also means a
+ * literal bracket.
+ */
+export function unescapeProse(md: string): string {
+  if (!md.includes('\\') && !md.includes('&lt;')) return md
+  return mapOutsideCode(md, (text) => text.replace(/\\([\\[\]`])/g, '$1').replace(/&lt;/g, '<'))
+}

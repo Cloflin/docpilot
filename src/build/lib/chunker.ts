@@ -8,6 +8,7 @@
  */
 
 import { normaliseMarkdown, MAX_CHUNK_CHARS, openFence, closesFence } from './normalise.js'
+import { unescapeProse } from './markdown-code.js'
 import { estTokens } from '../../theme/docpilot/text.js'
 
 export const TARGET_MIN_TOKENS = 350
@@ -139,7 +140,11 @@ function isTableDelim(line, n) {
  */
 function headingParts(text) {
   const m = /^(.*\S)\s*\{#([^}\s]+)\}$/.exec(text)
-  return m ? { title: m[1], anchor: m[2] } : { title: text, anchor: null }
+  const raw = m ? m[1] : text
+  // `raw` stays for a merged section, whose title is written into the body and
+  // unescaped there with it; `title` is what a reader sees, so it is unescaped
+  // once, here, before it is cited or slugged (WR-15, engine-spec 043).
+  return { title: unescapeProse(raw), raw, anchor: m ? m[2] : null }
 }
 
 /** Split into sections at ## and ###. `#` sets the document title, never a boundary. */
@@ -148,7 +153,7 @@ function toSections(text, fallbackTitle) {
   const sections = []
   let h1 = fallbackTitle || null
   let parent = null
-  let cur = { title: null, anchor: null, level: 0, parent: null, lines: [] }
+  let cur = { title: null, raw: null, anchor: null, level: 0, parent: null, lines: [] }
   let fence = null
 
   for (const line of lines) {
@@ -168,7 +173,7 @@ function toSections(text, fallbackTitle) {
       const level = h[1].length
       // Before the level test, so an `# H1 {#custom}` sets a page title without
       // the markup in it — the h1 is the breadcrumb on every chunk of the page.
-      const { title, anchor } = headingParts(h[2].trim())
+      const { title, raw, anchor } = headingParts(h[2].trim())
       if (level === 1) {
         h1 = h1 || title
         continue
@@ -178,7 +183,7 @@ function toSections(text, fallbackTitle) {
       // spec 029). Kept on the section, never on the chunk: it is a property of
       // where the text sits, and the reader's source row already shows the page.
       if (level === 2) parent = title
-      cur = { title, anchor, level, parent: level === 3 ? parent : null, lines: [] }
+      cur = { title, raw, anchor, level, parent: level === 3 ? parent : null, lines: [] }
       continue
     }
     cur.lines.push(line)
@@ -486,7 +491,7 @@ export function chunkMarkdown({
     const body = s.lines.join('\n').trim()
     const prev = merged[merged.length - 1]
     if (prev && estTokens(body) < MERGE_BELOW_TOKENS && prev.level === s.level) {
-      prev.body += `\n\n${s.title ? `${s.title}\n` : ''}${body}`
+      prev.body += `\n\n${s.raw ? `${s.raw}\n` : ''}${body}`
       continue
     }
     merged.push({ title: s.title, anchor: s.anchor, level: s.level, parent: s.parent, body })
@@ -564,7 +569,11 @@ export function chunkMarkdown({
       // (engine-spec 035) — the same sentence, written in the same place.
       const about = description || pageDescription
       const lead = about && chunks.length === 0 && i === 0 ? `\n${about}` : ''
-      const full = `${context}${lead}\n${body}`.trim()
+      // Unescaped per part, after every split: the extractor's escapes are not
+      // words (WR-15, engine-spec 043), but an escaped fence is text until the
+      // splitter has read it as such.
+      const plain = unescapeProse(body)
+      const full = `${context}${lead}\n${plain}`.trim()
       if (!body.trim()) return
       const record = {
         // `~N`, NOT `-N`, for the second and later parts of one section.
@@ -616,7 +625,7 @@ export function chunkMarkdown({
           .join(' › ')
         const context = embedContext === 'path+desc' ? about || '' : lead ? about : ''
         Object.defineProperty(record, 'embedText', {
-          value: `${trail}${context ? `\n${context}` : ''}\n${body}`.trim(),
+          value: `${trail}${context ? `\n${context}` : ''}\n${plain}`.trim(),
           enumerable: false,
         })
       }
