@@ -129,14 +129,20 @@ describe('the shipped defaults post the body they always posted', () => {
     })
   })
 
-  /** `system` hoisted out of the messages, and no `temperature` at all. */
+  /**
+   * `system` hoisted out of the messages, and no `temperature` at all.
+   *
+   * ONE FIELD DIFFERS FROM THE CAPTURE, on purpose: `system` is the same text in
+   * a one-block array that carries the prompt-caching marker, where it used to
+   * be the bare string (test/prompt-caching.test.js holds the rule).
+   */
   it('anthropic', () => {
     expect(bodyFor('anthropic')).toEqual({
       model: 'm',
       max_tokens: 2048,
       messages: [{ role: 'user', content: 'hi' }],
       stream: true,
-      system: 'S',
+      system: [{ type: 'text', text: 'S', cache_control: { type: 'ephemeral' } }],
       thinking: { type: 'adaptive' },
     })
   })

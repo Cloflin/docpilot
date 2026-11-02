@@ -16,6 +16,8 @@
  *               all — a forced tool call is how a JSON shape is pinned there.
  */
 
+import { markLast } from './prompt-cache.js'
+
 /** Line reader shared by every stream format below. */
 async function readLines(res, line) {
   const reader = res.body.getReader()
@@ -740,6 +742,22 @@ const openai = {
 // ── anthropic ────────────────────────────────────────────────────────────────
 
 /** Tool schemas, translated: `function.parameters` becomes `input_schema`. */
+/**
+ * THE PROMPT, AS ANTHROPIC COUNTS IT. With caching on, `input_tokens` is only
+ * what came AFTER the last marker; the rest is reported as
+ * `cache_creation_input_tokens` (written this time) and `cache_read_input_tokens`
+ * (served from cache). The prompt the model read is all three, so a total that
+ * left the other two out would shrink exactly when caching works. `cachedTokens`
+ * stays the reads alone — it answers "how much was reused", not "how much was
+ * written". Null when the response reports none of the three.
+ */
+function anthropicPromptTokens(usage) {
+  if (!usage) return null
+  const parts = [usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens]
+  if (parts.every((n) => n == null)) return null
+  return parts.reduce((sum, n) => sum + (n || 0), 0)
+}
+
 function anthropicTools(tools) {
   return tools.map((t) => ({
     name: t.function.name,
@@ -852,16 +870,22 @@ const anthropic = {
       messages: rest,
       stream: streaming,
     }
-    if (system) body.system = system
+    // PROMPT CACHING. The system text as ONE block that carries the marker, so the
+    // provider may reuse everything up to and including it — the tools before it
+    // are covered by the marker on the last tool below. The text is the same
+    // string the old `system: '…'` carried; only its envelope changes. A prompt
+    // under the model's minimum (1024 tokens, 2048 on the smallest) is simply not
+    // cached, and the request is otherwise identical.
+    if (system) body.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }]
 
     if (schemaBody) {
       // There is no `response_format`. Forcing the tool is how a shape is
       // pinned — and it lands in the same `toolCall` the harness already
       // handles, so the answer path is unchanged.
-      body.tools = [{ name: 'answer', description: 'Deliver the final answer.', input_schema: schemaBody }]
+      body.tools = markLast([{ name: 'answer', description: 'Deliver the final answer.', input_schema: schemaBody }])
       body.tool_choice = { type: 'tool', name: 'answer' }
     } else if (tools) {
-      body.tools = anthropicTools(tools)
+      body.tools = markLast(anthropicTools(tools))
     }
 
     /**
@@ -927,11 +951,7 @@ const anthropic = {
       content,
       thinking,
       toolCall,
-      usage: usageOf(
-        json.usage?.input_tokens,
-        json.usage?.output_tokens,
-        json.usage?.cache_read_input_tokens,
-      ),
+      usage: usageOf(anthropicPromptTokens(json.usage), json.usage?.output_tokens, json.usage?.cache_read_input_tokens),
       finishReason: null,
     }
   },
@@ -952,7 +972,7 @@ const anthropic = {
 
       // Input tokens arrive with message_start, output tokens with message_delta.
       if (json.type === 'message_start') {
-        promptTokens = json.message?.usage?.input_tokens ?? null
+        promptTokens = anthropicPromptTokens(json.message?.usage)
         cachedTokens = json.message?.usage?.cache_read_input_tokens ?? null
       }
       if (json.type === 'message_delta' && json.usage) outputTokens = json.usage.output_tokens ?? null

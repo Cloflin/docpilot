@@ -1580,7 +1580,9 @@ describe('provider adapters', () => {
     expect(seen.headers['x-api-key']).toBe('k')
     expect(seen.headers['anthropic-version']).toBe('2023-06-01')
     expect(seen.headers.authorization).toBeUndefined()
-    expect(seen.body.system).toBe('sys')
+    // The same text, hoisted out of the messages, in the one block that carries the
+    // prompt-caching marker (test/prompt-caching.test.js holds the rule).
+    expect(seen.body.system).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }])
     expect(seen.body.messages.every((m) => m.role !== 'system')).toBe(true)
     expect(seen.body.max_tokens).toBe(512) // required by this API
     expect(seen.body.response_format).toBeUndefined()
