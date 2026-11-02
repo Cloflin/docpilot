@@ -9,8 +9,9 @@
  * NO PROMPT TEXT MOVES. Every case compares the text that goes out with the text
  * that went in.
  */
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { providerFor } from '../src/theme/docpilot/providers.js'
+import { chat, resetCaps, resetPools } from '../src/theme/docpilot/llm.js'
 
 const SYSTEM = 'You answer from the documentation excerpts only.'
 const MESSAGES = [
@@ -144,11 +145,141 @@ describe('anthropic — the prompt total counts what was written and what was re
   })
 })
 
+// ── openai ──────────────────────────────────────────────────────────────────
+
+const openaiBody = (over = {}) => providerFor('openai').body({ ...CALL, baseURL: 'https://api.openai.com', ...over })
+const KEY = /^dp-[0-9a-f]{14}$/
+
+describe('openai — prompt_cache_key, on api.openai.com only', () => {
+  it('sends a key made of the system text and the tool schemas', () => {
+    const key = openaiBody({ tools: TOOLS }).prompt_cache_key
+    expect(key).toMatch(KEY)
+    expect(openaiBody({ tools: TOOLS }).prompt_cache_key).toBe(key)
+  })
+
+  it('changes when the system text changes, and when the tools change', () => {
+    const base = openaiBody({ tools: TOOLS }).prompt_cache_key
+    const otherSystem = openaiBody({
+      tools: TOOLS,
+      messages: [{ role: 'system', content: `${SYSTEM} Be brief.` }, MESSAGES[1]],
+    }).prompt_cache_key
+    const otherTools = openaiBody({ tools: TOOLS.slice(0, 1) }).prompt_cache_key
+    expect(new Set([base, otherSystem, otherTools]).size).toBe(3)
+  })
+
+  it('does not change with the question, the quote or the history', () => {
+    const key = openaiBody({ tools: TOOLS }).prompt_cache_key
+    const later = openaiBody({
+      tools: TOOLS,
+      messages: [
+        MESSAGES[0],
+        { role: 'user', content: 'An earlier question about my private deployment' },
+        { role: 'assistant', content: 'An earlier answer' },
+        { role: 'user', content: 'A different question, with a quote: "secret"' },
+      ],
+    }).prompt_cache_key
+    expect(later).toBe(key)
+  })
+
+  it('carries none of the text it was made from', () => {
+    const key = openaiBody({ tools: TOOLS }).prompt_cache_key
+    for (const word of ['documentation', 'excerpts', 'search_docs', 'gate']) expect(key).not.toContain(word)
+  })
+
+  it('writes no key when there is no system text', () => {
+    expect('prompt_cache_key' in openaiBody({ messages: [{ role: 'user', content: 'q' }] })).toBe(false)
+  })
+
+  it('leaves the prompt and the rest of the body as they were', () => {
+    const { prompt_cache_key, ...rest } = openaiBody({ tools: TOOLS })
+    expect(prompt_cache_key).toMatch(KEY)
+    expect(rest).toEqual(providerFor('openai').body({ ...CALL, tools: TOOLS }))
+  })
+
+  it.each([
+    ['OpenRouter', 'https://openrouter.ai/api'],
+    ['Ollama', 'http://localhost:11434'],
+    ['Groq', 'https://api.groq.com/openai'],
+    ['Together', 'https://api.together.xyz'],
+    ['a same-origin proxy', '/ai'],
+    ['a lookalike host', 'https://api.openai.com.evil.test'],
+    ['a path that only names it', 'https://proxy.example/api.openai.com'],
+    ['an Azure gateway', 'https://x.openai.azure.com/openai'],
+    ['not a URL', 'api.openai.com'],
+    ['nothing', undefined],
+  ])('sends nothing to %s', (_name, baseURL) => {
+    expect('prompt_cache_key' in openaiBody({ tools: TOOLS, baseURL })).toBe(false)
+  })
+
+  it('reads the host the way a URL does: case and port do not matter', () => {
+    expect(openaiBody({ baseURL: 'https://API.OpenAI.com:443/v1' }).prompt_cache_key).toMatch(KEY)
+  })
+
+  it('wins over extraBody on api.openai.com, and leaves extraBody alone elsewhere', () => {
+    const extraBody = { prompt_cache_key: 'mine', user: 'u' }
+    const there = openaiBody({ extraBody })
+    expect(there.prompt_cache_key).toMatch(KEY)
+    expect(there.user).toBe('u')
+    expect(openaiBody({ extraBody, baseURL: 'https://api.groq.com/openai' }).prompt_cache_key).toBe('mine')
+  })
+})
+
+// ── through chat(): the base URL has to reach the adapter ───────────────────
+
+/** What chat() posts to `baseURL`, with `fetch` replaced. */
+async function posted(options) {
+  const seen = []
+  vi.stubGlobal('fetch', async (url, init) => {
+    seen.push({ url: String(url), body: JSON.parse(init.body) })
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        choices: [{ message: { content: '{"text":"x"}' }, finish_reason: 'stop' }],
+        content: [{ type: 'text', text: '{"text":"x"}' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, input_tokens: 1, output_tokens: 1 },
+      }),
+    }
+  })
+  resetCaps()
+  resetPools()
+  await chat({ apiKey: 'k', temperature: 0, messages: MESSAGES, tools: true, ...options })
+  return seen[0]
+}
+
+describe('chat() hands the adapter the base URL it is about to post to', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('api.openai.com gets the key', async () => {
+    const r = await posted({ provider: 'openai', baseURL: 'https://api.openai.com', model: 'gpt-x' })
+    expect(r.url).toBe('https://api.openai.com/v1/chat/completions')
+    expect(r.body.prompt_cache_key).toMatch(KEY)
+    expect(r.body.messages[0]).toEqual({ role: 'system', content: SYSTEM })
+  })
+
+  it('another OpenAI-shaped host does not', async () => {
+    const r = await posted({ provider: 'openai', baseURL: 'https://api.groq.com/openai', model: 'm' })
+    expect(r.body).not.toHaveProperty('prompt_cache_key')
+  })
+
+  it('anthropic is marked whatever the host is', async () => {
+    const r = await posted({ provider: 'anthropic', baseURL: 'https://api.anthropic.com', model: 'claude-x' })
+    expect(r.url).toBe('https://api.anthropic.com/v1/messages')
+    expect(r.body.system).toEqual([{ type: 'text', text: SYSTEM, cache_control: EPHEMERAL }])
+    expect(r.body.tools.at(-1).cache_control).toEqual(EPHEMERAL)
+  })
+})
+
 describe('no other adapter gets a cache field it did not have', () => {
   const NONE = /cache_control|prompt_cache_key/
-  it.each(['ollama', 'openai', 'llamacpp'])('%s', (id) => {
+  it.each(['ollama', 'openai', 'llamacpp'])('%s, with no base URL to judge by', (id) => {
     const body = providerFor(id).body({ ...CALL, tools: TOOLS })
     expect(JSON.stringify(body)).not.toMatch(NONE)
     expect(JSON.stringify(providerFor(id).body({ ...CALL, schemaBody: SCHEMA }))).not.toMatch(NONE)
+  })
+
+  it('ollama gets none even when the host is OpenAI\'s', () => {
+    expect(JSON.stringify(providerFor('ollama').body({ ...CALL, tools: TOOLS, baseURL: 'https://api.openai.com' }))).not.toMatch(NONE)
   })
 })

@@ -1499,6 +1499,9 @@ export async function chat(options: ChatOptions) {
         // that has not failed a request, so the full-strength body stays the
         // default and a healthy endpoint never sees a degraded one.
         degrade: degradeFor(target.provider, target.baseURL, chosen),
+        // WHERE THE REQUEST IS GOING, so an adapter can decide what the host takes
+        // (prompt caching is the one thing that depends on it).
+        baseURL: target.baseURL,
       })
 
       const { res, kind } = await fetchWithRetry(

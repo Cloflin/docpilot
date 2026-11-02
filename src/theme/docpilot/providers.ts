@@ -16,7 +16,7 @@
  *               all — a forced tool call is how a JSON shape is pinned there.
  */
 
-import { markLast } from './prompt-cache.js'
+import { isOpenAIHost, markLast, promptCacheKey, systemTextOf } from './prompt-cache.js'
 
 /** Line reader shared by every stream format below. */
 async function readLines(res, line) {
@@ -507,6 +507,7 @@ const openai = {
     continuing,
     enableThink,
     degrade,
+    baseURL,
   }) {
     const body = {
       // The brand-specific fragment, and it goes FIRST so that nothing
@@ -603,6 +604,20 @@ const openai = {
       body.tools = tools
     } else if (!continuing) {
       body.response_format = { type: 'json_object' }
+    }
+    /**
+     * PROMPT CACHING, ON OPENAI'S OWN HOST ONLY. `prompt_cache_key` steers a
+     * request to the engine that already holds its prefix; the prefix here is the
+     * system text and the tool schemas, so that is what the key is made of — no
+     * question, no quote, no history. Every other host that speaks this dialect
+     * (OpenRouter, Groq, Together, vLLM, llama.cpp, a proxy) may refuse a field it
+     * does not know, and a refusal is paid for by the reader's question, so they
+     * are not sent it. The adapter writes it AFTER the `extraBody` spread, so
+     * configuration cannot overwrite it, on the rule stated at the top.
+     */
+    if (isOpenAIHost(baseURL)) {
+      const key = promptCacheKey(systemTextOf(messages), body.tools)
+      if (key) body.prompt_cache_key = key
     }
     return body
   },

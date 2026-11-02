@@ -89,6 +89,7 @@ async function probeBody(adapter, target, model, extra) {
       tools: null,
       schemaBody: null,
       continuing: false,
+      baseURL: target.baseURL,
       ...extra,
     }),
     // Whatever the adapter's own ceiling field was, one token is all this needs
