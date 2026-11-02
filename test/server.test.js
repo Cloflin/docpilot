@@ -206,7 +206,9 @@ describe('createDocPilotServer — a full turn against a stub model', () => {
     req.on('end', () => {
       const parsed = JSON.parse(body)
       calls.push(parsed)
-      const seen = JSON.stringify(parsed.messages).match(/\\"id\\":\\"([^\\"]+)\\"/)
+      // The first document id a tool result handed out (engine-spec 048's
+      // `<document id="…">`), never the system message's worked example.
+      const seen = JSON.stringify(parsed.messages.filter((m) => m.role !== 'system')).match(/<document id=\\"([^\\"]+)\\"/)
       const args = JSON.stringify({ text: 'Run npx docpilot index [1].', citations: seen ? [seen[1]] : [], confidence: 0.9 })
       const frame = { choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'answer', arguments: args } }] } }] }
       res.writeHead(200, { 'content-type': 'text/event-stream' })

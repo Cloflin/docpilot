@@ -99,7 +99,9 @@ describe('runServerTurn — the leak guard covers the summary and the actions', 
     let body = ''
     req.on('data', (c) => (body += c))
     req.on('end', () => {
-      const seen = body.match(/\\"id\\":\\"([^\\"]+)\\"/)
+      // The first document id a tool result handed out (engine-spec 048's
+      // `<document id="…">`), never the system message's worked example.
+      const seen = JSON.stringify(JSON.parse(body).messages.filter((m) => m.role !== 'system')).match(/<document id=\\"([^\\"]+)\\"/)
       const args = JSON.stringify({
         text: 'Run npx docpilot index [1].',
         citations: seen ? [seen[1]] : [],

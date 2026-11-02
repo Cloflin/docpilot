@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { assembleIndex } from '../src/theme/docpilot/store.js'
 import { createRetrieval } from '../src/theme/docpilot/retriever.js'
 import { runTurn } from '../src/theme/docpilot/harness.js'
+import { readObservation } from './helpers/observation.js'
 
 /**
  * engine-spec 040 — what a search says it searched.
@@ -70,11 +71,12 @@ const turn = async (calls, { composedQuery = null } = {}) => {
     queryVec: null,
     composedQuery,
   })
+  // Every tool result as the model read it — a `<tool_result>` block since
+  // engine-spec 048 — back as the observation it was rendered from.
   const observations = (i) =>
     bodies[i].messages
-      .map((m) => String(m.content))
-      .filter((c) => c.startsWith('{'))
-      .map((c) => JSON.parse(c))
+      .map((m) => readObservation(m.content))
+      .filter(Boolean)
   return { res, bodies, observations }
 }
 

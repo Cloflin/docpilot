@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeAll } from 'vitest'
 
 import { createHarness } from './helpers/chat-harness.js'
+import { questionOf, readObservation } from './helpers/observation.js'
 
 /**
  * THE MULTI-TURN AND FAILURE PATHS OF THE 2.1.1 CHAT SESSION — CORE-02, PITFALL 18.
@@ -57,18 +58,24 @@ const answerRequests = (wire) => wire.filter((w) => w.to === 'model' && w.body?.
 const embedRequests = (wire) => wire.filter((w) => w.to === 'embed')
 const turnPosts = (wire) => wire.filter((w) => w.to === 'endpoint' && w.method === 'POST')
 
-/** The `search_docs` result a request carries: the query retrieval ran on, the scope, the rows. */
+/**
+ * The `search_docs` result a request carries: the query retrieval ran on, the
+ * scope, the rows — read back from its `<tool_result>` block (engine-spec 048).
+ */
 const searchResult = (request) => {
-  const message = request.body.messages.find((m) => m.role === 'user' && String(m.content).startsWith('{"tool":"search_docs"'))
-  return message ? JSON.parse(message.content) : null
+  const message = request.body.messages.find((m) => m.role === 'user' && String(m.content).startsWith('<tool_result tool="search_docs"'))
+  return message ? readObservation(message.content) : null
 }
 
-/** The prior turns a model request carries as history: the user message in front of each assistant message. */
+/**
+ * The prior turns a model request carries as history: the question in the user
+ * message in front of each assistant message, out of its `<question>` tags.
+ */
 const historyOf = (request) => {
   const messages = request.body.messages
   const out = []
   messages.forEach((m, i) => {
-    if (m.role === 'assistant') out.push({ question: messages[i - 1].content, answer: m.content })
+    if (m.role === 'assistant') out.push({ question: questionOf(messages[i - 1].content), answer: m.content })
   })
   return out
 }
