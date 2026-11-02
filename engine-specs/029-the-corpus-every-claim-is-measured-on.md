@@ -43,7 +43,7 @@
   parametric knowledge (closed-book contamination is the first failure mode of
   open-domain QA benchmarks).
 - Held-out splits are the minimum guard against tuning to the test; the
-  sandbox of `stripo-docs/.claude/doc-agent-eval` uses train/test/acceptance by
+  sandbox of `reference-site/.claude/doc-agent-eval` uses train/test/acceptance by
   date for the same reason.
 - Canary strings are the standard leak test (OWASP LLM07): a token only the
   instructions carry, matched in the output.

@@ -672,7 +672,7 @@ and `DOCPILOT_ANSWER_SUMMARY=0` restore 1.4.
 question against an English corpus had the right section ranked first by BM25
 and then cut from the top 8 by the dense ordering of the raw Russian text.
 `embedQuery` now appends the canonical terms the question's aliases name. No
-extra requests; without a vocabulary nothing changes. On the Stripo golden set,
+extra requests; without a vocabulary nothing changes. On the reference site's golden set,
 recall@8 0.811 → 0.833, and Russian recall@8 0.750 → 0.833.
 
 ### Fixed

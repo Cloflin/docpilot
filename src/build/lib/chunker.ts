@@ -122,7 +122,7 @@ function isTableDelim(line, n) {
  * eats the trailing brace and emits `id="custom-id"`. Reading the line whole is
  * wrong twice over. The citation row label keeps the raw `{#…}` markup in it,
  * and `slug()` folds that markup back into the anchor — `### How to Get API Keys
- * for AI Models {#how-to-get-api-keys-for-ai-models}` (stripo-docs
+ * for AI Models {#how-to-get-api-keys-for-ai-models}` (a production docs site's
  * editor-configuration/artificial-intelligence.md) produced the anchor
  * `how-to-get-api-keys-for-ai-models-how-to-get-api-keys-for-ai-models`, which
  * matches no element on the rendered page, so the citation href built in

@@ -48,7 +48,7 @@ unsupported VALUE. The 400 says which in `error.code`.
 
 ## Measured, 2026-10-27
 
-The stripo-docs site, `gpt-6-luna`, `reasoning: 'low'`, through its own `/ai`
+The reference docs site, `gpt-6-luna`, `reasoning: 'low'`, through its own `/ai`
 proxy, headless through the panel's session code; five suggested questions, two
 turns each, a fresh page per question.
 

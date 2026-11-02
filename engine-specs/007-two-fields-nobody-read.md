@@ -32,7 +32,7 @@ does not add a `prev` field to the index. Derived at load, on purpose.»* — и
 write-only.
 
 Цена, на собственном индексе проекта (471 чанк, 661 KB шардов): `prev` 19.1 KB,
-`codeLangs` 7.6 KB. На потребительском корпусе stripo-docs — 4.6 % и 0.6 % при
+`codeLangs` 7.6 KB. На потребительском корпусе референс-сайта — 4.6 % и 0.6 % при
 каталоге 3.4 MB против `WARN_BYTES` 3 MB и `FAIL_BYTES` 5 MB.
 
 ## Research

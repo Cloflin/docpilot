@@ -19,7 +19,7 @@ which model should do which part of it.
 
 ## Research
 
-- `stripo-docs/.claude/doc-agent-eval` (the doc-editor agent's harness): a
+- `reference-site/.claude/doc-agent-eval` (the doc-editor agent's harness): a
   deterministic score decides and a model judge only advises; held-out cases by
   date; an 8-gram check against truth leakage; a sandbox with no truth mounted.
   Its agent definition shows the frontmatter Claude Code reads: `model`,

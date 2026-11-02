@@ -667,7 +667,7 @@ const ATX_HEADING = /^ {0,3}#{1,6}(\s|$)/
  * became `### Template Modifications (/extensions/…/template-modifications)` and
  * slugged to `template-modifications-extensionstutorialshow-totemplate-modifications`
  * against a real anchor of `template-modifications`, so all four sections of
- * stripo-docs' `extensions/tutorials.md` cited fragments that exist nowhere,
+ * a production docs site's `extensions/tutorials.md` cited fragments that exist nowhere,
  * under a citation label with the raw route printed inside it.
  *
  * The brackets go with the route rather than being left behind: `slug()` folds

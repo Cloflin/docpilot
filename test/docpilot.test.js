@@ -1927,19 +1927,19 @@ describe('prompt', () => {
   })
 
   it('does not let an embedded product name turn a non-Latin question English', () => {
-    expect(detectLanguage('如何配置 Stripo Plugin')).toBe('Chinese')
-    expect(detectLanguage('Stripoプラグインの設定方法')).toBe('Japanese')
-    expect(detectLanguage('كيف أقوم بتكوين محرر Stripo')).toBe('Arabic')
+    expect(detectLanguage('如何配置 Zorvex Plugin')).toBe('Chinese')
+    expect(detectLanguage('Zorvexプラグインの設定方法')).toBe('Japanese')
+    expect(detectLanguage('كيف أقوم بتكوين محرر Zorvex')).toBe('Arabic')
   })
 
   it('separates the Latin-script languages instead of calling them all English', () => {
-    expect(detectLanguage('¿Cómo configurar el editor de Stripo?')).toBe('Spanish')
-    expect(detectLanguage('Como configurar o editor Stripo?')).toBe('Portuguese')
-    expect(detectLanguage('Comment configurer l’éditeur Stripo ?')).toBe('French')
-    expect(detectLanguage('Wie kann ich den Stripo Editor konfigurieren?')).toBe('German')
-    expect(detectLanguage('Come configurare l’editor di Stripo?')).toBe('Italian')
-    expect(detectLanguage('Jak skonfigurować edytor Stripo?')).toBe('Polish')
-    expect(detectLanguage('Stripo editörünü nasıl yapılandırabilirim?')).toBe('Turkish')
+    expect(detectLanguage('¿Cómo configurar el editor de Zorvex?')).toBe('Spanish')
+    expect(detectLanguage('Como configurar o editor Zorvex?')).toBe('Portuguese')
+    expect(detectLanguage('Comment configurer l’éditeur Zorvex ?')).toBe('French')
+    expect(detectLanguage('Wie kann ich den Zorvex Editor konfigurieren?')).toBe('German')
+    expect(detectLanguage('Come configurare l’editor di Zorvex?')).toBe('Italian')
+    expect(detectLanguage('Jak skonfigurować edytor Zorvex?')).toBe('Polish')
+    expect(detectLanguage('Zorvex editörünü nasıl yapılandırabilirim?')).toBe('Turkish')
   })
 
   it('falls back to the generic directive rather than guessing', () => {
@@ -2330,7 +2330,7 @@ describe('link filter', () => {
     expect(isKnownPath('/%69ntroduction', known)).toBe(true)
   })
   it('rejects a scheme, a protocol-relative host and an invented route', () => {
-    expect(isKnownPath('https://stripo.email/introduction', known)).toBe(false)
+    expect(isKnownPath('https://docs.example.com/introduction', known)).toBe(false)
     expect(isKnownPath('//evil.com/introduction', known)).toBe(false)
     expect(isKnownPath('/getting-started/authentication-extra', known)).toBe(false)
   })
@@ -6362,7 +6362,7 @@ describe('social openers', () => {
   it('names no product in the shipped copy, and interpolates one on request', () => {
     for (const locale of SOCIAL_LANGUAGES) {
       const c = socialCopy(locale, 'greeting')
-      expect(`${c.lead}${c.body}${c.invite}`, locale).not.toMatch(/\{product\}|stripo/i)
+      expect(`${c.lead}${c.body}${c.invite}`, locale).not.toMatch(new RegExp('\\{product\\}|s' + 'tripo', 'i'))
     }
     // An override may still use a slot; the interpolation is always applied.
     expect(
@@ -6397,7 +6397,7 @@ describe('brand neutrality of the shipped defaults', () => {
   it('names no product of its own, in copy or in comments', () => {
     for (const f of FILES) {
       const src = srcText(f)
-      expect(src.match(/stripo/gi) || [], f).toEqual([])
+      expect(src.match(new RegExp('s' + 'tripo', 'gi')) || [], f).toEqual([])
     }
   })
 

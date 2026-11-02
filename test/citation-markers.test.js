@@ -11,7 +11,7 @@ import { inlineCitations, unlinkedAnswer } from '../src/eval/metrics.js'
 /**
  * engine-spec 039 — a section id written where a citation marker goes.
  *
- * Measured on stripo-docs before the fix: the answer text read
+ * Measured on a production docs site before the fix: the answer text read
  * `…your own server [editor-configuration/image-storage#connecting-your-own-server]`,
  * the Sources list under it was right, and the claim had no link. Three halves
  * are pinned here: the rewrite (`idMarkers`), the turn that applies it once for
