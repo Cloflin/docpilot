@@ -7,6 +7,146 @@ Release headings are read by a machine as well as by you:
 `scripts/check-publish.js` matches the first `## x.y.z` heading in this file
 against `package.json`'s version and refuses the publish if they disagree.
 
+## 2.2.0 — 2026-11-02
+
+A page of HTML now becomes Markdown by the same rules everywhere. `docpilot
+import`, `docpilot index --html-dir` and `docpilot doctor` share one extractor
+that picks the body of the page, keeps tab panels, accordions, tables and code
+as they were written, drops navigation and banners, and prints a table of what it
+kept and dropped. The indexer reads Markdown, a knowledge-base folder, built HTML
+and OpenAPI through one document reader, and `eval` can compare a run with a
+frozen baseline. The system prompt is new too, and answers link their claims more
+often. Engine-specs 041, 043 and 048.
+
+**A site written in Markdown needs no rebuild.** Its index is byte-identical to
+the one 2.1.1 builds, and no setting is new or required. A site that indexes
+built HTML or imports pages needs one rebuild; see the next section.
+
+### Upgrading from 2.1.1
+
+- **Markdown only:** nothing to do. `engines.node` stays `>=20`.
+- **`index --html-dir`:** run `docpilot index` again. The corpus hash now carries
+  the extractor's version for these pages, so the hash moves once, and a
+  calibration made before the upgrade reads as stale. Run `docpilot calibrate` if
+  you keep one.
+- **Pages made by `docpilot import`:** they keep working. Each new page carries
+  `extractor: 2` in its front matter, and `index` warns about a page an older
+  extractor wrote and prints the command that re-imports it (five at most;
+  `docpilot doctor` lists all of them). The warning never fails the build.
+- **`docpilot import --out`:** it now has to name a file under `importDir`. An
+  absolute path, a `..` segment, or a name that is empty or only dots exits 2
+  before the fetch. A nested name such as `guides/x` still works.
+- **Pages marked `noindex`** (a robots meta tag, or an `X-Robots-Tag` header) are
+  skipped. There is no switch to index them.
+- **Everyone:** the system prompt changed. Answers link their claims more often, and a
+  turn can use more requests; see the first item under Changed. If you watch a request
+  budget, run `docpilot eval` on your own questions after the upgrade.
+- **`linkedom` is a regular dependency now,** pinned to 0.18.14. Installing the
+  package adds 18 small packages. The HTML parser runs in the CLI only, and a
+  test holds it out of the reader's bundle.
+
+### Added
+
+**One extractor for HTML.** The body is `<main>`, `[role=main]` or `<article>`,
+or else the block with the most prose. Tab panels and accordions keep every panel
+under its label. A table keeps its merged cells, or falls back to one line per
+row. Code keeps its line breaks and the language its wrapper names, and a gutter
+of line numbers is dropped. A heading keeps its id. Page metadata (canonical
+address, `lang`, `dateModified`) is read before the noise is removed. Links
+resolve against `<base>`, then the canonical address, then the address you gave,
+and a link that cannot resolve becomes its text with a warning. See
+[Imported pages](https://docpilot-nine.vercel.app/guide/imported-pages).
+
+**`docPilot.html`, server-only.** `content` (one CSS selector for the body),
+`exclude` (selectors removed from inside it), `sources` (the same two settings for
+one URL prefix or one directory; the longest key wins) and `fetcher` (your own
+renderer for `docpilot import`). The flags win, then the key, then the default.
+The fetcher is checked against `sources.allow` twice, before and after, and has a
+30-second deadline. A key it does not know stops the build with the dotted name.
+The default is `null`, and the setting never reaches the browser.
+
+**Flags.** `--html-select` and `--html-exclude` on `import`; `--html-exclude` on
+`index`; `--baseline=<file>` and `--update-baseline` on `eval`. With `--baseline`,
+`eval` prints every record whose ranking moved and exits 1 when one did.
+
+**The extraction report.** `import` prints a table of pages, characters kept and
+dropped, empty pages and links it could not resolve, and names each skipped page
+with its reason. `doctor` re-runs the extraction offline over every directory
+key of `html.sources` and prints the same table. Neither moves `doctor`'s exit
+code.
+
+**Server runtime has no size ceiling on the index.** With `runtime: 'server'`,
+the browser downloads only the shell, so the 64 KB manifest and 5 MB total
+ceilings no longer apply, and `index` prints the shell's size instead. The
+browser runtime keeps both ceilings. Engine-spec 041.
+
+**Prompt caching.** The system prompt and the tool list are marked so the
+provider can reuse them between the steps of a turn: on Anthropic (`cache_control`
+on the system block and the last tool), on OpenAI's own API (`prompt_cache_key`,
+a hash of the system text and the tool schemas, with nothing of the reader in
+it), and on OpenRouter for `anthropic/*` models. Every other host gets the request
+it got before. No prompt text changes. For Anthropic, the prompt-token total now
+adds cache writes and reads, and `cachedTokens` is the reads alone.
+
+### Changed
+
+- **Answers link their claims more often, and a turn can cost more requests.** The
+  system message now opens with one constant instruction in tagged sections, with a
+  worked example of the `[n]` citation form. The product name follows it as a line of
+  its own; the search scope, the reader's quote and the question ride in their own tags
+  in the last message; tool results arrive as tagged documents; and one decline rule
+  replaces three (engine-spec 048). On the 66 golden questions with `qwen3:8b`, answers
+  that showed sources but had no working `[n]` link in their text fell from 41.5 to 2.
+  The price, on that small local model: answer F1 is 0.017 lower, citation precision
+  0.046 lower, and a turn takes about 21% more requests (1.19 to 1.45), which counts
+  against a free tier that rations requests. A prompt you set with `override` stays your
+  own words. The prompt hash changes, so eval reports start a new history, and the next
+  `docpilot index` bakes model-written opener answers again.
+- **A bad page no longer stops `index --html-dir`.** It is skipped, named in a
+  warning and counted. `index` stops only when it tried at least one page and
+  extracted none.
+- **A dead link in an imported page** becomes its text and a warning. A page you
+  wrote keeps the strict check.
+- **`import` exits 1** when the one page it was given is skipped, and prints
+  `nothing to import: <reason>`.
+
+### Fixed
+
+Review findings on the new code, each with a test: a page title or description is
+one line and cannot change the document structure; a backslash or an escaped
+backtick in page text cannot form a link or open a code span; the first line of
+a list item is escaped like the lines after it; a table is a code layout only
+when each row is one gutter beside one code cell; a `dl` in div wrappers keeps
+its terms; an ordered list with a non-numeric start is numbered from 1; a
+sentence that begins "Created by" is not dropped as a byline; an
+extracted heading such as `Array&lt;T>` is cited, slugged and indexed as
+`Array<T>`; the fetcher is cut off at its timeout even when it ignores the
+signal; control bytes in a page are shown as escapes in warnings; and
+`eval --baseline` refuses a file that is not a baseline before it spends a run.
+
+### The road to 3.0
+
+This release carries the first two phases of the 3.0 work. The plan, the
+progress and the latest update are on the docs site, at
+[Roadmap to 3.0](https://docpilot-nine.vercel.app/guide/roadmap-3), and in the
+GitHub pre-release
+[roadmap-3.0](https://github.com/Cloflin/docpilot/releases/tag/roadmap-3.0),
+which is updated at the end of every phase. No 3.0 package is published yet, and
+the 2.x line stays the current version on npm.
+
+After 3.0, DocPilot moves to a new website and gets a new product name that does
+not collide with other products, so people who look for it can find it more
+easily. The npm package becomes `@cloflin/ai`. The new name and the new site are
+announced with the 3.0 release.
+
+### Known issues
+
+- A built site that marks every page `noindex` indexes nothing, and `index` stops
+  with the reason named. There is no override yet.
+- A page that a script builds cannot be fetched by `import`. Render it with
+  `html.fetcher`, or save the DOM and pass `--html <file>`.
+- The extraction report has no `--json` form.
+
 ## 2.1.1 — 2026-10-27
 
 A claim links to its source again. With `gpt-6-luna` at `reasoning: 'low'`,
