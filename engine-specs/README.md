@@ -70,6 +70,7 @@ The rule this directory exists to enforce:
 | [041](041-source-documents-and-the-pipeline.md) | one internal `SourceDoc` shape for every source, `assertPublic` (deny by default), and size ceilings that apply to the browser runtime only; `shellManifest` gets its own module |
 | [042](042-both-ends-of-mcp.md) | an MCP endpoint (`/mcp`, dual-era, four reads that call no model) and an MCP client on the server whose tools the assistant calls as 038 function tools — under one owner policy that tokens, annotations and the reader can only narrow |
 | [043](043-html-extraction.md) | one `extractHtml` pipeline for every HTML path — code, tables, tabs, links and metadata survive, one bad page never stops a run; the parser and a Readability-class fallback measured on 78 labelled pages and neither adopted |
+| [048](048-one-instruction-for-every-turn.md) | the system message opens with one constant instruction in XML-style sections, with a worked citation example; the question's parts ride in their own tags and tool results arrive as tagged documents |
 
 ## Shape of a spec
 

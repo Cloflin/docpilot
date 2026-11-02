@@ -13,6 +13,9 @@
 > одну запись, а треть ходов тратит лишний запрос — гейт релиза 2.2.0 не пройден,
 > промпт не принят. Причина лишнего запроса найдена, следующий кандидат назван в
 > разделе Measured.
+>
+> **Решение владельца, 2026-11-02:** несмотря на этот вердикт, промпт входит в 2.2.0;
+> см. раздел «Decision for 2.2.0» в конце.
 
 ## Problem
 
@@ -269,3 +272,20 @@ gated the same way.
   rendering.** It did not cover the JSON layout or the language line's place
   before either, and the three diagnostic variants above all reported `160a0ace`.
   Hashing the envelope is a change of its own.
+
+## Decision for 2.2.0
+
+The owner decided on 2026-11-02 to ship this prompt in 2.2.0 although it fails the
+release gate above. The gate is a measurement and the verdict stands as written;
+the decision overrides the rule, and the trade-off is accepted knowingly:
+
+- gained: answers without an inline `[n]` link fall from 41.5 to 2 of 66, so a claim
+  links to its source far more often;
+- paid, on a small local model (`qwen3:8b`): answerF1 −0.017, citationPrecision −0.046,
+  and 1.19 → 1.45 requests per turn, about 21% more. On a free tier, where a request
+  is the unit of the daily budget, that is the number to watch.
+
+The two answer baselines (`2.1.1.rag-local.answers.json`, `2.1.1.rag-local.server.json`)
+are re-taken on this prompt. The gate-only baselines and both indexes do not depend on
+it and are unchanged. The candidate named in the Measured section for the extra request
+is not part of this release.
