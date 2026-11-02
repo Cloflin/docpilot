@@ -12,6 +12,9 @@
  *                      llama.cpp, Groq, Together, an Azure gateway) may answer an
  *                      unknown field with a 400, and a reader's question would
  *                      pay for the lesson — so the field goes to this host only.
+ *   openrouter.ai +    the system message as content parts with `cache_control`
+ *   `anthropic/*`      on the last part, which OpenRouter forwards to Anthropic.
+ *                      Only for that pair: its other upstreams do not read it.
  *
  * NO IMPORTS, and none may be added: this file ships to the browser and the
  * server alike, and `providers.ts` is the only module that calls it.
@@ -31,6 +34,10 @@ export function hostOf(baseURL: unknown): string | null {
 
 /** OpenAI's own API, and nothing that merely speaks its dialect. */
 export const isOpenAIHost = (baseURL: unknown): boolean => hostOf(baseURL) === 'api.openai.com'
+
+/** OpenRouter routing to an Anthropic model, the one pair whose upstream reads `cache_control`. */
+export const isOpenRouterAnthropic = (baseURL: unknown, model: unknown): boolean =>
+  hostOf(baseURL) === 'openrouter.ai' && /^anthropic\//i.test(String(model ?? ''))
 
 /** What the system messages say, joined the way the Anthropic adapter joins them. */
 export function systemTextOf(messages: any[]): string {
@@ -81,4 +88,26 @@ export function promptCacheKey(system: string, ...schemas: unknown[]): string | 
 export function markLast<T extends object>(list: T[]): T[] {
   if (!list.length) return list
   return [...list.slice(0, -1), { ...list[list.length - 1], cache_control: ephemeral() }]
+}
+
+/**
+ * The same messages with the LAST system message turned into content parts, the
+ * last part carrying `cache_control`. A message that is not a string is left as
+ * it is: a part list somebody built already says what they want cached.
+ */
+export function markLastSystem(messages: any[]): any[] {
+  let at = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === 'system') {
+      at = i
+      break
+    }
+  }
+  if (at < 0 || typeof messages[at].content !== 'string') return messages
+  const out = messages.slice()
+  out[at] = {
+    ...messages[at],
+    content: [{ type: 'text', text: messages[at].content, cache_control: ephemeral() }],
+  }
+  return out
 }

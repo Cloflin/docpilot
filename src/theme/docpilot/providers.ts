@@ -16,7 +16,7 @@
  *               all — a forced tool call is how a JSON shape is pinned there.
  */
 
-import { isOpenAIHost, markLast, promptCacheKey, systemTextOf } from './prompt-cache.js'
+import { isOpenAIHost, isOpenRouterAnthropic, markLast, markLastSystem, promptCacheKey, systemTextOf } from './prompt-cache.js'
 
 /** Line reader shared by every stream format below. */
 async function readLines(res, line) {
@@ -526,7 +526,15 @@ const openai = {
       // the message list from scratch on every step rather than replaying the
       // assistant turns those ids belong to. Observations are therefore carried
       // as user messages — same text, same position, no invented ids.
-      messages: messages.map((m) => (m.role === 'tool' ? { ...m, role: 'user' } : m)),
+      //
+      // PROMPT CACHING ON OPENROUTER, FOR AN ANTHROPIC MODEL ONLY. OpenRouter
+      // forwards `cache_control` on a content part to Anthropic, so the system
+      // message becomes one part that carries it — the same text, in a part.
+      // Its other upstreams do not read the marker, and an `openai/*` or
+      // `meta-llama/*` model routed through the same host is sent the plain string.
+      messages: (isOpenRouterAnthropic(baseURL, model) ? markLastSystem(messages) : messages).map((m) =>
+        m.role === 'tool' ? { ...m, role: 'user' } : m,
+      ),
       stream: streaming,
       temperature,
     }

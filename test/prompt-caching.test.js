@@ -224,6 +224,77 @@ describe('openai — prompt_cache_key, on api.openai.com only', () => {
   })
 })
 
+// ── openrouter + an Anthropic model ─────────────────────────────────────────
+
+const OPENROUTER = 'https://openrouter.ai/api'
+const viaOpenRouter = (model, over = {}) => openaiBody({ baseURL: OPENROUTER, model, ...over })
+
+describe('openrouter with an anthropic/* model — the system message becomes a marked part', () => {
+  it('sends the system text as one part with cache_control on the last part', () => {
+    const body = viaOpenRouter('anthropic/claude-sonnet-4')
+    expect(body.messages[0]).toEqual({
+      role: 'system',
+      content: [{ type: 'text', text: SYSTEM, cache_control: EPHEMERAL }],
+    })
+    expect(body.messages[1]).toEqual({ role: 'user', content: 'What is the gate?' })
+  })
+
+  it('does not send the OpenAI key to OpenRouter, and changes nothing else', () => {
+    const marked = viaOpenRouter('anthropic/claude-sonnet-4', { tools: TOOLS })
+    expect(marked).not.toHaveProperty('prompt_cache_key')
+    const { messages: sent, ...rest } = marked
+    const { messages: plain, ...restPlain } = viaOpenRouter('openai/gpt-x', { tools: TOOLS })
+    expect(rest).toEqual({ ...restPlain, model: 'anthropic/claude-sonnet-4' })
+    expect(sent).toHaveLength(plain.length)
+  })
+
+  it('marks the last system message when there are several', () => {
+    const body = viaOpenRouter('anthropic/claude-haiku', {
+      messages: [{ role: 'system', content: 'A' }, { role: 'system', content: 'B' }, { role: 'user', content: 'q' }],
+    })
+    expect(body.messages[0]).toEqual({ role: 'system', content: 'A' })
+    expect(body.messages[1]).toEqual({ role: 'system', content: [{ type: 'text', text: 'B', cache_control: EPHEMERAL }] })
+  })
+
+  it('marks a copy: the harness message list is not changed', () => {
+    const before = JSON.stringify(MESSAGES)
+    viaOpenRouter('anthropic/claude-sonnet-4')
+    expect(JSON.stringify(MESSAGES)).toBe(before)
+  })
+
+  it('leaves a request with no system message exactly as it was', () => {
+    const messages = [{ role: 'user', content: 'q' }]
+    expect(viaOpenRouter('anthropic/claude-sonnet-4', { messages }).messages).toEqual(messages)
+  })
+
+  it.each([
+    ['an OpenAI model', 'openai/gpt-x'],
+    ['a Meta model', 'meta-llama/llama-3.3-70b-instruct:free'],
+    ['the free router', 'openrouter/free'],
+    ['a model that only mentions it', 'someone/anthropic/x'],
+    ['an empty model', ''],
+  ])('sends the plain string for %s', (_name, model) => {
+    expect(viaOpenRouter(model).messages[0]).toEqual({ role: 'system', content: SYSTEM })
+  })
+
+  it.each([
+    ['api.openai.com', 'https://api.openai.com'],
+    ['Groq', 'https://api.groq.com/openai'],
+    ['a proxy', 'https://proxy.example/ai'],
+    ['a lookalike', 'https://openrouter.ai.evil.test/api'],
+    ['nothing', undefined],
+  ])('sends the plain string to %s even for an anthropic/* model name', (_name, baseURL) => {
+    expect(openaiBody({ baseURL, model: 'anthropic/claude-sonnet-4' }).messages[0]).toEqual({ role: 'system', content: SYSTEM })
+  })
+
+  it('keeps the observation fix: a tool message still travels as a user message', () => {
+    const body = viaOpenRouter('anthropic/claude-sonnet-4', {
+      messages: [...MESSAGES, { role: 'tool', content: 'excerpt' }],
+    })
+    expect(body.messages.at(-1)).toEqual({ role: 'user', content: 'excerpt' })
+  })
+})
+
 // ── through chat(): the base URL has to reach the adapter ───────────────────
 
 /** What chat() posts to `baseURL`, with `fetch` replaced. */
@@ -261,6 +332,14 @@ describe('chat() hands the adapter the base URL it is about to post to', () => {
   it('another OpenAI-shaped host does not', async () => {
     const r = await posted({ provider: 'openai', baseURL: 'https://api.groq.com/openai', model: 'm' })
     expect(r.body).not.toHaveProperty('prompt_cache_key')
+  })
+
+  it('OpenRouter with an anthropic/* model gets the marked system part, and with another model the string', async () => {
+    const a = await posted({ provider: 'openai', baseURL: 'https://openrouter.ai/api', model: 'anthropic/claude-sonnet-4' })
+    expect(a.body.messages[0].content).toEqual([{ type: 'text', text: SYSTEM, cache_control: EPHEMERAL }])
+    expect(a.body).not.toHaveProperty('prompt_cache_key')
+    const b = await posted({ provider: 'openai', baseURL: 'https://openrouter.ai/api', model: 'openai/gpt-x' })
+    expect(b.body.messages[0].content).toBe(SYSTEM)
   })
 
   it('anthropic is marked whatever the host is', async () => {
