@@ -6,7 +6,7 @@
     "goldenSha": "fd655d5315cb8f87",
     "temperature": 0.2,
     "seed": 20260829,
-    "capturedAt": "2026-11-02T11:39:54.926Z",
+    "capturedAt": "2026-11-02T15:18:14.369Z",
     "indexDir": "docs/public/rag-local",
     "indexHash": "a97c065c",
     "embedModel": "bge-m3",
@@ -183,7 +183,7 @@
         "reference/theme#two-tokens-the-stylesheet-moves-for-you",
         "reference/theme#the-whole-set~3"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "n-04": {
       "channel": "raw",
@@ -287,7 +287,7 @@
         "reference/config#chat-reasoning",
         "guide/providers#thinking-turned-off"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "n-08": {
       "channel": "raw",
@@ -435,7 +435,7 @@
         "guide/indexing#how-the-format-was-chosen~2",
         "guide/indexing#blocks-a-chunk-is-never-cut-through"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "n-14": {
       "channel": "raw",
@@ -825,7 +825,7 @@
         "guide/migrate-2#upgrade",
         "guide/benchmarks#rerun"
       ],
-      "outcome": "answer"
+      "outcome": "refuse:not-answerable"
     },
     "n-29": {
       "channel": "composed",
@@ -852,7 +852,7 @@
         "guide/production#content-security-policy",
         "guide/production#the-body"
       ],
-      "outcome": "answer"
+      "outcome": "refuse:not-answerable"
     },
     "n-30": {
       "channel": "raw",
@@ -879,7 +879,7 @@
         "reference/cli#feedback~2",
         "reference/cli#embedder-question"
       ],
-      "outcome": "answer"
+      "outcome": "refuse:not-answerable"
     },
     "q-01": {
       "channel": "raw",
@@ -984,7 +984,7 @@
         "reference/cli#",
         "features/terminal#status"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "q-05": {
       "channel": "raw",
@@ -1151,7 +1151,7 @@
         "features/credentials#what-it-catches",
         "guide/panel#hello"
       ],
-      "outcome": "answer"
+      "outcome": "refuse:not-answerable"
     },
     "q-11": {
       "channel": "raw",
@@ -1522,7 +1522,7 @@
         "guide/providers#a-model-this-table-has-never-heard-of",
         "reference/config#chat-models"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "q-25": {
       "channel": "raw",
@@ -2038,7 +2038,7 @@
         "concepts/the-ladder#what-never-happens",
         "concepts/the-ladder#"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "q-45": {
       "channel": "composed",
@@ -2404,7 +2404,7 @@
         "concepts/the-ladder#",
         "reference/cli#the-step-everyone-forgets"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "q-59": {
       "channel": "composed",
@@ -2429,7 +2429,7 @@
         "guide/appearance#the-tokens~6",
         "reference/config#ui-theme~2"
       ],
-      "outcome": "answer"
+      "outcome": "refuse:not-answerable"
     },
     "q-60": {
       "channel": "composed",
@@ -2460,24 +2460,24 @@
     "q-61": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.764196,
-      "D": 0.810594,
-      "L": 0.625,
+      "G": 0.943534,
+      "D": 0.924712,
+      "L": 1,
       "rankedIds": [
-        "guide/appearance#syntax-highlighting",
+        "guide/appearance#the-tokens~4",
+        "reference/theme#the-dark-set",
         "guide/appearance#the-tokens~2",
-        "introduction#from-your-pages-to-answers",
-        "install#installing-it",
+        "guide/appearance#the-tokens~3",
         "features/terminal#colour",
         "reference/highlighting#both-colour-schemes",
-        "guide/indexing#what-gets-indexed",
-        "guide/indexing#"
+        "reference/theme#the-whole-set~3",
+        "guide/faq#_2-the-dp-css-tokens-—-colour-and-geometry"
       ],
       "retrievedIds": [
-        "guide/appearance#syntax-highlighting",
+        "guide/appearance#the-tokens~4",
+        "reference/theme#the-dark-set",
         "guide/appearance#the-tokens~2",
-        "introduction#from-your-pages-to-answers",
-        "install#installing-it",
+        "guide/appearance#the-tokens~3",
         "features/terminal#colour"
       ],
       "outcome": "answer"
@@ -2505,7 +2505,7 @@
         "guide/production#the-body~2",
         "reference/config#feedback-comment"
       ],
-      "outcome": "answer"
+      "outcome": "refuse:not-answerable"
     },
     "q-63": {
       "channel": "composed",
@@ -2584,28 +2584,29 @@
       "outcome": "answer"
     },
     "q-66": {
-      "channel": "composed",
-      "gatePass": true,
-      "G": 0.954545,
-      "D": 1,
-      "L": 0.818182,
+      "channel": "raw",
+      "gatePass": false,
+      "G": 0.521065,
+      "D": 0.528087,
+      "L": 0.5,
       "rankedIds": [
-        "guide/indexing#",
-        "guide/troubleshooting#docpilot-the-panel-is-off-—-n-things-to-set-up",
-        "guide/providers#no-embedder-at-all",
-        "reference/config#embed-false",
-        "reference/config#embed-false~2",
-        "reference/cli#doctor~4",
-        "reference/cli#index",
+        "guide/history#two-tabs",
+        "guide/providers#",
+        "guide/evaluation#the-golden-set~4",
+        "guide/measure#context-precision",
+        "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+        "guide/providers#what-each-provider-honours~2",
         "guide/indexing#a-second-index-to-measure-against~2",
-        "reference/cli#embedder-question"
+        "guide/indexing#a-second-index-to-measure-against",
+        "guide/providers#name-nothing-the-provider-chain"
       ],
       "retrievedIds": [
-        "guide/indexing#",
-        "guide/troubleshooting#docpilot-the-panel-is-off-—-n-things-to-set-up",
-        "guide/providers#no-embedder-at-all",
-        "reference/config#embed-false",
-        "reference/config#embed-false~2"
+        "guide/history#two-tabs",
+        "guide/providers#",
+        "guide/evaluation#the-golden-set~4",
+        "guide/measure#context-precision",
+        "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
+        "guide/providers#name-nothing-the-provider-chain"
       ],
       "outcome": "answer"
     }
@@ -2613,144 +2614,115 @@
   "summary": {
     "positives": 66,
     "negatives": 30,
-    "retrievalF1": 0.2696882242336788,
-    "recall8": 0.75,
-    "mrr": 0.5563131313131313,
+    "retrievalF1": 0.2653592199046745,
+    "recall8": 0.7424242424242424,
+    "mrr": 0.5532828282828283,
     "recall1": 0.36363636363636365,
     "recall3": 0.5681818181818182,
-    "recall5": 0.6515151515151515,
-    "ndcg8": 0.5725175313857622,
-    "contextPrecision5": 0.5372474747474747,
-    "answerF1": 0.3653983117250143,
-    "identifierRecall": 0.49222222222222217,
-    "citationPrecision": 0.5060675883256528,
-    "citationRecall": 0.5967741935483871,
-    "supportPrecision": 0.970588954056696,
-    "unsupportedAnswerRate": 0.016129032258064516,
+    "recall5": 0.6439393939393939,
+    "ndcg8": 0.5689236266468336,
+    "contextPrecision5": 0.5342171717171716,
+    "answerF1": 0.32998192326994585,
+    "identifierRecall": 0.41370370370370363,
+    "citationPrecision": 0.4903628117913832,
+    "citationRecall": 0.5793650793650794,
+    "supportPrecision": 0.9455009276437847,
+    "unsupportedAnswerRate": 0.031746031746031744,
     "language": 1,
-    "gateOverRefusal": 6,
-    "gateOverRefusalUB95": 0.16629991049654563,
-    "answerOverRefusal": 2,
-    "answerOverRefusalUB95": 0.08752149825516234,
+    "gateOverRefusal": 7,
+    "gateOverRefusalUB95": 0.18461757691628358,
+    "answerOverRefusal": 3,
+    "answerOverRefusalUB95": 0.10840055055865168,
     "negativesCaught": 10,
     "negativesCaughtRate": 0.3333333333333333,
     "noAnswerPrecision": null,
     "hallucinated": 0,
     "scopeContainment": 1,
-    "unlinked": 0.43548387096774194,
+    "unlinked": 0.12698412698412698,
     "unlinkedIds": [
-      "q-01",
-      "q-02",
-      "q-05",
-      "q-07",
       "q-09",
-      "q-10",
-      "q-11",
-      "q-14",
       "q-17",
-      "q-23",
-      "q-25",
-      "q-26",
-      "q-29",
-      "q-31",
-      "q-32",
-      "q-33",
-      "q-39",
-      "q-45",
-      "q-46",
-      "q-48",
-      "q-51",
-      "q-53",
-      "q-55",
-      "q-59",
-      "q-60",
-      "q-61",
-      "q-63"
+      "q-20",
+      "q-37",
+      "q-49",
+      "q-54",
+      "q-56",
+      "q-66"
     ],
-    "unlinkedShown": 62,
+    "unlinkedShown": 63,
     "unlinkedOther": [
-      "n-01",
       "n-02",
-      "n-04",
       "n-07",
       "n-09",
-      "n-10",
       "n-15",
       "n-16",
-      "n-19",
-      "n-21",
-      "n-22",
-      "n-23",
-      "n-24",
-      "n-28",
-      "n-30"
+      "n-21"
     ],
     "rejectedFetches": 0,
     "iterationsPerAnswer": 0,
     "requestsPerTurn": 1,
-    "promptTokens": 2645.71875,
-    "outputTokens": 332.1979166666667,
+    "promptTokens": 2972.3229166666665,
+    "outputTokens": 313.125,
     "cachedTokens": null,
     "cachedShare": null,
-    "tokensPerAcceptedAnswer": 4610.967741935484,
+    "tokensPerAcceptedAnswer": 5006.396825396825,
     "promptChars": null,
     "promptCharsPeak": null,
     "observationChars": null,
     "answerChars": null,
-    "latencyP50": 5958,
-    "latencyP95": 25959,
-    "latencyP99": 40490,
-    "ttftP50": 1294,
-    "ttftP95": 2275,
+    "latencyP50": 4785,
+    "latencyP95": 38415,
+    "latencyP99": 41990,
+    "ttftP50": 1334,
+    "ttftP95": 2289,
     "misses": [
-      "q-04(refuse:not-answerable)",
       "n-02(answer)",
+      "n-03(answer)",
+      "q-10(refuse:not-answerable)",
       "n-04(answer)",
       "n-06(answer)",
-      "q-24(refuse:not-answerable)",
+      "n-07(answer)",
       "n-09(answer)",
       "n-10(answer)",
       "n-11(answer)",
+      "n-13(answer)",
       "n-14(answer)",
       "n-15(answer)",
       "n-16(answer)",
-      "q-44(refuse:not-answerable)",
       "n-17(answer)",
       "n-18(answer)",
       "n-20(answer)",
       "n-21(answer)",
       "n-24(answer)",
-      "q-58(refuse:not-answerable)",
+      "q-59(refuse:not-answerable)",
+      "q-62(refuse:not-answerable)",
       "n-25(answer)",
       "n-26(answer)",
-      "n-27(answer)",
-      "n-28(answer)",
-      "n-29(answer)",
-      "n-30(answer)"
+      "n-27(answer)"
     ],
     "languageFailures": [],
     "byLanguage": {
       "English": {
         "positives": 60,
         "negatives": 29,
-        "recall8": 0.7833333333333333,
-        "mrr": 0.5813888888888888,
-        "answerF1": 0.38094900805284343,
-        "identifierRecall": 0.5115079365079366,
-        "citationRecall": 0.6228070175438597,
+        "recall8": 0.775,
+        "mrr": 0.5780555555555555,
+        "answerF1": 0.34306807430953257,
+        "identifierRecall": 0.4273809523809523,
+        "citationRecall": 0.603448275862069,
         "language": 1,
-        "negativesCaughtRate": 0.3448275862068966
+        "negativesCaughtRate": 0.3103448275862069
       },
       "Russian": {
         "positives": 6,
         "negatives": 1,
         "recall8": 0.4166666666666667,
         "mrr": 0.3055555555555555,
-        "answerF1": 0.188120373587762,
+        "answerF1": 0.17818257121074024,
         "identifierRecall": 0.2222222222222222,
         "citationRecall": 0.3,
         "language": 1,
-        "negativesCaughtRate": 0
+        "negativesCaughtRate": 1
       }
     },
     "byDepth": {
@@ -2759,19 +2731,19 @@
         "negatives": 24,
         "recall8": 0.8421052631578947,
         "mrr": 0.6138157894736842,
-        "answerF1": 0.39378065467052376,
-        "identifierRecall": 0.5222222222222223,
-        "citationRecall": 0.625,
-        "negativesCaughtRate": 0.4166666666666667
+        "answerF1": 0.35135832258927113,
+        "identifierRecall": 0.47849462365591394,
+        "citationRecall": 0.6081081081081081,
+        "negativesCaughtRate": 0.2916666666666667
       },
       "1": {
         "positives": 8,
         "negatives": 0,
         "recall8": 0.8125,
         "mrr": 0.5916666666666668,
-        "answerF1": 0.3137833645531704,
-        "identifierRecall": 1,
-        "citationRecall": 0.6428571428571429,
+        "answerF1": 0.2849820441530743,
+        "identifierRecall": 0.5,
+        "citationRecall": 0.6875,
         "negativesCaughtRate": null
       },
       "2": {
@@ -2779,20 +2751,20 @@
         "negatives": 1,
         "recall8": 0.8,
         "mrr": 0.6333333333333334,
-        "answerF1": 0.3582223133713267,
-        "identifierRecall": 0.5809523809523809,
-        "citationRecall": 0.7,
+        "answerF1": 0.3702167741749739,
+        "identifierRecall": 0.3333333333333333,
+        "citationRecall": 0.6666666666666666,
         "negativesCaughtRate": 0
       },
       "3": {
         "positives": 10,
         "negatives": 5,
-        "recall8": 0.3,
-        "mrr": 0.2325,
-        "answerF1": 0.2999872303585076,
-        "identifierRecall": 0.20238095238095236,
-        "citationRecall": 0.3333333333333333,
-        "negativesCaughtRate": 0
+        "recall8": 0.25,
+        "mrr": 0.2125,
+        "answerF1": 0.24186621215602214,
+        "identifierRecall": 0.13055555555555556,
+        "citationRecall": 0.2777777777777778,
+        "negativesCaughtRate": 0.6
       }
     },
     "taxonomy": {
@@ -2803,7 +2775,6 @@
         "q-05",
         "q-07",
         "q-09",
-        "q-10",
         "q-11",
         "q-12",
         "q-13",
@@ -2814,36 +2785,31 @@
         "q-20",
         "q-21",
         "q-22",
+        "q-23",
         "q-25",
         "q-26",
         "q-27",
-        "q-29",
         "q-30",
         "q-31",
-        "q-34",
+        "q-32",
         "q-35",
         "q-37",
         "q-38",
         "q-40",
         "q-41",
-        "q-42",
+        "q-45",
         "q-46",
         "q-47",
-        "q-48",
         "q-52",
         "q-55",
-        "q-59",
-        "q-60",
         "q-63",
-        "q-64",
-        "q-65",
-        "q-66"
+        "q-64"
       ],
-      "over-refused": [
+      "gold-below-primed": [
         "q-04",
-        "q-24",
-        "q-44",
-        "q-58"
+        "q-16",
+        "q-33",
+        "q-49"
       ],
       "retrieval-miss": [
         "q-06",
@@ -2856,24 +2822,26 @@
         "q-53",
         "q-54",
         "q-56",
+        "q-58",
         "q-61",
-        "q-62"
+        "q-66"
       ],
       "neg-caught": [
         "n-01",
-        "n-03",
         "n-05",
-        "n-07",
         "n-08",
         "n-12",
-        "n-13",
         "n-19",
         "n-22",
-        "n-23"
+        "n-23",
+        "n-28",
+        "n-29",
+        "n-30"
       ],
       "neg-answered:refuse:no-evidence": [
         "n-02",
         "n-04",
+        "n-07",
         "n-10",
         "n-11",
         "n-14",
@@ -2885,33 +2853,45 @@
         "n-24",
         "n-25",
         "n-26",
-        "n-27",
-        "n-28",
-        "n-29",
-        "n-30"
-      ],
-      "gold-below-primed": [
-        "q-16",
-        "q-33",
-        "q-49"
+        "n-27"
       ],
       "neg-answered:refuse:out-of-scope": [
+        "n-03",
         "n-06",
         "n-09",
+        "n-13",
         "n-16"
       ],
+      "over-refused": [
+        "q-10",
+        "q-59",
+        "q-62"
+      ],
       "primed-low-f1": [
-        "q-23",
-        "q-32",
+        "q-24",
+        "q-29",
+        "q-34",
         "q-39",
+        "q-42",
         "q-43",
-        "q-45",
-        "q-57"
+        "q-44",
+        "q-48",
+        "q-57",
+        "q-60",
+        "q-65"
       ]
     },
     "reSearch": null,
     "missPages": {
       "undescribed": [
+        {
+          "page": "/reference/cli",
+          "described": false,
+          "records": [
+            "q-04",
+            "q-36"
+          ]
+        },
         {
           "page": "/guide/providers",
           "described": false,
@@ -2955,13 +2935,6 @@
           ]
         },
         {
-          "page": "/reference/cli",
-          "described": false,
-          "records": [
-            "q-36"
-          ]
-        },
-        {
           "page": "/concepts/the-gate",
           "described": false,
           "records": [
@@ -2976,6 +2949,13 @@
           ]
         },
         {
+          "page": "/guide/history",
+          "described": false,
+          "records": [
+            "q-58"
+          ]
+        },
+        {
           "page": "/install/docusaurus",
           "described": false,
           "records": [
@@ -2983,14 +2963,21 @@
           ]
         },
         {
-          "page": "/guide/i18n",
+          "page": "/reference/config",
           "described": false,
           "records": [
-            "q-62"
+            "q-66"
+          ]
+        },
+        {
+          "page": "/guide/indexing",
+          "described": false,
+          "records": [
+            "q-66"
           ]
         }
       ],
-      "checked": 10
+      "checked": 12
     }
   }
 }

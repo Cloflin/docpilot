@@ -1,0 +1,203 @@
+# DocPilot eval — qwen3:8b
+
+- index `a97c065c` · 859 chunks · embed `bge-m3`
+- prompt `160a0ace` · records 96 · maxIterations 2
+- transport native tools, think on, num_ctx `8192`
+- guard mode `cosine` tau `0.64` source `calibrated-reduced` calibratedAt `a97c065c`
+- guard.mode `off`
+
+## Hard gates
+
+| gate | value | verdict |
+|---|---|---|
+| hallucinated citations | 0 | pass |
+| scope containment | 1 | pass |
+| answers without a link | 0.030 | **FAIL** q-60, q-66 |
+
+## Metrics
+
+| metric | value |
+|---|---|
+| retrievalF1 | 0.265 |
+| recall8 | 0.742 |
+| mrr | 0.553 |
+| recall1 | 0.364 |
+| recall3 | 0.568 |
+| recall5 | 0.644 |
+| ndcg8 | 0.569 |
+| contextPrecision5 | 0.534 |
+| answerF1 | 0.311 |
+| identifierRecall | 0.422 |
+| citationPrecision | 0.447 |
+| citationRecall | 0.553 |
+| supportPrecision | 0.967 |
+| language | 1 |
+| negativesCaughtRate | 0.200 |
+| scopeContainment | 1 |
+| unsupportedAnswerRate | 0 |
+| hallucinated | 0 |
+| unlinked | 0.030 |
+| gateOverRefusal | 7 |
+| answerOverRefusal | 0 |
+| rejectedFetches | 0 |
+| promptTokens | 5360 |
+| outputTokens | 290 |
+| tokensPerAcceptedAnswer | 8218 |
+| promptChars | 18819 |
+| promptCharsPeak | 12364 |
+| observationChars | 7810 |
+| iterationsPerAnswer | 1.455 |
+| latencyP50 | 6559 |
+| latencyP95 | 15338 |
+| latencyP99 | 19987 |
+| ttftP50 | 6559 |
+| ttftP95 | 13926 |
+
+## By language
+
+> The corpus has one language; the readers do not. A mean over the whole
+> set describes neither population when they differ.
+
+| lang | pos | neg | recall8 | mrr | answerF1 | identifierRecall | negCaught |
+|---|---|---|---|---|---|---|---|
+| English | 60 | 29 | 0.775 | 0.578 | 0.324 | 0.445 | 0.207 |
+| Russian | 6 | 1 | 0.417 | 0.306 | 0.178 | 0.167 | 0 |
+
+## By chain depth
+
+> A question asked cold and a follow-up three turns into a chain are not
+> the same question, and a mean over both describes neither.
+
+| depth | pos | neg | recall8 | mrr | answerF1 | identifierRecall | negCaught |
+|---|---|---|---|---|---|---|---|
+| 0 | 38 | 24 | 0.842 | 0.614 | 0.333 | 0.427 | 0.167 |
+| 1 | 8 | 0 | 0.813 | 0.592 | 0.303 | 1 | — |
+| 2 | 10 | 1 | 0.800 | 0.633 | 0.286 | 0.426 | 0 |
+| 3 | 10 | 5 | 0.250 | 0.212 | 0.257 | 0.226 | 0.400 |
+
+> **Prompt changed: 45921454 → 160a0ace** — every delta below is against a different setup.
+
+## Change since the previous run
+
+| metric | before | after | Δ | |
+|---|---|---|---|---|
+| answerF1 | 0.333 | 0.311 | -0.022 | worse |
+| identifierRecall | 0.422 | 0.422 | -0.001 | worse |
+| citationPrecision | 0.519 | 0.447 | -0.071 | worse |
+| citationRecall | 0.614 | 0.553 | -0.061 | worse |
+| supportPrecision | 0.910 | 0.967 | +0.057 | better |
+| negativesCaughtRate | 0.167 | 0.200 | +0.033 | better |
+| unsupportedAnswerRate | 0.091 | 0 | -0.091 | better |
+| unlinked | 0.636 | 0.030 | -0.606 | better |
+| promptTokens | 3983 | 5360 | +1376 | worse |
+| outputTokens | 273 | 290 | +16.490 | worse |
+| tokensPerAcceptedAnswer | 6192 | 8218 | +2026 | worse |
+| promptChars | 13556 | 18819 | +5263 | worse |
+| promptCharsPeak | 10923 | 12364 | +1441 | worse |
+| observationChars | 7828 | 7810 | -17.552 | better |
+| iterationsPerAnswer | 1.182 | 1.455 | +0.273 | worse |
+| latencyP50 | 5864 | 6559 | +695 | worse |
+| latencyP95 | 16371 | 15338 | -1033 | better |
+| latencyP99 | 31071 | 19987 | -11084 | better |
+| ttftP50 | 5864 | 6559 | +695 | worse |
+| ttftP95 | 14084 | 13926 | -158 | better |
+| answerF1[English] | 0.346 | 0.324 | -0.022 | worse |
+| identifierRecall[English] | 0.445 | 0.445 | -0.001 | worse |
+| citationRecall[English] | 0.642 | 0.583 | -0.058 | worse |
+| negativesCaughtRate[English] | 0.172 | 0.207 | +0.034 | better |
+| answerF1[Russian] | 0.199 | 0.178 | -0.021 | worse |
+| citationRecall[Russian] | 0.333 | 0.250 | -0.083 | worse |
+| answerF1[depth=0] | 0.345 | 0.333 | -0.012 | worse |
+| identifierRecall[depth=0] | 0.396 | 0.427 | +0.031 | better |
+| citationRecall[depth=0] | 0.592 | 0.605 | +0.013 | better |
+| negativesCaughtRate[depth=0] | 0.208 | 0.167 | -0.042 | worse |
+| answerF1[depth=1] | 0.328 | 0.303 | -0.024 | worse |
+| identifierRecall[depth=1] | 0.500 | 1 | +0.500 | better |
+| citationRecall[depth=1] | 0.688 | 0.563 | -0.125 | worse |
+| answerF1[depth=2] | 0.322 | 0.286 | -0.036 | worse |
+| identifierRecall[depth=2] | 0.676 | 0.426 | -0.250 | worse |
+| citationRecall[depth=2] | 0.800 | 0.500 | -0.300 | worse |
+| answerF1[depth=3] | 0.301 | 0.257 | -0.044 | worse |
+| identifierRecall[depth=3] | 0.267 | 0.226 | -0.040 | worse |
+| citationRecall[depth=3] | 0.450 | 0.400 | -0.050 | worse |
+| negativesCaughtRate[depth=3] | 0 | 0.400 | +0.400 | better |
+
+## Over-refusal backlog — the ten positives closest to the floor
+
+| id | G | gate | observed | question |
+|---|---|---|---|---|
+| q-66 | 0.521 | **refused** | answer | And why is the second of those the serious one? |
+| q-15 | 0.559 | **refused** | answer | How does the i18n fallback work? |
+| q-57 | 0.609 | **refused** | answer | А если удалить один из них в одной вкладке? |
+| q-24 | 0.615 | **refused** | answer | Почему шлюз отказывает до вызова модели? |
+| q-50 | 0.623 | **refused** | answer | А сразу после него? |
+| q-58 | 0.624 | **refused** | answer | And which of them is not a loss at all? |
+| q-52 | 0.633 | **refused** | answer | And what undoes that sorting? |
+| q-62 | 0.649 | pass | answer | А что из этого вообще нельзя заменить? |
+| q-32 | 0.654 | pass | answer | Что хранится в истории переписки и где? |
+| q-56 | 0.703 | pass | answer | And why does one of them jump the queue? |
+
+## Failure taxonomy
+
+> What moved, not how much. The four positive buckets have four
+> different fixes: a corpus edit, a ranking lever, the answer side,
+> and the gate.
+
+| bucket | n | ids |
+|---|---|---|
+| ok | 36 | q-01, q-02, q-03, q-05, q-07, q-09, q-10, q-12, q-13, q-15, q-18, q-19, q-20, q-21, q-22, q-25, q-26, q-27, q-30, q-32, q-34, q-35, q-37, q-38, q-40, q-41, q-42, q-43, q-44, q-45, q-47, q-59, q-60, q-63, q-64, q-65 |
+| gold-below-primed | 4 | q-04, q-16, q-33, q-49 |
+| retrieval-miss | 14 | q-06, q-08, q-14, q-28, q-36, q-50, q-51, q-53, q-54, q-56, q-58, q-61, q-62, q-66 |
+| primed-low-f1 | 12 | q-11, q-17, q-23, q-24, q-29, q-31, q-39, q-46, q-48, q-52, q-55, q-57 |
+| neg-caught | 6 | n-01, n-05, n-08, n-13, n-25, n-28 |
+| neg-answered:refuse:no-evidence | 20 | n-02, n-04, n-07, n-10, n-11, n-12, n-14, n-15, n-17, n-18, n-19, n-20, n-21, n-22, n-23, n-24, n-26, n-27, n-29, n-30 |
+| neg-answered:refuse:out-of-scope | 4 | n-03, n-06, n-09, n-16 |
+
+## Pages behind the misses that never say what they are for
+
+> A frontmatter `description` lands on the page's FIRST chunk and is
+> the one measured dense lever on this pipeline. A lead, not a verdict:
+> the answer may simply not be written anywhere.
+
+| page | records |
+|---|---|
+| `/reference/cli` | q-04, q-36 |
+| `/guide/providers` | q-06, q-16, q-53 |
+| `/concepts/a-turn` | q-08, q-28, q-49, q-50 |
+| `/guide/social-openers` | q-14, q-56 |
+| `/guide/credentials` | q-33 |
+| `/concepts/the-ladder` | q-36, q-54 |
+| `/concepts/the-gate` | q-49 |
+| `/guide/comparison` | q-51 |
+| `/guide/history` | q-58 |
+| `/install/docusaurus` | q-61 |
+| `/guide/i18n` | q-62 |
+| `/reference/config` | q-66 |
+| `/guide/indexing` | q-66 |
+
+## Misses
+
+- n-02(answer)
+- n-03(answer)
+- n-04(answer)
+- n-06(answer)
+- n-07(answer)
+- n-09(answer)
+- n-10(answer)
+- n-11(answer)
+- n-12(answer)
+- n-14(answer)
+- n-15(answer)
+- n-16(answer)
+- n-17(answer)
+- n-18(answer)
+- n-19(answer)
+- n-20(answer)
+- n-21(answer)
+- n-22(answer)
+- n-23(answer)
+- n-24(answer)
+- n-26(answer)
+- n-27(answer)
+- n-29(answer)
+- n-30(answer)
