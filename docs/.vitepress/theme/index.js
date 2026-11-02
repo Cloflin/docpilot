@@ -9,9 +9,9 @@ import '@cloflin/docpilot/style/core.css'
 import './styles.css'
 import SiteFooter from './SiteFooter.vue'
 
-// Every component in `demos/`, `intro/` and `home/`, registered by file name, so a page
+// Every component in `demos/`, `intro/`, `home/` and `roadmap/`, registered by file name, so a page
 // can use `<ScopeDemo />` in its markdown without a script block.
-const components = import.meta.glob(['./demos/*.vue', './intro/*.vue', './home/*.vue'], { eager: true })
+const components = import.meta.glob(['./demos/*.vue', './intro/*.vue', './home/*.vue', './roadmap/*.vue'], { eager: true })
 
 /**
  * The docs theme: @cloflin/vitepress-theme, with the panel added through

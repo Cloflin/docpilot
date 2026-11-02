@@ -2,15 +2,15 @@
   "ok": true,
   "fails": [],
   "version": 1,
-  "ranAt": "2026-10-30T17:34:53.224Z",
+  "ranAt": "2026-11-02T10:56:59.727Z",
   "embedBase": "https://openrouter.ai",
   "probeSha": "8c28e1b30505a1c9",
   "embedRequests": 13,
-  "calibratedAt": "37991d24",
+  "calibratedAt": "a97c065c",
   "embedModel": "qwen/qwen3-embedding-8b",
   "vocabHash": null,
   "lexicalOnly": false,
-  "chunkCount": 856,
+  "chunkCount": 859,
   "probeFile": "docpilot/calibration.jsonl",
   "probeCount": 271,
   "byStratum": {
@@ -40,47 +40,47 @@
     "P": 30
   },
   "guard": {
-    "tau": 0.68,
+    "tau": 0.64,
     "tauLexical": 0.51,
     "wDense": 0.75,
     "wLexical": 0.25,
     "denseMode": "cosine",
-    "cosFloor": 0.22,
-    "cosCeil": 0.62,
+    "cosFloor": 0.24,
+    "cosCeil": 0.64,
     "source": "transferred-window",
-    "calibratedAt": "37991d24",
+    "calibratedAt": "a97c065c",
     "zexp": [
       {
-        "n": 7,
-        "z": 1.1862
+        "n": 8,
+        "z": 1.2338
       },
       {
         "n": 9,
-        "z": 1.4073
+        "z": 1.4176
       },
       {
         "n": 24,
-        "z": 1.8778
+        "z": 1.9236
       },
       {
-        "n": 47,
-        "z": 2.3056
+        "n": 48,
+        "z": 2.2759
       },
       {
-        "n": 105,
-        "z": 3.0769
+        "n": 106,
+        "z": 2.9849
       },
       {
-        "n": 307,
-        "z": 3.8656
+        "n": 309,
+        "z": 3.8768
       },
       {
-        "n": 712,
-        "z": 4.52
+        "n": 713,
+        "z": 4.577
       },
       {
-        "n": 856,
-        "z": 4.8579
+        "n": 859,
+        "z": 4.8278
       }
     ],
     "zexpSource": "measured",
@@ -89,20 +89,20 @@
   },
   "transferredFrom": {
     "embedModel": "bge-m3",
-    "calibratedAt": "37991d24",
+    "calibratedAt": "a97c065c",
     "source": "calibrated-reduced",
     "probeCount": 631,
-    "tau": 0.68,
+    "tau": 0.64,
     "tauLexical": 0.51,
-    "cosFloor": 0.26,
-    "cosCeil": 0.62
+    "cosFloor": 0.28,
+    "cosCeil": 0.64
   },
   "transferCheck": {
     "anchorCount": 271,
     "probeCount": 631,
     "window": {
-      "cosFloor": 0.22,
-      "cosCeil": 0.62
+      "cosFloor": 0.24,
+      "cosCeil": 0.64
     },
     "byStratum": {
       "U": {
@@ -155,8 +155,8 @@
       },
       "N6": {
         "n": 15,
-        "failures": 9,
-        "rate": 0.6,
+        "failures": 8,
+        "rate": 0.5333333333333333,
         "sourceRate": null
       },
       "X": {
@@ -172,9 +172,9 @@
         "sourceRate": null
       }
     },
-    "gatePrecision": 0.4740740740740741,
+    "gatePrecision": 0.48148148148148145,
     "blatantRefusalRate": 1,
-    "rampShare": 0.40441176470588236,
+    "rampShare": 0.4338235294117647,
     "drift": 0.04512275300267796
   },
   "bounds": {
@@ -223,62 +223,62 @@
     {
       "id": "s-115",
       "stratum": "S",
-      "G": 0.6827,
-      "margin": 0.0027
+      "G": 0.6471,
+      "margin": 0.0071
     },
     {
       "id": "s-18",
       "stratum": "S",
-      "G": 0.7049,
-      "margin": 0.0249
+      "G": 0.6495,
+      "margin": 0.0095
     },
     {
       "id": "s-08",
       "stratum": "S",
-      "G": 0.736,
-      "margin": 0.056
+      "G": 0.6906,
+      "margin": 0.0506
     },
     {
       "id": "s-66",
       "stratum": "S",
-      "G": 0.7446,
-      "margin": 0.0646
+      "G": 0.6997,
+      "margin": 0.0597
+    },
+    {
+      "id": "f-80",
+      "stratum": "F",
+      "G": 0.7057,
+      "margin": 0.0657
+    },
+    {
+      "id": "s-43",
+      "stratum": "S",
+      "G": 0.7165,
+      "margin": 0.0765
+    },
+    {
+      "id": "f-62",
+      "stratum": "F",
+      "G": 0.7195,
+      "margin": 0.0795
+    },
+    {
+      "id": "s-103",
+      "stratum": "S",
+      "G": 0.7227,
+      "margin": 0.0827
+    },
+    {
+      "id": "s-10",
+      "stratum": "S",
+      "G": 0.7297,
+      "margin": 0.0897
     },
     {
       "id": "f-71",
       "stratum": "F",
       "G": 0.75,
-      "margin": 0.07
-    },
-    {
-      "id": "f-80",
-      "stratum": "F",
-      "G": 0.7522,
-      "margin": 0.0722
-    },
-    {
-      "id": "s-43",
-      "stratum": "S",
-      "G": 0.7612,
-      "margin": 0.0812
-    },
-    {
-      "id": "f-62",
-      "stratum": "F",
-      "G": 0.7644,
-      "margin": 0.0844
-    },
-    {
-      "id": "s-103",
-      "stratum": "S",
-      "G": 0.7653,
-      "margin": 0.0853
-    },
-    {
-      "id": "f-85",
-      "stratum": "F",
-      "G": 0.775,
-      "margin": 0.095
+      "margin": 0.11
     }
   ],
   "sweep": [],

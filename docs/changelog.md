@@ -13,6 +13,24 @@ Each release in a few lines. The full notes — every change, every migration st
 
 <div class="cl">
 
+## 2.2.0
+
+<div class="cl-date">Nov 2, 2026</div>
+
+### One extractor for HTML pages, and a roadmap to 3.0
+
+- **One extractor reads every HTML page.** `docpilot import`, `docpilot index --html-dir` and `docpilot doctor` choose the body of the page, keep tab panels, accordions, tables and code as written, drop navigation and banners, and print a table of what was kept and dropped. See [Imported pages](/guide/imported-pages).
+- **`docPilot.html`** sets the body selector and what to remove, per source, and takes a `fetcher` for pages a plain request cannot read. It is server-only. `--html-select` and `--html-exclude` set the same for one run. See [`html`](/reference/config#html).
+- **A bad page no longer stops `index --html-dir`.** It is skipped, named and counted. A page marked `noindex` is skipped too, and a dead link in an imported page becomes its text.
+- **`eval --baseline`** compares a run with a frozen baseline and exits 1 when a ranking moved. See [Measure](/guide/measure).
+- **No size ceiling on a server index.** With `runtime: 'server'` the browser downloads only the shell, so the 64 KB and 5 MB limits apply to the browser runtime alone.
+- **`import --out` stays under `importDir`.** An absolute path or a `..` segment is refused before the fetch.
+- **A roadmap to 3.0.** [Roadmap to 3.0](/guide/roadmap-3) shows the plan, the progress and the latest update. No 3.0 package is published yet. After 3.0, DocPilot moves to a new website and gets a new product name that does not collide with other products, so people who look for it can find it more easily.
+
+A site written in Markdown builds the same index as in 2.1.1. If you index built HTML or import pages, run `docpilot index` again: the extractor is part of the corpus hash for those pages, and `index` names every imported page an older extractor wrote, with the command that re-imports it.
+
+<a class="cl-more" :href="gh('220--2026-11-02')">Full notes</a>
+
 ## 2.1.1
 
 <div class="cl-date">Oct 27, 2026</div>

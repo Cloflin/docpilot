@@ -2,59 +2,59 @@
   "meta": {
     "schema": 1,
     "node": "v26.8.1",
-    "package": "2.1.1",
+    "package": "2.2.0",
     "goldenSha": "fd655d5315cb8f87",
     "temperature": 0.2,
-    "seed": null,
-    "capturedAt": "2026-10-30T18:00:34.149Z",
+    "seed": 20260829,
+    "capturedAt": "2026-11-02T11:19:25.926Z",
     "indexDir": "docs/public/rag-local",
-    "indexHash": "37991d24",
+    "indexHash": "a97c065c",
     "embedModel": "bge-m3",
     "dims": 1024,
     "quant": "int8",
-    "chunkCount": 856,
+    "chunkCount": 859,
     "guard": {
-      "tau": 0.68,
+      "tau": 0.64,
       "tauLexical": 0.51,
       "wDense": 0.75,
       "wLexical": 0.25,
       "denseMode": "cosine",
-      "cosFloor": 0.26,
-      "cosCeil": 0.62,
+      "cosFloor": 0.28,
+      "cosCeil": 0.64,
       "source": "calibrated-reduced",
-      "calibratedAt": "37991d24",
+      "calibratedAt": "a97c065c",
       "zexp": [
         {
           "n": 8,
-          "z": 0.9897
+          "z": 1.1136
         },
         {
           "n": 9,
-          "z": 1.1833
+          "z": 1.2271
         },
         {
           "n": 23,
-          "z": 1.8844
+          "z": 1.8765
         },
         {
           "n": 45,
-          "z": 2.1406
+          "z": 2.1039
         },
         {
-          "n": 107,
-          "z": 2.7383
+          "n": 105,
+          "z": 2.7124
         },
         {
-          "n": 308,
-          "z": 3.7328
+          "n": 309,
+          "z": 3.7614
         },
         {
-          "n": 715,
-          "z": 4.5963
+          "n": 713,
+          "z": 4.6205
         },
         {
-          "n": 856,
-          "z": 4.8636
+          "n": 859,
+          "z": 4.8662
         }
       ],
       "zexpSource": "measured",
@@ -111,6 +111,7 @@
         "n-10",
         "n-12",
         "n-13",
+        "n-14",
         "n-17",
         "n-20",
         "n-22",
@@ -123,6 +124,7 @@
         "q-04",
         "q-06",
         "q-07",
+        "q-11",
         "q-12",
         "q-17",
         "q-19",
@@ -147,6 +149,7 @@
         "q-59",
         "q-61",
         "q-64",
+        "q-65",
         "q-66"
       ],
       "count": 238
@@ -161,8 +164,8 @@
     "n-01": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.720356,
-      "D": 0.627142,
+      "G": 0.67869,
+      "D": 0.571586,
       "L": 1,
       "rankedIds": [
         "guide/evaluation#the-golden-set",
@@ -186,14 +189,14 @@
     "n-02": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.933598,
-      "D": 0.978131,
+      "G": 0.891932,
+      "D": 0.922576,
       "L": 0.8,
       "rankedIds": [
         "install/docusaurus#options",
         "guide/comparison#choosing",
-        "guide/comparison#sources",
         "guide/comparison#architecture",
+        "guide/comparison#sources",
         "guide/comparison#how-the-money-is-arranged",
         "guide/llms-txt#robots-txt",
         "install/web#the-index",
@@ -203,8 +206,8 @@
       "retrievedIds": [
         "install/docusaurus#options",
         "guide/comparison#choosing",
-        "guide/comparison#sources",
         "guide/comparison#architecture",
+        "guide/comparison#sources",
         "guide/comparison#how-the-money-is-arranged",
         "install/docusaurus#syntax-highlighting"
       ],
@@ -213,8 +216,8 @@
     "n-03": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.66064,
-      "D": 0.769742,
+      "G": 0.618973,
+      "D": 0.714186,
       "L": 0.333333,
       "rankedIds": [
         "reference/theme#overriding",
@@ -267,8 +270,8 @@
     "n-05": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.606481,
-      "D": 0.725308,
+      "G": 0.564815,
+      "D": 0.669753,
       "L": 0.25,
       "rankedIds": [
         "guide/faq#_3-your-own-styles-all-the-way-down",
@@ -292,8 +295,8 @@
     "n-06": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.685311,
-      "D": 0.802636,
+      "G": 0.643644,
+      "D": 0.747081,
       "L": 0.333333,
       "rankedIds": [
         "guide/history#where",
@@ -318,8 +321,8 @@
     "n-07": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.745448,
-      "D": 0.827264,
+      "G": 0.703781,
+      "D": 0.771709,
       "L": 0.5,
       "rankedIds": [
         "reference/config#chat-models~2",
@@ -343,8 +346,8 @@
     "n-08": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.317552,
-      "D": 0.423402,
+      "G": 0.275885,
+      "D": 0.367847,
       "L": 0,
       "rankedIds": [
         "reference/config#suggestions-answers",
@@ -368,8 +371,8 @@
     "n-09": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.239535,
-      "D": 0.31938,
+      "G": 0.197868,
+      "D": 0.263824,
       "L": 0,
       "rankedIds": [
         "guide/social-openers#what-it-deliberately-does-not-do",
@@ -391,8 +394,8 @@
     "n-10": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.622798,
-      "D": 0.697064,
+      "G": 0.581131,
+      "D": 0.641508,
       "L": 0.4,
       "rankedIds": [
         "reference/cli#llms",
@@ -416,8 +419,8 @@
     "n-11": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.9375,
-      "D": 1,
+      "G": 0.91844,
+      "D": 0.974587,
       "L": 0.75,
       "rankedIds": [
         "reference/config#guard-tau-guard-taulexical",
@@ -441,8 +444,8 @@
     "n-12": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.566623,
-      "D": 0.555497,
+      "G": 0.524956,
+      "D": 0.499941,
       "L": 0.6,
       "rankedIds": [
         "guide/faq#_3-your-own-styles-all-the-way-down",
@@ -466,8 +469,8 @@
     "n-13": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.34106,
-      "D": 0.454747,
+      "G": 0.299393,
+      "D": 0.399191,
       "L": 0,
       "rankedIds": [
         "guide/indexing#how-the-format-was-chosen",
@@ -491,8 +494,8 @@
     "n-14": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.935665,
-      "D": 0.980887,
+      "G": 0.893998,
+      "D": 0.925331,
       "L": 0.8,
       "rankedIds": [
         "reference/cli#embedder-question~4",
@@ -502,7 +505,7 @@
         "guide/indexing#how-the-format-was-chosen",
         "reference/cli#eval-flags~4",
         "guide/providers#no-embedder-at-all",
-        "reference/cli#embedder-question~2"
+        "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate"
       ],
       "retrievedIds": [
         "reference/cli#embedder-question~4",
@@ -545,8 +548,8 @@
     "n-16": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.707844,
-      "D": 0.693792,
+      "G": 0.666177,
+      "D": 0.638236,
       "L": 0.75,
       "rankedIds": [
         "guide/appearance#five-entry-points",
@@ -570,8 +573,8 @@
     "n-17": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.697069,
-      "D": 0.796092,
+      "G": 0.655402,
+      "D": 0.740536,
       "L": 0.4,
       "rankedIds": [
         "concepts/a-turn#_3-retrieval-and-the-gate",
@@ -595,8 +598,8 @@
     "n-18": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.749306,
-      "D": 0.749075,
+      "G": 0.70764,
+      "D": 0.69352,
       "L": 0.75,
       "rankedIds": [
         "reference/config#chat-chain",
@@ -620,8 +623,8 @@
     "n-19": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.85,
-      "D": 1,
+      "G": 0.813115,
+      "D": 0.95082,
       "L": 0.4,
       "rankedIds": [
         "features/triggers#",
@@ -645,8 +648,8 @@
     "n-20": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.911652,
-      "D": 0.882203,
+      "G": 0.869986,
+      "D": 0.826648,
       "L": 1,
       "rankedIds": [
         "reference/config#suggestions-precomputed",
@@ -670,8 +673,8 @@
     "n-21": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.934144,
-      "D": 0.995526,
+      "G": 0.892478,
+      "D": 0.93997,
       "L": 0.75,
       "rankedIds": [
         "guide/indexing#when-to-rebuild",
@@ -695,8 +698,8 @@
     "n-22": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.746177,
-      "D": 0.728236,
+      "G": 0.704511,
+      "D": 0.672681,
       "L": 0.8,
       "rankedIds": [
         "guide/comparison#the-chat-itself",
@@ -720,8 +723,8 @@
     "n-23": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.740152,
-      "D": 0.820203,
+      "G": 0.698486,
+      "D": 0.764648,
       "L": 0.5,
       "rankedIds": [
         "reference/config#chat-verbosity",
@@ -773,8 +776,8 @@
     "n-25": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.528835,
-      "D": 0.538447,
+      "G": 0.487169,
+      "D": 0.482891,
       "L": 0.5,
       "rankedIds": [
         "guide/evaluation#the-golden-set",
@@ -800,8 +803,8 @@
     "n-26": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.790527,
-      "D": 0.88737,
+      "G": 0.748861,
+      "D": 0.831814,
       "L": 0.5,
       "rankedIds": [
         "guide/comparison#what-each-of-them-publishes~2",
@@ -852,8 +855,8 @@
     "n-28": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.714894,
-      "D": 0.819859,
+      "G": 0.673227,
+      "D": 0.764303,
       "L": 0.4,
       "rankedIds": [
         "guide/faq#the-skills-docs-rag-and-docs-import~3",
@@ -905,8 +908,8 @@
     "n-30": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.484952,
-      "D": 0.646603,
+      "G": 0.443285,
+      "D": 0.591047,
       "L": 0,
       "rankedIds": [
         "reference/cli#status~4",
@@ -958,8 +961,8 @@
     "q-02": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.984169,
+      "D": 0.978892,
       "L": 1,
       "rankedIds": [
         "concepts/a-turn#_3-retrieval-and-the-gate",
@@ -985,8 +988,8 @@
     "q-03": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.893815,
-      "D": 0.925087,
+      "G": 0.852148,
+      "D": 0.869531,
       "L": 0.8,
       "rankedIds": [
         "reference/config#budget",
@@ -1062,8 +1065,8 @@
     "q-06": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.978303,
-      "D": 0.97107,
+      "G": 0.936636,
+      "D": 0.915514,
       "L": 1,
       "rankedIds": [
         "guide/production#docker~2",
@@ -1091,8 +1094,8 @@
     "q-07": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.926507,
-      "D": 0.902009,
+      "G": 0.88484,
+      "D": 0.846453,
       "L": 1,
       "rankedIds": [
         "concepts/the-ladder#",
@@ -1118,8 +1121,8 @@
     "q-08": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.949498,
-      "D": 0.932664,
+      "G": 0.907832,
+      "D": 0.877109,
       "L": 1,
       "rankedIds": [
         "features/memory#how-it-works",
@@ -1203,8 +1206,8 @@
     "q-11": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.906207,
-      "D": 0.986053,
+      "G": 0.864153,
+      "D": 0.929981,
       "L": 0.666667,
       "rankedIds": [
         "guide/indexing#vectors-are-quantised",
@@ -1256,8 +1259,8 @@
     "q-13": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.990186,
-      "D": 0.986915,
+      "G": 0.948519,
+      "D": 0.931359,
       "L": 1,
       "rankedIds": [
         "guide/panel#when-it-refuses",
@@ -1284,8 +1287,8 @@
     "q-14": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.993857,
+      "D": 0.991809,
       "L": 1,
       "rankedIds": [
         "guide/panel#",
@@ -1313,8 +1316,8 @@
     "q-15": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.596981,
-      "D": 0.573753,
+      "G": 0.555314,
+      "D": 0.518197,
       "L": 0.666667,
       "rankedIds": [
         "guide/i18n#fallback-per-leaf",
@@ -1341,8 +1344,8 @@
     "q-16": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.985073,
+      "D": 0.980098,
       "L": 1,
       "rankedIds": [
         "concepts/the-ladder#_1-paid-providers-in-priority-order",
@@ -1445,8 +1448,8 @@
     "q-20": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.972361,
-      "D": 0.963148,
+      "G": 0.930694,
+      "D": 0.907592,
       "L": 1,
       "rankedIds": [
         "guide/indexing#blocks-a-chunk-is-never-cut-through",
@@ -1470,8 +1473,8 @@
     "q-21": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.916667,
-      "D": 1,
+      "G": 0.888178,
+      "D": 0.962015,
       "L": 0.666667,
       "rankedIds": [
         "guide/panel#quoting-a-passage",
@@ -1549,8 +1552,8 @@
     "q-24": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.650415,
-      "D": 0.86722,
+      "G": 0.608748,
+      "D": 0.811664,
       "L": 0,
       "rankedIds": [
         "guide/security#vercel-and-other-serverless-hosts~3",
@@ -1574,8 +1577,8 @@
     "q-25": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.965569,
+      "D": 0.954092,
       "L": 1,
       "rankedIds": [
         "reference/cli#what-it-may-never-touch~3",
@@ -1599,8 +1602,8 @@
     "q-26": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.943686,
-      "D": 0.924914,
+      "G": 0.902019,
+      "D": 0.869359,
       "L": 1,
       "rankedIds": [
         "concepts/the-ladder#_2-the-free-pool",
@@ -1624,16 +1627,16 @@
     "q-27": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.9375,
-      "D": 1,
+      "G": 0.926448,
+      "D": 0.985265,
       "L": 0.75,
       "rankedIds": [
         "guide/troubleshooting#retrieval-feels-like-keyword-matching",
         "reference/config#embed-fallback",
         "concepts/the-ladder#_3-retrieval-degrades-the-answer-does-not",
         "guide/providers#a-chat-provider-that-cannot-embed~2",
-        "reference/cli#embedder-question~3",
         "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
+        "reference/cli#embedder-question~3",
         "guide/providers#no-embedder-at-all",
         "guide/evaluation#when-eval-says-retrieval-is-the-problem~2"
       ],
@@ -1642,15 +1645,15 @@
         "reference/config#embed-fallback",
         "concepts/the-ladder#_3-retrieval-degrades-the-answer-does-not",
         "guide/providers#a-chat-provider-that-cannot-embed~2",
-        "reference/cli#embedder-question~3"
+        "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate"
       ],
       "outcome": "answer"
     },
     "q-28": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.957765,
-      "D": 0.943687,
+      "G": 0.916098,
+      "D": 0.888131,
       "L": 1,
       "rankedIds": [
         "features/memory#",
@@ -1675,8 +1678,8 @@
     "q-29": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.991919,
+      "D": 0.989226,
       "L": 1,
       "rankedIds": [
         "reference/cli#what-it-may-never-touch",
@@ -1752,8 +1755,8 @@
     "q-32": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.694848,
-      "D": 0.926464,
+      "G": 0.653182,
+      "D": 0.870909,
       "L": 0,
       "rankedIds": [
         "features/history#where-it-is-stored",
@@ -1781,8 +1784,8 @@
     "q-33": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.82629,
-      "D": 0.85172,
+      "G": 0.784623,
+      "D": 0.796164,
       "L": 0.75,
       "rankedIds": [
         "guide/credentials#this-is-not-a-security-boundary",
@@ -1810,8 +1813,8 @@
     "q-34": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.969186,
+      "D": 0.958915,
       "L": 1,
       "rankedIds": [
         "concepts/a-turn#_3-retrieval-and-the-gate",
@@ -1836,8 +1839,8 @@
     "q-35": {
       "channel": "composed",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.984428,
+      "D": 0.979237,
       "L": 1,
       "rankedIds": [
         "concepts/the-gate#two-channels",
@@ -1913,8 +1916,8 @@
     "q-38": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.936452,
-      "D": 0.91527,
+      "G": 0.894786,
+      "D": 0.859714,
       "L": 1,
       "rankedIds": [
         "guide/indexing#blocks-a-chunk-is-never-cut-through",
@@ -1938,8 +1941,8 @@
     "q-39": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.881686,
-      "D": 0.842248,
+      "G": 0.840019,
+      "D": 0.786692,
       "L": 1,
       "rankedIds": [
         "guide/providers#a-chat-provider-that-cannot-embed~2",
@@ -1963,8 +1966,8 @@
     "q-40": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.857807,
-      "D": 0.893742,
+      "G": 0.81614,
+      "D": 0.838187,
       "L": 0.75,
       "rankedIds": [
         "guide/social-openers#why-it-exists",
@@ -1986,8 +1989,8 @@
     "q-41": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.986494,
+      "D": 0.981992,
       "L": 1,
       "rankedIds": [
         "concepts/the-gate#follow-ups~3",
@@ -2012,8 +2015,8 @@
     "q-42": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.99729,
-      "D": 0.996387,
+      "G": 0.955623,
+      "D": 0.940831,
       "L": 1,
       "rankedIds": [
         "guide/providers#one-provider-if-it-can-do-both",
@@ -2065,8 +2068,8 @@
     "q-44": {
       "channel": "composed",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.966732,
+      "D": 0.955642,
       "L": 1,
       "rankedIds": [
         "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
@@ -2119,8 +2122,8 @@
     "q-46": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.974686,
-      "D": 0.966248,
+      "G": 0.933019,
+      "D": 0.910692,
       "L": 1,
       "rankedIds": [
         "guide/panel#when-something-is-wrong",
@@ -2172,8 +2175,8 @@
     "q-48": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.916667,
-      "D": 1,
+      "G": 0.899673,
+      "D": 0.977342,
       "L": 0.666667,
       "rankedIds": [
         "concepts/the-gate#five-settled-turns-five-causes",
@@ -2222,8 +2225,8 @@
     "q-50": {
       "channel": "composed",
       "gatePass": false,
-      "G": 0.661265,
-      "D": 0.881687,
+      "G": 0.619598,
+      "D": 0.826131,
       "L": 0,
       "rankedIds": [
         "concepts/a-turn#",
@@ -2249,8 +2252,8 @@
     "q-51": {
       "channel": "composed",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.999798,
+      "D": 0.999731,
       "L": 1,
       "rankedIds": [
         "guide/what-it-costs#what-raises-the-bill",
@@ -2274,8 +2277,8 @@
     "q-52": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.674019,
-      "D": 0.732025,
+      "G": 0.632352,
+      "D": 0.67647,
       "L": 0.5,
       "rankedIds": [
         "concepts/the-ladder#_1-paid-providers-in-priority-order~2",
@@ -2300,8 +2303,8 @@
     "q-53": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.930003,
-      "D": 0.948337,
+      "G": 0.888336,
+      "D": 0.892781,
       "L": 0.875,
       "rankedIds": [
         "guide/what-it-costs#where-the-money-actually-goes",
@@ -2350,8 +2353,8 @@
     "q-55": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.9375,
-      "D": 1,
+      "G": 0.932519,
+      "D": 0.993359,
       "L": 0.75,
       "rankedIds": [
         "guide/panel#a-question-with-a-key-in-it",
@@ -2378,8 +2381,8 @@
     "q-56": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.747998,
-      "D": 0.663997,
+      "G": 0.706331,
+      "D": 0.608442,
       "L": 1,
       "rankedIds": [
         "guide/providers#two-keys-and-which-answers-first",
@@ -2403,8 +2406,8 @@
     "q-57": {
       "channel": "composed",
       "gatePass": false,
-      "G": 0.648994,
-      "D": 0.865325,
+      "G": 0.607327,
+      "D": 0.80977,
       "L": 0,
       "rankedIds": [
         "guide/history#two-tabs",
@@ -2414,7 +2417,7 @@
         "guide/history#",
         "guide/panel#past-conversations",
         "guide/history#what-the-reader-sees",
-        "guide/what-it-costs#what-a-reader-downloads"
+        "reference/cli#html-dir~2"
       ],
       "retrievedIds": [
         "guide/history#two-tabs",
@@ -2429,8 +2432,8 @@
     "q-58": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.655644,
-      "D": 0.540858,
+      "G": 0.613977,
+      "D": 0.485303,
       "L": 1,
       "rankedIds": [
         "guide/evaluation#the-golden-set~3",
@@ -2507,33 +2510,33 @@
     "q-61": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.992253,
-      "D": 0.98967,
-      "L": 1,
+      "G": 0.761769,
+      "D": 0.807359,
+      "L": 0.625,
       "rankedIds": [
-        "guide/appearance#the-tokens~4",
-        "reference/theme#the-dark-set",
         "guide/appearance#the-tokens~2",
-        "reference/highlighting#both-colour-schemes",
-        "guide/appearance#the-tokens~3",
+        "guide/appearance#syntax-highlighting",
+        "introduction#from-your-pages-to-answers",
+        "reference/cli#status~3",
         "features/terminal#colour",
-        "reference/theme#the-whole-set~3",
-        "guide/faq#_2-the-dp-css-tokens-—-colour-and-geometry"
+        "guide/indexing#what-gets-indexed",
+        "reference/highlighting#both-colour-schemes",
+        "guide/indexing#"
       ],
       "retrievedIds": [
-        "guide/appearance#the-tokens~4",
-        "reference/theme#the-dark-set",
         "guide/appearance#the-tokens~2",
-        "reference/highlighting#both-colour-schemes",
-        "guide/appearance#the-tokens~3"
+        "guide/appearance#syntax-highlighting",
+        "introduction#from-your-pages-to-answers",
+        "reference/cli#status~3",
+        "features/terminal#colour"
       ],
       "outcome": "answer"
     },
     "q-62": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.685936,
-      "D": 0.914581,
+      "G": 0.644269,
+      "D": 0.859025,
       "L": 0,
       "rankedIds": [
         "reference/config#it-rewrites-it-never-adds",
@@ -2608,33 +2611,33 @@
     "q-65": {
       "channel": "composed",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.968282,
+      "D": 0.957709,
       "L": 1,
       "rankedIds": [
-        "reference/cli#level~2",
         "guide/evaluation#how-much-of-the-set-to-run~2",
-        "guide/evaluation#the-golden-set~2",
-        "guide/evaluation#how-much-of-the-set-to-run",
+        "reference/cli#level~2",
         "reference/cli#level",
+        "guide/evaluation#how-much-of-the-set-to-run",
+        "reference/cli#status~3",
         "reference/cli#eval-split",
-        "guide/evaluation#the-golden-set~3",
-        "guide/evaluation#lint-it-first"
+        "guide/evaluation#the-golden-set~2",
+        "concepts/the-ladder#what-costs-a-provider-its-turn~2"
       ],
       "retrievedIds": [
-        "reference/cli#level~2",
         "guide/evaluation#how-much-of-the-set-to-run~2",
-        "guide/evaluation#the-golden-set~2",
+        "reference/cli#level~2",
+        "reference/cli#level",
         "guide/evaluation#how-much-of-the-set-to-run",
-        "reference/cli#level"
+        "reference/cli#status~3"
       ],
       "outcome": "answer"
     },
     "q-66": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.559189,
-      "D": 0.578919,
+      "G": 0.517523,
+      "D": 0.523364,
       "L": 0.5,
       "rankedIds": [
         "guide/history#two-tabs",
@@ -2680,7 +2683,6 @@
     "And when it is written in another alphabet?": "/gX+AAP6/wAC/wIBAPwC/v78/AP7Av///Qj+AQX9////+wEABAP9AAEEA/0A+QP7A/oAAQX8AAH9APn6Afz9AvkHAv37+PwDAQL5Af/9+AgF/P4DAf38AQAF/v0F+QACAAYCAv8AAAIA/wYC/wEGBAH9/wH7AgP8/wUF+/z4/gL5/QUF+wH/APoFAfwAAP0ABf4I/gH+AAAC+QX8/QL9B/4C+v8E//0G//oAAwMA/AkGAAH+AAH+/gAA+wIBAAH5AgkEBQYH/QH7AgP6+wD3/QL+AP//Af7+AQT/AQIBAAEDBAX/AwD+A/0CAgD+BP/+BgMEAfwB+v3/AQIBAAQFBAQB/AIACAIDAwH9+gP9/wAB/wAE/fsGAAcGAgMC+QD9/f0C/gYD+fwB6gAB/wID/vz9/wD6/AAMA/0A//0FAAT7//0FAfv7AgT9BgQD/AEH/wAB/QED/AEA+/76/vz++wIFAwEBAP79/fsI//4E/AECBfoAAvv+/u3/BgEB/gABAgkbBQP8BP0DBwH8AgQAAwL++wYN/gP/CP36Av4GAgH/AQME/AIA+P8F/f4L/AAA+QD7/wH//gEEBP0C/f/8AwL8/AAEAP0BAfsB/wEDAwH+BwP9/PwD/gMEA/n7/v0A+f0D/f3++f7//wX+/AQBB/wDAwUCBf/+BgT/AgMC/gIFAvoBA/z7AAYA/wEBAvz//v/9AAL//QUAA/j3/f/7/QD8BgEECP0E/wL/AwEB+/4CAPz9/P8FAf4AAAT8/gH7/g3/AAP/BwD6+//9/wb9AgL//wIBAvj+BP4GBf76+wUF+v8I/QH/AP8A/gAI/gME/v8KAAUE/wP2/v8D+/v+/gf+AgD4AQAE+vwA/QD+/vUD/v39AQAG/wMDAgH/A/0HAAX9/AEAAAT/AfwBAf8BBPoA+wL//QT9APUCA/v/BwL/AAD9AP8H/wD//f0BAAEA/wIA+f36BwAB/AP1AAIEAPsI/gAGAP4BB////wL//wEAAPX3/wEHAv8DAf8E/v32Af8BAfz+BgD6Avv75wT7AfoB/QD9/P8CAQD6BQgF/f4D/wMCBP7/BPz/BPsFA/8FAgP+//0C+/4B/fwAAgj7/f/9/gX/Av4DA/sC+/39+QIC//36//oFA/8CAv4E/fsB/AD9Avj//P8AAvoB/wD+/voFAgT/Agf9AP4B/ff9/f3+BQMB/AQB+wUDAPsE/QP9Av4A/v4EAAAEAPz8+/sCAfz8A/wAAP7/Bv7/BwD/A/cC/gEA/gQGA/3+BP4AAQH/AgACAwMA/wkC/QQGAAMHAf4EAAX9/AAA/v8G+/wB9f8A/P0CAgIDAAMDAPv4AfoFAfwB/PsH/QICAv75BgMEBQ==",
     "And where are they the better buy?": "/QT3/wH+/gACBfoE/QIAAPr4AP39/P4CAgP7AQIA+/8DA//+AP3+//8EBvoB+QH+/fn//wT9BAcC+/gC/QEAAgAJAvr6/PoE/wL9/wAAAQQE/P8BAAEAAwAA+/4F+wED+AAC+AUDAQECBPoG/wAJAQEAAP7/AAL//P///f76BAX//gAD/QIB+wP9/vwEAwMACAX+/wP8/wMD/P7+/Af+//7+AP4F/gABAP8A+QECBAYH/wP//wAFAP8BBgQCA/78Cf8M+/4B+/z5AQkB//37Afr3BP8BB/78AAD/Af4H/wAGAwUDAf0BCP0B/P32Bf4CAgP9//oBAAEC/wUA/gQBBgX8Av4DBAUD/wIA+wX8/P8AA/z9AP0G/AIE/gAG9wAGAPsDAQUC/Pr/6/38//779gEC+gD8Af8FBAP+BPkDAQX9AgQDCP8BA/0B/wYC+/j//wIF/fwA+/sC/QD/Bf7++gIHAwQA//0AAfkC/vwBAQT++/wIBPv8//L+Af4AAP/8BgMeAAn7AvwA/AH7/gD/AQEF+QAIBwH1/wT7/P8CAAf8+QP+/P7/A/oG/P4F/wX/AAUFAPz+/wH/APsB+wT9AAH5APr7AvsCAQADAAMCAQECAfz+/v8BAAEBBv8GAf37AvT9AAH7BAACAP3/AgEBA/4E//4EBwYA/wf8BvwB//z+CgD+//3+/QX9BP4A/v35AvwC/gIB/f/9Bv76//8B/gH+BAMAEgQB/gYC/QL//gUF+wT9/f8EAAEB//3+/wX9/Ar+BQYDAgX++P79AAAD/v0E/voBAf7/AAL/A/v5/wIF9/kDAQT5AAABBP37Af4A/AAAAQED/wP//wIE+wIBA/7/A//+A/0D/AH6AP/+/PgA//4AAwH8AvMD+QACA/oEAQf+AAID/AD+BP///wf9//j9AQQC//0CAPv//vwDCAL6AwAAAAH+AfwJAAb9BwABAv0F/QUA/QgHAfz+Av38BP8F/P8G/f0EB//9BP4H/wQB+//+AgIG//8DA/8EBfwA/P/7AAH8CAD9//4D6gEDAfkAAgD5//oBBAD+Bfv9/wIF/QD+Bv0B/P3+/gED//4E//sCAgUAAf0AAwP9/QD+/gL9AP74AQQIAgMB/wIA9v8E/v79AP4B//v//gIC+gAI/gUA/P3/+/4D/fsD+//9+v0F/wD5+AQAAQL/AAD/Avz6/gMC/gYD/QMCBf8D/wf8/v4AAPcEAfoA///9+wEEAv8C/v4F/QEBA/0CBgD8/v3/AwQB/gAB/gAFAwIDA//+AwQD//z1/AgACP8C/PwIBv8H/gEF//8DAQQE+f0C/P78BwT+/wAB/QEC9fkE/P4CBf4IBPwBA/4FBP79BQAA/g==",
     "And where does a fresh conversation start out?": "AAD7AAIAAQAC/QEB+wgA/QL8AgH+/QP/BQX+/QT+/gT+AQT+AwD8BAD/AfwE+gP/A/wBAQT+/wf+APn+/AMAAwANA/7/+/v+/P/7AwIB/QQB/fcDBwP8Bv/6/v8F+P4B/QL9/AgCAfr+AAL//P8GBwD8/vwA//8D/AUF/v36AAD/AQT+/f/+/Ab8/QACAwL9AfwB/gQA/f3+Bf///wgACAYE9v8EAwID/v0E/woB/wQGAQAA/QMB+fwC9/0FBP7+BAMG/AIA/PcAAggB/vn/AQT6+gUD/fcBBAEDBPwH/v4AAv/8/gQEBgT7+QQBAwD8//r8/gAA/fwB/v/+/fwFAgMA+gT//wUDAAb++wEB/gD/AAEBAP8C/wL/AQQB+vwFAfwCAQb///4C7f/9AwMB+wf7BP/++AAEAfz/APkDAAf9AQH+//j+A/7+/QQA/fj4BPoF/Qj+/fv+/AAABPz6/f4HAf4B/wABAP4CAgIBAgcCAQABA//7APMHAv4C/AQFBgQeBwP6Bv4E/wD5/P7/A/wI+gMDAwT6A/34/gMA/gr+A//8/gD++f8DAv8H/fz9/QH4/wMB/AMG/f8B/QABAQT8/P4H/wD///wDAAMB/gEEBf4AAPsDAgEHAwQA/f39APgD/fv+Av4EAAIA/v8AB/8AAAAEBAH9//8CAf4EAPr+AfoEA//+AgoBBfz+/wEBAAIA//oC9wME//n6/AD//AX/BAMEDAEG/wMD//36AQMA//8E/AMBBAcB/v///wT7/w0BAQb6DAf8+v4E/gMCAQIC/vz9APr9+/4EB/n//wAI9QD+AP78BP/9/PsEBvz//wL6+wMFAAj//P4H//oA+/7+Av/+AQIA+//2/AID/fgF/vz+AQECAf0A/QgJBf//AQIA/QH+/gACA/4E/wH+BPr9+wQD+ggEBfj/AgMDA/z/AwP7/wAA/gL+//8CBAD++/8ABAP8AwUC/ggE+wEBAv8I/wECAPoABQL9AwIEAAMA+wD9Av0CAwD9Bf0CAfv4//sCA/sBBQX3A/0C6QUD//z//AL/AAMDBvz4BfwC/AABAwL+Cvz7AP0B/v0CBv4AAP0E/v8C/vz/Av4B/v39AwAF/QT3Av4F/P//+PoA9wD/AwD8/f8AAQD//v4B//z//QEB+f0B+/7+Bf4HAv4B/vsD/QD7/wj/AQIC/gEA+AL/AwICAAUD+wIJCPwEAAT/AgIA/fsB//wA/v78+vwAA/n9AP4CAP8FAv8EBf/6/fz7AwQA9/3//f3+A/sB/wj8A/77AAL+/goG/gT+BQAG/wEA/gP+BPv8+v38/P8D//v8/wEHA/v++wYB+AAC//gEAwH8/P8CAv0HBgECAf4CAA==",
-    "And where does a fresh conversation start out?\nthanks — and what's the weather in Paris this weekend?": "AQP5///6Av0DAP8BAgT6/wX9AfoAAP36AwP8/gT//gYA/wD8AgH6AAH8BAME+/0B/foFAgX/AAUDAfj9+AIC/wEN//8A//3+/v/8AQIA/wYC/fz+AwUAA/77/gEA9/j/+P8DAAf///kD/gIE/f8IBQMAAP7//QD//gMDAQD//Qb+BQUB+wEB/gMD//8BAfv8APwC+wL9/wD/BPwCAAj8BgED9gIDAgAB/wME/QkDBAQFAQH//gUD9fsEAfwGAAH/BAAJ/wH7/fv+AQUE/vz8/gX4+gIE/fkEAwECBAAI/f0AAgAE+QYGBQD9/wABBf7+Avz+AQD/AQH+/QD8/v4FAgH+/gQC/gQFAAMA/QAC/v/9AgT8/wAL+gH7AAUA/f8CAvr+/wf+Af3+7AH8//4B+wb+/fz+AgMBAv39A/gG+gn9BAH8AfkBAAL+/wUB/vP2Bf0G/Qb7+vr8/PwCBf0A+wACAPj/AAAB/QMAAgQEBAUG/f/+Bf///vIC/AH+/QEEBgQdCP/+BvwAAAH5/AH/AvkF+wEDAv4BAPv4+wQCAQgBBP4B/gH+/AAFAf8H+v/7Af75+/sA/AAC/v//AQL+AQX8/QIH+//+9v4BAgH//AcDCf0B/vn//AUBBP4GAf3/AfkF//n9AP8EAQUCAAAABAICAQQBAgT+/f3/BwID/f4D//4CAAECAQ7//wH+/wUAAfgB/fYD9wECAv35APz+/AMCAAMFDQUE/gQD+wD9AAL+AQAE/QoEAgQE/v///wH6/AYDAAYCBgP9+/3+/wEA//8D/f3+/f/9+/8HBPn8AQEK+v8A/f79BAD6//wEB/oC/wL6/QQC/wf/BAAE+gIB/PwC/gMDAAH//gL7/QQA+vv9+/z+/wMFAP8B+QkEA/sF//39/AP8+wEA//8F/QD/BPz/+gIC+QQAAvoAAAUAAPz+AgH/AQUB/QH//wT+AwH8/vwGBwP5AwsA/AYA/QH+AP0F//0BAv0GBAD7BAADAgYC/QAA/QMBAQEBBPsDAP77//wEAv4DAwT4/v7+6wgE/f0C+QMB/wYHAPz6Bv0AAAYAAgD/Av/6APz/AP0BBAP/A/8FAv0D+f4ABgMC+fz/Av0H/wT6AgEH+wD8+P0A9gMFAvz9AgL/BQAA/v7+/vr5/P//+/oA9/78BP8D/wD/APwA/AH7/gP9AwL+AAAB/v/8AQMG/gQG+wAGCQQBBQb/AAQC/voC/v7+///6+gABAQD/BfwD//4FAP0FAv72/P3/AQIA/f/+/PsAAv4E/AX8AP4BAgME/wMF/AP/A/8E/gQAAQL+BwP++gD3/P8BAP/+AAECAf0A/v4D/QMB/vYGAQMA/v8EBP4ECAL9/f79AQ==",
     "And which language does a reader get when nobody translated theirs?": "/gMA+wEAB/0D/gL8+/78BPv7+QAAAwL+BQP7AQIA/f4EAgABA///AgQA/gEE/AL+AQD+AQf//wAAA/7+Av0AAgQI/fv7/foCAP/2AP/8/AcHAwMHBQH9AAIC/gEF9voDAAAB/AIBAf8C+wMC/v8DAf0B/fz/AgL8AQf9/f/3+wD/Awb//AAC/PwC+/8FBQD+AwIC/AYA//8D/AH5/v/+CAAI/QABAwIEAP3++wX9AQb9AwT+AQX++/0G/QMC+v38AhAG/wQB+gL7Bf4AAv/99wL+BgEA+wEAAwQA/QEFAv8D/gb//AMDAf0DBPsB+gID/QX/BP3/+/38/AMCAAUEAAL7/wAE/wIE/wEBAAEA+//+AAAHAAIA/gEGAQQG+wf+AQL9AgYD9fb+7gEA+P4A/P35+gL++gABAvn9Bv0J/gX8Afv/Af/4BP7+BQUBBQMGAP4G/QT+/v4A/fz8/v39AQQC/f4CAwEAAfcEBgEDAAQDAfn/Bv39/fH/Af7+/wEDBQccBP38AgMCBfv9/AIBBP8D/gEJAQL/+v75A/4E///+/QMB/gYC9gD8//0MAf/++//9BAL+/gIEAf77+QMDAwH4/gX/AAMI/PoBBAIE/Ab+BQgB//wDAgL/+/oF/Pv/+foCAvn7/QD/+/0BAwD/Bv8B/vwEAP3+AQH++Pv7/AEABv0BBf7+BQb/+gP9A/0D/QABBP/+AAAAAfz9AgD/AAH7AgYBDgMI/wMBAAEA+f0BAfYA+f0GAgIC/QP+/QD8+QkAAAQBBwj/+gH+/Af7/gIEAv/5/wP7B/4AAgL6/QEF+gQDAPv9AwEB/voG+gAA//8C+/z9/P72AAII+gECAAADAP8B//8A/P4B/QICAvkFAfr9//oA/gYD+f8BAv0I/wP+/AD+AQAGBfz+/gX9BPsA/AD++wMCA/oB+P0ABwb/AwIAAQD+AQMBBfv7/gIC+P///f/9B/0D+gcBAP4F/AQG+/8GAf0FAgL/CPsD/wEAAwD+/gEG/PsD/gIA/P/8AP8E/wIBAQH8Avv/7gP9/f3+/gYDAP4DAv//AwAG+/39BAH+BgL0Bf4DBv4EAwEEBP///fwA/gEAAf4A/QD5/f79AgL1BAIEAP/9+vn7/AT5Bvr+APoFAP//+/0C/P4CAAYAAv0D/AIC/wT9+/oAAfkJ/wQBAgYBBAEB/vv5AP/+AgMCAAEA/QQHAv0F/QX9BAYAAAIECP0C+/n/+gMA//b4BQIEAQD/AfYFBgIAAP4DBAAA/QUDAv8DAvwD/gf7BAIAAwH9/QL6BgAC/wIB/v/8AQICA/n7////+vgD9/v9AQEEBgH+/v//AQD7/wUCBPwB/QAAAQQF/QH5BP77BA==",
     "And which of them can embed?": "AQP9AAEBBAQD/QEBAfwBAv79BPz++/wDCQL+AAD8/QEE/P37/fz7AP7+BPoB+AL+/wH8/wP9AQgABvYC//z+/gAKAQH8Af0D/AH6AAQC/QAJ/AIAAwD+AAYE9wAD+fkD/wICAPv/BQP+AQEC+f4GAAAD/vz//QADBgIF+gL9/wL/AQUHAv38/gUABfoFAgL3A/gBBAX8/v7/+AD8AgUCB/oAAPYD+wL7//wABQUHAgYCAQb4AP0CAwAGAf4EA/z8AwQGAgUB+vr2///+//74+//9AAMC+foAAAIB/v4DAgQB//8BAfsAAf////34BP78/wP8Af7+A/4A+wIC/QQDCAX+/wMFBAQG/vwB/P37/gD9/AID/QAKAAIAAgQE/P8EAfsC/wcD/wX+7PwC/Pz9+gIEBP37A/kFAP/+Avr+/An9A/4DAP79AwgAAf7/+/v6AwUDAwAA+QL+/QD7AAQB/AAGCgj+/gIBBPYE/f4E+gD8AP8CBPz9++3/AP8D/wABBQAgBAb8Bv0FAvz++f/+/wAE/QUL/f/5/wT++wEHAAD+AgX6+wAEAfsGAP8CBAb7/wL/BP/+Avn//vv+BAb9AwEB+wP9/f79AwEA/QYCAAb8AP79+wAAAAMFAvwCAgD9A/wA+gED/v8A/P0BAQAAAAEC/gEDAvv8Awf8/fn//v77BwEBCPwABAX+AQUFBwD/+/8ABwAD/gIBBgD6/v8A/P/8BgUBCAMJ+wMC/P74AAMD/fv6+wcDAP7+Af34/QH8+wz3AQUF/AYA+gL8Af0C/f/+/v8CBv4AAQEDCPz+AgEC+wABAwAAAgAC/PwC/v8A/P0GAv0IAgD9BP8B+wIBAAT/AwT8//0F+gD////2/fsCAf/8BwL++v4E/f0AB/f+/P//+wIDAPv+AP4A/AD+/fwAAPwABwQC//8ABfv+BPv9/wABA///AAUE+gMA//v9/wAE+gb+AQUL/AYCAP4CBQIA+v0C+v4BAwYAAv8HAwL+/AIAAfz8Bf0FAv4CAv78/wADAfwB+gL/Af0D6QcBAvr+/v/9Afj+BAAB/fz/+woB+wYABf8AAv4EAv3/BvwBAvr+/wQDAP37A/z9+QIB//7+AQL5/gEFAAMA/vr/+AECBQD7/v8AAwMBAf79/f8DAgL9AP7+/P/+APz+AgX6/P0F//wA/QIAAgH+/wIB+v8D/f0G/wIA+gT+Avz++wb6AQL//wAI///+AP0B/f//Bv/9Af4A+wMC/AL/AwQG/v32AQL++v7/BAD/Bv4FBwQCBAQH/QIDAQEBCQH/BfkEBQAA/gUD//z/AAEA+/wBAAD+AgD8AQD//QID/fsA/wL/C///B/oFAgEGAgP3B/z+BQ==",
     "And which of them change when the page goes dark?": "/AH7/P78CAQC/wH9/P8B///+BQL7A/kFBgT4/AQE/vv//gEAAQL8/AX/BfwE+QP8/fv9/gj9+wP7/vr5/wIC+gAMBP/9/P8B/f/5AfkA/AMGAwABBwP+AgL//f8G+/8BBP4EAgECBP0B/wIBAv8GAQMEAfv7/gIAAf//+QH8AgYC/wEB/vv1Af7+AfkB/f/5Bf8G/AP/AQH//wD9AQj9Af4A+v8DAgMGBgP++wcD/gYLAAD8///++v4F/AYB///+/QgB/wMEAPz9BAAAAgD5+wIBAwMDAf38/gX++QQGA/kEBAMG/gL7/gABA/7/AwAA//j8Av4D/AIA/wH+/gEIBQMA/v4FAv4E/wD+BQD++gEB/gQE/v4LAAUAAwQE+wEEAPgA/QYD//v96/wB/wP8/vr4APr7+/4BAgL8Af0A/wf8/f8A//n8Cv7+//z9/AQBAAH/+wIA/f4B/wEA//0C+gUFAv8HAP7//v8B//4E/AIBBfgABPv//e8CAwEB/vsAAgEcBvkABf0HAv/+/QD/AgMA+wMMAQL7BAX5/QAIAf77AQH++gX//AH9+v4CBv77/P/+/ggDAQEH+Pz++QIAAPj7BAIBAQIC/f0A/wAEAgL5BgD//P4CAf0EBPkFAwD8+voE/v4FAfsF+f0D/gX+BvoFAP0CAvv+/QH5AAb9APv//vkDAvz7AwUCAgAHBwH7BP4DCAb+/AIEB/72+AT9/vv+Bv8CBP8DAQEBAQMA/AQA//b//QIDB/79AAH4/v/+/BD+AQP9BQL+/AMAAAX9/gL///v8/f8CBv8DCQD7+AIC+wID//wBAQEDAP4C/gQB/AEG+gP//wH1BAgG+gUC+v78BAH7+v0E//3//gP//fUH//38AwACAAEA+QX+A/n//v/+AAEA+gP7A/4GAQUBAgD6/P7/BwUA/QH/AgL8/v38BgP///4AAgAAAgP+Av/8AgED+QX8BAUB/gQEAv4C/wEE//v+A/7/Af4D//4F/gX9APoA/vwAA/sF+QAEBPz8AvsE//8ABwP9Afn76gQB/f4CAP8B+gP9A/4B/gIC+wsEAfwACgD+BfsE/gEB/wAEAPwCAP0B/P0FBPoA/wMBAP4C/QL/AQUDBf3//PgD8wUBAPn/A/wBAP77//8A//r9AAb+/PkB/AADAgAB/gP+//sB/wH8AgQFA/z+BQEDBPz+AAEA/gH9/AUEAAII/QD+BQABAAcEAP79Af77//0EA/3+Af//+gP+BgL+CP4B/vwBAP78/AICBf4B/gMDAwQAAwEAAAMH/gIGAvwA/f0HAf8DAAIB+/0HA/3+AAAD+/77AgMAAwICBQcBAPz7/v4D/v39/v/+BQX///n8Bf//Aw==",
@@ -2693,22 +2695,26 @@
     "Can I use Anthropic as the chat provider?\nThen what handles the retrieval half?": "+v4AAfz9BP//AP8A/QMDAv35A/4CBf8BAwH6/wD+/f4C+/j7BAD6Afz6/v8E/AP/Agf9AwAC/wcD/fr+/f3+AQIN/wT+//wF+wD6AAT/AQAE/AMD/wD+BP8A/gIE/f0D/f4EAwH7/wD//AAE+/4DAQEA/f/8AgQF/AAD/vv8/AgFBQQF/vn4/AQB//cDBvz4BAECAQIDAQEAA/8BAQP/BfwA/AX+AP8DAPn//gQBAAQLBgL4AAL5+v4BAPoEBfz6Bf4G/vn8Avn+AwkE+wADAf/3BP4DAPX6AwX8/wAFAgUHAAD+Af8E//z8BfwD//z/+wD///kC/gcA/Pz7+fwHAQMCAv8CBv8C/QD//P4B/AH4/QED/gAEBAAJAgf/BQD7AvsD/gr9+f767gH6/gABAAP7APv4+/n6Av4DAv77/gv9AfsB/f7+BP4BAQIC/QL+AAAA/AsIAAIAAAEAAQL9+wL8AP8EAQT+BPsCBP0C/wn3AP/+B/wBAPQB/wMC/v8ABgQdCPwDBP0FBQT//gIDAQEC+wAF/v8A/AD6AAQJ/Qb/BgP+/AEF/gEE/vsGAfr8/vsA+//9A/4HAAD+/gUA//n/+wL//wP++QYE/AL9/wQFBP7+AQEC/f4G/Pz7/PoAAPwA/f8AAv/+/wUEAwL9B/oG+/sEAwMBAgX9/Pz9Av0FBP4AA/4GBP4D/QL+/f7++gEBAPsDAP8AAgP6Avz/AAH7Af4ACAEI/AT//QX8/QcB/gADB/4BAQMDBgH6//75/ggD//78AQv+/gABBAH8+/4B/QL/AgEBAgIFAP4BAQIC9wEC/Pv6BgH+/v4D/QEE//8F/P8EAQL9BAQG/P4AAwn9AAL9+f4AAfz7BAj7/P8D/fv8AgL/AAIC/gADAf7//gH9+P/8/QD9+/4K/v79AwD//gT/AwAD/QEA/vsCAwP9+/3+/v0DAQH///0BAQH7Af8D9v8DAQEF+wIB/f0AAwAF+Pr+/P4IBgL7CQUCCAME/AADAQn7AAYEAAAH/P/7+QH+AAH8Bwb8/P/97wACAAEF/v0CAP3//vr+//4AAQX+/gUDCP72/Pn+AvcDBv3/AP7///8IAAD6AP389wUHAv8FAgD1Af8D+wD+/wABAAEDAv76BAADBQH9/vr7//sEBf0CAPsA+QABA/39/wT+AAD7+wEA+gj//vj9/v8C//8HAPkCAAMB/f8HAQEI+AP4BAUE/v8I/gD+Af8C+wMAAf79AAMGBP8D+wT/A//++/0C//79BAABAvsACPoB/wgA//8C/wH/AgcBAgP4BfwAAQAFAAf9Afr8/gL7+gEDAgIB/wUGAgf//wUB/fv+A/0GAAH5//4FAPwMAf/9AAECAg==",
     "Can I use Anthropic as the chat provider?\nThen what handles the retrieval half?\nWhat does that cost me at build time?": "+///BP38A///AAEA/AMCAf37BQADAwD+AwH5AgL9/v0F+/n5BgL5Av76/wEF+gL/AgX/Av0BAQgA//n/+v7/AAEO/gL9/vwB/QH7/wT9AP8E/QQCAQD+AwD+/gIE//0C/P8CAQP6AAD++/4D+v4EAQH+AP/7AQQB/wEF/f39+wgDBgUG/Pv4/AEB/vcBBPv5BQID/wMDAAP/AgAAAQEAB/sA+QX+Af0B/vsB/wT/AAUMBAL4/gX5+/0DAf0EBv38BfwIAPv9A/n+AwoF/AIBAP/3A/wCAfj+AwT9AP0FAgUFAAD/AP8CAf78Bv4E/voA/QMAA/oE/Aj/+/36+/wEAwEBAP4DBP4C/gD9+gD/AAL6/v4FAAEDAgMJAQX7BAD5Avr/+wv89/377QH6Af8B/wP6Bfv4//37A/4DA//9/AkA/f8A/P/8//4CAQIDAAEAAgEB/QoGAv8A/v8CAgD++gH6AP4FAQL/BP0BAv0B/wn6Avz/B/z/AvQAAQID//4ABQQfBP8GAvsEBgT//gIEAAAB+wEG/AD/+/72/gEK/Qj+BgL//AIGAAAE//wH/fj4APwA+v0BAf4GAQD9/gT+APkA+wH/AQP++wYC/AD9AQYBAvz+AgIC+/sE+/z5//3///7//f7/AgD//wQEBAH7BvoF/PwEAwQAAwL/+/v9Af4CBQEAAv0GAQIE/QH9/P38+gED/voDAf8BAgX5A/r/BAD7AQABCgUG/AL//AP+/QcD/gADCP4BAwEDBf/2/v77/QkC/gD7/wf8Av8DAwD9+AAE+wH//wP/AwIEAPsCAQP/+QP+/vn8BQH+/v4D/QAE/QAD/AAF/gL8BQUF/fz9BAj9/wH9+f7/Av38Awb7/AIB+/r8BQECAAQB/gEF//3//wP/+f/++wD//P0G/v/9AwH+/gT/Av8E/gH+/vwDBAIA/Pz+/PwCAgL///7/A//9Av0E+QADAQEG/AEA/f0BBP8G+vz/+PwJBAL8BwYABgMD//8FAQj8AgkEAv8K+v/5+gEAAwD9Cgf6+/397gL/AQEDAfwCAf4B//z8//wAAgL//QAEB/37+vr+//kDCf3/Af0A//8JAP//Af7++AUEAv0FAv/2AP8D+wP8/gEBAP4CAv78AQMEAgMA/vv9//0CBf8BA/wA+v4BAgAC/gP9/gH8+wIA/AUC/vb8/v4A/v4I//n//QQB/f4FAQAL+QL5BQMG/v8I/QH+Av8C+/8CAAL8AQMIAwAE/AMABQD7/PwCAP0ABAL/APsFBv4B/gkD/gAD/wL/AgX9AAL4Avv+AwAHAQf9APz7/gL7+v0E/gP+/wEIAwb//gMC/vsCAv0D/gD9/wAGAfwLAv7/AgIBAw==",
     "Do the tiers stack, or is each one its own list?": "//n7/gT/Cf8ABf8G/gED//79/v34AP0JCAX+AfwE/v0FAf/6Bfv9Af8EBPwB/gP++fr9/AL//gf/APn8/gUBAQALAwAA//wB/f/4Af/5+v8F/wACAwb/CAIA/gAD/foC9/4E/QP9Af4C/v4AAP4HBf7+/v/7AwT/B/0F+QL+AQgAAAIF/wH9/fv6//sDBP3/A/sCAAQB/wT/AgcBBQj+B/4D//0BAQcBAQH7AgP8/AML/QT6+wH/+P0CAwACAvn/BAMBAfn8Av76BAD8+/74AwYCAf4AAf36AwUAAAIEBwADAAL++vj4Afz+BAH8AQEBBP8CAAD8BgMB+gH//gcCBAL9AwIBAQEA/QH/AgP//P4B/v8C/P0E/v3/Av4DAAUBAv4FBAcA//8B7AIB/QP++QH6Bfj49wAE/QMEAPsA+AT+AP4FBP77AgX/AAMECQL8AQII///9+f/9/QH9//z8/AECBAQFAQUDBf8CAv8F/AAA/vr7Bfj6//IFAwAA/v3+/g0f/wD9AAMJCQD+/P//AwIG/QEIAwMEAAL8/f4BBP/9/gUC//4GAvoF//oA/QD6/wP+/wMC/QH+AP77/AD//v77/wH8AfsJA/j+/QYBAwIEAf7+/AUAA/8EAPwEBf79/PkA//kDAf7+AgX+AgABBQABCQEH//oABwj+/v77+/oBAPr/BPz6/wEAAwIA+/f9+/z+AAD++/4FCPv7/gX/AP7+/gECBQED/v4C/v/7/gIGAvn5AQIH/PkCAAMAAPv8BA0B/QAAAgH//AL8/f8ABPv//vwG/vz7BPwDA/zz/gQI/fwA//sAAQEGBAID/gUC//8H/gIBAQT9AQQEAP/+/v/9/P/7AQAHAf78BAH+/fj9APz5Af/8AP0B+v77//j9+/79/gAC//7+Bfz4AP37//74/gEAAf79A/4B/QUAB/z6AAL///oCAPkF/f/9Af/9Av8B/AT/Af7//wf7/wD+BQMD/P0B/QL+BAL8AwABAP8E/gEAAgIABQEBBP0IAPr7+v0F+/0AAgP/AvsB7QQGAvwBAAIBAf/9CfwBA/z+/gQC/gIAAgH+Afr8AwIBAwAE/PwC/fwFAv8CAAADAf0B+gEHAQP5AAAD+/8A/P79/P8BB/4H/Pr9/vwAAvsCBv0B/f39//gAAwADBf8I/wH+AP0GAAP6AAT+/vsE/gEF/f8CAwMDAgMC+wADAwMJ/wH9AQIF+v0GAf72BAL8//r+BPsA/wIAAP0FBf8AAQP//P0CAwIAAgD/BQACAv4EDQoAAgIGBQT+/QYA/gj//fwFAP8CAQH6/vz//gD9+fgD+gL/AAP+BQQABgAEAvkAAP/9AAD6/P4HAwEDAgD4BP0CBQ==",
+    "Do the tiers stack, or is each one its own list?\nWhat happens to a record whose tier is misspelled?\nAnd when it carries none at all?": "+fv9AgP+BgAAAQAD/gID/P/9+//6//wFBwX/Av39+v8C//z8Av3+AgcEAvoB/AH//fr++wT6AAj7Avv7AgABAQEMA/4A/AEB/P30BPz69/0F/gEFAAj/AwQA//wD/v8A+QEB/v/8A/0E/QMDAwEGA/7//wD6AAT/BwMG+gH8AAcDAQMG//36//4B/vkCAvz9AAEF/QIC/gUAAQn9AwX5BQAF/vwEAwIC/wD8BAT9/wQKAQD7/QH9+gACAf8CAfn/AQv+Afv/AgP4BQIA/fz7Agn9BP/+AwH7BAT//gADBAEHAQEA/fr8/fv/BQL8AQIBBPwDAvv7BgH+/gEAAAgGAwL6AgIC/wAB/QECAQH9/gECAP0G/f0GAPwHA/4E/gf5AvwFAQgD+v0C7AH9/AH/+gD5Bfz49/0D/AEEAfkE9v/6/v4DBP38AwX/AQUDBgAA/gIG/wIA/wL6/P/5/fkA/QMFBQAAAAL9Av8A/v4E/gECAPv7Bfz7+/QCBAMC/gL/AQkg//38AwEMCwD++QP+BAEIAAIKAgUCBQL7/PoBBP7+AQT/+gQE//sFAfsC+/39/wD4AwMD/wAAAv79+wH///3+/wP+/v4HAfcBAQb+AAMAAv37+gECAf8H/vwDAPsA+v7+APsBAP7//wP/BP0DAf8BBwIGAf3+BAb7AP/8/v4CAPsBA/4CAQUA/QEA//n++f3+//4B+AIHA/r8/gb9/v79/wMCBgMDA/4BAAL9+/4B//z9/P8CAPkC/gUB/v3/BBEC/QIDAgUA/AD9/QT+BPoC/P4EAPj9B/sDA/31+wIGAv4A/f4B/wAECf8C+QQBAgEI/wT/AAT9/QYG/gD9+/z+/P75AQAH/v78AwL+/fgCAPz+//38A/4A/Pv+AvkG/AP6/AEBAQH+Bv/8/vz8Afz9/P8C/wL/BPoEAAMBBQD+AAL7/fkA/v0C/AD7/wL+AAAA/QP5BfcD/AX9//z8AwID/PwCAAIDAwP/A/4AAv8FA//8/QP+BQECBP8EA/j9/P4A/foABAL9APsC7AUDAP4BAAEAAAD7B/r8A/wA/wEC/v/+Av39Avz6AgQCAwMD/PkA/vkEAP4G//sC/fz9+v8CBQb3BQUFAAL+/gAAAQP+B/4I/fr9AvkBAfoCA/gE/v79APwBAwAFCAAG/QP/Af0CAgT+/QQAAf0I+/8C/P//AgUE/gME+wIE/QAD/QX+AAQG+vwEAPv5AwT9AP8CAvr8BQX/A/8EBQP/AQH9//0BAQEA/QEBAv//AwAEBAj/AQMEBAT9Agj9/AIA/P8H/gAC/QP8/v7/AgEG/f4C+AEAAv4AAQAC/gIEAvv+/gH+Bvv++vsEAAICBPz+A/4CBA==",
     "Does swapping the embedding model change the corpus hash?": "/fv/Av72A/8B/P79AgAA///8AP33/AP/AgX4/QD9/AIB/v8AAv78+f///voH/AL5/wIA/wL9AgT6Avz6/wAAAgACAAT9+f4D/f77BQL7/wEG+wX++wf9+gH8/wH7/voFBP7//wEB/wIAAQQJ/PsACP4A/Pv5+QcAB/4L/P77AAT+/f4A/v72APwA+/kB/vz/AgEKBQL9Af4CAgr9BAUIBP4A+/0D/gUFBP/+BwT+BAILAgD7//0B/fz8/P0ABv38AwX9BPz/AQL+BQEH/v//+P//BQUI/gAA/wD8+QIF//oDAfoCA/0B//39BgEACAX5/v79BfwE/QL//gX+//8KAQMBAwMBBAMGAv4CA/0B+wEB/wIAAfwHBwD9AAP6/QD6APQAAgYE+/kA7//9/wH++QH8A/r6+/j9/f/7AgEC9goCAAEAAfsCBwH/B/4B+gD9/gcC/gUE/Qb9+wX9BP7+/wAEBfz+AQECB/8B/fsB/wUE/gH8BQL8/vH+Af//+gQEBf8bA/0CCf8D/QT+/QEAAP4C/v4I/gED/wH5AP8K+wH9BQIEAAQAAP4E/f8ABQT9+gH8Av4ABP8C/Pv/AP8BAwAEAAEA/wMDBf38+gUFAP7+B/z9+v4B//gD//j+AP/+AwMA/wEB+/0E+wYBAQAA/QcEAPv/BP0CAAn+AfoBAgP7AwIG/wEDAgD/AQUEBv4C/AEAAwQD/QAAAPz2+/sABf79AgP+AggG/wcD/gAF/gP/A/v+/gICAQEE/gH/AQID/gf4AAAG/v//+AUC//sCAAMD/fn4/vwCAwABAf79BP8E///7//36BgIB//oK/wAAAP0HAv0C/wP8Awb/+AEB/QIEAQL8/v7//gADAAP//PsB/Pr7Av0E/AAD+QIEAvf/BQEB/wMB/P/+BwAK/QL++PcD+f4C+wUBBvn+/QH/AP7+Af3//QIC/wIE+/38AAIBBgf/+wP8//0I+gD7Af8BAfoA/vwAAPkJBAD/AwX/AgQBAP0A+v0AAAEB/AAA+Qf9Avr+Av77BAP/AAIC7wIA/fr/Bf4F/v4CAv75AAD+AgX7AAMACfz4BPv+/AECAwL6APoEAwIEAv8DBAIA/QEB+/z+//r4Av/+AgUA+vb/+AABBQEAAP8EAgEABf79Aff4/fz6AQQCAAECAPwHAAL/APn/AQX7/QT6A/0K/gIEAAP8AQMBAQYC/P0DAgH//AAA/wEG/QII/f0AAP8C//0AA/z6BP4FAgMGA/77CAf8/PsC+wEC/AP/BQED/vwEAQb+/vr+AvsB+gz+AgP+BAIDAwQA+QgA+fsCAvz+Af4A+wH7/wICAQEFAf8GAAD9/v4G/f//A/0JAv0CCAH/AQT9CA==",
     "Does swapping the embedding model change the corpus hash?\nAnd what stops the browser scoring questions against a foreign vector space?": "+f0BAv76Av8B/v79Af/9/QD7APv0/v/9BwT3/f/+AAMD+wH9Bf77//z//PcI+gH6/gH+BAP8AQL+Afn6AP0BAQEDAAP8+f4C/wD6BAEB/fwE+wb9/wX99wP9/QL++fgIAwEE/QEAAwIC/gMI/PoACgQA/Pz5/gUCCf0I/gD9AQUAAf4AAf35APsB/PcA//z9BAMKBAL8Af0BAwz+BAIHBf7++AEFAAAI//8BAwcBBQIIAwH///8D/vv8/v4ABv78AgP9BPwAAAD8BAEF+/8C9wH/BQYFAPz//gH9+wADAf0EAv8AAgECAf/9BP8CAwL7AfsABfwA/wP9/gf/Av0JAgEABAP+AwIIAfr/AP4B+QMF/gECAfwKCQABAAD7/wD7APf/AQcD/Pr87v///gL+9wH+Bfj5+vj9AQH7AwAB+AYDAP8B/vsCAwT/B/0B+wH4AgEG/QYF+wb8+AT8AwIA/AIBA/z9Af8EBf4D//oCAQUF/f8ABAD9/vH/Af8B+gMCA/8bBvoBBgACAQT9+gH//wAF/gIM/QAA///7AQIF/QL8BwQBAAP+AgEC/QD+BgT++gT9APr8AQIC/vr+AQYBA///AQAC/QkEA/3/+gQDAP7+CAAA+gIB//wGA/z8Af7+/wD8AAIB/fwE/QYCA/8A/wED/f//Av7/AQb6Af4AAQb9BAACBP//BgIB/wQDBwL7/QIAAQH+/QEDAPr4+/3/Bfv+AwIABAMIAAUCAf4DAAP9BPwB/AUABP8E+wEDAQMBAAf3/wEFBAEA+gUCAAACAwAF+/f7APcDA/8CAwL+AwIG+vz5Avv8BgEC//kH/v0DAPsHA/z9/wP5AwMD9gIA+wAFAwH//gAB+wEB/wX7/fkA/Pn7//4B/gEA+gQCA/sBA/8D/wYE/AD8B/0JAAMA/PoE+v8A/QECAvj9/Ab+AgD+Af7+/AMC//8D/fv7/gL6BgcA+wL+APwI+QD9Av0A//0A/vz/A/wJAgD+BQMCAQMB//4B/v///gID/f8E/QT8AvgD/v79BQb9AP//7QP//vwCBPsH/vwCA/77AQD/AwT8AAD/Bvz5BfwAAf8ABAQBAfkEAAAEAf8GBP/+/f8C/vwA/f75AgL9/wMA/Pj/9QEBBP7//gIHAQQAAvv8//n8Avv8AgH+/wIDBf8AAQT//fwCAgb8/gP+A/8E/QEBAAL6/AAD/wT/+/8DA////QH9AQADAQQK+vv7AP8A/wMDAvj7B/sA/v8EAv36CQb6/PsD/gMB/AP/B/8B//4GAwb///r5Av0B+ggBBQT+AwMF/wEB+gkA+/cAAv76/P7/+wH7/wMBAwIF/gMKAv37/f4HAP36/vwFBAAFBwH+AQP/Bg==",
     "Does swapping the embedding model change the corpus hash?\nAnd what stops the browser scoring questions against a foreign vector space?\nand can it just do that itself whenever I save a page?": "+f4BA/75AwAB/f/+AP/8/v78//rz/QD7BgT3//79AQMD/QH8A/78Avz//PcG+gD7/wD9AwT8AAT+Afr6Av0BAAIF/wH8+f8D///6AwAB/PsE/Ab8AQX8+wT+/gIA+fcHBAIF/QL/AwMD/QMH/PsACgUB/f36/gUCCP0I/gD/AQX/Av4CAf36//sD/vYB//39AwILAwL7Af4BAgz7BgMGBP799wMGAQAI//8BAgcCBAIIAwH+//8C/fwA/v8ABf/8AQT9Af4D/wH8BQEG/P0B9wH+BQMFAPwA/wL9+/8EAP0DAv/+AwMCAQH+A/0CAwH8AvwBBvsB/wL8/QYBBP4KAgAABAP+AwAIAfn///8C+gIG/f8CAP4LBwEBAgD9/wH7//f/AQcD/Pz77QD+/QH+9f/+Bvn5+fj+AgH8A/8A9wUC//8C/v0BAgP/B/4A+wD5AgEH/AgD/QX7+AL7AAMB/AIDBPz+Af4DBP4DAPoB/wUD/QABBf/+APD+Av8C+QMCAf0bB/oCBgABAwX++gL+AQEG/QMN/AD/AAH8/wEF/gD6BwQA/wP+Af8A/gD9BAP9+wL8APv8AAIC//v+AQgDBP7/AgEC/woFBPwA+wMCAQD9CQAB+wEB//sIBP78Af7+///7/wEC/fwE/AUDA/8B//8D/QECA/8AAgb5AAD+AQX9AwABBP0ABQIB/gUCBwH6/QEBAQH9/QAFA/v4+/z+Bfr+AgIABQEGAAUAAf8DAAH9A/wC+Qb+A/4E/AIEAAECAAj4/wAEBAEA/AMA/wACAgAF+/f7AfYEAvwCAwH8AwEG+v75A/z8BQED//oG//8EAvsHBP38AAP7AwID9wIB/P8FBf/9/AAC/AEDAQb6/fkA/Pr8AP0B/QH++gQEA/sBBP0CAAcD/AD8B/0JAAMA/vwD+/8A/wEAAvj8/Ab9AQH+Af7++wIAAP8A/vz8/QH5BgcB+gL+//wI+wD7Av7+/v4B/vz/APwIAQD+BgECAQQC/vsB/gD+/wEE/AAF/QP9AvkC/f7/Agj8AAEA7QP///0ABfoH/v0AAv/9Af/+AgX9AP//Bf36Bv0BAP//AwQCAvkFAP8DAP8FBf7+/v4E/fwA/f75AgP9/wQA/Pv/9wEBBf4B/gMIAAT+Afv8//r9Afz6AQH9/gADBgECAAP+/f0BAQb+/gH+A/8D/P//AAH6/QID/wP/+wAEBP8A/gH7Af8BAAQJ+fz7AP7+/wICAvj7Bfr+//4EAv35CQf6/foD/gUA+wT+Bv//AP4FBAX/APz4Av4C+wcBAwL9AQMG/f8B+woA+vYAAgD6+/3/+wH7AAL/AwIEAAMJAfz7/QEHAPz7/f0EBQAFCAH/AAH/Bg==",
     "Does that stop it from reading the other pages?": "/gP8/AABBP8B///+/QD7+f/7AP/7/P0EAwP7+gf+AvsIAP/+BPz/AgD9Avr/+gL/A/7++wX6/gACAv79/vsA+wEO/v37/P4C/gH3Bf3/AP8GAAcAAQD5/wAD+QEG/fkBA/8G/gICBAEB/wUBBAADBwb//gL9BPz+BQUF+P76/QEA/wECAf/9/gIBAvwFBwH+AP8FAAX8+gQAAQL7/AYACgAC+gUCA/8EAfkC+AgA/wYEA//+AAT+/PsDAgEC///+AQUE/QECAQL/BQMB/AD7+/7/Af4BAwAA/wP8+wMDAf39AwL//wH+AwABBP79Av0BA/wDAP7+/QD8/gMB/AEDBAL//wEBBgAC+/z/AAQA+gAC/wUEAgAE/v0EAgECAQACAfwEAwkB/gL/7AIF/v//+f/8Afr5+/0EBPz+APgAAQUA//0G//f7AwT/BQEBAf78Av0D/QQB9QMA+/n6/v8A+wEFAf4E/f4FAfoG//kG/QEA//v8BPz+/uoBBf0F/fwDAAQeBPX9Cf0FCAD4//0BBAAB+wEL+gL/BQT+AQEDAQD7BQL+/QL+/QABAAABBQH9/AX4/gMB/wIGAf79/Q4CA/4C/wT9/QME//oB/QID/QL4AQEB/AEABP4ICPv6/gD9/fz8/gD///sB/QEGAQMACv4EAf8DAf8CBQT4/AMA/P0DAfoDAfv6BAMB/QQBCP73Av//Bf///AAFBfz4/AD/BQP9AgAACv4GAAQD//3+/v4B/vcA/wYIBgD9Bgb//vz5AA0AAQQBAQT9/AEEAQX/AgH+/gH8/fYABf8GCQT8/gIH9gD9AgD/AgAD/v0F/f8G//gEAAT//gH7BAQE/AAE/gMCAwD9/QAC/v//BAP+//f/+/37CAACAAUA/wH8BfkEAP//AwMA/wMAAPsB/gL+Af76/AL/AAYD/vr9A/8ABwH8AwD//gAAAfj8AwEAAgD+BAUC+wL8BgQJAQQBAQICAP0G/vsE/wD9BQT/AfwCAAACAfoAA/0G+QAF/v8CAgH7AAAG/P3+AQT6Av767Af//f0DAv7+/Pz/Af0ABAcCAQgCBAAAAgD+BvsFA/wBBgEIBfwH/PwAAAD/A/0A/gIA/fn//QT4AgQFAP79/vj9+AUCAvn+/AECAAH7Af79/P76Bgb9AQL8+wL/AgL/AAP9/v0F/wH5/gcEBP0A//z/+vv9/vz/+gD+/gAAAwAD+QX6AAP+BAcHBP4A/vv6+voHAPn9+//+/v7/BP8BDAEA/v0AAv/5+gMEAf8B//0DAQQBBf/8Af0D/wb//QD8/vwE//4AAwIB/fgA/vwC+/wC/f38/wD+BQL/BQQE//77/QAB//79//wC/wAAAf74AwX+BQ==",
+    "Does that stop it from reading the other pages?\nAnd where does a fresh conversation start out?\nthanks — and what's the weather in Paris this weekend?": "AAX7/gD9BfsC//7//wL4/AL7APv9/v39AgP6/AX//wIG/wD9A/78AQH7Av8B+v4C//kD/wX8/gECA/r7+gEC/QIO/v3+/f3//gH5A///AAMCAAP9BAP9AP78+QMD+fcA/f8F/wYBAvwE/gQDAAAGBwUA/wL/Af3+AwQF/v/+/AT+AgUB/QAA/wEDAv0EAvz+//4E/AP7/QEABv7+/wf8CQEE9wYEBAED/wAF+QsCAwQEA/8AAAgB9/kE//4E/QD+AgIJ/AP+//3/BAQF/v38/QL4/P8CAf0CAAQAAgQH/fv9BAAC+wcEBgEAAf7/BP39BPkBAQD9/gD8/QL//QAEBAH+/wQAAwEE/f8C/gIB/P//AAP/AgAK+/8A/wMB/QEBAvoAAgj/Af/+7AH+/v4A+QT9/fn8AQECBfv9AvcG/Qf+A/8BAfb/AgP+AgUCAfX4BvoG/QX89vz++/j9//4C+gEE//gB//0D/v8CAf8GAgMF/f37Bf0A/u8D//4C/f8EAwQeBvj+Cf0CBwD3/AD/BPsD+wEH/gAB///5/QP+AgT9BP8B/AL9/P8CAf8G/gD8/v/4/P4C/gIEAP79AAn+AgT+/gQE/AMB9vsBAQEB/Ab7Bf///Pz+AAIGCP0A/wD+//n//fz8AP4E/QMHAQL/CAEDAgUAAQMAAP/6BgQC/P4G//0BAP7/AQv+/AL/AgP6AfkAAvcD+P8EBf32/v39AAQA/wIDDQIGAAQC+/7+///+//wD/gsHBQIBAgEB//74/wgDAQcBBQT++/0BAQUAAQEB/P7+/fv+/gAICP76AQIK+QD+/wH9BP/+APwDA/sEAPv+/wX//gb9BQME+gMB/P8DAQMA/QEB/wH9AQMA/Pf7+f79AwEG/wQB+gcDAvkG//3+AAX9/AICAP0E/gH+BP77+gMA/QUB//n//gIBA/7+AwAB/gQA/fz9AgP/AQH9/wEFBAL4BggEAAUBAAH/AfwE/v0DAQADBgT9A/wDAgME/vwB//8E/QEEAfwDAAD5Af4F/v8EAwX4/wD56wkC/f0E/QL//QQC/vz7BgMAAgoBAv7/Af/8A/wDA/0ABAQGBv8J/vwD/AABBwIB+/0A//oC/Ab7AgMI/QD7+/v/9QUFAvj9/wX/BAD9AP79+/v3AAH9/fz++QH+BgL/AAL+APwD/gL4/gICBAAA//3//fz6AAAE+wID/P8EBwQCAAb9/wQAAgIEAf/9/vz5+P4FAf/+//wB/v4CA/4CCAD4/f4AAgH9/AEA/f3/AP4E/QT+Av/+AgEF/QID+wL+/wAD/gL+BAD/BAAB+wD6+v4C/f39/AEAAf7/AgIF/QH+/vkFAQL+/f4DAgEABQD5/AL8BQ==",
     "How do I add a cross-encoder reranker after the RRF fusion?": "/v39BAAFA/7/A/z//gkB+/39Bv4A//oDAgf8/wQB+f/99vz3AAH6/PsB/voG/Af9A/38/wMAAQD7/fr8AAH4/gIGAQH/+/8A/QD4Agz8AgAAAgL/+Qb9Bv/7/Ab+/AD9/v8DBAIDAP4EAQQB/v0AAP8DAP77/Qb+AgUIAQUBBQP8/gH//QD9/QD9/fgGBgEDBPwB/wT9/f4A/QUEAAr5CPwJ/v0CAQIDAvv+AwMCBAMOBQP5/QH//P3/APr/Bf4AAgIIBP/3AgAB/QED+wH99QD9Af8E/AADAQb++/wHBf8CBQH+Avr9Afr9BQL/AwD/AgP8Af0A/wP8BP0B/wcGAgL9BAAEBAEDAQD/AQP5AAMEBQUGAPsMAQMFAP0B/f0D/vz//AkC/QEA7vsAAf3/AAD/Avr5/wD+//wAAP36/gT8AP0CAvv9AAD/A/8E+wAB/gcCBP0F/gT9/Pz4/wMA+wX+A/36AAL+APkA/P8E/gYA/P3/BPv7/PT6/wIA+wMBAwIcBwD+//8KAAL+AAcC/gEHAQIH/gP8/AX4/QYEAQQFAgIB/gQCAwMG/v0DAwX+APkB//39Af4E+PwB/gH+BP0I//4DAv4F/gEE/QQDBAn8Af0CAPwE/gQD//v9/fwB/gMD/vsD/f7+AAMAAQMFAQIH+wYD/fwE//8DAv4D/v78/PwJAQYCAfz9/QICBQL7/f4ABAEEAAkDAgL6/wL9/v38/wME/P8A+AMH/f/9+QEB/PgDAv0DAvv/AgX6/QP9/woDAP0FBwD8+v8GAfsA/gMEAvf7+/sCBgUI//kAAf4A/fwF+vwCAAIDA/8GAP8IAvwC/AQLAAMAAQQEAf4A/gD9AfsEAf79AP/1+gP8///+/fv5AwL+AwIF/gL+AfwBCQH//AD+/gX2/gQH/gL+A/8C/QH+AwgCA/oE/wECA/r6AQAAAf0BAf/8/f0F+v8A//7/+gUDAfkH+wD4/QQABf0B/PgA/f0BBAP7/gH//AIC/f78//z+A/wC/f0CAvv4/P39/wAABAT9A/4B7gD6/vwB+//9APj+BfoB+wIBCf7+/gP8AwL5B/r6AAEFA/3+//0B+wMFAQUDAgIC+/8EAgH6BQD8AfoE/f/7+vz9+QL/BAL8AvkEAwIAAfkCBfn9Afz9AP0E+/8E/gMDAQUBAv4BAwUB/AgBA/0C/QQB/AMA/f3+/wIF+v76APX+AwP+/wED/vwFAP7//QH///gBAfkBBgIBBvoDAP/7BQT+/vn//v4AAQECAwEEA/gAAgMFAP4D/QMDBQYAAgT+Bf4E/wX9+gb//AH9AwH///r/+QL6/gn9BAUB/QIF/v0A/Pv+/vn+CPv/Af4HBwD9Af8CBw==",
     "How do I bake sourdough bread?": "/wP+/gIE/QH//QAHAP4D/QD8AfwA//0ABQb9/wP8AAP8/vwC///9+wAEAvwF//7+BP0CAAP+BgQI//UA/PwCAAIG/v/6//0BAAP6/QQEAgYG/gMBAgEB/wEFBP//9/n/AQAE/wL6A/wBAP/+A/4DAwcE/P35+QEA9/sB/wUBAwUCBAP+/gX//AMC/vwEBPr7/+7/+AEDBAQE+QcAAgn/AwkDAQIA+/3+/AIBAQT/AAUFAv7+/gL/+fkH//0CA/0AAwL+AAP8AfwFBAAC/vz+/v0A//sE/fgCAPz+AP4FAPcBAAIAAP4AA//8Bf8DA/oD//4FAv8DBQT8/wL9/gsFA/4ABAECCgIEAgH8B/7///7///z7//sHAg4A+//9/AD7APgDAQX/+/z+7fz/Bf8D/vv8/gH5//8E/v/9BP38AwYFAQcA/v/9B/sABAX++/8AAgP8APwF9wD+//oCAvwA+wEEBP8A/gH+AP8IAgYD/QQABPwCAP38A/AD/gEA+gH8/AMeA//+AwH8AQH+AAIB/f0D+gMLBQQABfoA+wMKAfz6Av8ABP8AAP39/gD//QP/BAH//v3//QAAAv4B/gD/AwH9AAEBAv8CAv4AAQMCBgz9Bf79/PwDAQED/vcA/foB//wC/AEAAQEDBgT++wAC+PkA/AMDAf8BBAP8AwP//vz9/fwBAwD+AAj8B/8ABggA/vz9/Pz9//8A//78/vv9/gD7AQIACAMF+gz/AQD9AwUD/vv/BP7+AAMF/v8D/gEB/wX6AQAEBQQA+gb4/gIC+gMC/gD+//z8Av4GBgEC/f8A/v8BAf39/gEEAP0DBP4BAP77AAID/gcFCAUB/v8A/v7+BAAABQAE+/8B/gj4/gD+APz8AQj9AQIB/voC+/kEAAH/+gT/+wMA/wAD/AT/CAEB/v3+AP/9Af/8AgT/Av3+CAD+AAAF/QUC/fwA/wEBBP8C+v37/woI/AX6AAADAQME/AD/+gAGCPwB/wAD//z7AAAAAAb/Bv8HAPwB/Pv69wIAAAECAP/6BfcE7wX///38+wIA//YEAv/5AAQBAQP8/Pz5/vUFAf7+AAEFAwMA/P0IBP8F+gYA/v0C/gD9/wT//f/+/PsCAwD8/QL//P0DBf7+/wEC/v78/QEG//kJAQP+/f4C+P7/APn7/wD4AP8D/gAC/AT8AQIF//36/wMEAP38Av3/A/wAAv4CBP/3AQD8+/oHAPj9Av//+v8DBv4BB/0ABAgCBfwCAwIBAgIBAAME+wL//f8ABvv/AwcB/wb8/wgEA/4BAgEABP4NAf8E/gn/+Pn+/Pn//AEB/fz6/gIA/wMB9/kA/AMC+PoB/v3++wAE/P8GBQAA/v8BBQ==",
     "How do I change the panel's colours without patching a component?": "+/78///7CP7+AAEC/wL//f/+Bv3++/sCBQP3/gUG/QD7+/z7AP36+f8A/wEB+gH//P0AAQX6/gT//fr/+v/9AwkJAAIA/vv7BP74/wD7AAIDAAEEBgQBB/sC/wEE+vcBBQEE//v9Bv4H+/8HAP8C/v8CAPz8+gACAgAG+QICBf/5AQT//wL4Avr/+/wC+wD9A/sE/AYC/QMC/QD9Agr+AgYE+gQA+wMBAAD9AgEAAwIGA/0A/AP7+f0AAAECA/kA/wMHAQMDAwL/BQH9/AP+9wT8AgID9vwC/QX7+vsCAfwB/QQFAAEAAAL8Av/+/gIAAgMDBPwEAf//+fz/+wQE/wT+/AEDCwADAAL/BP0G/AH/AAMFAQAO/gIB/wUAAPwABP/8+goCA/767gAB/wL9+QEB/vv5+v8A/v37//z8/An/AAH9/v7+BwEABf7//gb9AP8FBAIB/f/+/gL7Av78/QUBBP4B/Ab9//8BAfoEAgMDAvoDB/0D//AFA//9APwAAgIbCPwABf4GBf39/QMCAQEB+wIJ+v8CBAD2/gAJAP78BQT6+wQCAwID/AIHAwP9BAMB/wMD/P39+/z7A/8JAAH8/gL8AwAEAf7+/QQIBwT6Av8D/v0A//wE+/sFAPwB/wAD9vsE/fgC+Af9AAP/AwMFA/wCAP4B/gP9+gP+/f3/AvoG//4CCAj8/QMHBgX+/P8DBP8C+QX/Cv76/wEBBf38AgQEBgAE+wP/+wT7+wj/APgBAvwF///6/wP9AQT+9gkD/gYEBP4H+wD///////4F/Pj9Af4BBQIBAQL9//3+/QL+Afr7+wEC/P8D+QMCAQID/QcE+//8BAQE+QID/QD6Af36AQAC/v0AAQP6/fz+//r8AAD/BQIA/P38A/v6/gMC+wEE+gICAPj+AgcAAAD+/AAA/wICA/8ABQD8AvsAA/wCAfr//Qz6/vwDAAL5/v4H/wMD/wEB/AT+AAAC/gEA/fsE+/3//QP//wUA/gEFAAH8/P7+AwD//gEBAfoE/PkG/AACAwYA/f367QIC/f7++QAA/wECBP4IBAIA/wj/AfwACAEBAfv8/AIE/fv8AQIEAAIB/v8FCAAA+gEE/P8GAQT8BwME/AH9/Pf++fv/AgAA/PsH/AAB/v4C/voA/wP+APkA/P/9/wMEBP/8/Pj/AQL/AQgBA/z8BP4DBgIG//4B/wT+/AT/BQAFBQUBAgAA//0JA/z9/wD6AwIE/f0ABAEC+/3/BAQCBQL8AQAC+/38/wL7A/oDAPoD+wb+AgEE/ggEAAQBAgP/BfkDAQP7/QAHAPwA/fz6A/0FAP38BgEDAgQAAgMB//4B+wEB/fv9BgQACfwEBvr9Bvz8/w==",
     "How do I change the panel's colours without patching a component?\nWhere does my own CSS have to be loaded for that to work?": "+gD9/wD6CP36AAEB/AL9/QD9BP39/PsDBgP5/wMD/gL9/P36AP/7/AEA/QED+wP//PwAAAT4+wP/+/z++f3/AwcHAP8A/f77Avv4/f/6/wIBAgMDCgQBBf4A/gEH+/j/BQIHAP//BPwH/f4FAP4D//8B//39+gABBQEF+QQBA//6AgMA/wH5AfsC/fwD/QH8A/gG/gYA/AIA/AH7AwUAAgQE+QUD+wIAAAD+/wICBAMEA/kA/AP7+P4CAP/+AvcAAgQFAgMCAwH/BAP8/wL+9wb6AQH/9PkC/QT9+vwAAPwD/QQEAAMDAAL/A/7++wABBAAFB/sEAgH/+P///QMCAQP/+/8BCf8C/wH///0E/QIAAAECAwEN/wAEAQkA/wH/AwD8+gkCAP397f8B/wD99/8A//76+f7/AP78//v8/AYAAAAA//4CBgMAAwD//wT/AP4FAwEC//78/gL9Af7+/AQDA/0B/wMA/v8CAP4FAAMBA/sCBv4BAvAFBP8AAPoBAQIcB/wBB/4FBPv++gL/AQD/+gMK+v7/BAT0/v8H/f76AwT5/AMEAQID/AEFAgL9AgQA/wP/+v/+/P/6/v4GAgL9/AP9Av8GAf3//wIGCQj6BfwF/vz//v4G+/wGAfsC/wEB+PoB/foC9wkAAAL/AwMFBf0A//8AAwP7/gH7/f//AvkF/v0BCAj5/QQFBgb6/AAEB/8B/AQCCQD6/wIBBf37AQUECP8A+gH+/AP7+gn9APcBAfsC/f38/wP/AAT9+AoD/ggEBv4F/QD9/QEC//0F+/r9AQD/BwIAAQL//v78/gb9Avr9/AEF/fz/+gUCAwAD/QUF+gH9AAME+AED/AH8/v/7AQAD/f4B/QP6/v7+APj9AQD/AwL8/fv+Af3+AAUC/QAC+wEDAPn/BAj/Af/8/QEA/QEBAvz/B/38A/7/A/oDAvv7/Qv6/v0C/wP1/PwH/wMG/gAC/QT9AP7+/gD///sC/P4A/Ab+AgP/AQIDAQP+/v7/BAIA/gQBAfsD/PoG/AIEAwcA///97QIB/v/9+QAA/wACBf4HBAT+/wYAAv0BBgD/Avr7/wMD/f39AgME/gIC/gAICAEC/P4B/QAIAAL7BgQF/AT8+fn+9f79Af8A/P4FAAH/AP4B//wCAQL//vz9/v37/wYGBv/9/fr+AgP+AgUDAf79Bf4CBAEDAAAC/wQB/AYABwAEBQX9BP/+AAEIA//5/gD6AwIE/f7+A/8A/v7+AgIABQP8Af4E/v/9AAL8AvoCAPsD/Qf8AgMC/ggD+wAEAwL+BPsCAQH6/gIN//oD/vz5//8FAPz9AwAEAgP/AgUC//8B/P4D/vv/BAX+Cf0FB/n+Bf79/w==",
     "How do I collect the feedback votes the panel casts?": "+f75BAD3Bvz+AwAJ/QcCA/35A/wBAvz/BQP3/wADAAD8/Pj//f/7AP4BA/gA/AL+AQj+BAT+/AkCA/oDBf77AQYKBgMAAPsCAf/5AQL7/wP8/QECAgEAAv8B/gEC+vr8+QEA/wX/BfsAAAMG//79BAD/A/39/gMCAgADAP4AAQEDAwUC/gL+AQAD/PwGBfr8//sF+gEBAv8D/gUFBAf+CAUF+wUDBv8CAAEB+gMAAgIHA/r8AP8B+fsE//0CCv39BQQH/wEA/QH9AwEC/P0C/AP8AgYC+/kF/AUD+vgFAwD//P0BAf0E/v39AgIC/P8A/QL/Af3+AwYB+foB/P8B/////wEDAQIGAwH8/AX/AAUAA/8B/v4K/f4CAwD//gH/A/oC+goAAAL96gH//QD++P37BwH6+gEAAQL/BPkA+wL9//oCAvwCAf8BAQEDAf3/AAIEAAcEAwEC+wD6AP/6+QD8AvsC/P79+v7+AwACAAX///4HBvf//PIFAQAA+/3/BgMd/f/7AQAECP8AAAYBAAAE/AQIAAEGAP/5/QAA/wQABwP/AgEBAgIHBP0D+v77BP36/AIA/v0E/f0CAwMJ/v75+gL9BAD8/v4A/QH/AQEEAvoE/gEB/v0BAgD+/fv/AP/+/PsEAP4AAgMABP8EB/8EAwEHAgYD/QX+A//8APwA/voCA/8FAgUBBgD8AwQA/PsABP4D/P7/BPz8A/4B/vv7AAj9Dv4D+wED/P0B+AcE//4BAfoC/vwBAv37/gb8+w0F/QL/Bwf///kCAP//AwUH/Pz/Av8ABAL6/f76AfsA/wAA/v/8/wH5AfwD/v0C+P0G+wEBAgECBAQD/v4D/AEC+AH//gEC/v38+gUA/fz/APv5BQD7B/sAAf77/Pz9+wX+/QH/+gP9/PsB/wT9A/4A/gH8AQcFAvj9Av0BCP/9Av/9AwL9/QL6AgED/f7++v4F/AUIAwIF/QMA/QEAAgEG/fkB/wEIAQH+AQAFAQIA/gD+AAP7Av8FBf8F/f8A/fwCAf0BCAX5//n+6QMC+vv9/fwFBAD+/PoDBP4AAQoBAAQBAvwC/vz7AgICBf8C//8C/wUD/PsCBv7/+PwA+/0EA/75AQIF/QD8+f0C/AMAAvsBAP4A////AP76/vkDBQIB//n//f79Av78/wD8//z8/wUB9wUE/wL8A/4E+QAAAvsG/wEA/AABBv4BBAMAAwIBA/gHA/j8AQP+AAECBvr7AgMCAf0DBAUBAwD+/v3+AgH9APz+BfwIA/wB+wQHAAEB/AgAAAYCAgQECvsGAAQB/Ab+Bfb8/wMCAP7//v77AwQKAAH99gUAAf3/+f4AA/7+A/8BAgADAfoCAPv8Ag==",
     "How do I collect the feedback votes the panel casts?\nWhy does the endpoint want to be same-origin?": "+v/7Av/5Bf78BP4H/wkCAP/6Av4AAgT+Af/7/gIC/wIB/fb7/v79/vwEA/oC+gP9AAT9AwT8AAf9BP8BA/37/wIIBAP/AP4A///5AQL2/v7//AEDAgD9CAEB+/0E/Pz+9wQE/QUBA/n+AwYC/AH/Bv3+Af39AAkCAv8EAfz7/wcAAggDAP/+//4G/PsGAPv6AP8C+/8DBwAF/gYDAwgACAEE/AIDAgAEAPkB+wMAAAIMAPz7/AL//v0A/v0BA/7+AwYF/fwB/gL8AgcC/f7//AED/QUB/voE/AQC+PsDAP38+/39AP4A/wL+Av0C/f3/BP7//v/5AAL/9v4A/P4DAAL/AAACAQEFAgH+/QcEAQQBAQUF//0IAAICBAEBAAP9AfoB/wv+/P397QQB/P/8+f79C/36+AH8Af7/Afn8/wX6/f0AAQD9Av///wIDAQT+AQUGAgYCAgD/+wL+/wD8+QL9A/0E/v4B/f8ABv8CAAj+/wT9CP39+vYF/gAC/P4EBQMeBPn+A/8CBPsABQYCAQMC+gIJAQIAAAD3/P///QUABAMB/f4AAwMEBP4FAf7+BPr7/gX+//4H/PoFAQII/gL7+gMBCgL+Av8B/gUCBAQDAvgC/wEBAP4HA//7/vwAAQD9+/4FAfkAAwH/Af4GBvwEAP8FBAUDAQX//P79/fwA+fsAAQAIAgMA/wD8AAAA+/z9AwME+/4ABfv6A/3//fn8BAcADf0F//z//gD+/goC//f//f0B/P7/A/39/gX8/w7//wL+Agf+/voA//0DBAIH/vn9A/sBBAQE+/4BAfoC+//9/wH+AAH5A/cFBPkC/v4E+QECAgECAQQFAgAE+wP//AH8AP8C/v34+wT/+vj/APv6BQL6Af0AAAL3/fv7/wT//QL//AD7Afv//gX9AP37/AD9AAUHAvr+A/wACv/6Av/8Af0B/wL9AQED/wH8AvwA+gEHAwIF+gX9/gL/AP8F/fsEAQIJBAH8Bf0FAQED//3/AgYA/P8FAf4D/QAC+/sDAQMBAgn4/fv/6gQE+/n9//8CA/8A/fwAAvz+AgQBAAMF//7//fwAAwYABgEDAAAAAwQF+/oDB/7/+fsC/gIDAvn9BAQD/QH9+/8B+wUAA/sA/gAA/gf+/v/4/fn+CAMB//z8+wT9A/0C/gP9/f0AAAIB9AQC/gL9Af4C+P8FA/sCAAEB+wT/BQIEAQD7AwIBAPYDBPr//wD9//8DCfsBAwMC/f4DAQIBA/39AP79AQH9A/7/BP0EA/wA+AUC/wEF/wMAAwoF/gABBfsEAQEC+AX9AvP//gL//v0B/wH7AAQHAAUA+Qf//v8B///+A/z/Af8CAwAHCf0A/v78BA==",
+    "How do I collect the feedback votes the panel casts?\nWhy does the endpoint want to be same-origin?\nAnd what does a cross-origin one cost?": "/P75BP/7Bf38Av0EAAYC/v/7AQAB/wH9///7/gMC/AAG/vX6AAD8//4DAvwD+wP+AQH+AQX7Awf6Av0AA/37AAIJAQQA//78Af/5AwP4/f7//AACAAMABgIB+v8C/P3+9QUD/wQABfn8AwMB+gAAB/39Afz6AQcAAwEGAf37AQj/AgYAAAD7/v0F/fsGAPz7AfwD/gEBBwEF/gQABwYACgAE+/4FAv8E/vsA/gL9/wEN/vz6+gP/+vz/AP4CBP/+AwUG//79AAH7AgkF/AD+/AEE/wUA//wF/QIC+fsD//7///39AQD+AgP/AP8C//wBBgEBAP76AAD+9v4A/AIDAgH/Af4DAAEGAQH+/gYCAQQAAgQHAv4H/wUFAgEAAQH/Afz//wz++/v97AP//f/8+v7+Dfz5+wH8AQD+Afj8/Qb7/P//AQH7AgAA/wICAwQAAgYIAAQDAAD/+v/8AP/++QMAAv0FAP3//f8AAv4CAgYC/wT9B/38+fUE//8C/PsFBQIfAPoAAvwAAv3/BgkB/wQC+wMJAAP/AAD0+/0A/AgBAgEB/QECBQMEBP4E/wD9Bvv9AAMBAP4I/foCAAIH/wD7/AIBCQH///8B+wcFCAICAPkC/wEAAPwHBf75APwAAAD8/vwDAvgAAgAA//4BAvsD/wEGBwEDAgb//f8A///9/f4BAQAFAgH/AP78/QAB+/0AAAMD+/8AA/z5A/wA/vn+AwoBDf8F//4B/gL+AAkE/PgA//wB/P78Av78/QP7AQ3+AAX+AwX///wB//wDBQQG/ff8AvwABQUG+/z/AfsB+f77AAIB/wH4BPgFA/cD//0D+QAAAQECAggGAf8C/QP+/gH8Av4DAf75/AQA+voA//v5Bf/9Av/+AAH+/fv+AAX//wIA/AL+Af0C/gb9Afz8/QD/AAMHAfz/A/z/Cf/6BP/5/v8BAAX//gECAAD7BvsA+gIFAP4K/QT9/gD+AP0I/PwE/wAKAgH7AwECAQACAP3+AgUB/gMFAv8H+QD++PsEAQIBBQj7//gA6gQD/Pj+AP8CBQAC/vwAAfn/Av8A//8H//78/PwBAwT/BwAEAf3/AAQF+voCA/4A+fn///4BBPr8AgMD/QL8+v8A/QMBAvz//P0B/gQA/P77+/j+BQUBAf37+gP9Av8C/QX9/f8AAQAB+AEA/v79Av4B+P8GAf0A/gAB+wb+BgUEAQH7BP4EAPkDAf78AP79/v8FBv0BAgMC/f4E/wEDA/78Af38AQD+A/3/BPwGAQIB+AMC/wEFAAAAAgkF+wIABP0CBQID+Qb/AvcAAAD//vv//gH8AAMIAwMC+gUC/P0D/v79AP0AAP4DAgAICPwA/v3/Aw==",
     "How do I configure Algolia DocSearch crawling for my site?": "+/v7AgAB/fv8AwIBAgAB/v39BQD//wADAv/9/QD/Af4A+v75Avv6AwH+/P0D/QH+AwH9+wL9AQD9+P76/Pz+AgIF/vz8+/4C/v76AQP8APwCAQMB/wP/AQAA/wAB+vz+Av8HBP8BAwMD/vwB/gL+AAH+APj4AP0CCQUD/QAFAwEGBwP+//v9/gEDAvQDBgL6AQAEBgL+/QIECAb//gIEBQQF/AIC+wEGBf0F/gcFAwALA//8/QT7/fv7AP0AAgD9AQMCAwD9/f8DAwkA/voA9/8CBAP8Afb+A/76/gICB/sGAQb+A/8AAf4ABvv+//oB9v4HAgAA/gj9AgMA/f4I/P8AAv8A/gAH/f37+/8E/gEB/wD+/v0HAfwDBQL9BAP8/vkA/Qv///747f4ABwH//v/+AP76/fr9/gIA/vj1AAYGA/0DAPz8BfwDAP0EAgL8/wQC/wMEAAIAAf0BAgUD+QH7AfwI//kBAgAB/v4IAQX+//8FBQL//vH6AwcB/fz/Bv8bAgMBBgEBB/8CAwICAAP//P0KAf/5/wb++f4G+gQBBwMF+gIFAgAD//77A/0BBP8D+wIA+/8HAP36+AQFBPn8AQT4/QUD/QABAPwE/gr9BAAC/AEE/PwE//z++//+/wID//r9AP39/gH/AwEAAAAC+/v9BQP/AQf6Av4AAAD8BvQFAf4CAQMAAQQAAvr7AAMD+wT6AAQEBP35AgAABQf8AQIFCQAD+wUBAQX69QkAAAAAAf4FBPv9AAP//f3/Agv//P4DAQT9AvsAAAUC/voCAAL+A/wABgEAAQX+AQAD9/8CAP8EAQAC+PkG/QMFA/sD+wMCBAEBAgYE/gEAAAX6/Pz7AAEEAP/7+Qb9+/oCAPkBBAH+/gACAwP5/gMAAwX7/AT7/Ab9+vsDAwH8A/v7//8AAQQF///9BwEFAgYBBgME/f8B/fsA/f7+/gT7Af/+/gP9BAAG+/z3/fv8AAAD/fkBAv//Av///f4CAwH/BPz/BPv9+/v/AQAFAPr8/QEA+QD9AQz8AfwD7v/9/P79APcD//UAAPsDBv/9/wf7+/4A/P3+Afr+AfkEBAACBP4BAQMDAgn//QIA/QQB//0B/QH+B/YG/wD6APwB+AMDAAD9Af0D/QL5/AEB//sEBAEAAgEB/fsC+QMBAv8BAP4A/QP+Bwf/AgD9AAAB/v4D/f4B+wH9+wMBAgAD/wL9AQH+/QQH+wD8BAEC+QICAvv+AAH/Av8C/QT8CAP6Av4BAgYA+wT+AfoBBfkFBggBAv0CAAMD+wMG/v4CB/sGCPv//gQABPsC/vwB+vwCAgL/AP/6CgIB/QAC/wX9+wQEAAIEAf0HBv4IAfsFAAMEAA==",
     "How do I fine-tune the embedding model on my own corpus?": "+v///v/6Bfz/AwAB/wIA//3+/vr/+wMAAAb3AQL//f0C/QL7B/v9/wEC//oG+gP8BAH+APz9AQn7A/79/gEAAgEDAQL/9wAD+f36AgH8BAcE/Qf/AwH+AgAAAAP++fkECP8BAwP/AwEFAAEE/vsCCP39APn5+AL8BAED+QP/BQP9AgEB/P8B+/0H/PgCAf/9/v0EAwQB+wMAAAn9AgkGAgAA+gEB/AEE/wEACAACAwIHAwL9Af0A/fwA//wABwD7BQMBBQAAAAAEBAP8AAD+9gP//gMI//4DAwAB/fsBA/gB//38A/n9/vz+Bf8DBP38AP0ABff9AAUB/wP+AgEEAf//BAIFAQMFA/4BBv0D+wEEA/0A/vwJBQIAAv7+Afz6APj8BAcE+vz/7wH+Av//+AH7A/76Avr///78/wH88gcEAQAFAvoCAPwAB/v/+//6/gYEAgcD+gP//QH7A/8A/gADAP0C/f8ABfwC/v4B/QX8//4DBAL8/fH7AgL9+QP+BAIfAQT9CP0BAQIAAQP/AQEE+vwI//wC/AD5+gEKAAX+BgYC/AMCAf8D/P4AAQj7BgAC/wT+Av4BAPoB/f0FA/4BAQIBAAEDA/3//AIGAgT5//v+/PgC/v3/+/n/Af3+AQAB/vkC+f0C/Qb4A/8B/AIFAf0ABQIE/wH9Bf7/+wP9CAADAAECBAYBAQIGBAD6+v4BAwQB/gD+AwD5APf+AgH6AAL+BgID/QsD/AAC/QkAAvz9AfwB//4EAfoBAAAC+Qj7AwUFB/79+AX9+/wF/wQH/fv5A/0BAQD/BP79AwED+/4A/QD/AgEE/foF/gECAf4F//0GAAIBAAT9APwDAQL9/P0A/wAC/f/5AAL9/P0A//v+BAL9AwAB+f8A/Pr/Bv//+wMA+v/6BPsE/wUA//kB////AQQDB/X7/v8CAgD/Av4AAAD+/f8AAPn7AQAAAgAE+wH++wAO+/z5//3/AvsA/PwB/PsKBwH/AQUD/gH/+P/7/PwAB/3+/AEE+QD8APz7AAD/BAf/Bf0B6wIA//z/AgADAP0AAv/9AwD+AQr+AAf9Bvv8BfwA/gYCAv3+AP4EAwcCAwT9BQQB+v8C/fwA//r4BPj8AgT9+/f+9/8AAwMB//cDBAD/BfwAA/4DA/38AAIB//4B+/wF/wX//voD/AL8BQP+AgAE/wIB+QD+AQP/AwP/+v8FBQAGAQP6AAMBAAIIAv4BAv8A/QH+Bfz9BgEE/QEE/gL8Cwv8/v///gUB+wQCAgABAgACBQMCAQH8BP39+gb+BgL/BPoIBgUA+wgE+Pv9/////////P/7BAP/AQD+/v4GAAEA/AAD/P//Bf4EBf4EBAIDBvr9Bg==",
     "How do I index a Notion workspace with docpilot?": "9voDBQAE//0CAQIAAQMFAP3+Bv8A//8K/f0F/v4EAPr/+v78AgH7AfwDAvwF/gP+/P/+AP79Av75/Pv5/voBAwQG/wEBAP//+f/5AQX4/QQE/QMBAP0ACAUBA/3+/Pv9Af8CAwICBQIM/gECAPwAAgH/AvwD/AECB/sE+wD+BQD/BAUHAQEAAP8D/vgDBfv7/v4BBQD//wcLBg79AgX//wED/AMEAAABBfwF//8ABAAIBPz7+wn+/f4AAP8ABP/7/wYAAP8D/v0BAwb5+v4B+gD8AgoCA/f/Avv/+P8CB/wFBgP9BAD8AP8ACf///wD++/wAAfz7AQMCCP8D+QIDAAP//wMBAAECAQD+AP4F/gAE/AYA9wAG/vr/AwL9Awf9Afv++wr++wT68f0AAgEA9/39Bfr4/PkC//78/vv6/gb+APoFAP76A/sCAv0GAAD6AwEDAgQD+////P/8AgP7+wABAv0F+/oABP4AAf8CAgX//wEF/gD9/vICAgP+/AT+AvwaAwH+C/0CCAD+/QQIAQMD/P0K/gT9/wH+/QMG+gYACQEA9/7//AEF+v3/AwH+Av0C/P8A+wEI/vn7+/0CAgH+AwMDAQcG//8A//4AAAYDAv4DAgIF+gAD/vn++QH7A/4DAvn8//wCAgH+AQMBAv8E/wABAgUA/gP6AgAB/v0CAvYG//7/AgUAAwT5/f7//QMD/wD3+QQB+/36Bfr+AgL7AAAKBAH/9wb8/fv8+AT+AgEC/v8AAPr8AwL9/gH+/wwA/gEDAwEAAAICAf0EBf0I//sAAPz8B/0HBQT9BQAC+AAA/PsH/gH//vcEAwQE//8H+f8FAv8DAQL//wIC+QP//f/6+P0G/vvz/wT4/P0BAP7/AQMC/wL+/wD+/QAC/gH8/AL8+Ab9//8D/wEB//j6/wIE/v4EAv0BBwgCCwH+AgAB+vz/AQEB/P0BAQICAQIE+//9A/0J+QL7AAEC/AD/APoBA//9/PoB/wEBAgL/AAL+APwA//r+/fgCAPv7+v/9/vkABwL8BPoH7/39//v+//sD//kDAPz7BwL9+wf9/wcBAgH5BPgDA/cCBf8D/wIDAQIBAwP/APsB/v8DAv4C///4CP0E/v/7/fr/AAICAwAC//wF/wMB/gX9Av3+BgL/AwACAfsB+/8D/wEA/v3/+wAAAAX+Bf8FAQEA/AH/AgH/AQMA+wME/P8G/wADAQAD/AAM/gIA//4C/v4E//n//gL9//kDAAYABgD2AwD+AwX/+gcBA/0ABvoDBAr6AfwE/wYA/QX9AwMFAvoF/wED/Qn+A/v++gL/Av0D+gH6AwH/AwEB/AQB/wL9+gb/AAAC/voDBwAFAP/9/f//Ag==",
     "How do I install DocPilot in a VitePress site?": "+vv/AAD/Bf7/AgAA/wH+/QEDBv4C/AIF/v8IAAL7/gD9/vr5/wH7A/74//wB+gT/AQL8//73A//2/fr8/wABAwYN/AD+//3//gD3/gb+/QQG+gYDAwYBAQEF/v8A/PoBBgIGAf8AAv8F/QD7Av4AAwD9//oB+QEGCQEA/AEBBf8DCAgE/wD+/vwJ/voGA/////cBAgL/+wQEBAb6AwQAAvsD/AEBAv0AAwAEAgQIBgAGAgX8/AMA/P4BAv4AA/4BBgAC/gP9AgL/BAj6+/wA+wP2AAcFA/cBAfr8+v7/B/8FAAIB/QX5//4DDwD7BQL+AAME//z8AAP+BP4C/wMCBAT//v0ABAME/fv9/wD/AgEABAQC/QMFAvkGAQQAAQX/Afb7BAf8Av/+7/4D/Pv7+/v6Afz6APsHAwP8/fv7AAkABPkFAAEA//8DBf7+Avr/APwDA/8AAv8B/fr7AAH6/QH6AvsE/gEDAf0D/v8DAgT//AQHAgAA/vICAwMD/v//A/8d/v8EB/0ABv/9BAMH/gL//gIL///7/AYA+wMB/QUBBwH7AP8G/v4F/f39/v//AgAB+v/++wAHAfr8/AADA/r9AwH+BQQE/wAAAAAC/gj/A/4FAAQB/f8D/P7+/QIFBQP8/fsAAfwE/PoBAgIEA/wE/P8BAQQCAAX9AvoCAv3+CvkB//0CAwMAAAL/Av/5/P8H+wUBAQQC/v78/f7/AgP+//8HBP//9Ab8AgL89gsEAv/+/f3+AvwBAv79/f8D/QsAAP0KBf/+BwMBAAMB/vgBAAH8Av4EBgIEAQX+AgEC9f8AAf0FAQECBPgG/AACAgEC/AABAQAA//8A/QD++wUA/Pv6//z//wL9Agn8/v3+/f/9/gICAQIA/fz7/wECA/z9AfwB/v8F/fwB/gb+Avr+/QIDAAQB/f/9BAH6BQIA/gYFA/n7APsFAAL+BgMAAvwF/wQABP4F/gD5+v/5/gEB/vwB/Pv//wH//wQE/wMG/gL/Bv/3AAEE/wECAvv8/P8F//v/AAj8/fwF8fz7A/r/AfoCAPsBAP0BBQQB+QT6+wH+AAH9//4D/f8IBPv+AgL+AAMDAQQB/P3/+wL/AQH/Af/7BPwE/QP8APj++gYA/vv/AfsF/Aj8+/v7Avz+BQT+Av4C/Pv5+fz//v4A+/kB/P7//QT9BPz/AwP8+/4B+/7/AQcC/QIDAgD8/AIBAPv/+wILAP39Af0B/wMB/fv//QP8+Pz/BAQAAgf5Af78/gP+/wQCAP4BAvcA/Qb5Av4EBgYEAAH/BgMGAvv8+gH+/wkFAfsB/P/+AAAFAP/5AQMBCwL9/gMA/QEC+AIAAP0FB/wFBv4JBfz7AQDz/g==",
     "How do I install DocPilot on a Docusaurus site?": "+/n9//7+APsAAQQF/gH//QH/Bv4B+f8D+/wI/v/8/vv5/fz4AQH8A/z5//4C+QL/AgD5A/35Bvz9APr+/gH+AAUN/gH8/v39///2/AX++wME/gMEAgEBAwICAP4C//oABwAIAfwDAf8D/v38+/4ABAD/APkC+/8EBgAD+wIBAgIFBgYGAf78/vwI/fkEA//7//0AAQEB/AQJBgj8+wMABf8E/wICAQADB/4CAAIGAQEEAQX8+QH++fwBAf7/A/3/Bv//AQAB/wD9BAcAAPz9+gP2AwkCBfn9Av78+vwCCPwF/gT+/gn9/vwBDP78AAEC+v8DAf38Agj+Bv0AAgEHAgP///4AAgED+v8AAAICAwX9AQT+/AEFAPsABAT8BgQD/vn7AQj//QD78P8CAPz++fz8APn5/vsJ/wL9/Pv2/gYCA/sE/v/5/voDAv//AfkBAAEDBQMCAf7//v/9BAT+/AH2AfsD+/8GAf8C/fwCBAP+AQIIAwEA/vMBBAQB/f0BAgEc/PsBCPwEBf3/BAAF/wP9/AAJ/wH6/gX/+gIH/AgEBv4C/AAA/f0D/fsA/wABBAEB+vr7+v4FAP76/AQEAPr/AP7/AgIF/f8AAv4DAQr+Af4B/gIF/gAD+/n9+f8HBAL9//7/Af4B/vv8BQcBAP8F/P7+AgYA/gf7/v7/Av36CPgFAv4EAwgAAQL7/v749wEC9gEB/gMBAfv8///+BAH9AP8JBwQD8wb9AgD89goBAP8CAPwFA/7/A/79/v4C/QkE//0EBAP8BQL+/wIB/foD/AP6/v8DCAYEAAX8AAAD+gECA/4CAwEE/vUH/v8DAPsC+PwCBwH//wED+wX+/wQA/Pz5+f0D/f7/AgT7/P8A/f3+AAMC+wAF+/r6/wD+BP38Af4B+wEE/PwA/wb9Af35/QAD/gYFAv8BBP//BQT/AgQCAfz8BPsK/wECBAEB/wAD/QcAAQQD/QD6/gH9AAAC/vwA/gAB+f8B/QIFAAIDAQH/AgL8/vsC/AAFAfv6+QAFAf0AAwf7AvwI8P77Afz///sEAPoEAfz8CAIC/Ab8/v/9Af0A/vsB/foDB/v9Af7/AQMDAgYBBP0C/gD//v8AAAH6BP8I/gH5AfkB/QUD/v//AvwD/gUA/f/8+fsACgX+/v8C/fz7+fwAAP7//v4C/QECAAX/Bvz+AgX9/QEB/gD/AgX+/v8DAgAC+gMDAf0B+QILA//+BAADAAEB/vv//AP//fkBAwEAAgP6Avz+AQT9/wT/Av4ABvYB/wgAA/0DAwYF/gL/Av4HAvz++wEA/wcBAfsB/v4EAP4D/f/6AgMCBgAB/AQAAAEB+QQCAfwEB/4IB/8JB/r/Av75AA==",
     "How do I install DocPilot on a Docusaurus site?\nWhere does the index have to be written?": "+fr+AP/+//oBAQMF/wL//gH/Bv//+wAB+vwIAP78/fv7//73AQH9A/39/v8C+AL+AQH5Av76A/78A/j9/v76/wQK/gL9AP3+/wH3/gb6/AID/gIDAf8BBAQCAP0BAPz+B/4IAP0EBAAJ/v3+/v4CBQH+AfcD/AADBv8B/QICAAIEBQYHAgD8AP0J/PkCA//6Af///gAA/AQIBwz+/AMAAwAF/wEFAP8CBv8BAP8EAgEDAQD9+QT+/f0BAP//Avz+CAH9AgIB///+BQj/APz7+gT0BQkAB/n9Avz++PkBCvsGAAb8AQj+AvwBC/78AAIC/P0DAfz5Awj+CP0BAgEIAgP///7/AgEC/QEB/gT/AgMBAAUB+wIF//0BBAT+Agb//fr7/wj/+//77/oAAv7/+Pv7Afj5/fsJAQP+/fv4/wYAAfoGAP35/vgCAgACAfwDAAIDBAQCAf38+QD9BAX/+wH5APsF+/sDAP4B/fsCBAL/AQQHAgD//vQBAwQB/AAABf4d/f3/Cf0CBP7/AQEHAAUA/AAI/wP6/gUA+gIH+wcEBP0C+v8B/f0C/foC/AABAgAC+vv7+/4GAv77/AEEAP/9AP8BAQII//8AAf0DAgn9A/0B/QAF//8F+vj9+P4GAgD+APz7//0AAP/8BgcAAf8F/gH//wQAAQX7/wD9//78A/gEBP8CAQcB/wP7/f36+AAD+QQA/AX/AP/7/wD+BAL9AQAKBgQA9AX/Av/8+AkA//8DAP0GBP7+Av79/QECAQkE//4CBQL8AgD8/wIB//sD+wL9//4ACgMEAAP7AgAC+QICAP0DAQEEAPUG/wEBAvsF+PwCBgH//AAA+wT+/QT/+fz5+fwE/P77AgH5/P4B/f3+AAMF+QEA/vz8/QACAgD7AAAA+wIC//4AAAX+APz7AAED/gYEAgEDBQH/CQT/AgQAAPv6AvoK/gEDBAEBAAAC+gb+AQIE/QL4/wH9AgAA/fv/AQEB+f4B/wEFAAQD//z9AAEB//0A/P8FAfz49/8C//sAAwX7BPsG7//7AP3//fwEAfgFAf75CAIC+QYB/gH+Af3/APoDAf0DBf3/Af4AAQMDAgUBAf0EAAD9/P4AAP/5BgEKAP/5/vsB/AUDAP///vsEAAIA/f/8+/sECQT+/gEB/fz7+/0AAf8B/f0D/QIAAQX/BP4CAAT//AD/AAEAAQX//gABAP8D/AMDAf0B+QMIAgD9BQACAAEB/foA/QH//PoCBQT9BQL4A/v9AAb//gUCA///BPcBAwgBAfsDAgcD/gX+BPwG//7+/QID/wYC//sA/QEF/v4B+f/8AgEABAIC/AYE/v//+AUCA/0EA/oFBwIGBfkAA//8AQ==",
+    "How do I install DocPilot on a Docusaurus site?\nWhere does the index have to be written?\nWhat colours the code inside an answer?": "+Pr+//78//sAAQIFAAD9/gD/BgD//P4B/P0H//3+/Pz8/wD2AwP8Af39/gEE9wP//gD6A//7Av78A/j+/v76/wMK/gH9AP39AAD1/AP8+gQBAAAEA/8BBQP+AP0C/v7+B/4JAP0FBP8I+/7+AP4DBQABAvgB/v8DBwAB/AIB/wMBBAUHAAH6APsG/PoD//36Av3//AD//QUHCAn9/AH+BQAE/wME/gEGBP/9//8DAQAHAP/9+gX++/4AAf7/Avv+BwH+AQEAAP79BAX8AP34+QXzBAj+B/j9APr++fsACfsH/wUAAAgABPsACvz//wMC/fsEBP3+AgcABfwA/wMIAwX//Pz/AwAC/AEB/gQAAQD+/gYE/AII/gEBAgMAAQb//fv7/gcB/QD77fkA////+v36APn5/vwGAgT8/fz3/Qj/APsD/v34AfgCAgEAA/wF/wEEAwIBA/39+f36AAMC+QL5AP4F+vYC//8B/vsBBgH/AgIJAv0AAPIAAwUB/v3/BAAdAvv8DP4BBP3/AAAH/wIA/AIJ/gT7/QT++wIE/QYEBf0B/AAB/vsA/fsF/gEBAv8C/P37/P8DA/35+wMEAQH9/v8D/gMK/wP///4HBAf6BQAB//4F//8F/Pn++v0EAgH///z5APwC/wD8Awj9AwEF/gH+AgIAAgP8/wL+//7/A/kEBP0DAgf//gL8/wD5+f8F/QX/+wYAAgL6/v/+Bf/9AAMMBwEA9AYAAf/6+Qr//P4DAPoFAf3+AgD9/QT/AAgF//7+BAH/AQL6AQICAP0G+v/+//4BCgMEAQP4Av8B/AAB//4A/gADAPUG/gECAv4G+fsDBAL//QAA+gb9/QT//P35+/0E/P7+Av/6/P0C/v3+AAQE+gL+/v76/P8DAAH8AAAC+wMC//wBAAj/APz8/wEC/wYEBf8EBgD9Bwb9AgQA/vz7Av8HAAECBP7/AQAD/Ab8/wQE/AL3/wL+AAAA/PsBBQEC9gAB/wEF/gQE//z9AAP//v4A+/8GAPz7+P0E/foDBwb9BPwD7//9Af0A/vwC/vwCAv/8BwUC+wcC/v8CAv4A/vkCAP8CA/4BAQAAAQQDAAMDAPwFAQD+/AABAAD6BgMJ/gL6/v7//AMAA/8A/vsCAQIC/P/8+voHCAP//////Pz6/P4AAQEC/f4D/gABAwcBBfwDAAUAAP/+AQEBAAT//wABA/4C/QICAv0A+gUHAgH9Bv8AAAIE/fwBAAH++foBBwH8BQL7APv8/wX/AgQAA/0ABfsBBAsDAfwCAQcD/AP+Bf0FAP0B/QECAAME/vsB/gID+/0C+f77AAIABAEE/QcE+wH++gIDBP4DA/wDCAMCB/j/BP7/AA==",
     "How do I let a reader upload a PDF into the panel?": "+QD9AQEBBvwCAf8E/QT/AQMACAL//voHBQX3/QIAAPz+/P77//77//z6AfT//QP/AAH7/gT++wD9/fT/APsB/QUMAQH///4ABgD6/wX6AQUB/gH+A/8BBQEC+wEE9/j+Af4CAQEBBAIE/wAA//77BgT/Avz7/P8BAwYD/AL/A/8CBAYA//8A/wIEA/0FAP75APMG/QP/+gIB+QT7AwX/BggH//4DAgMF/v8A/wH/AwIABAH9AwT7/f0HAfz/Av/9AQMEAP4BAP78BAMCAPwB+v/8AAYH+f4DAwIC+/0EAwIA/gD+AAD/Af3/CP8C/gABAgD+/v/+/wP9+v8C/QUF/wAA/f8B/wAFAAD6AgP8/gL+/wQB/v0EA/0GAAP+AwD9Af/+AggFAQT+7AAA/gH++PwEAwD7/PoFA/8BA/r9/wwCAP4C/v39AwMBAv0ABQT///0EAQEB+wH++fz9AgX/+wEDA/4C/gAC/vsBBQIG+wb8A/0GBvj//u8GBfoE+wEAAwIdAwT+A/8ABvf+BAYFBQAD+wEK/P4AAAH8+wAE/wH/BgL//AIC//8EAv4GAQD6AAT4/gf+AAAIAPn8AQQJAQH8AAED//8D+v0DAAICAgX8BAEG/P8A/gEDAAEA/v8FAv////wC/v8C/QH8A/8AAv0GBAECAAMBBf/8/QAB/v4AAfYFA//9AQr7BQX9Bv7++vwBBvsE/wECBAD7//3+/P75/wIBDP4C+QH//P389wcG//j6/gACAvv7Bfz7/QD8+QkE/wYFBwEF/fkD/wD7+gEFAgD8//wBAwL8AwX+A/v++AQAA/36AAH//vkE/wMD/f0H+gMFAP4CAgQD9v0E+AIA/gD//f8D/P/8/wT8APv////4AQEBBgv9APj7BPr+AAP+/gP//AIB+/sB/Qj//P7+/f7/AQYC+/n/BfwBCPv6Bf0CAgT8/gb6AQAF+wH//gIE+AIDBAUA/gYC/f8DAPr9/Pv//QME/v8AAP0B/wL/AAD9A/z9BP4EAP8E+vz7/f0F+fwAAgT9Af0A6wP//P3++vwDAP0CAP0HBQcA+Qj8AwMCBP0FAPr+AwADA/v8Af0BAQgBAAb/B/3++/4B/vz+/gP6Av4B/gD4/vX9+wIABf38/vwBAfz+AvwA/Pv9Awb/AfkB/P3/AAH/AQAA/f4E/QL9AwYDAwH6B/3/9/8DAPoB/v8F+wT/BAP//wQCAgUCBwEJBfr8/gD8/gACBP/6AAEA/gH/BQcAAwIAAvv//f/7/wQCAv7/AvgAAAgBAwEDAAME/QIAAwP9BvwG/AH++wUEAvf//f8AAvgG/v78AwIDAwT9+gYBBf7++gABAP0BAf4EB/4H/f38BAD4Aw==",
     "How do I make the panel answer from two indexes at once?": "+QL7BQAABP//AP0G/gUAAQH+A/7+AfsD/wP8Af4I/vz7+f/7+/z7/PoDAvYA/gX8/AP/AQIA+QT5A/b9//79AgAKAwUBBPz7AgD7/gD5AwAB+/0B/wIAAgMB/gEC+/79+gMEAAQABP0HAvwDAQAACAAAAvf4/gQEBf4D/P8CBAL6AgYDAAD9A/oCAfsFAQT7//UF/v3+/AEEBAr+/Qb+AwIE/gUDAf8D/voBAfv9AwMDA/39AQP9/wAEAfwEAf39CQcD/wH+BAP/AwL9/v79+AMEAggAAPcABgAB+vgGAv4H/wIBBP//Av0AB/8AAAAA/QICAfv9AgIAAP39+gIHAAT//gEDCP4D/wD7/wED+wIA/QQF/AEHAf4B/gH+AP/7//4F+gsAAAT97v8AAAH//v0BAQD4+v4EBP38/vn7AQj8APwAAv7+/v3/A/0HAgcDAgAD/wUC+wD69gH//QX7+QH/BP8A+gT7/fv9B/wF/gf8AwACBPr/++8IAv8E/AD9BP4cB/v6Bv8HAf3//QYDAAII/AMI/wEAAgL4+AII/wP8BwT9/wUD//8DAf0C//77AwX9/wUB/gAH/P39AAED/gP4AgT/AwIFBP8A+v0EBwT+Bf4G/f4DAf8D/AH9/v0CAf8C/foC+vkCBAb+Av//Av8FAgIDAf4AAgL4/f73//4E//gFAwAFAgX++wAA/wMC+f4DBQMD+P0DAvz5Af3/Af76BAUABgAE+gMB9/79+QUFAPwBAQAC+/7+BQT+/QP+AQsJAAADAQMF+AADA/z6AgEB/fj9A/r9AQEC/gP+A/r9//7+/fsAAQH+AP0HBQIEAP4G+QAJ/f0BBAQB/QQD/ggA+wH/+/0DAP/4/gP8/gQA/fz3AQIF/QH9AQL//vsCAgX//v8A+Ab5/P8AAP8B/fz++QH6BQkA/vwBAwD9Cvr8Bf78/wIAAQb8//4B/P7+/AEB9wP+AwMH/AcB/wAA/v7++foB//wGAwD///7//gAC/f3++wEBAQIDAv4C/v7//PwA+vkDAgT5Avn97AQA/PwB+Pz+AP0CAPwBAgQAAAcDAAQD/v8EAvoABv0FBwEEAQQG/wUDAP0E/QAB/PsC+/wBBAD9BAQC/P37+P39+gADBf4B/v0A/wID/Pv9Av0BBAL8Av4E///9/QIABQcB/f4A/gP/AAkCA/39AwAHAAMBBv0C9wP//QcD/wEEBwMDA/8C+/oH/f7/AAD7//8DAvb/AgIC+/8BAwP+BQL8Af/+/gD/AP/+AgAAAv8B/gYE/wP7/wAC/wUBAwUABgAG/QcF+wD7APcA+/7/APoCAf/6BAIB/wIA+AUC+/8D+AACAP3///7/BPwGA/sBAf3/AA==",
     "How do I make the panel speak the answer out loud?": "/gT8Af79A/4AAP4I+QIF/QT9AwIAAfkBAwb4/wT//gP2/P4A/v79/gAEAvwB+wH9BQX/AgIB+gT/AvcBAv77AAUMBP8CA/3/Af/3/gL8AwQA/AEBAQD/Af0AAf8B+P3+/AH+AQUABPwCBAIGAQIAB/4CAvb5/wICAgT///7/Av/+BQX//v/9/v8C/voAA/79APMG/f8B/gMD/QcD/Av8BwYC/QADAf4D/QL+AP//AQIBBAD8Af8C+/sDA/oEBP39AwAEAAEAAgH9AQL5/fz7/gEC/QUG+/wKBAMC+vsIAAEE//4A//4E/Pr+BgIAAf8A/gECAf4B+wAB+vv8+wQC/wEBAQICAQQFAf/8AAIFAgABAQAJAPwFAwD9/f79/v78AfwF/AoCAQH+7QT+AAD//gD+AQT8/P8B///+BPkBAAYA/AH7/vr+/gH+BAECBf/9Bf8G/Ab//f77+/z/AAH9+f8CA/8A/QD6+v8ABgMF/wX7BAMIBv7+/PIJAv8H/PwABAYdBwD5BAIGAQD+/wcCBfsK+gMI/wECBf76+P8EAAX/Bgb9AAkBAvoI/gAE+Pz9BQH4/QUA/wAEAP79AgMMAgD7+wMAAQD/BP8A/P//AwD+AgIA/PsAAgUB/QX//PoAAAEAAPwDAvsGBAP8Av39Af4AA/0DAgACAQP9BP/+Av0BBfgGA/8BBwz+BAH/AgL++/wDAf3//AEBAfv8/wAB/P/7BAX+Df8G+gH9/vz9+wYEAvv+//4BAP/7AfsC/gX9+gsF/wMBBgQA+vwB/AP5/wQF//v9AfsAAAD8AQABA/oC/gEA//wA/AH8//wAAgAC+gED+QAE/v7/AQMA/f4A+wL8/vv9AAIB/P/0/QQB//r+//33AwP/CQL/Bf4AAvwCAwMA/AD+/AX9/vv+AgX//vsA+gH+BAkBA/0DA///BP/6BgD7AQb+/QX3AQAD/P78/v8C/gMAAwb9+gUE/f4EAP4E/f0E//8C/wD9AP4B/v8BAP78/gX7BgACB/8DAPv+/fsF/fz+CAX9//v/6QQB/f3+9vwAAwUBA/r8Bf7+/Qb+//wBAf4D/vv+BQEDCP7/AQABAgMC/f/9B/8C+vwA/wEFAQP6AwEE/f76/PoB+fz+B/8AAfkB/wEA/v7+/PwCAQQBAPgF+/7+BP/9AAD9+foC/AEA/QsBAwP9Bf4F9wEAAf0A+wH9/QEFCP0BBQP+AgICA/oGBfn+AgL8/AABAfj+BwcC+wQCAgUFAQEBAPv+/AH+/wD/APwAAAAD+QkDAAT7/QEB/gIBBAQADvsI/QQD+/8D//z7/v4DAfsE+/z4AAEDAQMA9wP+/vsB/fkD/gABAf4DA/oCAfsBB/wCAg==",
@@ -2768,7 +2774,6 @@
     "What checks run on an answer before the reader sees it?\nWhat happens to a citation the model invented?": "+v8BAQD9A/8C//4A/v/8/wD9APwA/f4EAwT7/AD///gA/QD9AwD8AQD9/vwB/AL8Af3+/wECAQH7//3///n+AQAKAfz9+wH//gP5AQD8+wL/AQX9AP/6AQX9AAUD9/v+/P4FAv4ABv0G+/4CAf0CBQMF/v/9AAICBwEE//36AgABAf4DAQH6/AEE//kIBfz7AP0G/wEAAAH//wb7AgP+BAcB/AUDBwAE+/kE+gP+AQMGBf39/gYA/PoD//sBBP/6AgQA+QL9Af38BvoC/P7//AH9BgQHBP8DAAAH+QEABAEB/v8E/gMBBfv/AAEDAAQC/vsAB/r4AAD//wIB/AIEA///A/8C/gIFAfwAAwP+/f3+/gQF/AMHAAD/AvgC+wX/Avf/AAkB+gP97Pj8+wAB+Pv9Bfn6APsFAfn/BP38/Qf5AP4EA/kDAv7+AwUEA/oB//8J+gj+/wEB/AH4/QAE+wQBAfwFAvn+/v4A//v//QT7/gECA/sD/PT/BP4C/gYBBQMdBPv/AQUFBf77AAEH/wIB//4K/wP/AAX2/gEA/gL/AgUG/QT//f4D/v0D//77/wL2Af8H/wMEBf0D+wMFAgMCAAIC+wMIBP8A/gQCAAkAAgADAgMBAfsIBP/7/P7+AP8FAvoABP0FBAL6AQQGBf8E/v8FA/4BAwH9BQL7/gAE/PsFAQD/BQb/AQH/AP3++gEDCQL8+/4A/vz3/AD/APn7AAX7BP8AAAMD/f3+/QAEBPYE/fkCAf8F/QH//f4C/w4CAAf/BwD8/vwD/wX/BAEC/QD7AvoB/v4DAQUA/wED+gAAA/z/AAH2/voFAQH/9/cFAP8C/fsIAAYF/wL++wAABP3+/v8B/Pz4/wYA/foD/fz3+v39/gUDBP///PkDAgQA/QL//QD//fkI+wT+BfwAAAMA/wsD/fkD/AADAwT8Agf//wX+Af/+B/79/P/+BQT9/Qf5A/4L/wL+/P0DAf////r9AgEJBv8ABP8BAAT///z7/wIC+AEB/AAF/f38/f8G+PwFAQcAC/7/6gYBAAACBfsB+/8AA/79AwIC/gAEAQIABf38Af76/wICCv8F/wD+/gMF/wEFAfsC/P39Avr8AP/5CPwHAf79+/z++QAB/v0F/v0BAv8AAvv//wADBQH8Avv/AP8CAgAAAQQD/wAF/wj9AgQFBgUCAf4A/P38A/8AAAgA/P8HAvz7/Af9/wQA/wAC/f3+A/z+/QABAfr5BAL+AP8CBQICC/7+/v38AgH+/gED/P4C/f8ABQcAA//8+wUC/gEA+gEBAv0H+AEC/wP8AfP//f0E/vgA/P/5BAMHAAH/+wUH/QH7+wL+AP8FAf8GAwH/AP39AwH9AQ==",
     "What checks run on an answer before the reader sees it?\nWhat happens to a citation the model invented?\nAnd to a link that points nowhere?": "+f8BAgD/BP8BAP4A/wD7AQL8//4A/P8CBQP7/f/9/vgA/v/7AgH9AQL+/f4C+wL8//z+/gEAAQD6/v38APkBAAEJ/vv9+wP//v/5AQD8+QIAAQH9AP/7AQX+/gMD9/j7/f0EAf4BBv0G+v//Af8DAwEG/AD9AAECCQEFAAD6AP//Bf0AAwH5+gIE//oGA/r5Av8DAQIBAAH/BAf6AAL/BQMD+wQEBgAC/PgB/AQAAgQIBfz9AAUA/fsE//3/BP/7Agb/+gH9/vz7Bv4C//8A/AH8BgQDAwEB/AAG+wAABwEB/v8C/gICA/3/AP8B/gQB/vv/B/v3AAD+/QEC/QMFAgL+Af3//QIF/vsCAgQA/P7//gIG+wMIAAAABPkD/QT9AfoAAAoA+AP+7Pb9+QAB9/r7Avf6/voFAfoABP39/Qf4AP4DAv0BAv//AgYGAfwBAP0L+QT+AAL9/QH5/P0C+wQDAfwE//n/////AvsA/AX+/QAABf0C/PX/BP4E/AcBAgEeAPz/AQYGB//6/v8FAAQD//4J/gP9AQb1/QEB/wL+AAME+gT//QAB/v8DA/38/wL2AQAH/wMEBf0C+gEEAgQA/wMC/gQMBP8A/wQB/wn9AQADBAIBAPsKAQH7/f7+/f4EAfv8A/4G///6AAQFBPwE/fwEAP0CAwL6Af/6/QEA/fwFAv/9BQb/AgH+APwA+wIGBwH8AP0A//73/P/+Avr7AAT/AgEBAgQDAP37+wADAfMC/vsCAQAE/gMA/v0C/hAAAAb+CAP9/fwC/wX/BAMB/AD7APv///0FBAX/AP8E+QD/A/0AAgD2APsFAgD/+fcCAAED/P4I/AgF/AP9+gEBBfz9//8C/fz4/gUA//gD//v3+vz8/wQDAgH+/voDAgQB/gL//P4D//oI+wP8Bv3//wP//QkD/vsD/QAEBAX/BAb//wb9AQIAB/7+/P//BAL8/wb4BvwLAAIB/PsDAgH+//3/BAIHBAEABv8CAAP/APv8AAMD+QEB+/8FAP77/v0E+f4FAAn9Cv0B6wcCAgABBfsD/f8CAv79AgMCAAED/gQBBPz8AQD6/QMDCgII/wH9/wAF//8EAv0B/P37BP3+AQH4CfwF/wD9/v7/+wD9/fsG/f8BA/4D/vv/AP0FBgL9AvwAAf8DAQECAgMC//8GAAj8AQIFBQMCAP4B/v79AgH//wb//AAHAP77+wf7AgUA/v4C/fz9Avz8/wADAPr6AgH+BP8DBAICCv/7/v7/BQEA+wEB/wAC/QECBAb+Af/8+wf+/gL9+/4BAf0F+wACAAX/A/X//foC//kB///5BQUEAQD/+wQD/gP8/AT7Bf8FAAEGAgIA/v38AQL9/w==",
     "What colours the code inside an answer?": "+v//+/36Af7///0EAP/8AP7////8APwCCAT+/f0EAf8A/QP8BgP6+/4BAv8E+wX9+/8BAQb+AAL+A/cAAPz+AP8IAAD9//0A///4/f0B9wcEAP0FAgX9BP/4/wIF9v///v8CAwABBP4F/AQEAP4DAwAHAvz4A/4BBgQA+/77AAb7//8E/AX2AAH+//sG/Pr8AvcE+wH+AgL/Af3+AAL7BgEA/QIC/AUK+/34AgL9AQILAP78AQT++/4CAwABAP37AgMB/wD+AP37APz2/QH3+QP6AgX+AfsBAPsC/gAD//4E/QEIAPr/BPv9AP0D/wX//voDCAAG/f8C/f/9+QIEBAf//wEAAwEEAf8AAAMB+vv7+wYI/P4J/gX///4F/f/8AQD//QcD/wH86voB/AP+/v77/wD5AP3//v/8//38+gv5/QH+/Pz8B/wABgL/AAAE/gAE/QX/AwD//f34/QEE+QT9AAQF+/b9/wP+BQABAgQABP0HBfr//+z+/wEB//z9AAUbCvv6Df8BA/7+/AABAP0D/wkI/QIBAQD7/wEDAwD+AgH+AwL///r//P8KBQT/BPz+AQD9/QH/APv8/AQDAQEA/gMD9wIEAwQA/gQHBAD6CwH//v4CAv8DAf4BBPv+A/8D/fr5Af0EAAP8+QP8BAUB/wD/CfwBCQH9AAMC/f0JAPwCA/wBAgL9BAD/BQX///0BBAb8/QQBCAL4////APv9/wQHCP3/+wUC/v3//Ab9//z+/vkC+vwCAAcD/wr7+gsCAAP6AQIA/AX+AgT+AwMC/fn///4BBAABAwP6+wADAP8B/v3/+gD+//wJAQACAwAH/wEH/AL//gED+wQA/AH+AAD8AQIA+wIC/gP//vr///z8Awb//wT8/gb8AvwGAAEB/f8B/wX7//0B/Qf/Avz//QIBAgQDBfgDAv77BAT5AwT9/wAA/wf7///9APz8AAAC/wT6/gYF/QP7//8C/AEE+/0CCQAF+AEBAf4C/QMB/fz9/gL+AQL/+/sE/v///vkI/fsCCQUAAf377gMD//4B/wD//AL9AgABBgYBAAgAAfoGBf79//r6/gQBA/4HAAIB/wID/f0DAPwC/wAB/QEB/wL9BAMF/AT/+v/8+fz+B/4C+/3/BwAC/v39/foHAAEBBPz/+AD9AAD9AAUB//0D/f//AgoCBQECA/8CBfz+Av4F/wAA/wIBCAAAAAT5BAIBAAID/gD+Av39/gED////Cf8B+Pz+BPz/B/4D/P79+wH/BgECA/wDAwIDBAsEAQX/AQcE/AUDAwL+BP8KAgEC/QAE/fj//v/++fsD/v78/QIAAgEG/QMB+//6/voBAAD//gECCQH6Bf36Bf8EAg==",
-    "What colours the code inside an answer?\nAnd what would it take to use the other one instead?": "/AL9+/76AAABAP0DAPz9AQD//v7+//wCBAP8/QAF/v7//wP9BgX7+v8AA/8F/AX8+/8BAQj8AQH+A/n///z+AAAG/wD9/fz+/wD3/fwB+gYBAP8HBQP+BP/4/QAF+P4A//8DAwACAvwD/AMGAP8FBP8FAf75Av8BBQME+/76/gb5//0C/wT3AP77/vsF/P39A/oF+gH//QH9//8AAAH9Bv0C/AIB/AMJ/P35AwP+/wMJ///+/wX++v4AAv8BAfz7AwUB/wH+Av77AP32/QL4+gP8AgT9AfwCAfsB/gED/f8D/wIIAP0ABP3+APwCAQMB//oDCQAG/P8B/v/++QIFBQf//QIBCv4D/v4AAAIB+f35/QYJ/f0K+wQA/v8D/AD7AQEA/QkD/gD86v0B+wEA/f79/v34AP0B///8//z9+Ar6/QD+/Pv8Bv7/BgEAAQAD/gEF/AUB/QH/+/34/P4D+Qb9AAIE/fj9AAAAAwEDAwMABf4DBfoA/uwAAAIBAPv8/wUcDPr7Df8DAv38/P8A//0A/gsJ/QP/AQD4Af8DA//8AgP/AQYA/vwB/f8KBQIAA/3/AQP//P8B//r7/QUBAP///gAD+gIFAgMB/gQFBf/6CgEB/v4CAf8FA/wBBfr+Av8C/fv5//0E/gT99wP7BQUC/gAAB/sBBgT9AAID/f8GAf4BAfz9AwP9A/7/AwT9/P0BBQX9/gQDBwD2/gAAAPr/AgUGBwAC/AYDAP79+wX+/vwA/vsD+fwCAQkA/wf7/QsCAAT7AQL//AcAAwX9BAMC/fgAAP0ABgEEAwT6+wAC/v0D/gD+/QABAP0LAAADAP8G/wEF/QD8/wIH+gX8/gP+AwH7AQMA+wAC+wP9//oA/v76AQQB/QT8/wT+A/sFAgX+/P8B/gT9AP4C/wf/Af39+AMAAwUCBfYDAv38AwP8AwL8/wAAAgb+/gH9APv8BQAD/QP7/QIG/QL7AQAC/QAF+f4DBgEH+wL/AgAC/AIC//z9/wD//gMA/vwFAP39//kI//sECgT+//v67QQB//0B///8/AL+AwEBBgUBAAgBAPoGBP/7Afr8/QUBAv4HAQAB/gEE/vsEAPsD/f8A/v8BAAX9AwQG/QP/+f/9+P4ABvwB+v7/BQED/vz7/PoH/wIBA/7++QD9AQABAQUAAP0E/wD/AQcBA/8EAf4BB/z/Av4F/QAA/gMBBQAAAgX7AwEAAAAD/gL+Af78/QAEAAAAB/7/+vv+Bvv/B/8D/Pv+/P/+B/8CBPsCAgMEAgkEAgT/AgcE/QUCBAP+A/4KAQAD/gAI/ff//v4A+fkF/P7//QT/AgEH/gYA+//6/vgBAf0A/wEBBQD+Bvz7Bv8EAQ==",
     "What do I have to pass so it keeps up with my router?": "+QH7/wEBAf38AP4B/v8D/QP6AAAF/AECBAX+AQkA/P3/+vv6//3/A/z6/PsF+wIAAP38/QT4BAYAAf75/QD+/AAGBf78/P8D+QH2AQAB/gQD/gcCBPv4BQH9+wD++vr+/foGAAMAAgH+AwT+A/4DAQH//vz6/wX9BwIH+wD9BAIBAQH/APz7AAD+/vwGCAD9BvUF/Qj+/gAB/QIDAwD+B/4F+f0D+wAB//wAAAIBAQYGA/75/fsA+v8BC/z9Af8EAwEA/f7+A/z9AAj//gIC+gL6AP8C+v8FAwD7//0AAfwE/wX6/f0BBP4AAgAC/f8IAv8DBP8DAAD6AP3+/gQCBv8CBv8FAwQB/gIA+gP99wAGAggDAfoFAP4I//sBAfkABPMB/QkC/QEA6gEEAv0B/AL+BP75AgIB//z/APr++woAAwIDA/kDAAL//wICBP0BAAcFAP8D8/38Af/+Afz9/AEFBgIAAAMCAPgAAP8B+gME/f78AwL7+/ADAP4B//0C/gQdBvz+AQADAgL9/gMD/f8F+wMGAQP9Agf7+wEG/wP+///7+wn//QEE/f4C/gL/BQT8/QIA/gAC/vz9/AkCAfz+/QMB/wIC/vr8/wUCAwz4AP77+QACAQQMAf8CAf0A/vsB//4B/f4A/gUB/Qj+AwABAv0EB/8FBv/+AP/8+fv++/sJAgEABgMBBgH6Bv35+fv//wAEAQADBQT4AP7+Av/8AgEBCgED/QUG/P76+gAD/fUDAP4ECfr5+wMG/QX+AQz+AgIIBQP7+/4CAQME+v4E/wH8APgAA/8HAgP/+gID+f8BA/0E/wD+BQAE/gED/v4CAwICAAUDAAME/P4DAwMD/f8BAAED/AD9+wEC/v0EAfv7AwECAvwF//8BAvoDAP8A/AH+AQP8//8I/AP+Afz7/gD7BAcGCPj/BAL9AwMAAQABAP4C//kC/wMB/wP+BP4B/gYAAgQI/v74AQQCBAQC//gG+vz7AwH9BgICAP0AAQIAAQAJAvwD//0EA/j6+wEE/wD8/wf+Af4C7AX+/AH//P7+AwD3Av0EAQL+/gAAAP0D/v0AAvv8APoCAwIAAvv/AQUFAQQAA///+///AQL+Av/7Af8A/v75+vj7/AL+/wD9Af3/+wIA/f4C+v7+C////ggB+/8DBf8B/QMBAgEB/gP8+wX/BP39BP4A/gAAAPv7/gQA/v38Bv0F/wT4/wD9Af0FAvsA/gH7APsBAP/7Av0ABf8GA/4DAgT6/vz+BQL9/gADBfwJAPgCAAYGBP0CBf8EAgIB//7+AP8EAQIB/wMI/v/+AP3//f0E/fsBAQD+CP8B/vwBAQH/+f0A9f7+AvsCBvoFBwIBBf4DBA==",
     "What does DocPilot guarantee about every answer?": "+fn///z7Bvv9/QAE/wMBAP7+AP/8/v4CBAAB/v39+//+BP39//n/BAL7APwB/AH/Av/+/gH4BQQF/wD/Af7/AP4JAf7+//8CAP/3/gIA9QAD/AUB/wD9AAcEAgAD+fr+//4K/QH9Bf0F//8BAf0AAvwC//sCAAEHCP/7/vkA/QEIBgYF+//3/f4F//oGBv/9+/0C/AMABAQFBgX7AQD6BQMA/QMCBP0DAf4D+gIDAv8EBAD7+/4B9fsBBwAB//7+CgL//gEAAv/7BAj/+/v8+wL8AgcECfj///f/+/0DA/sGBP4D/Qb9AfkCBv8D/gP8/PwFA/n/+wYB/PwA+wIIAQUAAf//+gYEAAIC/gMDBPwDAAIC/QMI/f37AwH9Av8ABPQCAQr7/v3/8gEE+fv+/P/6AQD4+/8FAP8A+/v8/Qb7+/z//AD8AgEBBQECAPr/A/8CAAT+BP8BAAH5AwIA+QH7AwIB/P8CAP//Af4BBP/8/gUBAgEB+fMHBQIF/f3/AQIc+foACgIIBAP9/v4FAf8B/QAIBAb+/wD9/QICAAT8AP/+/wIA+/oE/v4A/AAAAf75/fwD+wIH////+wUH//4A/wcBAAYFBf8CAgEBAAUCBfwA/gMD/v0EAP/6+//9BgL6APv9BvwEBf4BBgEABPsAAAEAAwL/Awb6//8AAP8CCfwDBP8KBwQG/gP7/P0B/P4A/QQB/QAB/vj4/vr/AgL+AP4FDgUB/wP//P37/AADAP4D//0BB//+AQAC/QH9+wj+/f4F+wT7BQEBAAQCAPgB+//8Af8E/AMC/gX8/gMH/gAE/vwC/wH7BPcIAPwEAP8E/PwCBQL9/wMC/AYB/AMC/P/+/PgF//72/wf++vz+/v35AgH8+vsECAX7/QQBAf8AAv8A/QUCAv4C+QH/Afj8/gEA+wYC//4GAAP/BQUABgr7/f4BAf4EAAP+AwT+/gEB/wX5AgAH/wL+AAL4//8CAff/BgD9//4AAP8C/v4DAAABAQf7/f4G//sD//7/+f4I+fkCAgb5/fz/8AH//vsAAfwA/AD9Afz/BgAA+wX6AQH/BP/9//z+/QEDBf4C/gD//QMC/QABAPoD/gP++QACAP0BBAEF/gH4AfkAAwEB/vkBBAEC/AT//Pz7/PgHCgABAf8B/P8AAfoA/QIC+f7+/gMB/Qj/Bf0AAf4BA//8Av0DAw0A/QAFBQAD+QP1/gAC/f4I/wEABAIBAgUAAfr/AwL///sDAQMCAgD4/vr8/wP8/wT7Af7/A/wFAA/+APv/AgUBAQH9A/4CBf3//gED/QEC//UB/gD//vwG/QH7AgECBwAF+gIA+AIE/gQAAQADA/4IBv0BBf0D//z8Aw==",
     "What does a --no-embed index cost me, in one number?": "+vz7AgAABgEBAAH6/P4BAv/7Av78//0BBwX9//8B/f4H+vn/Af7+/wIFAf8E+gP++/8F/Ab9BAP7B//6/fr+AQMJ/QL///z9///6BAT5/fcI+/wB/gMCAP8B//8BAPsCAv8B/wH+CP8G/AID/f/+Av3///v8/gL+CgIF/AYC/v/3BP8DAAP6AAUI/fn+Av35BgIBBgX8/AP//wf+/gD+BP8D+fwFAP/9AgACA//9BAUFAv/3+wT8AvwABAMA/fv+AwQHBQb5/v7+AwD+/f76/gP8AQb//wAB//3//vwCAv4FBQMCBPz8AP3/Av4AAfsC/gUCBfz+AAEB/AAC/AcCAf/8AQEB+QAE//z+/v0C/AACAfwF/AEC/f0FAwEB/wH7Avv9AAoB/AD/7v7+AAD/+wH+BgH6/vkC/wH+Bfv+/wT8/AD+AQL2AAEABAYFBAEEBgEE/wYDAPz79//6Af0B/wMEB/8E+vwCAv3//vwC/QEG//z8A//6Aev9Afv/+///AQAeAAgHBQADA/v9+wEAAwAEAAML+gX/AwH6+gAK/AQAAP77+gME+/4CAP8FAv38//8AAfwFAf3/+vz6+wD+AgIBAAL5BwQF+/sB/wH+/QP9/gADAQP+/P79/vcC/vkAAAEHBfn7AgD/AP4DAP/8/QEB//4CBPsBAgH59/0AAQb/AAIGA/39AQX/AgQB/wUG+gIEAwUB/QcC/wP/APYDBP/+AwMECQID/QQB+f0A/Pv7+fv8AQICA/36/gX//QH9/wz6/v8C/QQDAAQB//oBBAED/P4BBQX9Cv0DBP/7B/8E+QX9+/cGAQADAvoD/PoCAP8D/AIE/QP8AAP+9wAB+v0GAQD6BPsIAf/9AwL2/v0E/fj5AQAB+gb//gEDA/0E/gP9/wMA+QQAA/77+wL9APkB/P8A+AICAgIA/v0BDAQEAf79/fz+BAMD//r//v/7A/4A+wH7AvcH/QL+BPz9AgUA+/sA/gAE/wP/BAEDBAL/Av/+/f7/BQEFA/8F/gD++/0EBf//AwH8+vkE7gUBAP4BA/oFBfgGAQH/A/4CAf0C/AYD////CP4FAgEABwIFAf0BAQMD/v0C//8E/f/7//wABgH5BAUFAQH6+QIB+gH+CP39/v0HAwID+/wBAgEAAAb+AvoB+f0AAwUA/wMA+fsA/v4CAAH/Av8AAvz8AP8CAgAB/P0B+wcB/AEB/gYAAfwH/PsJAAL+AQH+AAAH/vz/Af7//v8B/gIBBwXyA/4BAP8B/gL9//4GAQQCAwf9AQABAgMD+wb/BP///f0ABQMGAggFAP3+/P3/AfoC9gMAA/4BBgIC/P4F/////wj/BPwD/vsABf4FAf0ABP//BA==",
@@ -2801,7 +2806,6 @@
     "What happens to a citation the model invented?": "9/7/AgD6AQMH/v0D/gD/AQH//v0C+wL/AgIA/gH8//v7/P4ABAL9/gAB//sC/AH8Af3//gL+AQP4APv9/vv9/f4GAv//+AAC+QL4Af/7+AMCAAIA/P39AgYAAAD/+Pz+/QABA/z/BPwG9v8D//4DAwEC+wD//AkCAf4D//z3Av4BAQMD/wH5+gYB/PoEAfz4/v4EAAH9/wEA/wX6AwP/AAUC+QAEBgAG/voGBQH9AwIDBP7+/QMA/vkD/fsCBf/8/AsA+gL//wH4B/oE+vwAAf/8AwQGAv0DAgAI+f8ABP///wAC/wL/A/3/AwEC/Qb8+//6Bfn6//7+AQQB+QIFBAAAAQUB/P4F//4CA/79/P//AQMB+wIFAf/9BPsB/gUAAfcCAQgA9wP97fv8/AD/+fr/Bvr7/PsE//cABP0B/wf7Av8EBvoBAf3/BAYEAPn++/4G+Qr9AgIA/AL4/PwBAAYCBAAD//7/Afz/A/v+/QH8AAEAAv3//vX9AwIE/QcBBAAbAgIAAwEKBAD+AgQGAv/+//4G/wT+AwT7AAME///+AAcF/gP++fwG/v4CAf75AAD8/v4J/gEBAvsG/P4FAQMDAv4C/gIHBQAA/wYC/wsD/QEBAP8D/PoDAf4A/P//AfwD//v///oD/QX8AQEGAgEE/f0JAwAD/QP9A//8AwAD/P4C/AECAwYAAQD5Av0C+gYCBgQA/f0C/vj6/wL/Bfv5/wT9AQIA/wQC+gAE/AAEB/oE+fkBAv8E/QP+/v8G/A0BAQj+AQL8/P0CAAQBBQEA/f/5//z//vwF/wL+AAMB+QEA/vgBAwH6//0GAQT++fkE/gAC/PkI/gYGAgQA/vv9A//4/QAE/v37BAX+/P0EAPz4//7//wUC/P3++voEBQIB+gP+/P7/APoG+gEAB/sA/AIA/AgF/vkC/v4DAgL8AwUBAAP9AQH/BP/8/gEABgb8/Qj4BvkLAQH+//8EAQAE/vv+AAAFCP//AgECAgT9/vv9//7//AL9+QEE/P/7+/0F/f4BAQkBCfwE6wX//wAEA/wD/AL+BP//AAEB//4DAQj+A/7+Avz9AAICCQAG/v/8/gIE/QEEBfr+/QD8Bf7+AQL8A/4FAvz+/gH/AAAA/gEL//0CAAADAP38AvsAAAP6AP8AAgD/AvwE/wQFAPkCAAf9AgAEBwb///0BAP/+AwP9AAcB+gEJAP/+/gYA/wQC/AIC/f0BA/4A/QAB//j6BAT/A/0ABQQCBwH3AP/7AAT//QEC/gACAP7/CQX8BAD6/AEAAQD++v4B/f0I+v8G+gYBAfb+//wEB/sC+v76BAUG+v8B/AQD/gH7/AQCAvsIAgAKBQUDAPz/AQL8BA==",
     "What happens to a citation the model invented?\nAnd to a link that points nowhere?\nAnd if none of them survive?": "9wAAAv79AwQE//8BAf/+AwT9/P4A/QD/BQL+/f/6/fv+/f/+AgH9AAEB/vsC+wL7//z8/wT9AQH3APr6/vr//wAH//z/+gMA+vz4/wD5+QEFAQAB/gAAAAX///4B+/r6/f0DA/0BAvsF9v7/AAAEAf0D+gL+/QUCA/8G/wH4Af//BAABA/76+gYA/fwC/fz3/wABAwQAAAD+BQb5AAAAAf4D+AAGBgICAPsCBQUABAMFBP39/QIA//wE/v4BBgD6/gwC/AP//QD3BgAF/PwCAAD9BAMCAv///QMG+wABBgAB/QIA/gAB/wEBBf0A+wb++/78BPr5Af79/wEC+gQGBAP+/wEA/P4F/f0FAQD+/P//AAAD+wIF/wH/BfwCAAT8//sBAgn/9gP+7Pj8/gH++vv7Avf7+PoE//v/A/0D/gf5BP8BA/7////+AgcF//z//f0H+AX9AAH7/gL6+/r/AAYDA/8B/wD/A///BPwB+wH/AP77Av7+/Pj/BAEF/QkCAP8c/gAAAQUNBgH7Af8DAgQB/wAH/AP7BAX5/gIFAf7+/QYD+AT/+P8A/QECB/77AAD6/v8JAAICAvsC+fwEAgMBAQEBAgQKAgAA/wUA/gwA/gACAf0C+/oI/QD/+/7+/vsC//v6/f0F/AH+AAIH/v0E/fsF/v8D/AL5/fv5AgIA/v8DAAD/AwQAAf77Av4C+wMEBAMAAvwDAPr4/gL+B/35AQQCAgUEAwUDAAH/+AECAPgD/P0BBAIF/AX+/v0F+w4AAAb+AgX++/8BAAX/BQP/+/77/P3+APsGAQH/AgAC+wAAAPoBBAH7Af8GAgP9+/sB/QAE/P0H/QcH/gT9/v7+Bf74/gAG/f75AgQA//kGAfz5//v9/gMA+v////0FBQQB+gP//P0DA/0F+wL9CP0C+QL+/AYD//wCAf4DAgMABAQAAQT8AgX/Av/++wAABgP7/gT3CvcM/wAA/v4DAgID/f3+AwEEBwEABAMCAgT9Afv9//8B+wIA+v8H/v/5/fsD/wAAAQv+BfwF7AcAAv8DBfwC/gIAAf/+AQQAAf4C/AYB//79AAD+/gACCQMI///+/v8E/v0CA/z9/gD8BwIBAgL6Bf4DAf7/AAEAAwD7/f0J/wACBP0G+/n+AvkCAwX7/wAEAgABAf0GAAMEAfkCAgb+Av8DBwMB/f4CBAABAQb+/gcB/AMG+wL++wn+AAUA/P8C/f39Av3+/wEB//n5AwQBBf4ABAMCBQL1AAD8BAIB+QEAAAAEAP8DCAH8AgD8+wL/AgH7/fwA/v4F/P8F/wYBA/cA//gCB/sE/P/6AwcE/v///QL/AAT8/gb9BvkIAwIJBAYI/v79/wL9AQ==",
     "What happens to a record whose tier is misspelled?": "9/z+BAL+AQH/AP4B/gEF+QD+/AD7//8AAAMBAv/8+v7//PkAA//+AQcFAPkB+wH/AP///Qb7Awn+BPr9BPv+AP8JBPz/+QED/QD1BP79+v4G/QIG/AX9/QIAAf3/+wIB+wH/Af78BPwI/AcEAQIAAP4A/QH7/gf+BAYF+/73AAMG/wQGAv37/wH//Pj+A/r8AP8E/QEA/gAD+wf9/wH5AQMI+/0CAgAE//z9BQL7AAMEAgH9/gP//v8BAv4DBPsB/Az+APsCAAH1AgIA/gD8AAf8Avz9AwD7BgEB//0AAf4JBgQCAfv9Afv/Bwb7AAP8Av7/Afv8BP79AgIA/gYGBAL8BAME/v8C/gABBv/9/gL/BAEBAPsHBv4KBP4A/QL4AvoF/QgE9/0C7v78/gIA/AH9B//4/PsC+/0EBfkG/P/5/v0FBfb7AQH+AwQBAv79/AME/gUCAgL/+wD1//v8/wUEBv3//gD6/////PwCAP4EAP/+AwD8+/D9BAMB/gP/BQIdAP79BPwLCAH//AH/Av0EAgQKAQT9C//9/fwE/wEAAQj9+QX9+v4IA/0D/f7+Af74Af4C/v4BAv7//v8C//4AAQP+AP4EAPoEBAj+AAQA/wP7+AEDAAAB/Pz///4A/gH+AP7/APz//gL+A/4E/gQA/wIFBP7/BAb8//4CAQACAPsE/v8EAwUFAAD8Av7/+/7+/f8E+QUD/vf8/wX9/v3+AAQAAgQCAQACAgQA+wABAP8C+/4BAvsC/QP//QEDAA4B/gICAAkA/QEB/AQBBfwC/QABA/n/BvwFAgD79wAH/v0A/P4E/gEEBvv/+v8CAgII/wP//gUA+QUF/wT//PsC//74AgAF/v3/AgT//vkCAPz+AP/7BAEB//z7A/oLAAT8+//+/gX8BgEC/f39BvkC/P4EAgMGBPgCAP4BBQP9/gT9//wA/wEB/AH7/gQAAQH9/AT4CvUD/gL+AfsCAwEF/f0BBQACAgIAA/oCBf8BA//++gH5BQMBAf8CAfn/+gD/A/v+BQH+APgE7QIA/f4BAfwA/f8ABPv7AgAC/wAAAP/8APz7Av36AQIDBAMC/vr6//0F+gAIAvUA/P37//73Bgr5AwYDAQD+/gABAgIABQAE/vX/AfwBAPz+BPgCAgD+AgD/AgQEBP8A/AQB///8Agf9/QP/A/0G+wL++v79/wED/AMD/P8AAP7+/QcC/wYF+f0EAPj/AwP//gQE//v/BwUC/v4DAQgABP3+Af/9/QD//AIC////BP8E/Aj/AQMEAAT+BAf8/QEA+wEH/AEE+QYE/wD+AwIHAgAF+P4BAP8C/f8E+AMEAPz8/P4ABPgF+vkF/gEDBgADB/4CBA==",
-    "What happens to a record whose tier is misspelled?\nAnd when it carries none at all?": "9v3/BAL+AgEAAP8A/gED/P/9/AH7//4AAgP/Av/9+f3//vkAA/7/AQgEAPoB+wH+AP3//Qb6BAf8A/v8A/wAAAEIA/z/+QIC/f70Avv8+P0G/gAH/Qf+/gICAPwA/AIB/AAAAPz8BP0G/AcEAgICAP4A/QH7/gT/BAcH+/74/wIEAQMGAf37/wIC/Pr+A/v9AQEF/QIC/gED+wf9/QD4AwII/PsDA/8E//z9BQL8AAUFAv/8/gP9/gIBAgACA/oA/Az+AvwBAAP1AwP//v/8AAj5BP39AgL7BQEAAP0BAv0IAwQC//v9//wABwT9AAT+Av8AAvr9BP79AAQB/wcGAwL7AwED/gACAAEEBP/+/wL/BP8D//0HA/0LBf8C/gP5AvsF/wkD9vwC7v78/AEA+wH7AwD4+fwC+v4DBfoH+/74AP4CBfn6BAH+BAYBA/4A/AME/gUCAwP9+gH2APn9/wUFBf78/gH7////+/0CAP8DAP78BAD8+vH+AgMA/gT/BQMeAP39A/0LCAL/+wH/A/8EAwQKAAX9CwD8/fwFAf//AQb89wb++v4IAv4E/f7/AP74Af8B/v8AAf7/+/8AAP7/AQL+/wAEAPoDBAj+/wUAAAH6+f8DAQED+/oA/f0A/AH/AP7+APz//QH+Av4D/QIBAAIFA/7/BAb8//3/AQED//oE//4DAwQD/gH9AP4B+/79/gAE+gQF/fr8/wT8/f3+AQMABAMEAwABAgX++v8A/v8B+/0BAv0D/AT//QACAQ8D/gMEAAkB/AH//QQAA/sC/v4AAvn9B/wDAgD6+QAGAP4B+/4B/QECB/sA+AEBAwEI/wP+/gb/+gYI/QP+/PwC/v75Af8I/f7+AQP+/voDAPz+//78BQAB//z9BPwL/wb6+v/+AAX+BwEA/f39BfkD+/8FAAEGBvoC//4BBQP+AAP8//wB/gIC/QD7/gMAAQP8/QP5CfUF/AP+APsAAwMF/P0CAwECAgIBA/0CBP4BAwH9+gH5BQICAv8AA/j+/AD/A/z/BAD9//gD7QQA/f8AAP7+/v//BPv7Av8CAP7//v/8Afz7A/75AAMDAwMB/vn8APsE+wAIAPcA+//6///5Bwf3BAYDAQH+//8BAgP/BQAF/vcABPsCAPsAAvcFAAH+Av4BAQMFBQEB/AMAAP3/Awb+/QP/Av0H+wH//P7+/wED/QMD/AAA/v39/QcA/wUF+fsFAfj/AgT/AAMEAPv9CAQBAP4CAwcBBP37Af/+/gAA/AICAP//BAAE/Qf9AQIEAgX/Bgj7/gEA/AAH/gEE+QcD///+AwAIAAEE9/4CAwAC/QAE+QIEAfz8/AD/BvgF+voE/gACBf4BBv8BAg==",
     "What happens to retrieval when the embedder is unreachable?": "AP//AgAABAECAgAAAwABAwX+BQEBAAT9Bgf9Afz++/3++/wAA//+AvwF//0E+QT///78/AQDAAcCAf35/v/5AAIL/wH9/P8D+v/4Agb8/AAC/gQG/QQA/QMCBwAA/fwAAfwGAv77Af8E/wYAAP7/+/8D/QH8AAQAAQUB/v36AQMDBQL+/f/1/ggDAfkE//r7AwEHAwMD//78/QT8/v4BAv0G+v8G/wIC//3+AwcBAQUMAgP7AQYC+v4F/f3+Bvn9AgcE/QMA/wD3AgMF/gEB+QL4Af8B/P3+/gn9/wABA/z/AAD//vkA+/z/Cfn+//3+//37/wP5/QIA/gMC+wEDAv///gQCAf0D//3//Pz7+QT9AP///wADA/oDAwIG///7A/8DAggG+wEA6/wA//3++gD4Bvz5/v4G/vsEAvz9Agr9A/oFA/n/AQcABgAC/AIDAQAE/gUHAQT/+wH9AP/9/QMBAvUB/AIDBPoB/v4G+QP9A/z8Av79APP7AgL//gACBf8cBgUHAgEICAL9//0C/v8E/wQI+wQA/wT8/wID/gT9+wf79gIDBP0DAgIDCAT9+vv+AAQBA/z9/QD//vsBA/kD/AP8AQUE/AIC/QX9+gr9Bf39+wIB/f4A+/r//P3++AD9/P78/Pz//f8CAgICAAAC+v0AAf8EBQT7/fn8BAAA/QIFA///AQQBAAEEAwIA+gD/BQIEAAIBB/z9/gH/Af35Af7+BAMJ/PsDAQH8+P8C//n5/gEABP8BAgT7/QH7/Az9/wIEAgb//gD7BwAA/fwB/QP+AwACCP0G/wEB/gMG/QIE/v4BBwAHAPwAAP7+//0F+gAG///+AgYH/AUB/QX9BAD8Af0E+/wD/wT9/voD//j5+/38/wUE+f79BfwBAwEC+wMB////AfoD/P37BP8F/f8AAQQC/wEE//0CAgAB/gIDAP78AwAA/QD/+QECAP/+9QX7BfYH/AQEAf8B/gED/v38/v0EAgYABfwFBAL//wX///j//gEG/f8K/Pz8//7+A/v+/Ab+AfgE7AcB//wB//8EAfX6BP79/gIDAAX8/gP+BPkEA/0AAf4BCAAEAvr8AwgDAgABB/wA+v/9BQEAAAP8APwD/gL+/f4A/f78AgD7/vwECP8A//79/vv9CwL8AAIA+QMH//4D/AIAAPn+AgP+/gkBA/wHAP/6/QAE/vsG//4C+QH/A/wC+AL7AAcC/QMIBPz8/gH//P3/AwL7BAH/AAX//gT6Bgb6/f8BAf0B+/7/CP4DAvwCBwT8AgIC/wb//gcCAgP9+vsBAAAB/QQC//oA//z9Bf4D+gH8/QH/BwAB+AAAAAP6/gQBBP39CPwGAv0EBAL+BgX+BA==",
     "What is a follow-up composed against?": "AAP+AwD7AgMB/f4C/AL6AQD//P7+AAP9/AUA//wH/f0C/wH/BQP9AQMEAAD/+gMAAvwABQYDBAUDBPkC/fj6BvwKAwIB/vv/AgH6/gH8AAEGBAEF+gX/Af4ABf8G9AEB+wQEAfz9APwE/QUCAAAH/v4CAfoB/QL7/QIK//38BQn9BQIE/AL+/gMHA/oE/gH9Avv//wX///0A+gEBAwn7AwL8+gEDAQL/+vj9AgMDAQQFAf77+gID9wH+APwCA//8BwEA/QL7/gH9AgX9/P349gL//v3/BQL+AQIG/f8C/gIFAAcG/wABAv/9AAL8CAP8AP0C/f0AAP4CCAEA/wAICAP/CQIECgQEAgIE///8Av4BAgIDAv4G/gMCAgAA/v0EBvj+Agf//QAA6/n/BAECBgABAP76AgQJ//v2/vz8+wAAAv0I/vQAAQD9BP4A/gMA/gQH/QX//fz9/QIC//8C/v8AAAD8/f39/P8CAgME+wT7Avv/AQIB/PP//gAB/P0B/wQa//79/QEEAv75/fn8Af8F/AQG/wT8AQX+APv+AAL5AQL99fz99/oDAP4DAf79Af8AAAEDAPz/+v0D/P7//QD9+wMGAwIBA/z//gECAA34Af/7/AH9BgQCAP7+AP0DB/sJ+/wBAPgAAf8GAAACAQMAAAEEBgH/Bf3+AgEDBPwA+/wBCf4ABAYBBAH9/v77/QMBAQP+/gH/Avv8/f79/gAABAQFAQII+AkBAP77/gUCBP0C+P0DAvz7AAD7/fz6/g8B/Qn7Cv39AvwA/v4CAwL8+QUBBPr+/gMHAvz/+QMH/AMG//sF/AH++/8BBvb9/wAFBgYBAP39+wQB//sAAf//Avz7/QP7/f3//wX+/PoBAfn6AQIB+gEAAwEAAgEFBgP7/AT//v79/gAE+AEDBfr/+gABBQcEA/YC+//+A/39AP4AAAL/AwH7/foA/QIB/gP/+gcBBAT+Agb0AgIF/gME//8FBQEBAwEA/vkBAP8C+/j9//4A//8B/fkFBwH/AP////wBBgn9AP/+6wL///wA//7+AgECBPz7B/4CAfoAAP0AAAf6////BAMAA/8FAf3++wEF+/0I+vz/+QIAAwX9/gH/AgAEAAH9+wEAAP8D/f/7A/v/BQIGAv4BAP37A/sB/PgB/QEG//sBAgL+//kB/wX/AwMEA//+/vz/9AACAAT/AAYD/gT//PwC/wf1//4ACf8CAfoBAAEAAf4FAPcD/QMD/QH+CPv+AwP8//3/B/4E/wb/BP4EAgED/gz/B//++/4C/gEA+gP/BP4DAwQD/wX9AAP/Af0A9P/8/gD9/fr+/P//+gMC+/z8AQEABP7/Af4FBAIHBv0AA/3+BQ==",
     "What is an imported page?": "Af78BgP/AwH/BQAH/QP+Af7/AgD7/QX+BAQD/v75A//+/v0BA/v7Bfv+//kA+wT+AAD5/AT2AQYAA/oB/f79/gEJ/wD8+/4GAAL4BAQB+gEBA/0HBQD8AAH8+P0F+Pr+/gIB/gQGCP4LAAQA9v79BgL//P4B//0E/wID/Qb8/f8GAgUD/wH6/wcDA/8G/vr6APwC/QP8/v8G/QP1+QL+Af4C/f0F//4H/P0D/f0BAgID/wH9/wYC/f4F/gAAAPv8AwYD/QEB/QIBBP4K//399wAAAwMB//39AQUD+v4BBP8CAQn+AQQABP8AAv79/AD8//31/vr8+wL9AgEF+wEJAwL/AgD/Av8EBf/5/gr/+QH//AIE/gEFBP8DAwUF/v39//sBAQUA//v/7vn/Af/7/Pf+Avz6+P4HAAP/Af77/gT+/gAFAPv7A/wBAv8E+wYAAf/9AAf/Av/+/gH/Av8A/P3/BgH//vz9AwIBBP//+wb+APwGB/oB/vECAwED//0AAv4dAwMGB/38AAL8A//+Af4C+gMK+AP6BgL8AAT9+/v9AAP6/P7//v4AA/wFAwb+APj+AAL///8HAQACAQQE//wA/gME/gMD/PsCAAj/AgT8BAH9+gAB/P4HBQAD/AQC+/r7/QD7/vr9AvkCBP39A/8CAf8HAf4CBv76+gL9AvwB+P4D/fsAAQcFAAH6Bv0EAQQCCAYDAgUEAv3+AgcAAwMB/gH/C/4G////+gEB+gcP//35/gICAfsBAP8B/QIA+Q77AAL9B/4AAgEBAgMBAgb++P8B//8ABP8EDPr5AQMC8wEAAv78AgECA/gCAP/+APoDAf4DAgIA/f8B/ggD/gAC/gD7/P8C+/8BAAP3/v8DAPoAAwIA/AMFAPz6/v0AAP7+/gEA/QD+BAMH/AL7/f3/AQMBBf0EAvsCBgb8CAD+BAYA/gH8AgEEAgAAAf37/gL/+wQEBf4K/AUA/wEAAP0A+v4A/f8BBAMC//oEBAIB+f8B/fwC/v8F+P8C+QL6+QEEAv///QD/Av4E7wMB//n9BfoIAfsB+gIBBQIC//8AAQr/Av78Bfn6A/8A//3+AQAGAPoD//4BAP79/v4B/AL7AgH9Af8AAPwA/gAB/wT/APr9/f8AAAT8/f7+APwIAgr+BwIBAP0AAv8BAf38/vwAAAf/BfsDAgAAAgMA+AAA+/8C//z5+gUBAgAG+Qb6Bf7//wcI/vv5/v3//QQE/vn9/P8A+wL//wX9DAUBBP/9/Pz+/fwHBP4ABP8CAwL/AwUABwgEAQQC/gAA/QIE/v0A/AwG/foB/wMB/P8AAPz8A/z9/f79AQAB/gD7/P8FAgMA/AEEAgEFAgH9+gL9/g==",
@@ -2827,7 +2831,7 @@
     "Where does my own CSS have to be loaded for that to work?": "+wD6/wP/Af74AgUC/AH6AAH///79+/4GBQf+AgH8AAL//wD3/wH9AAAAAP0D+wf+//z9/gD5AAYC+/z9+vwAAAAE/fz9+//++vv6/QH8/AMDAQUDCwX8AwP9/QMJ/Pf+AgIIAwYEAP8EAQH+/fwDAv79//38/f//BQUE+wb+/wP9BQIF/wL7AAMFAPwEAwD5A/cFAgX7+wD6/AT6AAICAwID+wMG+wAA/v8B/wQCBAUEAvv+/gT++/4EBP3+Bfn9BAUCBAQA/vz7AAT9AP/9+AP8Af7++vYBAf////z8Av4HAAL/Af7+/wABBP39/P4BAgAGBfsBAQP/+wMCAAIBBQH//v7/AgIC/f76+QL9+wEA////Av4K/wEGBQoBAAX+AgD+AggB+v4C6/4EAP799P36AgH6+/wAAP7/A/v8/gX/Af4IAPkHAQMBAAH/Av///wD/AAAD+//7AP8C/P/++gIBAfsC//0F//oE/wIE+wT/AfwABQD7A+0FAgAF/fwBAAUeAwT/Cf4CAPz+/AP+Af79+AQK/P72Bgj4/QAG/AT6AwX9/f0F/AED/v0EAQP6BQP+/v73+AD/AAD7+wACA/8A/QT++f4FAfsAAQIDBQv7BvwD/AD//f4F/fwBAP0FAP8A//38/f/+/Qb/AAADAwAEBAD+Av0CCgL9Av/7+v/8AfoEAvz+BAb6BAcAAgD2AAECAwL9AQIFCAH6/v4BAQL5/gEDCgL8+QT//QL9+Qn/A/f9AP3/Afr+BP7//AL++Qz/AQcBBgD7/wP9/gEF/P4B+gP7AQT8BQABAwAA+wIB/Qn/AfsEAAAG/voBAAUDA/sF/AMD/QIA+wEC/AEC/AEA9v///wAD+wAE+gT9//79//v9CQEC/QP8/vv9Av4CBgP//gD//v/8//r/Agb9Bfn4/gP/Av4CAvn9CfwBBwH9//8BAgH7/v8B/wAAAgH4AvsD+wYEAQIGAf/6/v7+A/8D//v//gH/AAX/BgAABQH9AQEAAfsDAwL+/QUC/v7++/4CAP8CAgb5BP0F6gX8AP77/wEDAvsDBv8BBQP+AAMAAwMAAP/+BPv+AgABBP7/BAEB/AAEAQIGBf4C//3+/v4E/gD8A/4E/wb7+fn89gH8AP4A//0CBwD/A/8C//8ECAH//gb9AP38AAIFAwH///0DAAT7AQEDAAD+BQAA+/0AAQQBAQMB+wQBB/8C/wX4BgL9/QQIAAL5/v39//wAAv7+Afz9BP8BAQH9BwMAAfwCAwICAQEDA/0DAPkBCAb9BQQAAgX/+/8HAf79/v4E//7//wYR/vYB/fz+/AEIAPz9Av//AgL+/wECAP0A/f0C/v0BAAIDBfwEBP0ACAL+AA==",
     "Where does my own CSS have to be loaded for that to work?\nAnd which of them change when the page goes dark?": "+gD8///8BQH6AwT//AH8/gH+Av/+AfgFBgb6/wQBAP///gH5AQT7+wP/BP8G+QX9+/3//gP7/QX/+/z7+gEB/AEHAf79/AD//Pz4/vz9/QICAgUBDAX8BQT7/wEJ+/3+Bf4HBQQBAvwC/wH///wGAQAAAPz7/f/9AwL/+QX+/wb9AwAC/fz3A/8CAfsC///3BvwF/QT8/wD8/gL8AQb/Af4B+gMH/gEDAwb+/AYEAAUJAfr9/QH++/0EAgH/A/v/AQcCAwUC//v8AQT+AgH8+AP/AwEA/Pj+/gL9/AEAA/kIAwQDAAL+/gECBfwA/v8CA/sCBPwE/AX++gIAAAEFBwIA//0CAgAE/wD8/f/++wEC/wEBAP0O/wQDBAgD/gQBAvr8/QcC/Pz/6/0CAgD8+Pn3A//7+//+AQL+Av3+/gb//v4F//gDBwH/AP77/wECAQH9+wAB/v39AAAE+/sB+gQBA/wEAPoD/f4C/gUD/AP/BPYBBfz8A/ADAwIC//kAAgMdBf3+CP8FAf3++QL/Af79+gUK//75BQb4/QAHAAP7AgP/+wMC/gP/+/4EBQH6Af///AX7+wAC+f/8+QABAvn/AQQA/QIE/vwA//4DBgj3B/0A+/3//P0E//oEA/wA/f4CAP0B//0C+gEC/wP+Bv0FA/8AAPsBBP77AwP7/P38//oFA/3+BQf/AQIGBwL2Av4DBwP9AQMECQL4+gH9AP38Av8DCAD9/AMA/wMA+Qn9//T9AQABBPr9AQH7/AH++A3/AgUAB//9/gP8AAIE/P8A+wH8/gH/BwIABv7+9gP/+wgB//oFAgAGAP4A/gUCAP8I+AMB/wL5AAYE+gQB+gD9/AH/+/8B/P0B+QP+/fgEAPv9BwAA/gH8+gEBAv0AAgL//gMA+gD5AfwFAwX/BP73/QD+BQMB/f7/CP//AAH+BAEBAv/9Af/+AwP/AQD4A/0F+gf/AQUC/QEAAf3/AgEEAPj8Af3//gIBAwEC/wT9AQACAP0DA/8C+wQEAvz///oC/v8DBgT8Bvn/6gX+/gD//gAC/gD/Bv4CAAEA/gkDAf7/BQH9BPsAAgIAAAEDAv8C/v4D/f4JBf0D/gEB//wG/AD+AgIDAgL9+fkA8gP8//v+BP8BA//9Av8C/v4ABQP+/f/+/f7/AwEEAgMBAf3/AAH7AwEFAf78BwEDAvv/AgIB/wP9+wIDBAAH/wH5BwAAAAgGAQD4AP78Av4BAgD/A/39/QMAA//8CAAB//sCA///AQIBBfwD/f8DBwUCBAMCAQYF/AAIAfv+/v0F//4AAAUL+/sGAv3+/AEF/f38AQH9AgP/BAUAAf3//vsF/P3+/wL+BwAAAvn+CAAAAQ==",
     "Where does the index have to be written?": "9wD9AAL//v4BAP8DAgIA/wL/AwD9/gAB/AMDBQL9//0BAQD7AgH9/gEGAPwC+gL9/wH9AQP+/Qb8A/b7/vf3AQQBAAD+Af0B/AH7AwT3/gID//4EAf79AgIC/gAB+/37Af8E/gIECAILAAEDBP8DAwT+Avj//gMAAgD9/gEA/wMAAAUGAgP9AQIE/fsCAPz7BvwA/QH8AAUDAgwA/gb/AQID/P8H/f4B/wAAAfv8AQMDAvr//Ab/A/8GAP8CAf38BgUBBAUAAf3+Bwf6/f35+wL2BgT+BfoCA/wE+voBCPwFAgT9Bfz/Bv4AA//9AQMCAf4BAf37AAEBBf0D/wQIAgL+AAD+AAQCAwH9/AX5/P4D/QUH/P8G/QEFAwAE/QT5AP///QgB/P/+6vf+BAIA+/z5AP35AP8FA/7/AfkAAAX7/fwGBPv+//v/AgQFAQIDAAUBAAYB/f349QL+AP//+gIGAv8H/vX8//r/Av4C/QIBAQIEAP77/fACAQMD+wL/Bf8hBAP5Cv3/A/7+/AEFAAQG/AMG/wb8BQP++wAH+wIB/wH++f0D+/7///sI+gD9/v0A///9//8FAf0A/f4EAQf6AQEA/wAHBP4A/wMCAwP+Bv4A/f4EAf8G/voA/v0B/PkCAPn5/fsA/wcAAgICAvwEAgUDAP8ABAD+AwP5/AAC+vkCBQD7/gIAAwP9AP4B/wADAwf+/AX/AgT6APz/AAP7BAEFBgIB+gQE/v//+wIA//v+Av4DB//+AP79/Af/Ag0D/wT9BQD++f77/gAABf8A+wIDAfz7B/sDAgH5AwAD+QMB+/sF+QADBPoCAwUAAvwG/AEDAQIA/P///f8B+gEA+fz8//4I+/74//77+/oC/vz8AAEE/wP4BAD+/v0H/wT6/QP+/AP7Af4C/wMAAfr9BAMBAwIBBP8EBQL/CwL9BAH9APr8/P4D/f8AA/8AAv8B+AP6Av4E/QT2/gH/AgIB/f7+BAEA//wAA/8CAQMA+/b7/P4GAwEA/v0DAPz3+vz+/voBBP/+BPsC6wH8////+wEAAfkFAQD6BQMB+AMH/wUBAv7/A/oBCAIDAQMCAf4A/gIE//8B/fsCAQD9+/0CAv77BQMIBP39+v4A+QICA/8B+foFBv7//gAAA/8HAQEAAAAA/Pv/Av7+AwL//foD/gL8AQQB/wEG/v8D+f/+BAQBAAP//AT9/gACAwP+AQAA/P8D+/7/A//7//wE/vj/Av8AAgIEBwf7B//3Avn9/wQB/AMDAwEBAf3/CQcAAv8AAAL7AQgABP8B+wEDAgUJ/gIG/fv9/QQE////9v7/A/7+AgcD+gQJ/fv8+QIBAgAA/fgABQP+Avz/BAEABA==",
-    "Where does the index have to be written?\nWhat colours the code inside an answer?": "+P7//QD9/v0AAP4EAgD+/wH+Af7+APwBAQMBAf4B//4BAAL5BQT7+v8EAQEE+QX9+wD/AgT//gX7BPf+/vn6AgIC/wH+APz//wH4AP/7+gYAAf0FBAH9AwH7/v8C+P78AP8E/wAEBwAJ/AIFA/4EAgIDA/r7AQABBgL+/AH9/QX9/wIFAAX5Af8B/fsE/Pv8BfoB+QD9AQQCAgX//wP9BQIA/gEG+wEI/P/6AP38AQIHAfr+/gf+//8CA/8BAPz7BAQBAgP+Afz9BAL2/QD2+QP4BAX9A/kCAfoD+/wBBfwHAAMEBP0CB/z+Af4C/wUCAPoDB/8B/wACAf8A+wMHAwX+/v7/AwICAQD+/AT8+vz//AcJ/P8J/QYD/wAE/AP6/wD+/QcC/gD86vf+/wIA/f36//35AP8BAgD8APv7/Qn6/v4B//v8A/r/BAMCAgIE/wID/wUBAP769//6/gAE+AQBAgIG/fL8///+A/8AAQIAAgAIAvr+/+8A/wQC//79AwIdCv74Df//A/3++gEF/wAG/gcH/gX+AQL8/QEE/wAAAQH+/wEC/v3//f0KAAL+Afz/AQD9/gACA/v8/AEDAQX9/wID+gIIAwP//gIIBQH7CgAA/fwDAf8FAP0BAfv///wC//j3//sDAAb//QT+BAEDAQMABP0BB///AgT9+wAH/PwDBP/+AAP+AQH+AwP//v4EBQf8+wX/BQX4AP7/AP39AgQHCP//+wQD/v7+/Ab8/fz/APoCAP7+AAMA/Qr8/woD/wP6AwAA+gH7AQIABQED+v0C//3+B/8CAwL4AAAC/AEA/PwB+AABAvoGAgMBAv8G/QAG/gIA/QAA/AP/+gL+/P79AP8D+QH9/v78/PoB/vz8AAQB/wT2AgP9//wI/gT9/QMB/gT7Af4C/wcAAPv+/wMBAgMCB/0EBgD8CAX7BAL9/vv9/QX+////A/z9AwED+wT5/gIF/QP4/gAB/QIB+/0BCQEE+f8BAwAC/QQC+/r7/AEDAQP+/fsF//z8/PgD+/kDCQMAAvz97gMAAP8A/AD+//0BAQH+BQcA/AYF/wAFBP79Afn8BAYCAQEGAQEB/gME/f0D/fsEAgAA/P8CAv/8BgUH/wH++gD99///Bv0C+v0DB/0C/f39//0IAAABA/7++f39Af/+AwUB/vwE/f/+AggCAgEHAP8DAf39AwIE/gP//wP+A/8BAgP9AgAA/gED/f/+BP77/v8E/f0AB/4A+/8ABwP8Bv79//v8/QMAAwECBP0DAgEBBwoEAQL/AAX+/gcBBAH///8HAQMH/gAG/Pj+/QMB+/wB+P39/wH/AgQG/AYG+v/7+/wDAgD//fz/CQL7Bfr9Bf8EAg==",
+    "Where does the index have to be written?\nWhat colours the code inside an answer?\nAnd what would it take to use the other one instead?": "+AD9/QD9/v4CAP4DAv79AQH/AP7///0C/wIAAQAC/f4BAQL7BQX7+v8EAgAE+QT8/AD/AAX9/wT7A/j+/fn6AQMC/wH+//z+/wL4AP/8/AX+Af8GBf/9BAH6/f8D+f79AQAE/gAEBf4I/AEGAv4FBAICAvv8AAABBQMA/AH+/AX7/wAEAgX6Av0A/fsE/P38BvwC+gD9/gQAAQUA/wP/A/4B/QIF+/8H/P/7Af79AAMGAPr//gf+/v8BAv4CAPz7BgYCAgT+A/39BQL2/QD3+gP6BAX8A/oDAvoD+/0CA/0GAQMEBP8CB/7/Af0BAAMDAfoDB/4B/wEBAv8B+wMHBAb+/f8ACAACAAD//AP7+f7+/QYK/f4J+wUE/wEF+wT5AAH//QgC/AD86vn+/gEB/Pz7//v4Af8CAv/9APr9/Aj6/f0B//v8A/z/BQMCAgICAAIF/gUC/f/69f77/f4E+QUBAgEG/vP8//4AAv8BAQIBBAEFA/r+/u8CAQUD/v79AQEeC/74DQAAA/39+gAE/wAF/ggH/gX9AgH6/wAD////AgL+/QQD/f4A/v0K/wD/AP0AAAH//v4DA/r8/QMCAAT8/wAD+wIJAwMA/gEGBwD6Cf8B/f0DAf8HAvv/Avr//vwB/vn4/vsD/gcA/AP9BQADAAMAA/4BBQL+AwP++gIF/v0BBP77AQP9AAD9AQL9/P0EBgb9+wQBBAP3AP7/AP3+BAUHBwAB/AUD/v/+/Ab9/fz/APwC///+AAP//Qj8AQsD/wT6AwD/+wP9AwQABgEC+vsCAfz+BwAEBAL4Af8B+wAB/P8A+gACA/sHAgICAf4G/QAE/wD+/gED/AL8+wT9///7AAAD+v/9/f78/PkC/v37/wMD/QT2AwL///sI/wf7/QMC/QP+Af8D/wb///z9/AT/AwQBBvoEBQD9BwT9BAL8/vv9/gT//gD+A/v8BQED+gP5/f8G/QL5/wAA/wIC+/4BBwIF+/8ABAAB/QMC/Pr7/QEEAAP///wGAPv6/fgD/PkECgL/Afr77QP/AP4A/AD9//4BAgL9BgYB/AYG/v8FA/78A/r+AwYCAAEGAQAB/QMF/fsE/fsFAP///f0BAQH8BQYIAAH++QH99gAABf0C+f0DBv4C/fz8//0IAAEBAgD9+v39AgAABAUA//wE///+AQUCAQAH//4CAf3+AwIE/AMA/gP/AP8BBAP9Av8A/gAC/QH9A/76/QAG/v0BBf3+/f4ACAH7B//8APj9/QL/BAECA/0CAQIBBQkDAgH/AQX+/gcABQEA/v4HAgIH//8I/fn+/gIB+voC9/7//wL+AgQH/AkG+v77/PsDA/8A/f3+BgL9Bvr9BgAFAg==",
     "Where does the panel keep the conversation history?": "+/36BQD8Bv3/AAIJAAgEAAP8AQEC+wH9AwX7/wH+/AIAA/v/A/78AQEA//oA/QH+BAT6/QP9/gr9APoFA/4C/wYLBAABAf7+Afr5Af3+/gQA/AUABgD+CQL/BAAE+/z7/vv//Aj+BfwDAwQF/f//CP3///z8/AAFA/8A//n9AwEGAAQC/gH8/wYFAPoHAvz9//4C+gMB/AEAAf8AAwv7BAgE+wMFBAMA/gAA+wD8AgAGAwD8/gH/+voE+/4CBf//AQIB//4D/P4AAQcF/vkFAAP4/QUD+v0EBgQF+vkGA/4A+f//AQAB/wUAAgME/QP//gL9/v7+AwIBAvwC/AAGAQL//AP//wIEAgT9+gb//wP/AQMBAAED/wD/AwH//gD9AAEEAAkDAAD77AT9/wL8/v74Cvz7+f4DAf/9BPkF/gMF/vz+//0BCgIAAf8CBfoB/wIHAQv///7/+gP7Av79+v0A//sB/QT+/gD9BPkB/gb/BQUABfn9/vECAf4A/gMBBQIcA/36BwUGBf3//gX/AP8I/wYE/gIFAv/9/f8E/gYABAP6/AIB+/wDAP4E+/n6/wH0/gYFAP4J/v79/wcH/gX9+gEDAQP9Av4A/wX+/wEBBv4A/AAA/v4D/AEB/f/+/vv8/f0B/fv/+wIBBv0DAf0CBP0F/wT++gT9AP36A/kA+/gFA/4ABAgDAAD8AgMB/f3///4FAP4DAv34AQQAAP/6AQQDCwID/P8BAf3++wcG/wH9/wACBQP+AwH9/gH+/gwH/gH9BAwC//oE/gL6AQUEAfoB/voB/gABAf75Af0A/QL8AwH6BAH+AfgD/gIB/wEF/v/9AgUB/AED/wD+/QQCAP7++wAF+gT4AwQA/vkDAvoA/gH9AgP/BPwFAfYC+wH++wL9/AP8AAAB/QP+Afz+/gAA/QYDAfwEAv0CBP38Av3+AAP9/gL1/wME/AH9+wED/gcE/wUD/QUD/f4AAP8E/fwA/v4CAAT9Af4CA/7///v9/vv8BAIDAfsGAfz+/P0GAf0AAgP//f8A7AYC/P3++/8B/wb8APoBBQEA+QcBAwAEB/wA//oBAgABBAEC//kAAAAB+fwAB/0B/f7++v4CAAD7AAIC//36+/v+///8Bf4F/gD//v4ABP34//wDAgX9//z+/QD9CQAB/v39//r4+wX//AwB/gP9AfsH9gECAv4DAAT++gABCf//AAUAAwID//sE//f7AgP7/gECA/z3AAQB/fwFBg0D//3+APv8/v7++QD/AQACAvcC/QYAA/77/gUA/wj/AQD8BAEEAwME/QT9A/X7/wMEAP4G+fz7AgQI+wH+9wUB/f4A+P4FA/8AAP4GA/sABf0EA/4A/g==",
     "Where does the panel keep the conversation history?\nHow much of it survives a reload?": "+/77BAH8B//9AAEI/QoC/QL8/wAC/AAABAb6/QEA+wQBAvz/BPv7Af39+v0B+wT/BwP7+gH8AQj8AfsG/wAE/gMLAwAAAf/+Afr3Av79/QMC/QYBBgP+CP/9A/4G+/r8/foC/Qj+Bf0GAgQE/v0AB/4A/v37/QAEA/8C//37AgAF/wED+//3/gUFAPsFAv38/gD//QUB+/8ABP/+BQr5AwUF9gYHBgMA/PwB/AX6AgEJAwH7+gL++PwE/gABBf4A/wQB/f0D/f4AAQcF/PkF+wL5+wMG/P0DAgUD+fwFAvv9+//+/gIBAQX9AwAF/QD9AP38AfsAAQP/AfsB+/wHAwH/+gMA/gIDAgX++gUA/QIBAAMC/wAG/gIAAwD+/QD+/////ggDAf/97QH+/wL7/gL4C/n89/0BA/79BvoFAgID//77/fr/BwYAAgECAvn//wAFAQkB/QD+/gD/Av39+/4DAfwBAAcA////A/kB/ggBBAL9B/j//e8FAf4C/wICBAIbBP3+BwQIBP7+/gUAAwAG/QcG/AMDAv/7/AIAAQb/AgL7+QMD/PwC/f8F/vb5AAD2AAUFAAEG/v3//gcE/wH/+QMBAwT//v0B/wMAAQL/BfsA+/7//f0E+/0B/v39/f/8//sB/vkA+gL/BvwDBP4BBPwD/gEB/QX8/fz9A/gB/foGAf4CBQgE/gH+AQL//vz//v0I//4CBP34/gMABf78AAMFCgMB/wH+AP4A+gYF/gIDAAICBQT8AgT+/gD9/wwF/gH/BAj//vwGAAP7AQYEAPn/+/wBAf4DAf/9Av4B+wT/A/74BAD+/vcE/AMD/gIG/v7+AAf//f8AAQD+/v8AAP4A+/0C+wP1AQUC/vsEAPoAAQIB/QEAAP8HA/gA//7+/AX//wX9AQL+/gL+//7/+/8B/gUFA/4AAv4CCPz9AAAC/QP/AQP4/QID/AL8/QEDAAUDAgMC/QQF/f3///4C/vwB+v8EAwb8Av//BAEAAfz+//r/AwQCAv8I/vz8/vwHAPwBAgT8+/wB6wYA/wD+/QAA/gX6Afr/AgAB/AQAAf4EB///AfkEAQAABf8B//sB/v8C/PsCC/wB+wL+/QH9AgH6/wMB/QH5+fr8/P36Bf0C/gAA/v7/A/38/PkDBQL9AP8A/AH9CQIA/f3//vz6+wIA/wwC/wH+Af0F+gIFAvoE/QQD/AEABf4B/AUAAQIEAP4FA/n+AAH8/gECAf34AgkD+/4BBQsBAv8A/vz/AP3+/P8AAf4EAvgD+QcAAv/7/gYBAQcA/wL7/gEEAgQB/QP+A/j9/wIDAv4H+vz7/wUJ/QD/+AT+/v7/9v4FAQD+AP8IBfz/Bv4CA/4C/Q==",
     "Where should the API key live?": "/f37Af/8+/4CAgMFAwL7AwQC/wH/Af//BQX6AAH7///9A/r7//38AP8AAf4B+AH/AQP8/QIA/gYBAPz9APr6AgQB/v/9/P4B/P76AQb/+QIF/AQEBgH4BwEE+/4K/Pr+Av4H/wIBAf4G/wcE/wAB/AMC//z9/QEEAQf+/f/6AQYBAAD+/QD8AAUDAfsBAfwAAv8E/v4CB/4C/gb/+wAFAQH+/QQE+wX9/gIABf/+AgMCA/39+gj/+v7/BAMCBP3/AgIBBAAFAv72AgsC/f4F/gT3AQD+//cBAAIB/v0EAgIH/wD9APr6/wD6Bv74/gP+AAD8Av3+AgH/AP4A/AMAAQL/AAACAQQCAgT3+AX+/QIB+gT/APgEAv8BAgECAAH4AAL/AwcBAP366/4BAQP9+wD3AAj6/PsC/v8D/voC+gwBAwMJBfoAAP8BBAMAAQb++wT7AAMG/v75/wMBAAP7/gECAvsG//8C/AIDBAIF/QUC/v7/A/75//MC/QP+/PsAAgYb/wP8Cf4AAwD+AAEC/QMG/wQEAQD9BQD6/P0J/AcBAQIC9gD///4C+v8G/QL+AP38/Pz3/f8G/v7/AgMG///9/P0A/fwFBQED/AMAAQr8BgL/+v3//fsG//r+Afr+//kAAf3++f/8/AP7BwEEAwECAfj9AwYBBgYA+wEA+/0D/f4FBP0EAf39BwL+AQD5AvwC+QYCAvz+CP30/vwC/gP7AAIICAYKAQMD/wH6+QIF/fv/Af0CBAX8AwEF/QX/+Qn+AQT9BAr9Af8AAP7+AP8B/gQGAwD9BAEIB/4AAP8E+wAF+/sC/wEBAfwDAAH+AQEH/gEDAAYH+gEE/f4BAQf+Afz8A/8E+f/7BQb8/Pn9AP7/AgAAAf3//QH6BfoGAQH+/gL8/gT+AAH+/wX8//T9/AUB+v4CBf4DCP8BCQX+/gcBAQQA/foB/gL9AP3/AwYC9wUB/AEEAP3/AP77Av0C/PkBBP/9Av//AwIABQb++vr8//8H/wP//v4E/fr+//z+/wD5BgT7/v4E7gT//vv//v0AAfcAAQD/BgQC//3//gcFAQL///wCAfwDBP/9AP38A/8D/f0DBv78Av8EAgIBBv75BAIGAQH//gEA9/sBAwL//QH/Bv4B/v37A/UDAQb/BQX9/f39CP8FAPz/AP4A/wD7+gj8/wH+AvkD/Pv+Af4C/wgB/QAAAwMAAAb//QQA//kH/Pv8BAD79wAB/v3/BwH//v8EAgb6AQH2A/z8+wL++wb9CP4FBfcEBwL/BAH/AAP6AAkB/v3+/f0FAQAE/gEGAPb+/wEEAAED+v/9/f8BAgL//wD/Af7+/f4AA/sCAQAFAfoCAQD+CQP/BA==",
@@ -2846,7 +2850,6 @@
     "Why are the vectors quantised?": "9vv+AP3//P4BAv0BAAEF/QT+A/z7+fsDBAL8AP4GAAUG//z9BP3/BAL//vsE+P/6+v76/wX+BQT1+/z7A/wCAwMIAf/9/QP+AQP7AAP9/gMG/f8CBgr+AP0AAQT8+/wC/gIEAgb+AgMD/QMB/AEEBAL+/AD+AAUEAvoA+/77Awb//v4B/AL9/QAH/PsEBPr/A/0FAAL/AP4A/gQD/gP6AgT6AwACAPkK/wIA+/3/AgMKAAH9AgIC//wC/vcCBQL/BgAE/fwGAfv5AgT/9wD/+AcAAf4I//v+/vwA+gAFBAAAA/sC/P4CBQL9Af3+AAMCAf8F/f8CAgYBAAgE/gAB/wX9Af4D/QsDDAAAAQQB+/7+BwEA+wIIBP8B/AAJ/v/6AwL+/wgC+QD+6gD6////9wL9BP75AAADAAP9Af0G+gv5Av3+CPz7Af0ABPz9AQf4AgAFBAIEAAAC/AD9BwH7+QL/AAEH/v0GAfv+BwEDAQQH+vwEBvr9/vz//wQD///+AQQc/vsBAgAEBgD+/QQA/QAF+P4L/wD6AgT9/wQBAQH//QMCAgACCAQDAP/5/Ar5Af4E//8A/gP///8F/AEJ/v//Bfv9+wcFAwX9+wUAAv7+AP8B/wAB/wIA//37//z6/gD+Av0E////AgH4/AACAv3//wMFBvn+Agf/AgAFAv79/PwBBP74/gEE/wX9A//9+wMF+AH6/QL9//36//v+/fn7/v8CA/sD/QED/QQB/AEFA/kC+gADA/0D/AEB/wQAAA78/QMAAAH+AAX+AQIEAf/9//3/A/sB/v7++/4BAv8F+fcB/AEFAAH+/wECAP8C+AAGBQIH//wC/v8IAgEG/v3+/gAB//0B/f32/QL7APj/Af/2AP7+A/sHAgf7//4AAAED/gIE/QX+AvcIAAb/A/YAAP7//wIC//sB//0CBvoAA/r//wAA/gEE+wH9Afn//vz9+wUGAP8G+gT///8CAQIFAvsB/gADBwYBBgMG/QUG/AH8AwX8/f4F/PkHAgH9Af38/gL9AgABAvgG7f0CAP7+Av39/wAE/wD+/QD+AgT+AAb+BAAFAPv6AvoFAAD8/v4DAwUBA///BPr8+P/6BgQCAQH+AQH/A/0A+/7/+/4DAAEI/PwHAQL/BP0GAfwBAAP/Bfr8AAD///n+/QH7+gQBBQIA/AH8AgIB/wAF/QEEAP0HBgT9+wX+AgMC/QD8/gQA/gAFBfv8AP0DAfwAA/n9/v79/P8DA/4AAAP1/wH8/v8C/gIBBPwGBP4CCwL1BP8BAgb8/QUHAAEEAAIA/gP//Ab6//j8/QD7+/wE9/0AAgT5BAX++gACAPr+//sBAgD//vwIAQX/AgX7AwAA/g==",
     "Why does a greeting never reach a model?": "+QP8+f/7/f7/AAIDAwEBAAL+AP0CBAP9AAH5AAIAAAX5/P3+BwD/AvwB/vj//v7+Bf8C/AABAgIGAAD++/4D/wIHAP/++AAAAAD5Bf8E9wIJAP4CAgD9AgEC/wL/+vP9/foE/gH+AvkD/wgH/wAEAwIC/AAA/AIA/wIB//v1/v/6AgL+BAEA+gQHAP0AAAEBAAIABP0BAP37CAL4/gH+BAIK+P///Qb/+/sA/wL7AgQKAwT//QQB+gIFAPv/Av/+AgAFAQX/AQP6AQD+/v3/+QD7/wMG+vsDAP8EAAMDAfsCAAH+/PwEAfsEAwAA/wIF+gb7//r7/wAC/QD8+v4BAgL9A/wE/gACA//5AfwE+/sA/wcA/AIEAQQBAgUDBf78A/0BBQYD/AL/7wED+QAB+v38AQT9/wP8A/r8BPsA/Qz5//sC/v/+/wP/CgQC/AAA//sF/P8E+v8AAvwAAPz9AQkEAPcBAQIDBQEEAvwE/wX+BQICB//8+vIB/wD8AAQAAQMfAQX8AgYAAAP7APsCBQED+PwE/P3/A//8AAECAQL+AQUA/wMEAQL5/wEFAP/9/gD/AP8D+/z7AQD6+/wHAgH8/wD9/f0HAAEAAgcBAAj9/wMC/f8AAAAC/gL/Avr9//z/AP8BAv8A/wL4AP4E/PkAAP0AAP4DBgD/9wH6/f8B9/oCAAD0BgX/Cf79/QQDAQUFCPsCAvwC/vv7AQAB/gH6//0DBgEG/wYC+wT/+wUCAPz7/wAC//kLAAb//wL+/wr+AggFAgj/+gT/AP8BAv4AAgH3B/3+AfwCAAH+/v8K/f78/f77BgEDAfwHAPsA+f////0D+vz+/wQI/gMA//oBA/36A//9+/77/wEFBP0EAP76/QD9AgYB+QD8BfsEAgEC+/4C//8BBPwD/AD9BfgC+QEA+wIABf0CAP4ABgX+AQr6AAH8AQgBBv/3APr/AgAAAAH+CQAE/wL/+wACAP8DAP0EAfkF/wEAB/wCBAT+/wb6/wQAAP0D+v8D+/r2AQAE/gMBAQf7AfYF7QYC/P76AgQB/AMABf/9A/8BAAABAwcBA/76AfsA9gIEAP////36BAAE/QD/B/b/+AD8AwP+Avr7BP4D/gD//fj+A/72/wH+APoCBAL5/gADAf38BQP9AvkB/AH+//8AAPz7//4C/QH9AQcAA/77AQL+/wMBBAH//gYB/P4DAv8C/AMBAwME//0DBPwB///9/v//Bf0ABQIEAgAEBP8ACAL+A/4ABQP9/gABAv8LAQACBAH7AQIDAQAACAH+/f8C//wJ/gAE/gcCAf78AgD7BvQI//oBBQgFA//++gD9AP78+wH+AP0A/QAIAgAHAwH6CgIAAA==",
     "Why does the endpoint want to be same-origin?": "/wD8/v/9Av/+AP4C/gQE/QL9/wP7/gf9/gH//QL//gQC/fv7Af8B//sCA/4C+QP9/v76/gb8BAb8BAH8APr7APwEAgH//f8B+gD5AgL4/f0F/v8EAAD7CQIC+/0D/f7/+gMH/wQD//r9BAb++wMDA/7//vz+AwkB/gEFAPr4AAj8AAYDAf79/v8E/vsB/gD5Av8AAQEBBwAE/QQAAAcBCAAA/f0E/wIF//cAAAIA/wIL/gD7+QIA/v8BAv0B/wD+/wYB+/oD//78AAwE/f/5/gIF+/8AA/sA/wD//QAB/vz//gD7/v76BAQAAPz9/v3/BvwA/f/5/vz++gT++gIHAgQABAEAAv8DAAD/AQUG/gIC/wYFAPwEAQICBAEDAv/9/v0ABAv9+vv97gIC///++/8ACfv5+gH8/vz//vr8Agn6/AP+AP/6A//+/wEBAgb+AQUH/wP+//7+/wUCAP/9+gUAAwAGAQIFAf4CBf8DAQQCAQf4BwP8+/gB/AAE/vwGAgMfB/sAB/z///sCBgYCAQP++gAIAQP4AwT6/AAC/gX//Qb/+/79AAH/Af8EBQQBBPr9AQT+/v4F/PoH/AEJ/wP+/QMECAMDCP0AAQgGBwf8AP3//gEBA/0KA/77//wAAP///AAC/vYAAQD7/QIDAvoC/f4DBgEABAP9+QAB/Pv/9/0BAP8FAAIB/QL9//4A/QH8/wf++wEEBPv7Av39/vz+BgMECf8I//z//wP9AwUB//MA+v8B/gL/AgAA/gP9Ag38/wX+/wT9/f/8/vwFAf8BAPv7A/sBAwAL/f8EAf0G+P/8AgAB/wD9AfsHB/kCBv///AADAAAB/gIFBAIG/gD+AQH7AfwD/v71/wP++vYAAPz8BQP//P8C/gf5Afv+AwID/QL+///7Bf0C/gP/Afj4/QAB/gAHAv0BAgD/CP75AAP8AfkH/wEC+wABAgL/CPv6+QMAAwEI+Qb6/wIA//4H/fwGAQECBgH6B/wDAQAEAvsAAgMG+v4F/f0A/f8A9/0CAAT/+gj7/PsB7AMD/foA/wD/AP0D////Avv9Af3//wEE/f/8/vwEAQX+BgMDAf//BQQD/PwDBfwA/PsDAQYDAfwCBAIBAP/+/P7++gQCA//8+/4E/wj/+wH8+/39BwUB/gP8+QX+A/0H/gQB/P0BAP/++gP8AP4A//0A+f4FAwD9AAEA/AX9BgUF/gD2AgID+/sBBP0C/fv9//sEB/wEAgIB/f8B/f8BAgD7AAD+/wD/AgIBBv0AA/wC/gb7AgIGAwD/BAoE+/38APsBAv8E+QIB/fgA+/78/v4D/wH9/wEBAwQD/wX/+wEAAv/+Af0C/f4FA/4KDQT+AP8AAg==",
-    "Why does the endpoint want to be same-origin?\nAnd what does a cross-origin one cost?": "AP75AAAAAv79APwB/wID+wL9/wL//AP9/gH//gT/+gAJ/vj5AgL+AP4CAf4E+gP9/vz9/Af7CAX3AgD7//v7Av4GAAIA/v/8/wD6AwP5/f0E/P4DAAP+BwIC+/8A/f7+9wYGAAQBAvr7BAL9+gEEBf3+/vv7Agj/AgIGAPz4Agn8AAQAAAH6/f4D/vsC/f/8A/4BAwIABgAE/QP9BAQAB/4B/PsF/wAF/vn/AgH8/gMO/f/79wX++v8AAv8BAQH+AQQC/v79Af35AQwH/AD6/gAF/gEAA/0CAf8C/P4B/P4BAv77AAD5BQUAAP7/APwBCP4BAf76/vz++gL/+wQGAwL/BQABAAAE/wH9/wQC/wICAAUHAv8EAAUFAQEBAv8A//39Agz9+fv+7AIB///+/P/+DPr4/AH8///+//r8/wn8/AT9AQH5AQD//wIAAwYCAQcI/gIA/v3+/QAAAQD++gYCAwEGAgABAf8CAf8DAgQEAAX4BgL6+/UB/QAD//sGAwIdAvwEBPv//v3/BggCAAT/+wEJ/wP4AQT1+f8D+wkB/AIB+/8BAQIBAv8CAgT/Bfz/AgECAP4G/fsD/AEGAAP9/gEDCQECAv4A/gkGCQX+//3/AAD/AfsIBPz6Af0AAAD///0BAfcA/wD9/AD///oB/QAECPwABQX++gAD/v/9/AAA/wADAAD//f/9/f8A/AH//QgA/AICAv35Av3/APv/BAUECwIGAP0C/wT9BAYD+/QB/v4C/wH8AgD9/QD8Awz6AAf//wH+/f////oGAwIB//r6AvwABQMM+vwBAf8F9/78AQED/wD9BPoGBPgDBv8A+wACAQAAAAYGAwEDAAD9AQD8A/wCAAD3AAT/+fkA/vv7BAAB/AL//gUA//sABAQCAAIB/wH+Bf4D/gT+APj6/QAC//8GAf8CA//+B/77AwL5//sF/wQF+gEBAwH9DPv8+gQB//wL/QT5/wH/AP4J/P0E/v8EAwH6BAABAQABAvwAAgIF/AIE//4F+v389PwDAgT//gf+//kC6wMD//kAAQD/A/8GAf8AAfgAAvkA//wGAP/6/PwEAQP/BQEDAfz+AQME+vsDAv0C/Pn+AgAAA/wBAgIB/wH9+wH+/AMBAf79+/wD/gYA+/8A+/v8BAX/AQL7+QP/Av8H/gX+/AABAf7//AD8APsAAP4A+v8HAQH9/wEC/Ab8BgYF/gH3BPwE/PwCAAH//vz9/fwFBf4DAQEC/f8C/AAEAgH7Af79AP8BA/8CBPwEAQMC/gT8AgEFA/wAAQkF+QH7/v//BQED+wQC/voB/f38/foB/gH//wADBAQG/gMC+v4DAgD8/vwD//0GA/8MDAL/AP8CAw==",
     "Why does the endpoint want to be same-origin?\nAnd what does a cross-origin one cost?\nand which setting has it email me when a down-vote lands?": "+/37Bf76B//8Af8CAAIC/AD+AQH8/AP//wH+/gAC+/8J//f7A//8Av4DAP4F+wL+AP3+/Qb7CQX5Av/8Afj9AfwIAgH//QD///36BAP6/PsC/AEDAwH+CQQC+wAC+v/9+gEG/gECAvv9CAP+/AECBv77//z7AQf+BAQIAv39AQr9BAX+AP79/v0FAPoE/vz7Af4FAgP8BQAF/wH7CgICCP8B+f4FAP8D//kA/wL7/gQQ/vv6+QX9+vv/Av///v8AAQgF/v3+AP76AAoD/wD7/AED/wH+APwB//4A/PwC//wBBf38AgH8AwUCAPwAAvv/CAAAAP36//39+P8B/QAFAwAAB/4E/AAFAgMAAAUAAf4F/QUEAP8GAAMGAQMAAwEAAPz4AAz/+vr97AMA///++//9Df76///+AQIAAfv5/wb8+AIA/gL6Af7//gIBBAUGAQcF/wECAf/9/f//AAAC+QYAAgAE/vwB//4CAwEDAgUEAgL5B//6/PQC/v4B/f0FAAMdBPsEBPgAA/0ABQcB/wQB/AIIAgP8AwL2+/0D/AcAAAIE/P4D/wECAv4G/wH+A/v9AgEBAP4D/fsC/QMGAQL+/QQDBwIF/v0A/wcDBgb8AfwB/QP/Av0GBP36Av8BAgH/Av4CAPkA/////gL+APoC/gAECv0CBwT8+gID/f/+/f4CAf8CAQEA/gD+AP0B/f7//gX//AECBP35AP3//vz+BAQEDQAG//3//gP8AAUD+fcA/f8B/vz9AwL+/QH8BA3/AAcCAgYA//39/vsFAAIF//3+A/sBBwMO/fr/A/0C9vv7AQIAAAD6BvkEA/gEBv4B/AEBAAEAAQYE///+/QABAwL6AfwCAf35/gMA+vkB/vn9CP/9/QP8/gf9AP0CCAD//wQA/gL7A/4C/wT+AP39/gAB/gAFAf7+Bv//CAP8AgL6/voEAQEA/P8AAgH7CPz++QAAAPwH/gL6/v/+Av0I/f0FAQEGBAP7Bv4AAQECAvr+AQQE/QMEAP4J9/799v0E/wEAAAn8/fkA6wQB/fn/AAIABP0DAP0B//r+Af4A//4H/fz9/vwCAQQABgEDBPz8AQQF/fwDA/0B/fgAAv8CA/39AwUB/gX9+v/8/QL/A/r7+/8B+wb//P7+/fn9BQUAAgL5+gIABAAF/gb9/P7///0A+wL+//wAAv0A+v8DA/8B/AAC+wb8BQcD/AH3Av8F/voCAf3+/f38/f8EBP8BAgMA/v4F/QIDBAD9Afz9AP7/AgH/Af4FAQMC+gMAAwAEA/8AAgkD+QD+AAAABQAE+gX///kB/gH7/PkE/gP/AAECBAEE/AYB/PwBAAH6//wD/v0DAgEFCQD9AP4D/g==",
     "Why does the fusion weight both channels equally when the gate does not?": "BAD7AwAB/AT/AwEA/AP//gP/AgH7/v39CQT3/wYA/wH5+/77///++/v8APYF+v36/gP++gT8BwL+A/3/AP8B+wMG/wP8/gAABP76Avr9Av4F/wIC/gT4BgH8/f4C/v8A/gAE/gMM/vr/AAoAAP8GBvv7+v37/gYDA/8D/AD8AwD9Af8B//r7/wUF/wAAAwABBPwEAgEEAP8B/wP/AQT+DAcC/QP8AgQF/f4CBQEAAwUFAQD4/v4B/QACAQMGA/z/BwD+Af38AAP+//8CAP35+gQBB/oC+f4DA//++P4FB/0ABP8DAfn8Av//BQL8Af/++wL/AQIF/P4B+gcDAfwJAwL7AvoFAP8D/wD8/gb8+QP9AwAGAf4G/wX8AQD/Af7//fsE+wn99wcA7wb+/v8A/fv3//z6+wUD/P77Av7//wj7/v78Av/5/v/+AwAC+Qj+BAYD//4A/AH8/QIAAf0A/AUEBvr//QUF/v3//f4E/QUH/wH9Bvn8/fMJAAQHAf8BBvwcBP8AAf0J/QD8+QP//PsD/P4J+QT1AwP99/8LAwP9/gIA/gj8/gcABP4F/gP9AAH+AAAE/f8F+P3//QP//wEE+v39AwAGCAL9AQb9AgH7/fv+/v0CAAIEAPr8//0D/AD9/v4B/PoCBv4AAv4AA/kGAAEE+/z/BQT+/v4C/P78/PoGAP/5AAYC/AMBAQAA//4C/gQE/QMABPz4/gH9/v79AP8BAwEHA/4D+wEA+gQHAPP9+f4GBQP+/gf+/fgBAg39/gMI9wf//QQGAfsFAP/9Afv6APsBBQP/Af8BBPwBAAD8/QH7AgH7Af8GAPwFAf/+BAMDAf77AAcOAggD/wD+AAMG/P7//v34Af7//gAE//36BP8C/v0IAAP7DPv9BQECAQH/AAL6Bf4A/wIA/vsA+////gn+A////f8ABP0AAgP+AAADAAID/gAAA/sFA/36/QUI+QIK+wME/wAAAv8E/fsC/gQBBQP+BQED/gAAAAH+BP3//gH//P4A+/38/AAB//8AAgX5APsA7wME/fv9/vz+AgMJAP78+v0BBf8BAP8EAv77APz9AP8B/AMAAQIEAgIDAf8AB/4E/PsBBQD9Av/+BAcFAP39+PX+9QEBBP0GAQACAAMFBAD/AP77BQT7BP8A/gD+//4FAf3//QADAAAB+wf7BwEBAwME//////kBAQMB/QAA/wL/AQT6/AUD/v4EA/3/+/7/AvcDBvgAAgT9AAP/AQP+AgEDAf79/v4CAf4BBAEJ/PsBAQD8AAMFBP4FBAX+Af4A/gAC/v8D/gT9APkBAP/6/fsH/AH9AgP8/wf5+gD//wYE/vgAAP7/BP0E/wEBAgH3BP7/Ag==",
     "Why does the panel answer a greeting from a template instead of letting the gate refuse it?": "/AD7Bf/2Avr/BAEG/gf/AAX8Bf74//z8AgD6/QAFAAH7+wD6AP/9/vz/BPgB+v78AQUBAAP+/QQGAfwF/vkD/v8HAgH/AQEABf36AwAA/P8B/v8DBAP4AwH9/gAG+vj8/AEF/AUDAvsE/wgFAwEBBQL8APv9/f8D/gYE/vz2BQL9BgX+BAD7AAQGAf0BAv/8AvsEAP4C/gAEBAb8AAUACwQF+wYCAQP/+f7+/wL9BgICAQH8/QMC+wEFBAAC//77BgIBAP39AwP/Af/+/f36/AT6/gYB9voDAgQB+wAF//3/BAL///4C/v4BBAIA/gX//AL8//79+wL/+wT8+/0FAQEAA/4DAvwEAwD6/QUE/AD9/wUB/f8G//7/AQMABP3+AvwHAwr//QP87AQA/QD9+Pz9AQD6/AEC////Afr+/Av//Pf//f0AAwH+B/4C/QcBAP8F/QUD//77/AD+Afv5+wQAAfoA/AQD/AL/BAIDAAMBBv/8Cf8A+/AFAQABAPwBAwAaBf0CAQEEAAD6+v4BAgEE+wMF+f7/BAD5AAAI/Qb8BgX+/f0AAQABAv8D//3+/wH6/wMA/AAA/f76AAUH/wP7+wL/BP8D/f4A/wX/CQP5BgAD/QUBAgEG/gMBAPsAAP3+/fwCAfkCAwD/A/4ABP4BBf8BAP7/CgT9+AAD/fwD+fcEAv75Awj/AgD6/gMG/wMDBv4EAPwIA/z4AwH8AAH+/wIGCgAF/v3/+/3++wYIAv7//AEB/vj5AggDAQD8/wkAAQYEAwf+/fwF///6BAADAPwCBfgBCAD+BQP8/PsD/v/7///4AwD+//oIAvwC//0D/gb//f39AAIH+gAAAAMAA///AQH+/Pv+AQP9/v4EAPz2AAEABQIBAAH6BQAHB/0CAv8C/gL7A/8B/wD/APoA+QP9+gYBBPkB/gL7BwL7AgP/AgX/BQf/BAL8/P8AAQIB/gYGBQIBAgf+/v4A/PsFAvkEAQMD+gT/BPr/AwH/BgMCAAMC/gIC/v8G/v/9AP8G/QECBQr8+vgB7AMD+/v9+fsCAAEIAfwEAv7+AAf/Af4EAP3+/fgB/wIDAP39Af//AAEC+v8ACfoC9/kB/f4C/v/8BQUD+f/9+vn8/v39Av//+gAAAgABA///Afr6BQb/Avj+AQD8AwP9Af3//gAE/gH7AAcCBP34BQEA/QECAfkG/Af/+/4FAQQBAwP8AwEEAPsEA/v+/QP7///+AfkAAwQB+/8EB/8BB/8AAPwC+//8Av0AA/8GAP0E/QUAAgL/AwECCAcC/QH/Bf8F/QED/QICAPoAAgD2/PkF/wD8AQQBAAT89wQCAf37+vz//AD9/AAFCPwAAf/8BwD/Aw==",
@@ -2901,20 +2904,20 @@
   "summary": {
     "positives": 66,
     "negatives": 30,
-    "retrievalF1": 0.26968822423367883,
+    "retrievalF1": 0.2653592199046745,
     "recall8": 0.7424242424242424,
-    "mrr": 0.5457070707070707,
-    "recall1": 0.3560606060606061,
-    "recall3": 0.5757575757575758,
-    "recall5": 0.6515151515151515,
-    "ndcg8": 0.5672092752412964,
-    "contextPrecision5": 0.5279040404040404,
-    "answerF1": 0.3437788633578124,
-    "identifierRecall": 0.44756944444444446,
-    "citationPrecision": 0.4819624819624819,
-    "citationRecall": 0.5833333333333334,
-    "supportPrecision": 0.9558878349319525,
-    "unsupportedAnswerRate": 0.030303030303030304,
+    "mrr": 0.5532828282828283,
+    "recall1": 0.36363636363636365,
+    "recall3": 0.5681818181818182,
+    "recall5": 0.6439393939393939,
+    "ndcg8": 0.5689236266468336,
+    "contextPrecision5": 0.5342171717171716,
+    "answerF1": 0.3325736103057499,
+    "identifierRecall": 0.4222222222222223,
+    "citationPrecision": 0.5186868686868689,
+    "citationRecall": 0.6136363636363636,
+    "supportPrecision": 0.9104879968516333,
+    "unsupportedAnswerRate": 0.09090909090909091,
     "language": 1,
     "gateOverRefusal": 7,
     "gateOverRefusalUB95": 0.18461757691628358,
@@ -2925,20 +2928,21 @@
     "noAnswerPrecision": null,
     "hallucinated": 0,
     "scopeContainment": 1,
-    "unlinked": 0.5909090909090909,
+    "unlinked": 0.6363636363636364,
     "unlinkedIds": [
       "q-01",
       "q-02",
+      "q-03",
       "q-04",
       "q-05",
       "q-07",
       "q-08",
       "q-09",
+      "q-11",
       "q-13",
-      "q-14",
-      "q-15",
       "q-19",
       "q-20",
+      "q-21",
       "q-25",
       "q-28",
       "q-29",
@@ -2946,24 +2950,26 @@
       "q-32",
       "q-34",
       "q-35",
-      "q-38",
       "q-39",
       "q-40",
       "q-41",
       "q-43",
-      "q-44",
+      "q-46",
       "q-47",
       "q-48",
       "q-49",
       "q-50",
       "q-51",
       "q-52",
+      "q-53",
+      "q-54",
       "q-55",
       "q-58",
       "q-59",
       "q-60",
+      "q-61",
+      "q-62",
       "q-63",
-      "q-64",
       "q-65",
       "q-66"
     ],
@@ -2982,29 +2988,31 @@
       "n-14",
       "n-16",
       "n-18",
+      "n-23",
       "n-24",
+      "n-25",
       "n-26",
       "n-27",
       "n-28",
       "n-29"
     ],
     "rejectedFetches": 0,
-    "iterationsPerAnswer": 1.2121212121212122,
-    "requestsPerTurn": 1.25,
-    "promptTokens": 4022.6875,
-    "outputTokens": 269.9479166666667,
+    "iterationsPerAnswer": 1.1818181818181819,
+    "requestsPerTurn": 1.2291666666666667,
+    "promptTokens": 3983.34375,
+    "outputTokens": 273.4479166666667,
     "cachedTokens": null,
     "cachedShare": null,
-    "tokensPerAcceptedAnswer": 6243.833333333333,
-    "promptChars": 13695.75,
-    "promptCharsPeak": 10889.6875,
-    "observationChars": 7776.708333333333,
-    "answerChars": 652.1354166666666,
-    "latencyP50": 6042,
-    "latencyP95": 16355,
-    "latencyP99": 24178,
-    "ttftP50": 6042,
-    "ttftP95": 11975,
+    "tokensPerAcceptedAnswer": 6191.69696969697,
+    "promptChars": 13555.833333333334,
+    "promptCharsPeak": 10922.958333333334,
+    "observationChars": 7827.5625,
+    "answerChars": 633.6666666666666,
+    "latencyP50": 5864,
+    "latencyP95": 16371,
+    "latencyP99": 31071,
+    "ttftP50": 5864,
+    "ttftP95": 14084,
     "misses": [
       "n-02(answer)",
       "n-04(answer)",
@@ -3038,10 +3046,10 @@
         "positives": 60,
         "negatives": 29,
         "recall8": 0.775,
-        "mrr": 0.5697222222222221,
-        "answerF1": 0.3589183367765317,
-        "identifierRecall": 0.4731060606060606,
-        "citationRecall": 0.6166666666666667,
+        "mrr": 0.5780555555555555,
+        "answerF1": 0.34596390756766915,
+        "identifierRecall": 0.4454545454545455,
+        "citationRecall": 0.6416666666666667,
         "language": 1,
         "negativesCaughtRate": 0.1724137931034483
       },
@@ -3050,9 +3058,9 @@
         "negatives": 1,
         "recall8": 0.4166666666666667,
         "mrr": 0.3055555555555555,
-        "answerF1": 0.1923841291706204,
+        "answerF1": 0.19867063768655602,
         "identifierRecall": 0.16666666666666666,
-        "citationRecall": 0.25,
+        "citationRecall": 0.3333333333333333,
         "language": 1,
         "negativesCaughtRate": 0
       }
@@ -3063,9 +3071,9 @@
         "negatives": 24,
         "recall8": 0.8421052631578947,
         "mrr": 0.6138157894736842,
-        "answerF1": 0.35278834171625684,
-        "identifierRecall": 0.44791666666666663,
-        "citationRecall": 0.6052631578947368,
+        "answerF1": 0.34468847274415987,
+        "identifierRecall": 0.3958333333333333,
+        "citationRecall": 0.5921052631578947,
         "negativesCaughtRate": 0.20833333333333334
       },
       "1": {
@@ -3073,7 +3081,7 @@
         "negatives": 0,
         "recall8": 0.8125,
         "mrr": 0.5916666666666668,
-        "answerF1": 0.37335323682740357,
+        "answerF1": 0.32754987396472235,
         "identifierRecall": 0.5,
         "citationRecall": 0.6875,
         "negativesCaughtRate": null
@@ -3083,19 +3091,19 @@
         "negatives": 1,
         "recall8": 0.8,
         "mrr": 0.6333333333333334,
-        "answerF1": 0.3326338952587057,
-        "identifierRecall": 0.6476190476190476,
-        "citationRecall": 0.65,
+        "answerF1": 0.32185932310893095,
+        "identifierRecall": 0.6761904761904761,
+        "citationRecall": 0.8,
         "negativesCaughtRate": 0
       },
       "3": {
         "positives": 10,
         "negatives": 5,
         "recall8": 0.25,
-        "mrr": 0.1625,
-        "answerF1": 0.2970283149191573,
-        "identifierRecall": 0.23095238095238096,
-        "citationRecall": 0.35,
+        "mrr": 0.2125,
+        "answerF1": 0.301270409309432,
+        "identifierRecall": 0.26666666666666666,
+        "citationRecall": 0.45,
         "negativesCaughtRate": 0
       }
     },
@@ -3108,7 +3116,6 @@
         "q-07",
         "q-09",
         "q-10",
-        "q-11",
         "q-12",
         "q-13",
         "q-15",
@@ -3116,8 +3123,6 @@
         "q-19",
         "q-20",
         "q-21",
-        "q-22",
-        "q-23",
         "q-25",
         "q-26",
         "q-27",
@@ -3127,13 +3132,12 @@
         "q-32",
         "q-34",
         "q-35",
-        "q-37",
         "q-38",
+        "q-39",
         "q-40",
         "q-41",
         "q-42",
         "q-43",
-        "q-44",
         "q-45",
         "q-46",
         "q-47",
@@ -3199,16 +3203,20 @@
         "n-29",
         "n-30"
       ],
+      "primed-low-f1": [
+        "q-11",
+        "q-17",
+        "q-22",
+        "q-23",
+        "q-24",
+        "q-37",
+        "q-44",
+        "q-52"
+      ],
       "neg-answered:refuse:out-of-scope": [
         "n-06",
         "n-09",
         "n-16"
-      ],
-      "primed-low-f1": [
-        "q-17",
-        "q-24",
-        "q-39",
-        "q-52"
       ]
     },
     "reSearch": null,

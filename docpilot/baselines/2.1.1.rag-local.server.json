@@ -2,59 +2,59 @@
   "meta": {
     "schema": 1,
     "node": "v26.8.1",
-    "package": "2.1.1",
+    "package": "2.2.0",
     "goldenSha": "fd655d5315cb8f87",
     "temperature": 0.2,
-    "seed": null,
-    "capturedAt": "2026-10-30T18:44:33.209Z",
+    "seed": 20260829,
+    "capturedAt": "2026-11-02T11:39:54.926Z",
     "indexDir": "docs/public/rag-local",
-    "indexHash": "37991d24",
+    "indexHash": "a97c065c",
     "embedModel": "bge-m3",
     "dims": 1024,
     "quant": "int8",
-    "chunkCount": 856,
+    "chunkCount": 859,
     "guard": {
-      "tau": 0.68,
+      "tau": 0.64,
       "tauLexical": 0.51,
       "wDense": 0.75,
       "wLexical": 0.25,
       "denseMode": "cosine",
-      "cosFloor": 0.26,
-      "cosCeil": 0.62,
+      "cosFloor": 0.28,
+      "cosCeil": 0.64,
       "source": "calibrated-reduced",
-      "calibratedAt": "37991d24",
+      "calibratedAt": "a97c065c",
       "zexp": [
         {
           "n": 8,
-          "z": 0.9897
+          "z": 1.1136
         },
         {
           "n": 9,
-          "z": 1.1833
+          "z": 1.2271
         },
         {
           "n": 23,
-          "z": 1.8844
+          "z": 1.8765
         },
         {
           "n": 45,
-          "z": 2.1406
+          "z": 2.1039
         },
         {
-          "n": 107,
-          "z": 2.7383
+          "n": 105,
+          "z": 2.7124
         },
         {
-          "n": 308,
-          "z": 3.7328
+          "n": 309,
+          "z": 3.7614
         },
         {
-          "n": 715,
-          "z": 4.5963
+          "n": 713,
+          "z": 4.6205
         },
         {
-          "n": 856,
-          "z": 4.8636
+          "n": 859,
+          "z": 4.8662
         }
       ],
       "zexpSource": "measured",
@@ -110,8 +110,8 @@
     "n-01": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.726067,
-      "D": 0.634755,
+      "G": 0.6844,
+      "D": 0.5792,
       "L": 1,
       "rankedIds": [
         "guide/evaluation#the-golden-set",
@@ -135,14 +135,14 @@
     "n-02": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.934911,
-      "D": 0.979881,
+      "G": 0.893244,
+      "D": 0.924325,
       "L": 0.8,
       "rankedIds": [
         "install/docusaurus#options",
         "guide/comparison#choosing",
-        "guide/comparison#sources",
         "guide/comparison#architecture",
+        "guide/comparison#sources",
         "guide/comparison#how-the-money-is-arranged",
         "guide/llms-txt#robots-txt",
         "install/web#the-index",
@@ -152,8 +152,8 @@
       "retrievedIds": [
         "install/docusaurus#options",
         "guide/comparison#choosing",
-        "guide/comparison#sources",
         "guide/comparison#architecture",
+        "guide/comparison#sources",
         "guide/comparison#how-the-money-is-arranged",
         "install/docusaurus#syntax-highlighting"
       ],
@@ -162,8 +162,8 @@
     "n-03": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.657307,
-      "D": 0.765298,
+      "G": 0.61564,
+      "D": 0.709742,
       "L": 0.333333,
       "rankedIds": [
         "reference/theme#overriding",
@@ -216,8 +216,8 @@
     "n-05": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.607156,
-      "D": 0.726207,
+      "G": 0.565489,
+      "D": 0.670652,
       "L": 0.25,
       "rankedIds": [
         "guide/faq#_3-your-own-styles-all-the-way-down",
@@ -241,8 +241,8 @@
     "n-06": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.688736,
-      "D": 0.807203,
+      "G": 0.647069,
+      "D": 0.751647,
       "L": 0.333333,
       "rankedIds": [
         "guide/history#where",
@@ -267,8 +267,8 @@
     "n-07": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.752279,
-      "D": 0.836373,
+      "G": 0.710613,
+      "D": 0.780817,
       "L": 0.5,
       "rankedIds": [
         "reference/config#chat-models~2",
@@ -292,8 +292,8 @@
     "n-08": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.323009,
-      "D": 0.430679,
+      "G": 0.281342,
+      "D": 0.375123,
       "L": 0,
       "rankedIds": [
         "reference/config#suggestions-answers",
@@ -317,8 +317,8 @@
     "n-09": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.235542,
-      "D": 0.314056,
+      "G": 0.193875,
+      "D": 0.2585,
       "L": 0,
       "rankedIds": [
         "guide/social-openers#what-it-deliberately-does-not-do",
@@ -340,8 +340,8 @@
     "n-10": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.624196,
-      "D": 0.698928,
+      "G": 0.582529,
+      "D": 0.643372,
       "L": 0.4,
       "rankedIds": [
         "reference/cli#llms",
@@ -365,8 +365,8 @@
     "n-11": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.9375,
-      "D": 1,
+      "G": 0.921958,
+      "D": 0.979277,
       "L": 0.75,
       "rankedIds": [
         "reference/config#guard-tau-guard-taulexical",
@@ -390,8 +390,8 @@
     "n-12": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.56555,
-      "D": 0.554067,
+      "G": 0.523884,
+      "D": 0.498512,
       "L": 0.6,
       "rankedIds": [
         "guide/faq#_3-your-own-styles-all-the-way-down",
@@ -415,8 +415,8 @@
     "n-13": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.343912,
-      "D": 0.458549,
+      "G": 0.302245,
+      "D": 0.402994,
       "L": 0,
       "rankedIds": [
         "guide/indexing#how-the-format-was-chosen",
@@ -440,8 +440,8 @@
     "n-14": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.933807,
-      "D": 0.978409,
+      "G": 0.89214,
+      "D": 0.922853,
       "L": 0.8,
       "rankedIds": [
         "reference/cli#embedder-question~4",
@@ -494,8 +494,8 @@
     "n-16": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.710814,
-      "D": 0.697752,
+      "G": 0.669147,
+      "D": 0.642196,
       "L": 0.75,
       "rankedIds": [
         "guide/appearance#five-entry-points",
@@ -519,8 +519,8 @@
     "n-17": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.692315,
-      "D": 0.789753,
+      "G": 0.650648,
+      "D": 0.734198,
       "L": 0.4,
       "rankedIds": [
         "concepts/a-turn#_3-retrieval-and-the-gate",
@@ -544,8 +544,8 @@
     "n-18": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.745535,
-      "D": 0.744046,
+      "G": 0.703868,
+      "D": 0.688491,
       "L": 0.75,
       "rankedIds": [
         "reference/config#chat-chain",
@@ -569,8 +569,8 @@
     "n-19": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.85,
-      "D": 1,
+      "G": 0.809065,
+      "D": 0.94542,
       "L": 0.4,
       "rankedIds": [
         "features/triggers#",
@@ -594,8 +594,8 @@
     "n-20": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.911546,
-      "D": 0.882061,
+      "G": 0.869879,
+      "D": 0.826506,
       "L": 1,
       "rankedIds": [
         "reference/config#suggestions-precomputed",
@@ -619,8 +619,8 @@
     "n-21": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.93214,
-      "D": 0.992854,
+      "G": 0.890474,
+      "D": 0.937298,
       "L": 0.75,
       "rankedIds": [
         "guide/indexing#when-to-rebuild",
@@ -644,8 +644,8 @@
     "n-22": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.737809,
-      "D": 0.717079,
+      "G": 0.696142,
+      "D": 0.661523,
       "L": 0.8,
       "rankedIds": [
         "guide/comparison#the-chat-itself",
@@ -669,8 +669,8 @@
     "n-23": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.741329,
-      "D": 0.821772,
+      "G": 0.699662,
+      "D": 0.766216,
       "L": 0.5,
       "rankedIds": [
         "reference/config#chat-verbosity",
@@ -724,8 +724,8 @@
     "n-25": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.527706,
-      "D": 0.536942,
+      "G": 0.48604,
+      "D": 0.481386,
       "L": 0.5,
       "rankedIds": [
         "guide/evaluation#the-golden-set",
@@ -747,13 +747,13 @@
         "changelog#_1-5-0",
         "changelog#the-turn-on-your-own-server-a-smaller-index-and-a-security-pass"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "n-26": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.792948,
-      "D": 0.890598,
+      "G": 0.751282,
+      "D": 0.835042,
       "L": 0.5,
       "rankedIds": [
         "guide/comparison#what-each-of-them-publishes~2",
@@ -804,8 +804,8 @@
     "n-28": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.721952,
-      "D": 0.82927,
+      "G": 0.680285,
+      "D": 0.773714,
       "L": 0.4,
       "rankedIds": [
         "guide/faq#the-skills-docs-rag-and-docs-import~3",
@@ -857,8 +857,8 @@
     "n-30": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.491553,
-      "D": 0.655404,
+      "G": 0.449886,
+      "D": 0.599849,
       "L": 0,
       "rankedIds": [
         "reference/cli#status~4",
@@ -910,8 +910,8 @@
     "q-02": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.981942,
+      "D": 0.975922,
       "L": 1,
       "rankedIds": [
         "concepts/a-turn#_3-retrieval-and-the-gate",
@@ -937,8 +937,8 @@
     "q-03": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.901403,
-      "D": 0.935204,
+      "G": 0.859737,
+      "D": 0.879649,
       "L": 0.8,
       "rankedIds": [
         "reference/config#budget",
@@ -984,7 +984,7 @@
         "reference/cli#",
         "features/terminal#status"
       ],
-      "outcome": "answer"
+      "outcome": "refuse:not-answerable"
     },
     "q-05": {
       "channel": "raw",
@@ -1014,8 +1014,8 @@
     "q-06": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.976815,
-      "D": 0.969087,
+      "G": 0.935148,
+      "D": 0.913531,
       "L": 1,
       "rankedIds": [
         "guide/production#docker~2",
@@ -1044,8 +1044,8 @@
     "q-07": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.918963,
-      "D": 0.89195,
+      "G": 0.877296,
+      "D": 0.836395,
       "L": 1,
       "rankedIds": [
         "concepts/the-ladder#",
@@ -1071,8 +1071,8 @@
     "q-08": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.940467,
-      "D": 0.920623,
+      "G": 0.898801,
+      "D": 0.865068,
       "L": 1,
       "rankedIds": [
         "features/memory#how-it-works",
@@ -1156,14 +1156,14 @@
     "q-11": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.900288,
-      "D": 0.978162,
+      "G": 0.858123,
+      "D": 0.921942,
       "L": 0.666667,
       "rankedIds": [
         "guide/indexing#vectors-are-quantised",
         "guide/indexing#vectors-are-quantised~2",
-        "guide/what-it-costs#what-a-reader-downloads",
         "reference/cli#embedder-question~3",
+        "guide/what-it-costs#what-a-reader-downloads",
         "guide/what-it-costs#where-the-money-actually-goes",
         "reference/cli#embedder-question~4",
         "introduction#what-it-costs",
@@ -1172,8 +1172,8 @@
       "retrievedIds": [
         "guide/indexing#vectors-are-quantised",
         "guide/indexing#vectors-are-quantised~2",
-        "guide/what-it-costs#what-a-reader-downloads",
         "reference/cli#embedder-question~3",
+        "guide/what-it-costs#what-a-reader-downloads",
         "guide/what-it-costs#where-the-money-actually-goes"
       ],
       "outcome": "answer"
@@ -1209,8 +1209,8 @@
     "q-13": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.985816,
-      "D": 0.981088,
+      "G": 0.944149,
+      "D": 0.925532,
       "L": 1,
       "rankedIds": [
         "guide/panel#when-it-refuses",
@@ -1237,8 +1237,8 @@
     "q-14": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.987883,
+      "D": 0.983844,
       "L": 1,
       "rankedIds": [
         "guide/panel#",
@@ -1266,8 +1266,8 @@
     "q-15": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.600613,
-      "D": 0.578595,
+      "G": 0.558947,
+      "D": 0.52304,
       "L": 0.666667,
       "rankedIds": [
         "guide/i18n#fallback-per-leaf",
@@ -1294,8 +1294,8 @@
     "q-16": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.989512,
+      "D": 0.986015,
       "L": 1,
       "rankedIds": [
         "concepts/the-ladder#_1-paid-providers-in-priority-order",
@@ -1398,8 +1398,8 @@
     "q-20": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.973954,
-      "D": 0.965271,
+      "G": 0.932287,
+      "D": 0.909716,
       "L": 1,
       "rankedIds": [
         "guide/indexing#blocks-a-chunk-is-never-cut-through",
@@ -1423,8 +1423,8 @@
     "q-21": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.916667,
-      "D": 1,
+      "G": 0.882671,
+      "D": 0.954673,
       "L": 0.666667,
       "rankedIds": [
         "guide/panel#quoting-a-passage",
@@ -1502,8 +1502,8 @@
     "q-24": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.656788,
-      "D": 0.875718,
+      "G": 0.615122,
+      "D": 0.820162,
       "L": 0,
       "rankedIds": [
         "reference/config#chat-models~2",
@@ -1527,8 +1527,8 @@
     "q-25": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.965785,
+      "D": 0.95438,
       "L": 1,
       "rankedIds": [
         "reference/cli#what-it-may-never-touch~3",
@@ -1552,8 +1552,8 @@
     "q-26": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.941904,
-      "D": 0.922538,
+      "G": 0.900237,
+      "D": 0.866983,
       "L": 1,
       "rankedIds": [
         "concepts/the-ladder#_2-the-free-pool",
@@ -1572,21 +1572,21 @@
         "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
         "guide/providers#reasoning-on-a-rotating-pool"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "q-27": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.9375,
-      "D": 1,
+      "G": 0.918405,
+      "D": 0.97454,
       "L": 0.75,
       "rankedIds": [
         "guide/troubleshooting#retrieval-feels-like-keyword-matching",
         "reference/config#embed-fallback",
         "concepts/the-ladder#_3-retrieval-degrades-the-answer-does-not",
         "guide/providers#a-chat-provider-that-cannot-embed~2",
-        "reference/cli#embedder-question~3",
         "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
+        "reference/cli#embedder-question~3",
         "guide/providers#no-embedder-at-all",
         "guide/evaluation#when-eval-says-retrieval-is-the-problem~2"
       ],
@@ -1595,15 +1595,15 @@
         "reference/config#embed-fallback",
         "concepts/the-ladder#_3-retrieval-degrades-the-answer-does-not",
         "guide/providers#a-chat-provider-that-cannot-embed~2",
-        "reference/cli#embedder-question~3"
+        "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate"
       ],
       "outcome": "answer"
     },
     "q-28": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.959337,
-      "D": 0.945783,
+      "G": 0.917671,
+      "D": 0.890227,
       "L": 1,
       "rankedIds": [
         "features/memory#",
@@ -1628,8 +1628,8 @@
     "q-29": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.981855,
+      "D": 0.975807,
       "L": 1,
       "rankedIds": [
         "reference/cli#what-it-may-never-touch",
@@ -1705,8 +1705,8 @@
     "q-32": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.695241,
-      "D": 0.926988,
+      "G": 0.653574,
+      "D": 0.871432,
       "L": 0,
       "rankedIds": [
         "features/history#where-it-is-stored",
@@ -1734,8 +1734,8 @@
     "q-33": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.829545,
-      "D": 0.85606,
+      "G": 0.787879,
+      "D": 0.800505,
       "L": 0.75,
       "rankedIds": [
         "guide/credentials#this-is-not-a-security-boundary",
@@ -1763,8 +1763,8 @@
     "q-34": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.967371,
+      "D": 0.956495,
       "L": 1,
       "rankedIds": [
         "concepts/a-turn#_3-retrieval-and-the-gate",
@@ -1787,27 +1787,29 @@
       "outcome": "answer"
     },
     "q-35": {
-      "channel": "raw",
+      "channel": "composed",
       "gatePass": true,
-      "G": 0.819645,
-      "D": 0.759527,
+      "G": 0.981553,
+      "D": 0.975404,
       "L": 1,
       "rankedIds": [
-        "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
-        "guide/indexing#when-to-rebuild",
-        "guide/evaluation#carrying-a-calibration-across-embedders",
+        "concepts/the-gate#two-channels",
+        "concepts/a-turn#_3-retrieval-and-the-gate",
         "reference/skills#what-changed-in-docs-rag-this-release~2",
-        "guide/why#what-it-costs",
-        "features/fallback#when-it-moves-and-when-it-does-not",
-        "guide/security#where-the-key-is-not",
-        "guide/evaluation#the-answer-only-takes-effect-at-the-next-index"
+        "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+        "features/gate#modes",
+        "guide/benchmarks#the-gate",
+        "guide/troubleshooting#every-question-is-refused~2",
+        "guide/troubleshooting#every-question-is-refused",
+        "features/gate#why-it-is-off-by-default"
       ],
       "retrievedIds": [
-        "reference/config#an-unnamed-embedder-and-why-it-does-not-rotate",
-        "guide/indexing#when-to-rebuild",
-        "guide/evaluation#carrying-a-calibration-across-embedders",
+        "concepts/the-gate#two-channels",
+        "concepts/a-turn#_3-retrieval-and-the-gate",
         "reference/skills#what-changed-in-docs-rag-this-release~2",
-        "guide/why#what-it-costs"
+        "guide/evaluation#when-eval-says-retrieval-is-the-problem~2",
+        "features/gate#modes",
+        "features/gate#why-it-is-off-by-default"
       ],
       "outcome": "answer"
     },
@@ -1864,8 +1866,8 @@
     "q-38": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.938829,
-      "D": 0.918439,
+      "G": 0.897162,
+      "D": 0.862883,
       "L": 1,
       "rankedIds": [
         "guide/indexing#blocks-a-chunk-is-never-cut-through",
@@ -1889,8 +1891,8 @@
     "q-39": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.877631,
-      "D": 0.836841,
+      "G": 0.835964,
+      "D": 0.781285,
       "L": 1,
       "rankedIds": [
         "guide/providers#a-chat-provider-that-cannot-embed~2",
@@ -1914,8 +1916,8 @@
     "q-40": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.855837,
-      "D": 0.891117,
+      "G": 0.814171,
+      "D": 0.835561,
       "L": 0.75,
       "rankedIds": [
         "guide/social-openers#why-it-exists",
@@ -1937,8 +1939,8 @@
     "q-41": {
       "channel": "raw",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.994648,
+      "D": 0.992864,
       "L": 1,
       "rankedIds": [
         "guide/panel#when-it-refuses",
@@ -1963,8 +1965,8 @@
     "q-42": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.993926,
-      "D": 0.991901,
+      "G": 0.952259,
+      "D": 0.936345,
       "L": 1,
       "rankedIds": [
         "guide/providers#one-provider-if-it-can-do-both",
@@ -2016,8 +2018,8 @@
     "q-44": {
       "channel": "composed",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.972521,
+      "D": 0.963361,
       "L": 1,
       "rankedIds": [
         "concepts/the-ladder#what-the-reader-sees-rung-by-rung",
@@ -2036,7 +2038,7 @@
         "concepts/the-ladder#what-never-happens",
         "concepts/the-ladder#"
       ],
-      "outcome": "answer"
+      "outcome": "refuse:not-answerable"
     },
     "q-45": {
       "channel": "composed",
@@ -2070,8 +2072,8 @@
     "q-46": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.972041,
-      "D": 0.962721,
+      "G": 0.930374,
+      "D": 0.907166,
       "L": 1,
       "rankedIds": [
         "guide/panel#when-something-is-wrong",
@@ -2123,8 +2125,8 @@
     "q-48": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.916667,
-      "D": 1,
+      "G": 0.899865,
+      "D": 0.977598,
       "L": 0.666667,
       "rankedIds": [
         "concepts/the-gate#five-settled-turns-five-causes",
@@ -2173,8 +2175,8 @@
     "q-50": {
       "channel": "composed",
       "gatePass": false,
-      "G": 0.664292,
-      "D": 0.885723,
+      "G": 0.622626,
+      "D": 0.830167,
       "L": 0,
       "rankedIds": [
         "concepts/a-turn#",
@@ -2200,8 +2202,8 @@
     "q-51": {
       "channel": "composed",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.997916,
+      "D": 0.997222,
       "L": 1,
       "rankedIds": [
         "guide/what-it-costs#what-a-question-costs-you",
@@ -2225,8 +2227,8 @@
     "q-52": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.675013,
-      "D": 0.733351,
+      "G": 0.633347,
+      "D": 0.677795,
       "L": 0.5,
       "rankedIds": [
         "concepts/the-ladder#_1-paid-providers-in-priority-order~2",
@@ -2251,8 +2253,8 @@
     "q-53": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.932915,
-      "D": 0.95222,
+      "G": 0.891248,
+      "D": 0.896665,
       "L": 0.875,
       "rankedIds": [
         "guide/what-it-costs#where-the-money-actually-goes",
@@ -2301,8 +2303,8 @@
     "q-55": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.9375,
-      "D": 1,
+      "G": 0.922158,
+      "D": 0.979544,
       "L": 0.75,
       "rankedIds": [
         "guide/panel#a-question-with-a-key-in-it",
@@ -2329,8 +2331,8 @@
     "q-56": {
       "channel": "raw",
       "gatePass": true,
-      "G": 0.744575,
-      "D": 0.659433,
+      "G": 0.702908,
+      "D": 0.603878,
       "L": 1,
       "rankedIds": [
         "guide/providers#two-keys-and-which-answers-first",
@@ -2354,8 +2356,8 @@
     "q-57": {
       "channel": "composed",
       "gatePass": false,
-      "G": 0.650398,
-      "D": 0.867198,
+      "G": 0.608732,
+      "D": 0.811642,
       "L": 0,
       "rankedIds": [
         "guide/history#two-tabs",
@@ -2380,8 +2382,8 @@
     "q-58": {
       "channel": "raw",
       "gatePass": false,
-      "G": 0.665589,
-      "D": 0.554119,
+      "G": 0.623923,
+      "D": 0.498563,
       "L": 1,
       "rankedIds": [
         "guide/evaluation#the-golden-set~3",
@@ -2458,24 +2460,24 @@
     "q-61": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.9852,
-      "D": 0.980267,
-      "L": 1,
+      "G": 0.764196,
+      "D": 0.810594,
+      "L": 0.625,
       "rankedIds": [
-        "guide/appearance#the-tokens~4",
-        "reference/theme#the-dark-set",
+        "guide/appearance#syntax-highlighting",
         "guide/appearance#the-tokens~2",
-        "guide/appearance#the-tokens~3",
+        "introduction#from-your-pages-to-answers",
+        "install#installing-it",
         "features/terminal#colour",
         "reference/highlighting#both-colour-schemes",
-        "reference/theme#the-whole-set~3",
-        "guide/faq#_2-the-dp-css-tokens-—-colour-and-geometry"
+        "guide/indexing#what-gets-indexed",
+        "guide/indexing#"
       ],
       "retrievedIds": [
-        "guide/appearance#the-tokens~4",
-        "reference/theme#the-dark-set",
+        "guide/appearance#syntax-highlighting",
         "guide/appearance#the-tokens~2",
-        "guide/appearance#the-tokens~3",
+        "introduction#from-your-pages-to-answers",
+        "install#installing-it",
         "features/terminal#colour"
       ],
       "outcome": "answer"
@@ -2483,8 +2485,8 @@
     "q-62": {
       "channel": "composed",
       "gatePass": true,
-      "G": 0.690359,
-      "D": 0.920479,
+      "G": 0.648692,
+      "D": 0.864923,
       "L": 0,
       "rankedIds": [
         "reference/config#it-rewrites-it-never-adds",
@@ -2506,33 +2508,30 @@
       "outcome": "answer"
     },
     "q-63": {
-      "channel": "raw",
+      "channel": "composed",
       "gatePass": true,
-      "G": 0.957125,
-      "D": 0.942833,
-      "L": 1,
+      "G": 0.96875,
+      "D": 1,
+      "L": 0.875,
       "rankedIds": [
+        "guide/imported-pages#what-an-imported-page-is",
         "guide/imported-pages#its-path-is-an-id-not-a-link",
-        "install/vue#the-router",
-        "concepts/guarantees#what-this-is-not",
-        "reference/config#importdir",
+        "guide/imported-pages#",
+        "guide/imported-pages#the-allowlist-is-a-security-boundary",
+        "guide/imported-pages#links-out-of-an-imported-page",
+        "reference/config#sources",
         "guide/other-sites#routes-are-derived-from-file-paths",
-        "reference/config#chat-chain~5",
-        "install/react#keeping-it-in-step",
-        "reference/config#chat-chain~4",
-        "install/vue#where-the-config-comes-from",
+        "guide/imported-pages#importing-one~2",
         "guide/other-sites#a-sidebar-buys-you-the-scope-picker"
       ],
       "retrievedIds": [
+        "guide/imported-pages#what-an-imported-page-is",
         "guide/imported-pages#its-path-is-an-id-not-a-link",
-        "install/vue#the-router",
-        "concepts/guarantees#what-this-is-not",
-        "reference/config#importdir",
-        "guide/other-sites#routes-are-derived-from-file-paths",
-        "install/vue#where-the-config-comes-from",
-        "guide/other-sites#a-sidebar-buys-you-the-scope-picker"
+        "guide/imported-pages#",
+        "guide/imported-pages#the-allowlist-is-a-security-boundary",
+        "guide/imported-pages#links-out-of-an-imported-page"
       ],
-      "outcome": "refuse:not-answerable"
+      "outcome": "answer"
     },
     "q-64": {
       "channel": "composed",
@@ -2562,52 +2561,51 @@
     "q-65": {
       "channel": "composed",
       "gatePass": true,
-      "G": 1,
-      "D": 1,
+      "G": 0.96823,
+      "D": 0.95764,
       "L": 1,
       "rankedIds": [
-        "reference/cli#level~2",
         "guide/evaluation#how-much-of-the-set-to-run~2",
-        "guide/evaluation#the-golden-set~2",
-        "guide/evaluation#how-much-of-the-set-to-run",
+        "reference/cli#level~2",
         "reference/cli#level",
+        "guide/evaluation#how-much-of-the-set-to-run",
+        "reference/cli#status~3",
         "reference/cli#eval-split",
-        "guide/evaluation#the-golden-set~3",
-        "guide/evaluation#lint-it-first"
+        "concepts/the-ladder#what-costs-a-provider-its-turn~2",
+        "guide/evaluation#the-golden-set~2"
       ],
       "retrievedIds": [
-        "reference/cli#level~2",
         "guide/evaluation#how-much-of-the-set-to-run~2",
-        "guide/evaluation#the-golden-set~2",
+        "reference/cli#level~2",
+        "reference/cli#level",
         "guide/evaluation#how-much-of-the-set-to-run",
-        "reference/cli#level"
+        "reference/cli#status~3"
       ],
       "outcome": "answer"
     },
     "q-66": {
-      "channel": "raw",
-      "gatePass": false,
-      "G": 0.562732,
-      "D": 0.583642,
-      "L": 0.5,
+      "channel": "composed",
+      "gatePass": true,
+      "G": 0.954545,
+      "D": 1,
+      "L": 0.818182,
       "rankedIds": [
-        "guide/history#two-tabs",
-        "guide/providers#",
-        "guide/evaluation#the-golden-set~4",
-        "guide/measure#context-precision",
-        "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
-        "guide/providers#what-each-provider-honours~2",
+        "guide/indexing#",
+        "guide/troubleshooting#docpilot-the-panel-is-off-—-n-things-to-set-up",
+        "guide/providers#no-embedder-at-all",
+        "reference/config#embed-false",
+        "reference/config#embed-false~2",
+        "reference/cli#doctor~4",
+        "reference/cli#index",
         "guide/indexing#a-second-index-to-measure-against~2",
-        "guide/indexing#a-second-index-to-measure-against",
-        "guide/providers#name-nothing-the-provider-chain"
+        "reference/cli#embedder-question"
       ],
       "retrievedIds": [
-        "guide/history#two-tabs",
-        "guide/providers#",
-        "guide/evaluation#the-golden-set~4",
-        "guide/measure#context-precision",
-        "guide/philosophy#refuse-as-early-as-the-refusal-can-be-trusted",
-        "guide/providers#name-nothing-the-provider-chain"
+        "guide/indexing#",
+        "guide/troubleshooting#docpilot-the-panel-is-off-—-n-things-to-set-up",
+        "guide/providers#no-embedder-at-all",
+        "reference/config#embed-false",
+        "reference/config#embed-false~2"
       ],
       "outcome": "answer"
     }
@@ -2615,113 +2613,115 @@
   "summary": {
     "positives": 66,
     "negatives": 30,
-    "retrievalF1": 0.2640965936420483,
-    "recall8": 0.7272727272727273,
-    "mrr": 0.5381313131313131,
-    "recall1": 0.3560606060606061,
-    "recall3": 0.5606060606060606,
-    "recall5": 0.6363636363636364,
-    "ndcg8": 0.5576497335205167,
-    "contextPrecision5": 0.5203282828282827,
-    "answerF1": 0.36792434161427245,
-    "identifierRecall": 0.49185185185185193,
-    "citationPrecision": 0.5134408602150538,
-    "citationRecall": 0.5725806451612904,
-    "supportPrecision": 0.9385618861425312,
-    "unsupportedAnswerRate": 0.04838709677419355,
+    "retrievalF1": 0.2696882242336788,
+    "recall8": 0.75,
+    "mrr": 0.5563131313131313,
+    "recall1": 0.36363636363636365,
+    "recall3": 0.5681818181818182,
+    "recall5": 0.6515151515151515,
+    "ndcg8": 0.5725175313857622,
+    "contextPrecision5": 0.5372474747474747,
+    "answerF1": 0.3653983117250143,
+    "identifierRecall": 0.49222222222222217,
+    "citationPrecision": 0.5060675883256528,
+    "citationRecall": 0.5967741935483871,
+    "supportPrecision": 0.970588954056696,
+    "unsupportedAnswerRate": 0.016129032258064516,
     "language": 1,
-    "gateOverRefusal": 7,
-    "gateOverRefusalUB95": 0.18461757691628358,
+    "gateOverRefusal": 6,
+    "gateOverRefusalUB95": 0.16629991049654563,
     "answerOverRefusal": 2,
     "answerOverRefusalUB95": 0.08752149825516234,
-    "negativesCaught": 11,
-    "negativesCaughtRate": 0.36666666666666664,
+    "negativesCaught": 10,
+    "negativesCaughtRate": 0.3333333333333333,
     "noAnswerPrecision": null,
     "hallucinated": 0,
     "scopeContainment": 1,
-    "unlinked": 0.41935483870967744,
+    "unlinked": 0.43548387096774194,
     "unlinkedIds": [
       "q-01",
+      "q-02",
       "q-05",
       "q-07",
+      "q-09",
       "q-10",
+      "q-11",
+      "q-14",
       "q-17",
       "q-23",
       "q-25",
+      "q-26",
       "q-29",
-      "q-30",
       "q-31",
       "q-32",
       "q-33",
-      "q-35",
       "q-39",
-      "q-41",
+      "q-45",
       "q-46",
-      "q-49",
+      "q-48",
       "q-51",
+      "q-53",
       "q-55",
       "q-59",
       "q-60",
       "q-61",
-      "q-62",
-      "q-64",
-      "q-65",
-      "q-66"
+      "q-63"
     ],
     "unlinkedShown": 62,
     "unlinkedOther": [
       "n-01",
       "n-02",
-      "n-06",
+      "n-04",
       "n-07",
       "n-09",
+      "n-10",
       "n-15",
       "n-16",
       "n-19",
-      "n-20",
       "n-21",
       "n-22",
+      "n-23",
       "n-24",
-      "n-26",
       "n-28",
       "n-30"
     ],
     "rejectedFetches": 0,
     "iterationsPerAnswer": 0,
     "requestsPerTurn": 1,
-    "promptTokens": 2696.34375,
-    "outputTokens": 336.1770833333333,
+    "promptTokens": 2645.71875,
+    "outputTokens": 332.1979166666667,
     "cachedTokens": null,
     "cachedShare": null,
-    "tokensPerAcceptedAnswer": 4695.5161290322585,
+    "tokensPerAcceptedAnswer": 4610.967741935484,
     "promptChars": null,
     "promptCharsPeak": null,
     "observationChars": null,
     "answerChars": null,
-    "latencyP50": 5485,
-    "latencyP95": 28252,
-    "latencyP99": 40880,
-    "ttftP50": 1305,
-    "ttftP95": 2335,
+    "latencyP50": 5958,
+    "latencyP95": 25959,
+    "latencyP99": 40490,
+    "ttftP50": 1294,
+    "ttftP95": 2275,
     "misses": [
+      "q-04(refuse:not-answerable)",
       "n-02(answer)",
       "n-04(answer)",
       "n-06(answer)",
       "q-24(refuse:not-answerable)",
-      "q-26(refuse:not-answerable)",
       "n-09(answer)",
       "n-10(answer)",
       "n-11(answer)",
       "n-14(answer)",
       "n-15(answer)",
       "n-16(answer)",
+      "q-44(refuse:not-answerable)",
       "n-17(answer)",
       "n-18(answer)",
       "n-20(answer)",
       "n-21(answer)",
       "n-24(answer)",
       "q-58(refuse:not-answerable)",
-      "q-63(refuse:not-answerable)",
+      "n-25(answer)",
       "n-26(answer)",
       "n-27(answer)",
       "n-28(answer)",
@@ -2733,21 +2733,21 @@
       "English": {
         "positives": 60,
         "negatives": 29,
-        "recall8": 0.7583333333333333,
-        "mrr": 0.5613888888888888,
-        "answerF1": 0.3818774809474622,
-        "identifierRecall": 0.5031746031746033,
-        "citationRecall": 0.5964912280701754,
+        "recall8": 0.7833333333333333,
+        "mrr": 0.5813888888888888,
+        "answerF1": 0.38094900805284343,
+        "identifierRecall": 0.5115079365079366,
+        "citationRecall": 0.6228070175438597,
         "language": 1,
-        "negativesCaughtRate": 0.3793103448275862
+        "negativesCaughtRate": 0.3448275862068966
       },
       "Russian": {
         "positives": 6,
         "negatives": 1,
         "recall8": 0.4166666666666667,
         "mrr": 0.3055555555555555,
-        "answerF1": 0.20885855321590877,
-        "identifierRecall": 0.3333333333333333,
+        "answerF1": 0.188120373587762,
+        "identifierRecall": 0.2222222222222222,
         "citationRecall": 0.3,
         "language": 1,
         "negativesCaughtRate": 0
@@ -2759,40 +2759,40 @@
         "negatives": 24,
         "recall8": 0.8421052631578947,
         "mrr": 0.6138157894736842,
-        "answerF1": 0.38784357393889496,
-        "identifierRecall": 0.5277777777777778,
-        "citationRecall": 0.5972222222222222,
+        "answerF1": 0.39378065467052376,
+        "identifierRecall": 0.5222222222222223,
+        "citationRecall": 0.625,
         "negativesCaughtRate": 0.4166666666666667
       },
       "1": {
         "positives": 8,
         "negatives": 0,
-        "recall8": 0.6875,
-        "mrr": 0.46666666666666673,
-        "answerF1": 0.36059778309205104,
-        "identifierRecall": 0.5,
-        "citationRecall": 0.5625,
+        "recall8": 0.8125,
+        "mrr": 0.5916666666666668,
+        "answerF1": 0.3137833645531704,
+        "identifierRecall": 1,
+        "citationRecall": 0.6428571428571429,
         "negativesCaughtRate": null
       },
       "2": {
         "positives": 10,
         "negatives": 1,
         "recall8": 0.8,
-        "mrr": 0.6833333333333333,
-        "answerF1": 0.373164548018488,
-        "identifierRecall": 0.6555555555555556,
-        "citationRecall": 0.7222222222222222,
+        "mrr": 0.6333333333333334,
+        "answerF1": 0.3582223133713267,
+        "identifierRecall": 0.5809523809523809,
+        "citationRecall": 0.7,
         "negativesCaughtRate": 0
       },
       "3": {
         "positives": 10,
         "negatives": 5,
-        "recall8": 0.25,
-        "mrr": 0.1625,
-        "answerF1": 0.28951970237576435,
-        "identifierRecall": 0.19523809523809524,
+        "recall8": 0.3,
+        "mrr": 0.2325,
+        "answerF1": 0.2999872303585076,
+        "identifierRecall": 0.20238095238095236,
         "citationRecall": 0.3333333333333333,
-        "negativesCaughtRate": 0.2
+        "negativesCaughtRate": 0
       }
     },
     "taxonomy": {
@@ -2814,44 +2814,42 @@
         "q-20",
         "q-21",
         "q-22",
-        "q-23",
         "q-25",
+        "q-26",
         "q-27",
         "q-29",
         "q-30",
         "q-31",
-        "q-32",
         "q-34",
+        "q-35",
         "q-37",
         "q-38",
         "q-40",
         "q-41",
         "q-42",
-        "q-43",
-        "q-44",
-        "q-45",
+        "q-46",
         "q-47",
         "q-48",
         "q-52",
         "q-55",
-        "q-57",
         "q-59",
         "q-60",
+        "q-63",
         "q-64",
-        "q-65"
+        "q-65",
+        "q-66"
       ],
-      "gold-below-primed": [
+      "over-refused": [
         "q-04",
-        "q-16",
-        "q-33",
-        "q-49"
+        "q-24",
+        "q-44",
+        "q-58"
       ],
       "retrieval-miss": [
         "q-06",
         "q-08",
         "q-14",
         "q-28",
-        "q-35",
         "q-36",
         "q-50",
         "q-51",
@@ -2859,8 +2857,7 @@
         "q-54",
         "q-56",
         "q-61",
-        "q-62",
-        "q-66"
+        "q-62"
       ],
       "neg-caught": [
         "n-01",
@@ -2872,8 +2869,7 @@
         "n-13",
         "n-19",
         "n-22",
-        "n-23",
-        "n-25"
+        "n-23"
       ],
       "neg-answered:refuse:no-evidence": [
         "n-02",
@@ -2887,39 +2883,35 @@
         "n-20",
         "n-21",
         "n-24",
+        "n-25",
         "n-26",
         "n-27",
         "n-28",
         "n-29",
         "n-30"
       ],
+      "gold-below-primed": [
+        "q-16",
+        "q-33",
+        "q-49"
+      ],
       "neg-answered:refuse:out-of-scope": [
         "n-06",
         "n-09",
         "n-16"
       ],
-      "over-refused": [
-        "q-24",
-        "q-26",
-        "q-58",
-        "q-63"
-      ],
       "primed-low-f1": [
+        "q-23",
+        "q-32",
         "q-39",
-        "q-46"
+        "q-43",
+        "q-45",
+        "q-57"
       ]
     },
     "reSearch": null,
     "missPages": {
       "undescribed": [
-        {
-          "page": "/reference/cli",
-          "described": false,
-          "records": [
-            "q-04",
-            "q-36"
-          ]
-        },
         {
           "page": "/guide/providers",
           "described": false,
@@ -2955,19 +2947,25 @@
           ]
         },
         {
-          "page": "/concepts/the-gate",
-          "described": false,
-          "records": [
-            "q-35",
-            "q-49"
-          ]
-        },
-        {
           "page": "/concepts/the-ladder",
           "described": false,
           "records": [
             "q-36",
             "q-54"
+          ]
+        },
+        {
+          "page": "/reference/cli",
+          "described": false,
+          "records": [
+            "q-36"
+          ]
+        },
+        {
+          "page": "/concepts/the-gate",
+          "described": false,
+          "records": [
+            "q-49"
           ]
         },
         {
@@ -2990,23 +2988,9 @@
           "records": [
             "q-62"
           ]
-        },
-        {
-          "page": "/reference/config",
-          "described": false,
-          "records": [
-            "q-66"
-          ]
-        },
-        {
-          "page": "/guide/indexing",
-          "described": false,
-          "records": [
-            "q-66"
-          ]
         }
       ],
-      "checked": 12
+      "checked": 10
     }
   }
 }

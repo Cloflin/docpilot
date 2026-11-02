@@ -18,7 +18,7 @@ the panel fetches the index once and caches it:
 
 | | |
 | --- | --- |
-| the vectors | **428 KB for this site's 856 chunks at 4096 dimensions** |
+| the vectors | **430 KB for this site's 859 chunks at 4096 dimensions** |
 | the chunk text, titles and breadcrumbs | the rest of the same directory |
 | when | on the reader's **first open of the panel**, not on page load |
 

@@ -333,6 +333,7 @@ const releases = {
   items: [
     { text: 'Changelog', link: '/changelog', badge: `v${pkg.version}` },
     { text: 'Migrate to 2.0', link: '/guide/migrate-2' },
+    { text: 'Roadmap to 3.0', link: '/guide/roadmap-3' },
   ],
 }
 const docs = [start, releases, measure, security, operate, concepts]
