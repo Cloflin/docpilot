@@ -7,9 +7,12 @@
 > кодом. Теперь сообщение открывается одной неизменной константой `CORE` с
 > разделами в XML-тегах и рабочим примером цитирования; всё, что относится к
 > вопросу, едет в последнем сообщении пользователя в своих тегах, а результаты
-> инструментов — блоками `<tool_result>` с `<document id="…">`. Риск — качество
-> ответов малой модели, поэтому изменение принято только через A/B на
-> golden-наборе (раздел Measured).
+> инструментов — блоками `<tool_result>` с `<document id="…">`. A/B на
+> golden-наборе (`qwen3:8b`, две пары прогонов): ответов без ссылки в тексте
+> стало 2 из 66 вместо 41,5, но answerF1 и citationPrecision упали больше чем на
+> одну запись, а треть ходов тратит лишний запрос — гейт релиза 2.2.0 не пройден,
+> промпт не принят. Причина лишнего запроса найдена, следующий кандидат назван в
+> разделе Measured.
 
 ## Problem
 
@@ -175,11 +178,84 @@ instruction block is `coreText`, tags included.
 - The tests that read the wire (`search-observations`, `chat-paths`, the server
   stubs) read `<tool_result>` and `<question>` through `test/helpers/observation.js`.
 
-## Measured
+## Measured, 2026-11-02
 
-To be written from the A/B runs: control (the shipped prompt) against this one,
-`qwen3:8b` on the LAN Ollama, `rag-local`, the golden set with answers, at least
-two runs per arm.
+Two control runs (the shipped prompt, `promptHash` `45921454`) and two runs of
+this one (`160a0ace`) on the LAN box, Ollama 0.33.2, chat and query embedding on
+the same host: `qwen3:8b` (`500a1f067a9f`), `bge-m3` (`790764642607`), `rag-local`
+index `6182b904`, golden set `fd655d5315cb8f87` (66 positive, 30 negative, 7 in
+Russian), `guard.mode: 'off'`, two iterations, `num_ctx` 8192, temperature 0.2,
+no seed. The gate: no hard gate worse, and every other metric's mean at least the
+control mean minus max(one record, |control 1 − control 2|).
+
+| metric | control 1 | control 2 | new 1 | new 2 | tolerance | verdict |
+|---|---|---|---|---|---|---|
+| answers shown without a working `[n]` (hard gate) | 39 / 66 | 44 / 66 | 2 / 66 | 2 / 66 | 0 | better |
+| positives refused (hard gate) | 0 | 0 | 0 | 0 | 0 | same |
+| wrong language (hard gate) | 0 | 0 | 0 | 0 | 0 | same |
+| hallucinated citations, scope escapes (hard gates) | 0, 0 | 0, 0 | 0, 0 | 0, 0 | 0 | same |
+| answerF1 | 0.332 | 0.332 | 0.321 | 0.308 | 0.015 | **worse by 0.017** |
+| identifierRecall | 0.423 | 0.413 | 0.474 | 0.434 | 0.015 | better |
+| citationPrecision | 0.504 | 0.503 | 0.465 | 0.450 | 0.015 | **worse by 0.046** |
+| citationRecall | 0.568 | 0.583 | 0.614 | 0.561 | 0.015 | better |
+| supportPrecision | 0.964 | 0.918 | 0.964 | 0.978 | 0.046 | better |
+| unsupportedAnswerRate | 0.030 | 0.061 | 0.015 | 0.000 | 0.030 | better |
+| negatives caught | 0.167 | 0.167 | 0.167 | 0.167 | 0.033 | same |
+| Russian: answerF1 | 0.200 | 0.210 | 0.160 | 0.189 | 0.167 | within |
+| Russian: citationRecall | 0.250 | 0.250 | 0.417 | 0.333 | 0.167 | better |
+| Russian: answers without `[n]` | 5 | 4 | 0 | 0 | 1 | better |
+| requests per turn | 1.20 | 1.19 | 1.46 | 1.44 | — | +21 % |
+| prompt tokens per turn | 3,880 | 3,864 | 5,208 | 5,162 | — | +34 % |
+| latency p50 | 6.1 s | 6.0 s | 6.2 s | 6.4 s | — | +5 % |
+
+Retrieval is identical in all four runs (recall@8 0.720, MRR 0.544), so only the
+prompt moved. Control 1 reproduces the frozen `2.1.1.rag-local.answers.json`
+within a record or two on every metric. A host-paired run on the maintainer's Mac
+(Ollama 0.40.13, same digests) was started and stopped: the two arms evicted each
+other's prompt cache on one model slot (24 s → 77–131 s a record), the new arm
+was stopped after one record to run after the control, and the control was then
+stopped at the owner's request with 80 of 96 records done. Neither wrote a report.
+
+**What moved.**
+
+- **Answers without a working `[n]`**: 41.5 → 2 of 66 on average; every Russian
+  answer links.
+- **`citationPrecision` falls** while `citationRecall` rises: an answer now
+  cites 2.20 ids on average against 2.05, because more of its claims carry a
+  marker. This is the count effect RAG-SPEC names for this instrument (it
+  divides by what the answer cites).
+- **`answerF1` falls by 0.017**, one record's worth is 0.015. The markers are
+  part of it: `tokenF1` scores `[1]` as an answer token and the gold answers carry
+  none — with markers removed from both arms the gap is 0.014.
+- **A turn costs more on `qwen3:8b`.** In about a third of turns the model writes
+  its first reply as prose — already marked — instead of calling `answer`; the
+  harness's "Call the answer tool." reminder recovers it on the next step, so the
+  answer is kept but the turn spends one more request (36 of 96 turns took two
+  steps in new run 1, 14 in control 1). The larger system message adds about 320
+  tokens to every step.
+
+**The extra step, isolated** — a step trace on the first 20 golden records, LAN
+box, one run each, a diagnostic and not part of the gate:
+
+| variant | first reply is a tool call | turns with two steps | answers without `[n]` |
+|---|---|---|---|
+| shipped prompt | 20 / 20 | 0 | 13 / 20 |
+| this spec | 9 / 20 (10 prose, 1 fetch) | 10 | 2 / 20 |
+| this spec, language line before the question | 14 / 20 | — | — |
+| this spec, tool results as JSON | 17 / 20 | — | — |
+| this spec, both of the above | 20 / 20 | 0 | 5 / 20 |
+
+The rewritten instruction block does not cause the extra step; the two per-turn
+layout changes do — documents that read as documents rather than as a tool's
+reply, and an instruction line after the question, each make a small model answer
+in prose. The last row keeps most of the link gain at no extra request. It is a
+different prompt and needs its own two-host gate; it is not adopted here.
+
+**Verdict: FAIL** under the release gate the owner set for 2.2.0. No hard gate
+is worse, and the one that fails on every run of the shipped prompt nearly
+clears; but `answerF1` and `citationPrecision` fall past one record, so the
+shipped prompt stays. The next candidate is the last row of the probe above,
+gated the same way.
 
 ## What this does not do
 
@@ -189,3 +265,7 @@ two runs per arm.
 - **The documents stay after the question.** The agent loop's order is kept; see
   Research.
 - **The instruction is not translated**, for the reason `promptHash` gives.
+- **`promptHash` still hashes the instruction texts, not the per-turn
+  rendering.** It did not cover the JSON layout or the language line's place
+  before either, and the three diagnostic variants above all reported `160a0ace`.
+  Hashing the envelope is a change of its own.
